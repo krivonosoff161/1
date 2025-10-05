@@ -1,0 +1,10 @@
+ccxt
+python-telegram-bot
+pandas
+python-dotenv
+talib-binary
+black
+flake8
+isort
+bandit
+pre-commit
