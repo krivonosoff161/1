@@ -1,2 +1,0 @@
-# potential-train
-все заново
