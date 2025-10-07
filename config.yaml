@@ -5,7 +5,7 @@ api:
     api_key: "${OKX_API_KEY}"
     api_secret: "${OKX_API_SECRET}"
     passphrase: "${OKX_PASSPHRASE}"
-    sandbox: true  # Set to false for live trading
+    sandbox: true  # Демо-режим OKX
     
 trading:
   symbols: 
