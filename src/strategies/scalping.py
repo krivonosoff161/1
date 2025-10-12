@@ -387,9 +387,9 @@ class ScalpingStrategy:
                     )
 
                     # Обрабатываем тик
-                await self._process_tick(symbol, tick)
+                    await self._process_tick(symbol, tick)
 
-        except Exception as e:
+                except Exception as e:
                     logger.error(f"❌ Error processing {symbol}: {e}")
 
                 # Ждем 60 секунд до следующего опроса
