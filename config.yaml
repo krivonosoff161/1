@@ -1,0 +1,123 @@
+# Trading Bot Configuration
+api:
+  okx:
+    # Set these in environment variables or .env file
+    api_key: "${OKX_API_KEY}"
+    api_secret: "${OKX_API_SECRET}"
+    passphrase: "${OKX_PASSPHRASE}"
+    sandbox: true  # Демо-режим OKX
+    
+trading:
+  symbols: 
+    - "BTC-USDT"
+    - "ETH-USDT"
+    - "SOL-USDT"
+  base_currency: "USDT"
+  
+# Risk Management
+risk:
+  max_position_size_percent: 5.0  # Max 5% of balance per position
+  max_daily_loss_percent: 10.0    # Stop trading if daily loss exceeds 10%
+  risk_per_trade_percent: 1.0     # Risk 1% per trade
+  max_open_positions: 3           # Maximum concurrent positions
+
+# Scalping Strategy
+scalping:
+  enabled: true
+  symbols: ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
+  timeframe: "1m"
+  indicators:
+    sma_fast: 5
+    sma_slow: 20
+    ema_fast: 8
+    ema_slow: 21
+    rsi_period: 14
+    atr_period: 14
+    bollinger_period: 20
+    bollinger_std: 2.0
+  
+  # Entry conditions - СМЯГЧЕННЫЕ для больше сигналов
+  entry:
+    min_volatility_atr: 0.0004  # ✅ Было: 0.0005 (торгуем в более спокойном рынке)
+    rsi_overbought: 68          # ✅ Было: 70 (шире диапазон)
+    rsi_oversold: 32            # ✅ Было: 30 (шире диапазон)
+    volume_threshold: 1.15      # ✅ Было: 1.2 (меньше требование к объему)
+  
+  # Exit conditions  
+  exit:
+    take_profit_atr_multiplier: 1.5  # Было: 2.0 (ближе цель - быстрее фиксация)
+    stop_loss_atr_multiplier: 2.5    # Было: 1.5 (больше воздуха - меньше ложных срабатываний)
+    max_holding_minutes: 15          # Max time to hold position
+    
+  # Trade management - УВЕЛИЧИЛИ частоту
+  max_trades_per_hour: 15       # ✅ Было: 10 (больше сделок если рынок позволяет)
+  cooldown_after_loss_minutes: 4  # ✅ Было: 5 (быстрее возврат)
+
+# Trend Following Strategy  
+trend_following:
+  enabled: true
+  symbols: ["BTC-USDT"]
+  timeframe: "15m"
+  indicators:
+    sma_fast: 50
+    sma_slow: 200
+    ema_trend: 100
+    rsi_period: 14
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    atr_period: 14
+  
+  entry:
+    min_trend_strength: 0.02  # Price should be 2% above/below MA
+    rsi_confirmation: true
+    volume_confirmation: true
+  
+  exit:
+    take_profit_percent: 3.0
+    stop_loss_percent: 1.5
+    trailing_stop_atr_multiplier: 2.0
+
+# Logging
+logging:
+  level: "INFO"
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
+  rotation: "100 MB"
+  retention: "30 days"
+  
+# Notifications
+notifications:
+  telegram:
+    enabled: false
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
+    
+  email:
+    enabled: false
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    username: "${EMAIL_USERNAME}"
+    password: "${EMAIL_PASSWORD}"
+    recipients: ["${EMAIL_RECIPIENT}"]
+
+# Database
+database:
+  url: "sqlite:///trading_bot.db"
+  echo: false
+
+# Monitoring
+monitoring:
+  prometheus:
+    enabled: true
+    port: 8000
+  
+  health_check:
+    enabled: true
+    port: 8080
+    
+# Backtesting
+backtest:
+  start_date: "2023-01-01"
+  end_date: "2024-01-01"
+  initial_balance: 10000
+  commission: 0.001  # 0.1% commission
