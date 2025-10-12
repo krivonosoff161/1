@@ -9,31 +9,30 @@ import numpy as np
 from loguru import logger
 
 from src.config import RiskConfig, ScalpingConfig
+# PHASE 1: Time-Based Filter
+from src.filters.time_session_manager import (TimeFilterConfig,
+                                              TimeSessionManager)
 from src.indicators import (ATR, MACD, RSI, BollingerBands,
                             ExponentialMovingAverage, IndicatorManager,
                             SimpleMovingAverage, VolumeIndicator)
 from src.models import (MarketData, OrderSide, OrderType, Position,
                         PositionSide, RiskMetrics, Signal, Tick)
 from src.okx_client import OKXClient
-
-# PHASE 1: Multi-Timeframe Confirmation
-from src.strategies.modules.multi_timeframe import (MTFConfig,
-                                                      MultiTimeframeFilter)
 # PHASE 1: Correlation Filter
 from src.strategies.modules.correlation_filter import (CorrelationFilter,
-                                                         CorrelationFilterConfig)
-# PHASE 1: Time-Based Filter
-from src.filters.time_session_manager import (TimeFilterConfig,
-                                                TimeSessionManager)
-# PHASE 1: Volatility Modes
-from src.strategies.modules.volatility_adapter import (VolatilityAdapter,
-                                                         VolatilityModeConfig)
+                                                       CorrelationFilterConfig)
+# PHASE 1: Multi-Timeframe Confirmation
+from src.strategies.modules.multi_timeframe import (MTFConfig,
+                                                    MultiTimeframeFilter)
 # PHASE 1: Pivot Points
 from src.strategies.modules.pivot_points import (PivotPointsConfig,
-                                                   PivotPointsFilter)
+                                                 PivotPointsFilter)
+# PHASE 1: Volatility Modes
+from src.strategies.modules.volatility_adapter import (VolatilityAdapter,
+                                                       VolatilityModeConfig)
 # PHASE 1: Volume Profile
 from src.strategies.modules.volume_profile_filter import (VolumeProfileConfig,
-                                                            VolumeProfileFilter)
+                                                          VolumeProfileFilter)
 
 
 class ScalpingStrategy:
@@ -106,7 +105,8 @@ class ScalpingStrategy:
         ]
 
         # 🌊 УЛУЧШЕНИЕ 9: Market Regime Detection
-        self.regime_detection_enabled = True
+        # ⚠️ ОТКЛЮЧЕНО: В режиме RANGING блокирует 100% сигналов скальпинга!
+        self.regime_detection_enabled = False  # ❌ Отключаем для тестирования Phase 1
         self.high_volatility_threshold = 0.02  # 2% волатильность = высокая
         self.trend_threshold = 0.05  # 5% разница SMA50/200 = тренд
 
@@ -131,9 +131,14 @@ class ScalpingStrategy:
 
         # PHASE 1: Multi-Timeframe Confirmation Filter
         self.mtf_filter: Optional[MultiTimeframeFilter] = None
-        if hasattr(config, "multi_timeframe_enabled") and config.multi_timeframe_enabled:
+        if (
+            hasattr(config, "multi_timeframe_enabled")
+            and config.multi_timeframe_enabled
+        ):
             mtf_config = MTFConfig(
-                confirmation_timeframe=config.multi_timeframe.get("confirmation_timeframe", "5m"),
+                confirmation_timeframe=config.multi_timeframe.get(
+                    "confirmation_timeframe", "5m"
+                ),
                 score_bonus=config.multi_timeframe.get("score_bonus", 2),
                 block_opposite=config.multi_timeframe.get("block_opposite", True),
                 ema_fast_period=config.multi_timeframe.get("ema_fast_period", 8),
@@ -147,14 +152,25 @@ class ScalpingStrategy:
 
         # PHASE 1: Correlation Filter
         self.correlation_filter: Optional[CorrelationFilter] = None
-        if hasattr(config, "correlation_filter_enabled") and config.correlation_filter_enabled:
+        if (
+            hasattr(config, "correlation_filter_enabled")
+            and config.correlation_filter_enabled
+        ):
             corr_filter_config = CorrelationFilterConfig(
                 enabled=True,
-                max_correlated_positions=config.correlation_filter.get("max_correlated_positions", 1),
-                correlation_threshold=config.correlation_filter.get("correlation_threshold", 0.7),
-                block_same_direction_only=config.correlation_filter.get("block_same_direction_only", True),
+                max_correlated_positions=config.correlation_filter.get(
+                    "max_correlated_positions", 1
+                ),
+                correlation_threshold=config.correlation_filter.get(
+                    "correlation_threshold", 0.7
+                ),
+                block_same_direction_only=config.correlation_filter.get(
+                    "block_same_direction_only", True
+                ),
             )
-            self.correlation_filter = CorrelationFilter(client, corr_filter_config, config.symbols)
+            self.correlation_filter = CorrelationFilter(
+                client, corr_filter_config, config.symbols
+            )
             logger.info("🔗 Correlation Filter enabled!")
         else:
             logger.info("⚪ Correlation Filter disabled (enable in config.yaml)")
@@ -165,10 +181,16 @@ class ScalpingStrategy:
             time_filter_config = TimeFilterConfig(
                 enabled=True,
                 trade_asian_session=config.time_filter.get("trade_asian_session", True),
-                trade_european_session=config.time_filter.get("trade_european_session", True),
-                trade_american_session=config.time_filter.get("trade_american_session", True),
+                trade_european_session=config.time_filter.get(
+                    "trade_european_session", True
+                ),
+                trade_american_session=config.time_filter.get(
+                    "trade_american_session", True
+                ),
                 prefer_overlaps=config.time_filter.get("prefer_overlaps", False),
-                avoid_low_liquidity_hours=config.time_filter.get("avoid_low_liquidity_hours", True),
+                avoid_low_liquidity_hours=config.time_filter.get(
+                    "avoid_low_liquidity_hours", True
+                ),
                 avoid_weekends=config.time_filter.get("avoid_weekends", True),
             )
             self.time_filter = TimeSessionManager(time_filter_config)
@@ -178,23 +200,54 @@ class ScalpingStrategy:
 
         # PHASE 1: Volatility Modes
         self.volatility_adapter: Optional[VolatilityAdapter] = None
-        if hasattr(config, "volatility_modes_enabled") and config.volatility_modes_enabled:
+        if (
+            hasattr(config, "volatility_modes_enabled")
+            and config.volatility_modes_enabled
+        ):
             vol_config = VolatilityModeConfig(
                 enabled=True,
-                low_volatility_threshold=config.volatility_modes.get("low_volatility_threshold", 0.01),
-                high_volatility_threshold=config.volatility_modes.get("high_volatility_threshold", 0.02),
-                low_vol_sl_multiplier=config.volatility_modes.get("low_vol_sl_multiplier", 1.5),
-                low_vol_tp_multiplier=config.volatility_modes.get("low_vol_tp_multiplier", 1.0),
-                low_vol_score_threshold=config.volatility_modes.get("low_vol_score_threshold", 6),
-                low_vol_position_size_multiplier=config.volatility_modes.get("low_vol_position_size_multiplier", 1.2),
-                normal_vol_sl_multiplier=config.volatility_modes.get("normal_vol_sl_multiplier", 2.5),
-                normal_vol_tp_multiplier=config.volatility_modes.get("normal_vol_tp_multiplier", 1.5),
-                normal_vol_score_threshold=config.volatility_modes.get("normal_vol_score_threshold", 7),
-                normal_vol_position_size_multiplier=config.volatility_modes.get("normal_vol_position_size_multiplier", 1.0),
-                high_vol_sl_multiplier=config.volatility_modes.get("high_vol_sl_multiplier", 3.5),
-                high_vol_tp_multiplier=config.volatility_modes.get("high_vol_tp_multiplier", 2.5),
-                high_vol_score_threshold=config.volatility_modes.get("high_vol_score_threshold", 8),
-                high_vol_position_size_multiplier=config.volatility_modes.get("high_vol_position_size_multiplier", 0.7),
+                low_volatility_threshold=config.volatility_modes.get(
+                    "low_volatility_threshold", 0.01
+                ),
+                high_volatility_threshold=config.volatility_modes.get(
+                    "high_volatility_threshold", 0.02
+                ),
+                low_vol_sl_multiplier=config.volatility_modes.get(
+                    "low_vol_sl_multiplier", 1.5
+                ),
+                low_vol_tp_multiplier=config.volatility_modes.get(
+                    "low_vol_tp_multiplier", 1.0
+                ),
+                low_vol_score_threshold=config.volatility_modes.get(
+                    "low_vol_score_threshold", 6
+                ),
+                low_vol_position_size_multiplier=config.volatility_modes.get(
+                    "low_vol_position_size_multiplier", 1.2
+                ),
+                normal_vol_sl_multiplier=config.volatility_modes.get(
+                    "normal_vol_sl_multiplier", 2.5
+                ),
+                normal_vol_tp_multiplier=config.volatility_modes.get(
+                    "normal_vol_tp_multiplier", 1.5
+                ),
+                normal_vol_score_threshold=config.volatility_modes.get(
+                    "normal_vol_score_threshold", 7
+                ),
+                normal_vol_position_size_multiplier=config.volatility_modes.get(
+                    "normal_vol_position_size_multiplier", 1.0
+                ),
+                high_vol_sl_multiplier=config.volatility_modes.get(
+                    "high_vol_sl_multiplier", 3.5
+                ),
+                high_vol_tp_multiplier=config.volatility_modes.get(
+                    "high_vol_tp_multiplier", 2.5
+                ),
+                high_vol_score_threshold=config.volatility_modes.get(
+                    "high_vol_score_threshold", 8
+                ),
+                high_vol_position_size_multiplier=config.volatility_modes.get(
+                    "high_vol_position_size_multiplier", 0.7
+                ),
             )
             self.volatility_adapter = VolatilityAdapter(vol_config)
             logger.info("📊 Volatility Adapter enabled!")
@@ -208,8 +261,12 @@ class ScalpingStrategy:
                 enabled=True,
                 daily_timeframe=config.pivot_points.get("daily_timeframe", "1D"),
                 use_last_n_days=config.pivot_points.get("use_last_n_days", 1),
-                level_tolerance_percent=config.pivot_points.get("level_tolerance_percent", 0.003),
-                score_bonus_near_level=config.pivot_points.get("score_bonus_near_level", 1),
+                level_tolerance_percent=config.pivot_points.get(
+                    "level_tolerance_percent", 0.003
+                ),
+                score_bonus_near_level=config.pivot_points.get(
+                    "score_bonus_near_level", 1
+                ),
                 cache_ttl_seconds=config.pivot_points.get("cache_ttl_seconds", 3600),
             )
             self.pivot_filter = PivotPointsFilter(client, pivot_config)
@@ -222,13 +279,23 @@ class ScalpingStrategy:
         if hasattr(config, "volume_profile_enabled") and config.volume_profile_enabled:
             vp_config = VolumeProfileConfig(
                 enabled=True,
-                lookback_timeframe=config.volume_profile.get("lookback_timeframe", "1H"),
+                lookback_timeframe=config.volume_profile.get(
+                    "lookback_timeframe", "1H"
+                ),
                 lookback_candles=config.volume_profile.get("lookback_candles", 100),
                 price_buckets=config.volume_profile.get("price_buckets", 50),
-                value_area_percent=config.volume_profile.get("value_area_percent", 70.0),
-                score_bonus_in_value_area=config.volume_profile.get("score_bonus_in_value_area", 1),
-                score_bonus_near_poc=config.volume_profile.get("score_bonus_near_poc", 1),
-                poc_tolerance_percent=config.volume_profile.get("poc_tolerance_percent", 0.005),
+                value_area_percent=config.volume_profile.get(
+                    "value_area_percent", 70.0
+                ),
+                score_bonus_in_value_area=config.volume_profile.get(
+                    "score_bonus_in_value_area", 1
+                ),
+                score_bonus_near_poc=config.volume_profile.get(
+                    "score_bonus_near_poc", 1
+                ),
+                poc_tolerance_percent=config.volume_profile.get(
+                    "poc_tolerance_percent", 0.005
+                ),
                 cache_ttl_seconds=config.volume_profile.get("cache_ttl_seconds", 600),
             )
             self.volume_profile_filter = VolumeProfileFilter(client, vp_config)
@@ -387,9 +454,9 @@ class ScalpingStrategy:
                     )
 
                     # Обрабатываем тик
-                    await self._process_tick(symbol, tick)
+                await self._process_tick(symbol, tick)
 
-                except Exception as e:
+        except Exception as e:
                     logger.error(f"❌ Error processing {symbol}: {e}")
 
                 # Ждем 60 секунд до следующего опроса
@@ -630,7 +697,7 @@ class ScalpingStrategy:
                 # Получаем адаптированные параметры
                 vol_params = self.volatility_adapter.get_parameters(current_volatility)
                 current_score_threshold = vol_params.score_threshold
-                
+
                 logger.debug(
                     f"📊 Volatility: {current_volatility:.2%} → Regime: {vol_params.regime.value} | "
                     f"Threshold: {current_score_threshold}/12"
@@ -662,9 +729,11 @@ class ScalpingStrategy:
                 signal_direction = None
                 if long_score >= current_score_threshold and long_score > short_score:
                     signal_direction = "LONG"
-                elif short_score >= current_score_threshold and short_score > long_score:
+                elif (
+                    short_score >= current_score_threshold and short_score > long_score
+                ):
                     signal_direction = "SHORT"
-                
+
                 if signal_direction:
                     corr_result = await self.correlation_filter.check_entry(
                         symbol, signal_direction, self.positions
@@ -680,10 +749,15 @@ class ScalpingStrategy:
             # PHASE 1: Volume Profile
             # Проверяем Volume Profile первым (общий бонус для обоих направлений)
             if self.volume_profile_filter:
-                vp_result = await self.volume_profile_filter.check_entry(symbol, current_price)
+                vp_result = await self.volume_profile_filter.check_entry(
+                    symbol, current_price
+                )
                 if vp_result.bonus > 0:
                     # Применяем бонус к обоим score (если есть сигнал)
-                    if long_score >= current_score_threshold and long_score > short_score:
+                    if (
+                        long_score >= current_score_threshold
+                        and long_score > short_score
+                    ):
                         long_score += vp_result.bonus
                         long_confidence = long_score / 12.0
                         logger.info(
@@ -691,7 +765,10 @@ class ScalpingStrategy:
                             f"Reason: {vp_result.reason} | "
                             f"Bonus: +{vp_result.bonus} | New score: {long_score}/12"
                         )
-                    elif short_score >= current_score_threshold and short_score > long_score:
+                    elif (
+                        short_score >= current_score_threshold
+                        and short_score > long_score
+                    ):
                         short_score += vp_result.bonus
                         short_confidence = short_score / 12.0
                         logger.info(
@@ -705,7 +782,9 @@ class ScalpingStrategy:
             if self.pivot_filter:
                 if long_score >= current_score_threshold and long_score > short_score:
                     # Проверяем LONG около Pivot уровней
-                    pivot_result = await self.pivot_filter.check_entry(symbol, current_price, "LONG")
+                    pivot_result = await self.pivot_filter.check_entry(
+                        symbol, current_price, "LONG"
+                    )
                     if pivot_result.near_level and pivot_result.bonus > 0:
                         long_score += pivot_result.bonus
                         long_confidence = long_score / 12.0
@@ -713,9 +792,13 @@ class ScalpingStrategy:
                             f"✅ PIVOT BONUS: {symbol} LONG near {pivot_result.level_name} | "
                             f"Bonus: +{pivot_result.bonus} | New score: {long_score}/12"
                         )
-                elif short_score >= current_score_threshold and short_score > long_score:
+                elif (
+                    short_score >= current_score_threshold and short_score > long_score
+                ):
                     # Проверяем SHORT около Pivot уровней
-                    pivot_result = await self.pivot_filter.check_entry(symbol, current_price, "SHORT")
+                    pivot_result = await self.pivot_filter.check_entry(
+                        symbol, current_price, "SHORT"
+                    )
                     if pivot_result.near_level and pivot_result.bonus > 0:
                         short_score += pivot_result.bonus
                         short_confidence = short_score / 12.0
@@ -730,7 +813,9 @@ class ScalpingStrategy:
                 # Определяем какой сигнал сильнее (используем адаптированный порог)
                 if long_score >= current_score_threshold and long_score > short_score:
                     # Проверяем LONG сигнал
-                    mtf_result = await self.mtf_filter.check_confirmation(symbol, "LONG")
+                    mtf_result = await self.mtf_filter.check_confirmation(
+                        symbol, "LONG"
+                    )
                     if mtf_result.blocked:
                         logger.warning(
                             f"🚫 MTF BLOCKED: {symbol} LONG signal blocked | "
@@ -745,9 +830,13 @@ class ScalpingStrategy:
                             f"✅ MTF CONFIRMED: {symbol} LONG | "
                             f"Bonus: +{mtf_result.bonus} | New score: {long_score}/12"
                         )
-                elif short_score >= current_score_threshold and short_score > long_score:
+                elif (
+                    short_score >= current_score_threshold and short_score > long_score
+                ):
                     # Проверяем SHORT сигнал
-                    mtf_result = await self.mtf_filter.check_confirmation(symbol, "SHORT")
+                    mtf_result = await self.mtf_filter.check_confirmation(
+                        symbol, "SHORT"
+                    )
                     if mtf_result.blocked:
                         logger.warning(
                             f"🚫 MTF BLOCKED: {symbol} SHORT signal blocked | "
@@ -818,58 +907,58 @@ class ScalpingStrategy:
 
         else:
             # Старая логика "всё или ничего" (если scoring отключен)
-            long_conditions = [
-                current_price > sma_fast.value > sma_slow.value,
-                ema_fast.value > ema_slow.value,
-                30 < rsi.value < 70,
+        long_conditions = [
+            current_price > sma_fast.value > sma_slow.value,
+            ema_fast.value > ema_slow.value,
+            30 < rsi.value < 70,
                 current_price <= bb.metadata["lower_band"] * 1.002,
-                volume.value >= self.config.entry.volume_threshold,
-            ]
+            volume.value >= self.config.entry.volume_threshold,
+        ]
 
-            short_conditions = [
-                current_price < sma_fast.value < sma_slow.value,
-                ema_fast.value < ema_slow.value,
-                30 < rsi.value < 70,
+        short_conditions = [
+            current_price < sma_fast.value < sma_slow.value,
+            ema_fast.value < ema_slow.value,
+            30 < rsi.value < 70,
                 current_price >= bb.metadata["upper_band"] * 0.998,
-                volume.value >= self.config.entry.volume_threshold,
-            ]
+            volume.value >= self.config.entry.volume_threshold,
+        ]
 
-            existing_position = self.positions.get(symbol)
-            if existing_position:
+        existing_position = self.positions.get(symbol)
+        if existing_position:
                 if existing_position.side == PositionSide.LONG and any(
                     short_conditions
                 ):
-                    return None
+                return None
                 if existing_position.side == PositionSide.SHORT and any(
                     long_conditions
                 ):
-                    return None
+                return None
 
-            if all(long_conditions):
-                return Signal(
-                    symbol=symbol,
-                    side=OrderSide.BUY,
+        if all(long_conditions):
+            return Signal(
+                symbol=symbol,
+                side=OrderSide.BUY,
                     strength=0.8,
-                    price=current_price,
-                    timestamp=datetime.utcnow(),
-                    strategy_id=self.strategy_id,
-                    indicators={k: v.value for k, v in indicators.items()},
+                price=current_price,
+                timestamp=datetime.utcnow(),
+                strategy_id=self.strategy_id,
+                indicators={k: v.value for k, v in indicators.items()},
                     confidence=1.0,
-                )
+            )
 
-            elif all(short_conditions):
-                return Signal(
-                    symbol=symbol,
-                    side=OrderSide.SELL,
-                    strength=0.8,
-                    price=current_price,
-                    timestamp=datetime.utcnow(),
-                    strategy_id=self.strategy_id,
-                    indicators={k: v.value for k, v in indicators.items()},
+        elif all(short_conditions):
+            return Signal(
+                symbol=symbol,
+                side=OrderSide.SELL,
+                strength=0.8,
+                price=current_price,
+                timestamp=datetime.utcnow(),
+                strategy_id=self.strategy_id,
+                indicators={k: v.value for k, v in indicators.items()},
                     confidence=1.0,
-                )
+            )
 
-            return None
+        return None
 
     def _detect_market_regime(self, symbol: str) -> str:
         """
@@ -1709,7 +1798,7 @@ class ScalpingStrategy:
 
         try:
             # Закрываем все позиции через отдельный метод БЕЗ обновления статистики
-            for symbol in list(self.positions.keys()):
+        for symbol in list(self.positions.keys()):
                 await self._close_position_silent(symbol, "emergency")
         finally:
             self._emergency_in_progress = False
@@ -1821,7 +1910,7 @@ class ScalpingStrategy:
 
             # Получаем открытые ордера (опционально - требует Trade права)
             try:
-                open_orders = await self.client.get_open_orders(symbol)
+            open_orders = await self.client.get_open_orders(symbol)
             except Exception as e:
                 logger.debug(
                     f"Cannot fetch open orders (requires Trade permission): {e}"
