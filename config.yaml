@@ -106,12 +106,12 @@ scalping:
     bollinger_period: 20
     bollinger_std: 2.0
   
-  # Entry conditions - СМЯГЧЕННЫЕ для больше сигналов
+  # Entry conditions - СТАНДАРТНЫЕ для скальпинга
   entry:
     min_volatility_atr: 0.0004  # ✅ Было: 0.0005 (торгуем в более спокойном рынке)
-    rsi_overbought: 68          # ✅ Было: 70 (шире диапазон)
-    rsi_oversold: 32            # ✅ Было: 30 (шире диапазон)
-    volume_threshold: 1.15      # ✅ Было: 1.2 (меньше требование к объему)
+    rsi_overbought: 70          # ✅ ИСПРАВЛЕНО: стандартный диапазон RSI
+    rsi_oversold: 30            # ✅ ИСПРАВЛЕНО: стандартный диапазон RSI
+    volume_threshold: 1.1       # ✅ ИСПРАВЛЕНО: менее строгий фильтр объема
   
   # Exit conditions  
   exit:
