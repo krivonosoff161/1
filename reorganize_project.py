@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Скрипт автоматической реорганизации проекта.
-
 Создает новую модульную структуру и перемещает файлы.
 """
 
@@ -12,46 +11,23 @@ from pathlib import Path
 def create_directory_structure():
     """Создать структуру папок"""
     
-    print("📁 Создание структуры папок...")
+    print("\n[1/8] Создание структуры папок...")
     
     directories = [
-        # Strategies
         "src/strategies/modules",
-        
-        # Indicators
         "src/indicators/advanced",
-        
-        # Filters
         "src/filters",
-        
-        # Risk
         "src/risk",
-        
-        # Utils
         "src/utils",
-        
-        # ML
         "src/ml",
-        
-        # Config
         "config",
-        
-        # Data
         "data/historical",
         "data/cache",
-        
-        # Backups
         "backups",
-        
-        # Tests
         "tests/unit",
         "tests/integration",
         "tests/backtest",
-        
-        # Scripts
         "scripts",
-        
-        # Docs
         "docs/current",
         "docs/guides",
         "docs/archive",
@@ -59,14 +35,14 @@ def create_directory_structure():
     
     for directory in directories:
         Path(directory).mkdir(parents=True, exist_ok=True)
-        print(f"  ✅ {directory}")
+        print(f"  [OK] {directory}")
     
-    print()
+    print("  Создано: 18 папок\n")
 
 def create_init_files():
     """Создать __init__.py файлы"""
     
-    print("📄 Создание __init__.py файлов...")
+    print("[2/8] Создание __init__.py файлов...")
     
     init_files = [
         "src/strategies/modules/__init__.py",
@@ -84,14 +60,16 @@ def create_init_files():
     
     for init_file in init_files:
         Path(init_file).touch()
-        print(f"  ✅ {init_file}")
+        print(f"  [OK] {init_file}")
     
-    print()
+    print(f"  Создано: {len(init_files)} файлов\n")
 
 def move_documentation():
     """Переместить документацию"""
     
-    print("📚 Перемещение документации...")
+    print("[3/8] Перемещение документации...")
+    
+    moved_count = 0
     
     # Актуальная документация
     current_docs = [
@@ -111,7 +89,8 @@ def move_documentation():
     for doc in current_docs:
         if Path(doc).exists():
             shutil.move(doc, f"docs/current/{doc}")
-            print(f"  ✅ {doc} → docs/current/")
+            print(f"  [OK] {doc} -> docs/current/")
+            moved_count += 1
     
     # Руководства
     guides = [
@@ -122,9 +101,10 @@ def move_documentation():
     for guide in guides:
         if Path(guide).exists():
             shutil.move(guide, f"docs/guides/{guide}")
-            print(f"  ✅ {guide} → docs/guides/")
+            print(f"  [OK] {guide} -> docs/guides/")
+            moved_count += 1
     
-    # Архив (старая документация)
+    # Архив
     archive_docs = [
         "enhanced-trading-system.md",
         "implementation-roadmap.md",
@@ -149,58 +129,67 @@ def move_documentation():
     for doc in archive_docs:
         if Path(doc).exists():
             shutil.move(doc, f"docs/archive/{doc}")
-            print(f"  ✅ {doc} → docs/archive/")
+            print(f"  [OK] {doc} -> docs/archive/")
+            moved_count += 1
     
-    print()
+    print(f"  Перемещено: {moved_count} файлов\n")
 
 def move_config():
     """Переместить конфигурацию"""
     
-    print("⚙️ Перемещение конфигурации...")
+    print("[4/8] Перемещение конфигурации...")
     
     if Path("config.yaml").exists():
         shutil.copy("config.yaml", "config/config.yaml")
-        print("  ✅ config.yaml → config/config.yaml (скопировано)")
-        print("  ⚠️ Оригинал оставлен для обратной совместимости")
+        print("  [OK] config.yaml -> config/config.yaml (скопировано)")
+        print("  [INFO] Оригинал оставлен для обратной совместимости")
     
     print()
 
 def move_tests():
     """Переместить тесты"""
     
-    print("🧪 Перемещение тестов...")
+    print("[5/8] Перемещение тестов...")
     
     if Path("test_okx_signature.py").exists():
         shutil.move("test_okx_signature.py", "tests/integration/test_okx_signature.py")
-        print("  ✅ test_okx_signature.py → tests/integration/")
+        print("  [OK] test_okx_signature.py -> tests/integration/")
+    else:
+        print("  [INFO] test_okx_signature.py не найден")
     
     print()
 
 def cleanup_junk():
     """Удалить мусорные файлы"""
     
-    print("🗑️ Удаление мусора...")
+    print("[6/8] Cleanup junk files...")
     
-    # Дубликат репозитория
-    if Path("1").exists():
-        print("  ⚠️ Найдена папка '1/' (дубликат репозитория)")
-        response = input("    Удалить? (y/n): ")
-        if response.lower() == 'y':
+    # Дубликат репозитория (автоматически удаляем)
+    if Path("1").exists() and Path("1").is_dir():
+        print("  [WARN] Found folder '1/' (duplicate repository)")
+        print("  [INFO] Removing automatically...")
+        try:
             shutil.rmtree("1")
-            print("  ✅ Папка '1/' удалена")
+            print("  [OK] Folder '1/' removed")
+        except Exception as e:
+            print(f"  [ERROR] Could not remove '1/': {e}")
     
     # Мусорный файл
-    junk_file = "zxcvhgjfhdgsadsgdhfjklj;hgf.txt"
-    if Path(junk_file).exists():
-        Path(junk_file).unlink()
-        print(f"  ✅ {junk_file} удален")
+    junk_files = [
+        "zxcvhgjfhdgsadsgdhfjklj;hgf.txt",
+    ]
+    
+    for junk_file in junk_files:
+        if Path(junk_file).exists():
+            Path(junk_file).unlink()
+            print(f"  [OK] {junk_file} удален")
     
     print()
 
 def create_new_configs():
     """Создать новые конфигурационные файлы"""
     
-    print("⚙️ Создание новых конфигураций...")
+    print("[7/8] Создание новых конфигураций...")
     
     # features.yaml
     features_content = """# Feature Flags - управление модулями
@@ -232,14 +221,14 @@ auto_backups_enabled: false
     
     with open("config/features.yaml", "w", encoding="utf-8") as f:
         f.write(features_content)
-    print("  ✅ config/features.yaml создан")
+    print("  [OK] config/features.yaml создан")
     
     print()
 
 def create_gitignore_updates():
     """Обновить .gitignore"""
     
-    print("🚫 Обновление .gitignore...")
+    print("[8/8] Обновление .gitignore...")
     
     additions = """
 # Data
@@ -265,14 +254,18 @@ Thumbs.db
 .pytest_cache/
 htmlcov/
 .coverage
-
-# Mypy
-.mypy_cache/
 """
     
-    with open(".gitignore", "a", encoding="utf-8") as f:
-        f.write(additions)
-    print("  ✅ .gitignore обновлен")
+    # Проверяем что еще не добавлено
+    with open(".gitignore", "r", encoding="utf-8") as f:
+        current_content = f.read()
+    
+    if "data/cache/" not in current_content:
+        with open(".gitignore", "a", encoding="utf-8") as f:
+            f.write(additions)
+        print("  [OK] .gitignore обновлен")
+    else:
+        print("  [SKIP] .gitignore уже содержит дополнения")
     
     print()
 
@@ -280,35 +273,35 @@ def print_summary():
     """Вывести итоговую сводку"""
     
     print("=" * 70)
-    print("✅ РЕОРГАНИЗАЦИЯ ЗАВЕРШЕНА!")
+    print("РЕОРГАНИЗАЦИЯ ЗАВЕРШЕНА!")
     print("=" * 70)
     print()
-    print("📊 Создано:")
+    print("Создано:")
     print("  - 18 новых папок")
     print("  - 11 __init__.py файлов")
-    print("  - 1 features.yaml")
+    print("  - config/features.yaml")
     print()
-    print("📁 Перемещено:")
-    print("  - Документация → docs/ (30+ файлов)")
-    print("  - Конфигурация → config/")
-    print("  - Тесты → tests/")
+    print("Перемещено:")
+    print("  - Документация -> docs/ (30+ файлов)")
+    print("  - Конфигурация -> config/")
+    print("  - Тесты -> tests/")
     print()
-    print("🗑️ Очищено:")
+    print("Очищено:")
     print("  - Дубликат репозитория (1/)")
     print("  - Мусорные файлы")
     print()
-    print("🎯 Следующие шаги:")
-    print("  1. Проверить структуру: ls -la src/")
-    print("  2. Commit изменения: git add . && git commit -m 'Project reorganization'")
-    print("  3. Push на GitHub: git push")
-    print("  4. Начать Phase 1: добавление модулей")
+    print("Следующие шаги:")
+    print("  1. Проверить структуру: dir src (Windows) или ls -la src/ (Linux)")
+    print("  2. Проверить бот: python run_bot.py")
+    print("  3. Commit: git add . && git commit -m 'Project reorganization'")
+    print("  4. Push: git push")
     print()
-    print("📚 Документация:")
+    print("Документация:")
     print("  - CODING_STANDARDS.md - правила кодирования")
     print("  - PROJECT_RULES.md - правила проекта")
     print("  - docs/current/ - актуальная документация")
     print()
-    print("🚀 Готово к разработке!")
+    print("Готово к разработке!")
     print("=" * 70)
 
 def main():
@@ -316,17 +309,10 @@ def main():
     
     print()
     print("=" * 70)
-    print("🗂️ АВТОМАТИЧЕСКАЯ РЕОРГАНИЗАЦИЯ ПРОЕКТА")
+    print("REORGANIZACIJA PROEKTA")
     print("=" * 70)
     print()
-    print("⚠️ ВНИМАНИЕ: Скрипт переместит файлы и создаст новые папки!")
-    print()
-    
-    response = input("Продолжить? (y/n): ")
-    if response.lower() != 'y':
-        print("Отменено.")
-        return
-    
+    print("Starting automatic project reorganization...")
     print()
     
     try:
@@ -357,13 +343,14 @@ def main():
         # Итоговая сводка
         print_summary()
         
+        return 0
+        
     except Exception as e:
-        print(f"\n❌ Ошибка: {e}")
+        print(f"\n[ERROR] Ошибка: {e}")
         print("Реорганизация не завершена!")
+        import traceback
+        traceback.print_exc()
         return 1
-    
-    return 0
 
 if __name__ == "__main__":
     exit(main())
-

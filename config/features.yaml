@@ -1,0 +1,25 @@
+# Feature Flags - управление модулями
+
+# Phase 1: Базовые улучшения
+multi_timeframe_enabled: false
+correlation_filter_enabled: false
+time_based_filter_enabled: false
+volatility_modes_enabled: false
+pivot_points_enabled: false
+volume_profile_enabled: false
+
+# Phase 2: Продвинутые
+order_book_enabled: false
+liquidity_zones_enabled: false
+
+# Phase 3: ML
+kelly_criterion_enabled: false
+rl_agent_enabled: false
+
+# Phase 4: Гибрид
+hybrid_mode_enabled: false
+grid_trading_enabled: false
+
+# Опционально
+web_dashboard_enabled: false
+auto_backups_enabled: false

@@ -5,3 +5,26 @@ __pycache__/
 .mypy_cache/
 *.log
 trading_bot.db
+# Data
+data/cache/
+data/historical/
+*.db
+*.db-journal
+
+# Backups
+backups/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
