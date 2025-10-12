@@ -19,6 +19,9 @@ from src.okx_client import OKXClient
 # PHASE 1: Multi-Timeframe Confirmation
 from src.strategies.modules.multi_timeframe import (MTFConfig,
                                                       MultiTimeframeFilter)
+# PHASE 1: Correlation Filter
+from src.strategies.modules.correlation_filter import (CorrelationFilter,
+                                                         CorrelationFilterConfig)
 
 
 class ScalpingStrategy:
@@ -129,6 +132,20 @@ class ScalpingStrategy:
             logger.info("🎯 MTF Filter enabled!")
         else:
             logger.info("⚪ MTF Filter disabled (enable in config.yaml)")
+
+        # PHASE 1: Correlation Filter
+        self.correlation_filter: Optional[CorrelationFilter] = None
+        if hasattr(config, "correlation_filter_enabled") and config.correlation_filter_enabled:
+            corr_filter_config = CorrelationFilterConfig(
+                enabled=True,
+                max_correlated_positions=config.correlation_filter.get("max_correlated_positions", 1),
+                correlation_threshold=config.correlation_filter.get("correlation_threshold", 0.7),
+                block_same_direction_only=config.correlation_filter.get("block_same_direction_only", True),
+            )
+            self.correlation_filter = CorrelationFilter(client, corr_filter_config, config.symbols)
+            logger.info("🔗 Correlation Filter enabled!")
+        else:
+            logger.info("⚪ Correlation Filter disabled (enable in config.yaml)")
 
         logger.info(f"Scalping strategy initialized for symbols: {config.symbols}")
 
@@ -520,6 +537,28 @@ class ScalpingStrategy:
                 f"SHORT {short_score}/12 ({short_confidence:.1%}) | "
                 f"Threshold: {self.min_score_threshold}/12"
             )
+
+            # PHASE 1: Correlation Filter
+            # Проверяем корреляцию ПЕРЕД MTF (чтобы не тратить ресурсы)
+            if self.correlation_filter:
+                # Определяем направление сигнала
+                signal_direction = None
+                if long_score >= self.min_score_threshold and long_score > short_score:
+                    signal_direction = "LONG"
+                elif short_score >= self.min_score_threshold and short_score > long_score:
+                    signal_direction = "SHORT"
+                
+                if signal_direction:
+                    corr_result = await self.correlation_filter.check_entry(
+                        symbol, signal_direction, self.positions
+                    )
+                    if corr_result.blocked:
+                        logger.warning(
+                            f"🚫 CORRELATION BLOCKED: {symbol} {signal_direction} | "
+                            f"Reason: {corr_result.reason} | "
+                            f"Correlated: {corr_result.correlated_positions}"
+                        )
+                        return None
 
             # PHASE 1: Multi-Timeframe Confirmation
             # Применяем MTF фильтр ДО генерации сигнала (если включен)

@@ -37,6 +37,13 @@ scalping:
     ema_slow_period: 21           # Период медленной EMA
     cache_ttl_seconds: 30         # Кэш свечей (секунды)
   
+  # PHASE 1: Correlation Filter
+  correlation_filter_enabled: false  # Включим после тестов
+  correlation_filter:
+    max_correlated_positions: 1   # Максимум 1 позиция в коррелированных парах
+    correlation_threshold: 0.7    # Порог высокой корреляции (>0.7)
+    block_same_direction_only: true  # Блокировать только одинаковые направления
+  
   indicators:
     sma_fast: 5
     sma_slow: 20
