@@ -84,6 +84,18 @@ scalping:
     score_bonus_near_level: 1      # Бонус за вход около уровня
     cache_ttl_seconds: 3600        # Кэш 1 час
   
+  # PHASE 1: Volume Profile
+  volume_profile_enabled: false  # Включим после тестов
+  volume_profile:
+    lookback_timeframe: "1H"       # Таймфрейм для расчета профиля
+    lookback_candles: 100          # Количество свечей
+    price_buckets: 50              # Количество ценовых уровней
+    value_area_percent: 70.0       # Процент для Value Area (70%)
+    score_bonus_in_value_area: 1   # Бонус за вход в Value Area
+    score_bonus_near_poc: 1        # Бонус за вход около POC
+    poc_tolerance_percent: 0.005   # Допуск около POC (0.5%)
+    cache_ttl_seconds: 600         # Кэш 10 минут
+  
   indicators:
     sma_fast: 5
     sma_slow: 20

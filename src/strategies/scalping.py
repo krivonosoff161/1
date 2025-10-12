@@ -31,6 +31,9 @@ from src.strategies.modules.volatility_adapter import (VolatilityAdapter,
 # PHASE 1: Pivot Points
 from src.strategies.modules.pivot_points import (PivotPointsConfig,
                                                    PivotPointsFilter)
+# PHASE 1: Volume Profile
+from src.strategies.modules.volume_profile_filter import (VolumeProfileConfig,
+                                                            VolumeProfileFilter)
 
 
 class ScalpingStrategy:
@@ -213,6 +216,25 @@ class ScalpingStrategy:
             logger.info("📍 Pivot Points Filter enabled!")
         else:
             logger.info("⚪ Pivot Points Filter disabled (enable in config.yaml)")
+
+        # PHASE 1: Volume Profile
+        self.volume_profile_filter: Optional[VolumeProfileFilter] = None
+        if hasattr(config, "volume_profile_enabled") and config.volume_profile_enabled:
+            vp_config = VolumeProfileConfig(
+                enabled=True,
+                lookback_timeframe=config.volume_profile.get("lookback_timeframe", "1H"),
+                lookback_candles=config.volume_profile.get("lookback_candles", 100),
+                price_buckets=config.volume_profile.get("price_buckets", 50),
+                value_area_percent=config.volume_profile.get("value_area_percent", 70.0),
+                score_bonus_in_value_area=config.volume_profile.get("score_bonus_in_value_area", 1),
+                score_bonus_near_poc=config.volume_profile.get("score_bonus_near_poc", 1),
+                poc_tolerance_percent=config.volume_profile.get("poc_tolerance_percent", 0.005),
+                cache_ttl_seconds=config.volume_profile.get("cache_ttl_seconds", 600),
+            )
+            self.volume_profile_filter = VolumeProfileFilter(client, vp_config)
+            logger.info("📊 Volume Profile Filter enabled!")
+        else:
+            logger.info("⚪ Volume Profile Filter disabled (enable in config.yaml)")
 
         logger.info(f"Scalping strategy initialized for symbols: {config.symbols}")
 
@@ -654,6 +676,29 @@ class ScalpingStrategy:
                             f"Correlated: {corr_result.correlated_positions}"
                         )
                         return None
+
+            # PHASE 1: Volume Profile
+            # Проверяем Volume Profile первым (общий бонус для обоих направлений)
+            if self.volume_profile_filter:
+                vp_result = await self.volume_profile_filter.check_entry(symbol, current_price)
+                if vp_result.bonus > 0:
+                    # Применяем бонус к обоим score (если есть сигнал)
+                    if long_score >= current_score_threshold and long_score > short_score:
+                        long_score += vp_result.bonus
+                        long_confidence = long_score / 12.0
+                        logger.info(
+                            f"✅ VOLUME PROFILE BONUS: {symbol} LONG | "
+                            f"Reason: {vp_result.reason} | "
+                            f"Bonus: +{vp_result.bonus} | New score: {long_score}/12"
+                        )
+                    elif short_score >= current_score_threshold and short_score > long_score:
+                        short_score += vp_result.bonus
+                        short_confidence = short_score / 12.0
+                        logger.info(
+                            f"✅ VOLUME PROFILE BONUS: {symbol} SHORT | "
+                            f"Reason: {vp_result.reason} | "
+                            f"Bonus: +{vp_result.bonus} | New score: {short_score}/12"
+                        )
 
             # PHASE 1: Pivot Points
             # Проверяем Pivot уровни (до MTF, так как может дать бонус к score)
