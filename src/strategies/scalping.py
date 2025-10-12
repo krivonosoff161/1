@@ -22,6 +22,9 @@ from src.strategies.modules.multi_timeframe import (MTFConfig,
 # PHASE 1: Correlation Filter
 from src.strategies.modules.correlation_filter import (CorrelationFilter,
                                                          CorrelationFilterConfig)
+# PHASE 1: Time-Based Filter
+from src.filters.time_session_manager import (TimeFilterConfig,
+                                                TimeSessionManager)
 
 
 class ScalpingStrategy:
@@ -146,6 +149,23 @@ class ScalpingStrategy:
             logger.info("🔗 Correlation Filter enabled!")
         else:
             logger.info("⚪ Correlation Filter disabled (enable in config.yaml)")
+
+        # PHASE 1: Time-Based Filter
+        self.time_filter: Optional[TimeSessionManager] = None
+        if hasattr(config, "time_filter_enabled") and config.time_filter_enabled:
+            time_filter_config = TimeFilterConfig(
+                enabled=True,
+                trade_asian_session=config.time_filter.get("trade_asian_session", True),
+                trade_european_session=config.time_filter.get("trade_european_session", True),
+                trade_american_session=config.time_filter.get("trade_american_session", True),
+                prefer_overlaps=config.time_filter.get("prefer_overlaps", False),
+                avoid_low_liquidity_hours=config.time_filter.get("avoid_low_liquidity_hours", True),
+                avoid_weekends=config.time_filter.get("avoid_weekends", True),
+            )
+            self.time_filter = TimeSessionManager(time_filter_config)
+            logger.info("⏰ Time Filter enabled!")
+        else:
+            logger.info("⚪ Time Filter disabled (enable in config.yaml)")
 
         logger.info(f"Scalping strategy initialized for symbols: {config.symbols}")
 
@@ -537,6 +557,18 @@ class ScalpingStrategy:
                 f"SHORT {short_score}/12 ({short_confidence:.1%}) | "
                 f"Threshold: {self.min_score_threshold}/12"
             )
+
+            # PHASE 1: Time-Based Filter
+            # Проверяем СНАЧАЛА время (самая быстрая проверка)
+            if self.time_filter:
+                if not self.time_filter.is_trading_allowed():
+                    next_time = self.time_filter.get_next_trading_time()
+                    logger.info(
+                        f"⏰ TIME FILTER BLOCKED: {symbol} | "
+                        f"Reason: Outside trading hours | "
+                        f"{next_time}"
+                    )
+                    return None
 
             # PHASE 1: Correlation Filter
             # Проверяем корреляцию ПЕРЕД MTF (чтобы не тратить ресурсы)

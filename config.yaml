@@ -44,6 +44,16 @@ scalping:
     correlation_threshold: 0.7    # Порог высокой корреляции (>0.7)
     block_same_direction_only: true  # Блокировать только одинаковые направления
   
+  # PHASE 1: Time-Based Filter
+  time_filter_enabled: false  # Включим после тестов
+  time_filter:
+    trade_asian_session: true       # Торговать Азиатскую сессию (00:00-09:00 UTC)
+    trade_european_session: true    # Торговать Европейскую сессию (07:00-16:00 UTC)
+    trade_american_session: true    # Торговать Американскую сессию (13:00-22:00 UTC)
+    prefer_overlaps: false          # Только пересечения сессий (более строго)
+    avoid_low_liquidity_hours: true # Избегать часы низкой ликвидности
+    avoid_weekends: true            # Не торговать в выходные
+  
   indicators:
     sma_fast: 5
     sma_slow: 20
