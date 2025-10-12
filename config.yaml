@@ -54,6 +54,27 @@ scalping:
     avoid_low_liquidity_hours: true # Избегать часы низкой ликвидности
     avoid_weekends: true            # Не торговать в выходные
   
+  # PHASE 1: Volatility Modes
+  volatility_modes_enabled: false  # Включим после тестов
+  volatility_modes:
+    low_volatility_threshold: 0.01   # <1% = LOW VOL
+    high_volatility_threshold: 0.02  # >2% = HIGH VOL
+    # LOW VOLATILITY (узкие стопы, легче вход)
+    low_vol_sl_multiplier: 1.5
+    low_vol_tp_multiplier: 1.0
+    low_vol_score_threshold: 6
+    low_vol_position_size_multiplier: 1.2
+    # NORMAL (стандартные параметры)
+    normal_vol_sl_multiplier: 2.5
+    normal_vol_tp_multiplier: 1.5
+    normal_vol_score_threshold: 7
+    normal_vol_position_size_multiplier: 1.0
+    # HIGH VOLATILITY (широкие стопы, строже вход, меньше размер)
+    high_vol_sl_multiplier: 3.5
+    high_vol_tp_multiplier: 2.5
+    high_vol_score_threshold: 8
+    high_vol_position_size_multiplier: 0.7
+  
   indicators:
     sma_fast: 5
     sma_slow: 20

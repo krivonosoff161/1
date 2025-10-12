@@ -25,6 +25,9 @@ from src.strategies.modules.correlation_filter import (CorrelationFilter,
 # PHASE 1: Time-Based Filter
 from src.filters.time_session_manager import (TimeFilterConfig,
                                                 TimeSessionManager)
+# PHASE 1: Volatility Modes
+from src.strategies.modules.volatility_adapter import (VolatilityAdapter,
+                                                         VolatilityModeConfig)
 
 
 class ScalpingStrategy:
@@ -166,6 +169,31 @@ class ScalpingStrategy:
             logger.info("⏰ Time Filter enabled!")
         else:
             logger.info("⚪ Time Filter disabled (enable in config.yaml)")
+
+        # PHASE 1: Volatility Modes
+        self.volatility_adapter: Optional[VolatilityAdapter] = None
+        if hasattr(config, "volatility_modes_enabled") and config.volatility_modes_enabled:
+            vol_config = VolatilityModeConfig(
+                enabled=True,
+                low_volatility_threshold=config.volatility_modes.get("low_volatility_threshold", 0.01),
+                high_volatility_threshold=config.volatility_modes.get("high_volatility_threshold", 0.02),
+                low_vol_sl_multiplier=config.volatility_modes.get("low_vol_sl_multiplier", 1.5),
+                low_vol_tp_multiplier=config.volatility_modes.get("low_vol_tp_multiplier", 1.0),
+                low_vol_score_threshold=config.volatility_modes.get("low_vol_score_threshold", 6),
+                low_vol_position_size_multiplier=config.volatility_modes.get("low_vol_position_size_multiplier", 1.2),
+                normal_vol_sl_multiplier=config.volatility_modes.get("normal_vol_sl_multiplier", 2.5),
+                normal_vol_tp_multiplier=config.volatility_modes.get("normal_vol_tp_multiplier", 1.5),
+                normal_vol_score_threshold=config.volatility_modes.get("normal_vol_score_threshold", 7),
+                normal_vol_position_size_multiplier=config.volatility_modes.get("normal_vol_position_size_multiplier", 1.0),
+                high_vol_sl_multiplier=config.volatility_modes.get("high_vol_sl_multiplier", 3.5),
+                high_vol_tp_multiplier=config.volatility_modes.get("high_vol_tp_multiplier", 2.5),
+                high_vol_score_threshold=config.volatility_modes.get("high_vol_score_threshold", 8),
+                high_vol_position_size_multiplier=config.volatility_modes.get("high_vol_position_size_multiplier", 0.7),
+            )
+            self.volatility_adapter = VolatilityAdapter(vol_config)
+            logger.info("📊 Volatility Adapter enabled!")
+        else:
+            logger.info("⚪ Volatility Adapter disabled (enable in config.yaml)")
 
         logger.info(f"Scalping strategy initialized for symbols: {config.symbols}")
 
@@ -551,11 +579,27 @@ class ScalpingStrategy:
                 if existing_position.side == PositionSide.SHORT and long_score > 0:
                     return None
 
+                # PHASE 1: Volatility Modes - адаптация порога scoring
+            current_score_threshold = self.min_score_threshold
+            if self.volatility_adapter and atr:
+                # Рассчитываем текущую волатильность
+                current_volatility = self.volatility_adapter.calculate_volatility(
+                    atr.value, current_price
+                )
+                # Получаем адаптированные параметры
+                vol_params = self.volatility_adapter.get_parameters(current_volatility)
+                current_score_threshold = vol_params.score_threshold
+                
+                logger.debug(
+                    f"📊 Volatility: {current_volatility:.2%} → Regime: {vol_params.regime.value} | "
+                    f"Threshold: {current_score_threshold}/12"
+                )
+
             # Логируем scoring ВСЕГДА (для понимания почему нет сигналов)
             logger.info(
                 f"📊 {symbol} Scoring: LONG {long_score}/12 ({long_confidence:.1%}) | "
                 f"SHORT {short_score}/12 ({short_confidence:.1%}) | "
-                f"Threshold: {self.min_score_threshold}/12"
+                f"Threshold: {current_score_threshold}/12"
             )
 
             # PHASE 1: Time-Based Filter
@@ -573,11 +617,11 @@ class ScalpingStrategy:
             # PHASE 1: Correlation Filter
             # Проверяем корреляцию ПЕРЕД MTF (чтобы не тратить ресурсы)
             if self.correlation_filter:
-                # Определяем направление сигнала
+                # Определяем направление сигнала (используем адаптированный порог)
                 signal_direction = None
-                if long_score >= self.min_score_threshold and long_score > short_score:
+                if long_score >= current_score_threshold and long_score > short_score:
                     signal_direction = "LONG"
-                elif short_score >= self.min_score_threshold and short_score > long_score:
+                elif short_score >= current_score_threshold and short_score > long_score:
                     signal_direction = "SHORT"
                 
                 if signal_direction:
@@ -595,8 +639,8 @@ class ScalpingStrategy:
             # PHASE 1: Multi-Timeframe Confirmation
             # Применяем MTF фильтр ДО генерации сигнала (если включен)
             if self.mtf_filter:
-                # Определяем какой сигнал сильнее
-                if long_score >= self.min_score_threshold and long_score > short_score:
+                # Определяем какой сигнал сильнее (используем адаптированный порог)
+                if long_score >= current_score_threshold and long_score > short_score:
                     # Проверяем LONG сигнал
                     mtf_result = await self.mtf_filter.check_confirmation(symbol, "LONG")
                     if mtf_result.blocked:
@@ -613,7 +657,7 @@ class ScalpingStrategy:
                             f"✅ MTF CONFIRMED: {symbol} LONG | "
                             f"Bonus: +{mtf_result.bonus} | New score: {long_score}/12"
                         )
-                elif short_score >= self.min_score_threshold and short_score > long_score:
+                elif short_score >= current_score_threshold and short_score > long_score:
                     # Проверяем SHORT сигнал
                     mtf_result = await self.mtf_filter.check_confirmation(symbol, "SHORT")
                     if mtf_result.blocked:
@@ -631,8 +675,8 @@ class ScalpingStrategy:
                             f"Bonus: +{mtf_result.bonus} | New score: {short_score}/12"
                         )
 
-            # Long сигнал: минимум 7 баллов и больше чем short
-            if long_score >= self.min_score_threshold and long_score > short_score:
+            # Long сигнал: минимум current_score_threshold баллов и больше чем short
+            if long_score >= current_score_threshold and long_score > short_score:
                 logger.info(
                     f"🎯 SIGNAL GENERATED: {symbol} LONG | "
                     f"Score: {long_score}/12 | Confidence: {long_confidence:.1%} | "
@@ -649,8 +693,8 @@ class ScalpingStrategy:
                     confidence=long_confidence,
                 )
 
-            # Short сигнал: минимум 7 баллов и больше чем long
-            if short_score >= self.min_score_threshold and short_score > long_score:
+            # Short сигнал: минимум current_score_threshold баллов и больше чем long
+            if short_score >= current_score_threshold and short_score > long_score:
                 logger.info(
                     f"🎯 SIGNAL GENERATED: {symbol} SHORT | "
                     f"Score: {short_score}/12 | Confidence: {short_confidence:.1%} | "
@@ -669,12 +713,12 @@ class ScalpingStrategy:
 
             # Если нет сигнала - логируем почему
             if (
-                long_score < self.min_score_threshold
-                and short_score < self.min_score_threshold
+                long_score < current_score_threshold
+                and short_score < current_score_threshold
             ):
                 logger.info(
                     f"⚪ {symbol} No signal: Both scores too low "
-                    f"(L:{long_score}/12, S:{short_score}/12, need {self.min_score_threshold})"
+                    f"(L:{long_score}/12, S:{short_score}/12, need {current_score_threshold})"
                 )
             elif long_score == short_score:
                 logger.info(
