@@ -26,6 +26,17 @@ scalping:
   enabled: true
   symbols: ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
   timeframe: "1m"
+  
+  # PHASE 1: Multi-Timeframe Confirmation (MTF)
+  multi_timeframe_enabled: false  # Включим после тестов
+  multi_timeframe:
+    confirmation_timeframe: "5m"  # Таймфрейм для подтверждения
+    score_bonus: 2                # Бонус к score при подтверждении
+    block_opposite: true          # Блокировать противоположные сигналы
+    ema_fast_period: 8            # Период быстрой EMA
+    ema_slow_period: 21           # Период медленной EMA
+    cache_ttl_seconds: 30         # Кэш свечей (секунды)
+  
   indicators:
     sma_fast: 5
     sma_slow: 20

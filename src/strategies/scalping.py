@@ -16,6 +16,10 @@ from src.models import (MarketData, OrderSide, OrderType, Position,
                         PositionSide, RiskMetrics, Signal, Tick)
 from src.okx_client import OKXClient
 
+# PHASE 1: Multi-Timeframe Confirmation
+from src.strategies.modules.multi_timeframe import (MTFConfig,
+                                                      MultiTimeframeFilter)
+
 
 class ScalpingStrategy:
     """High-frequency scalping strategy"""
@@ -109,6 +113,22 @@ class ScalpingStrategy:
 
         # Market data cache
         self.market_data_cache: Dict[str, MarketData] = {}
+
+        # PHASE 1: Multi-Timeframe Confirmation Filter
+        self.mtf_filter: Optional[MultiTimeframeFilter] = None
+        if hasattr(config, "multi_timeframe_enabled") and config.multi_timeframe_enabled:
+            mtf_config = MTFConfig(
+                confirmation_timeframe=config.multi_timeframe.get("confirmation_timeframe", "5m"),
+                score_bonus=config.multi_timeframe.get("score_bonus", 2),
+                block_opposite=config.multi_timeframe.get("block_opposite", True),
+                ema_fast_period=config.multi_timeframe.get("ema_fast_period", 8),
+                ema_slow_period=config.multi_timeframe.get("ema_slow_period", 21),
+                cache_ttl_seconds=config.multi_timeframe.get("cache_ttl_seconds", 30),
+            )
+            self.mtf_filter = MultiTimeframeFilter(client, mtf_config)
+            logger.info("🎯 MTF Filter enabled!")
+        else:
+            logger.info("⚪ MTF Filter disabled (enable in config.yaml)")
 
         logger.info(f"Scalping strategy initialized for symbols: {config.symbols}")
 
@@ -261,9 +281,9 @@ class ScalpingStrategy:
                     )
 
                     # Обрабатываем тик
-                    await self._process_tick(symbol, tick)
+                await self._process_tick(symbol, tick)
 
-                except Exception as e:
+        except Exception as e:
                     logger.error(f"❌ Error processing {symbol}: {e}")
 
                 # Ждем 60 секунд до следующего опроса
@@ -501,6 +521,45 @@ class ScalpingStrategy:
                 f"Threshold: {self.min_score_threshold}/12"
             )
 
+            # PHASE 1: Multi-Timeframe Confirmation
+            # Применяем MTF фильтр ДО генерации сигнала (если включен)
+            if self.mtf_filter:
+                # Определяем какой сигнал сильнее
+                if long_score >= self.min_score_threshold and long_score > short_score:
+                    # Проверяем LONG сигнал
+                    mtf_result = await self.mtf_filter.check_confirmation(symbol, "LONG")
+                    if mtf_result.blocked:
+                        logger.warning(
+                            f"🚫 MTF BLOCKED: {symbol} LONG signal blocked | "
+                            f"Reason: {mtf_result.reason}"
+                        )
+                        return None
+                    if mtf_result.confirmed:
+                        # Добавляем бонус к score
+                        long_score += mtf_result.bonus
+                        long_confidence = long_score / 12.0
+                        logger.info(
+                            f"✅ MTF CONFIRMED: {symbol} LONG | "
+                            f"Bonus: +{mtf_result.bonus} | New score: {long_score}/12"
+                        )
+                elif short_score >= self.min_score_threshold and short_score > long_score:
+                    # Проверяем SHORT сигнал
+                    mtf_result = await self.mtf_filter.check_confirmation(symbol, "SHORT")
+                    if mtf_result.blocked:
+                        logger.warning(
+                            f"🚫 MTF BLOCKED: {symbol} SHORT signal blocked | "
+                            f"Reason: {mtf_result.reason}"
+                        )
+                        return None
+                    if mtf_result.confirmed:
+                        # Добавляем бонус к score
+                        short_score += mtf_result.bonus
+                        short_confidence = short_score / 12.0
+                        logger.info(
+                            f"✅ MTF CONFIRMED: {symbol} SHORT | "
+                            f"Bonus: +{mtf_result.bonus} | New score: {short_score}/12"
+                        )
+
             # Long сигнал: минимум 7 баллов и больше чем short
             if long_score >= self.min_score_threshold and long_score > short_score:
                 logger.info(
@@ -556,58 +615,58 @@ class ScalpingStrategy:
 
         else:
             # Старая логика "всё или ничего" (если scoring отключен)
-            long_conditions = [
-                current_price > sma_fast.value > sma_slow.value,
-                ema_fast.value > ema_slow.value,
-                30 < rsi.value < 70,
+        long_conditions = [
+            current_price > sma_fast.value > sma_slow.value,
+            ema_fast.value > ema_slow.value,
+            30 < rsi.value < 70,
                 current_price <= bb.metadata["lower_band"] * 1.002,
-                volume.value >= self.config.entry.volume_threshold,
-            ]
+            volume.value >= self.config.entry.volume_threshold,
+        ]
 
-            short_conditions = [
-                current_price < sma_fast.value < sma_slow.value,
-                ema_fast.value < ema_slow.value,
-                30 < rsi.value < 70,
+        short_conditions = [
+            current_price < sma_fast.value < sma_slow.value,
+            ema_fast.value < ema_slow.value,
+            30 < rsi.value < 70,
                 current_price >= bb.metadata["upper_band"] * 0.998,
-                volume.value >= self.config.entry.volume_threshold,
-            ]
+            volume.value >= self.config.entry.volume_threshold,
+        ]
 
-            existing_position = self.positions.get(symbol)
-            if existing_position:
+        existing_position = self.positions.get(symbol)
+        if existing_position:
                 if existing_position.side == PositionSide.LONG and any(
                     short_conditions
                 ):
-                    return None
+                return None
                 if existing_position.side == PositionSide.SHORT and any(
                     long_conditions
                 ):
-                    return None
+                return None
 
-            if all(long_conditions):
-                return Signal(
-                    symbol=symbol,
-                    side=OrderSide.BUY,
+        if all(long_conditions):
+            return Signal(
+                symbol=symbol,
+                side=OrderSide.BUY,
                     strength=0.8,
-                    price=current_price,
-                    timestamp=datetime.utcnow(),
-                    strategy_id=self.strategy_id,
-                    indicators={k: v.value for k, v in indicators.items()},
+                price=current_price,
+                timestamp=datetime.utcnow(),
+                strategy_id=self.strategy_id,
+                indicators={k: v.value for k, v in indicators.items()},
                     confidence=1.0,
-                )
+            )
 
-            elif all(short_conditions):
-                return Signal(
-                    symbol=symbol,
-                    side=OrderSide.SELL,
-                    strength=0.8,
-                    price=current_price,
-                    timestamp=datetime.utcnow(),
-                    strategy_id=self.strategy_id,
-                    indicators={k: v.value for k, v in indicators.items()},
+        elif all(short_conditions):
+            return Signal(
+                symbol=symbol,
+                side=OrderSide.SELL,
+                strength=0.8,
+                price=current_price,
+                timestamp=datetime.utcnow(),
+                strategy_id=self.strategy_id,
+                indicators={k: v.value for k, v in indicators.items()},
                     confidence=1.0,
-                )
+            )
 
-            return None
+        return None
 
     def _detect_market_regime(self, symbol: str) -> str:
         """
@@ -717,7 +776,7 @@ class ScalpingStrategy:
                     logger.debug(
                         f"🚫 {symbol}: Outside trading sessions (hour: {current_hour})"
                     )
-                    return False
+            return False
 
         # Check hourly trade limit
         if self.trade_count_hourly >= self.config.max_trades_per_hour:
@@ -755,7 +814,7 @@ class ScalpingStrategy:
                         f"🛡️ {symbol} Extended cooldown active after {self.consecutive_losses} losses: "
                         f"{extended_cooldown_minutes - time_since_loss:.1f} min remaining"
                     )
-                    return False
+                return False
 
         # Check max positions
         if len(self.positions) >= self.risk_config.max_open_positions:
@@ -1447,7 +1506,7 @@ class ScalpingStrategy:
 
         try:
             # Закрываем все позиции через отдельный метод БЕЗ обновления статистики
-            for symbol in list(self.positions.keys()):
+        for symbol in list(self.positions.keys()):
                 await self._close_position_silent(symbol, "emergency")
         finally:
             self._emergency_in_progress = False
@@ -1559,7 +1618,7 @@ class ScalpingStrategy:
 
             # Получаем открытые ордера (опционально - требует Trade права)
             try:
-                open_orders = await self.client.get_open_orders(symbol)
+            open_orders = await self.client.get_open_orders(symbol)
             except Exception as e:
                 logger.debug(
                     f"Cannot fetch open orders (requires Trade permission): {e}"
