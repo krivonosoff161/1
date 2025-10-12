@@ -28,7 +28,7 @@ scalping:
   timeframe: "1m"
   
   # PHASE 1: Multi-Timeframe Confirmation (MTF)
-  multi_timeframe_enabled: false  # Включим после тестов
+  multi_timeframe_enabled: true  # Включим после тестов
   multi_timeframe:
     confirmation_timeframe: "5m"  # Таймфрейм для подтверждения
     score_bonus: 2                # Бонус к score при подтверждении
@@ -38,14 +38,14 @@ scalping:
     cache_ttl_seconds: 30         # Кэш свечей (секунды)
   
   # PHASE 1: Correlation Filter
-  correlation_filter_enabled: false  # Включим после тестов
+  correlation_filter_enabled: true  # Включим после тестов
   correlation_filter:
     max_correlated_positions: 1   # Максимум 1 позиция в коррелированных парах
     correlation_threshold: 0.7    # Порог высокой корреляции (>0.7)
     block_same_direction_only: true  # Блокировать только одинаковые направления
   
   # PHASE 1: Time-Based Filter
-  time_filter_enabled: false  # Включим после тестов
+  time_filter_enabled: true  # Включим после тестов
   time_filter:
     trade_asian_session: true       # Торговать Азиатскую сессию (00:00-09:00 UTC)
     trade_european_session: true    # Торговать Европейскую сессию (07:00-16:00 UTC)
@@ -55,7 +55,7 @@ scalping:
     avoid_weekends: true            # Не торговать в выходные
   
   # PHASE 1: Volatility Modes
-  volatility_modes_enabled: false  # Включим после тестов
+  volatility_modes_enabled: true  # Включим после тестов
   volatility_modes:
     low_volatility_threshold: 0.01   # <1% = LOW VOL
     high_volatility_threshold: 0.02  # >2% = HIGH VOL
@@ -76,7 +76,7 @@ scalping:
     high_vol_position_size_multiplier: 0.7
   
   # PHASE 1: Pivot Points
-  pivot_points_enabled: false  # Включим после тестов
+  pivot_points_enabled: true  # Включим после тестов
   pivot_points:
     daily_timeframe: "1D"          # Таймфрейм для расчета
     use_last_n_days: 1             # Использовать последний день
@@ -85,7 +85,7 @@ scalping:
     cache_ttl_seconds: 3600        # Кэш 1 час
   
   # PHASE 1: Volume Profile
-  volume_profile_enabled: false  # Включим после тестов
+  volume_profile_enabled: true  # Включим после тестов
   volume_profile:
     lookback_timeframe: "1H"       # Таймфрейм для расчета профиля
     lookback_candles: 100          # Количество свечей
