@@ -28,6 +28,9 @@ from src.filters.time_session_manager import (TimeFilterConfig,
 # PHASE 1: Volatility Modes
 from src.strategies.modules.volatility_adapter import (VolatilityAdapter,
                                                          VolatilityModeConfig)
+# PHASE 1: Pivot Points
+from src.strategies.modules.pivot_points import (PivotPointsConfig,
+                                                   PivotPointsFilter)
 
 
 class ScalpingStrategy:
@@ -194,6 +197,22 @@ class ScalpingStrategy:
             logger.info("📊 Volatility Adapter enabled!")
         else:
             logger.info("⚪ Volatility Adapter disabled (enable in config.yaml)")
+
+        # PHASE 1: Pivot Points
+        self.pivot_filter: Optional[PivotPointsFilter] = None
+        if hasattr(config, "pivot_points_enabled") and config.pivot_points_enabled:
+            pivot_config = PivotPointsConfig(
+                enabled=True,
+                daily_timeframe=config.pivot_points.get("daily_timeframe", "1D"),
+                use_last_n_days=config.pivot_points.get("use_last_n_days", 1),
+                level_tolerance_percent=config.pivot_points.get("level_tolerance_percent", 0.003),
+                score_bonus_near_level=config.pivot_points.get("score_bonus_near_level", 1),
+                cache_ttl_seconds=config.pivot_points.get("cache_ttl_seconds", 3600),
+            )
+            self.pivot_filter = PivotPointsFilter(client, pivot_config)
+            logger.info("📍 Pivot Points Filter enabled!")
+        else:
+            logger.info("⚪ Pivot Points Filter disabled (enable in config.yaml)")
 
         logger.info(f"Scalping strategy initialized for symbols: {config.symbols}")
 
@@ -635,6 +654,30 @@ class ScalpingStrategy:
                             f"Correlated: {corr_result.correlated_positions}"
                         )
                         return None
+
+            # PHASE 1: Pivot Points
+            # Проверяем Pivot уровни (до MTF, так как может дать бонус к score)
+            if self.pivot_filter:
+                if long_score >= current_score_threshold and long_score > short_score:
+                    # Проверяем LONG около Pivot уровней
+                    pivot_result = await self.pivot_filter.check_entry(symbol, current_price, "LONG")
+                    if pivot_result.near_level and pivot_result.bonus > 0:
+                        long_score += pivot_result.bonus
+                        long_confidence = long_score / 12.0
+                        logger.info(
+                            f"✅ PIVOT BONUS: {symbol} LONG near {pivot_result.level_name} | "
+                            f"Bonus: +{pivot_result.bonus} | New score: {long_score}/12"
+                        )
+                elif short_score >= current_score_threshold and short_score > long_score:
+                    # Проверяем SHORT около Pivot уровней
+                    pivot_result = await self.pivot_filter.check_entry(symbol, current_price, "SHORT")
+                    if pivot_result.near_level and pivot_result.bonus > 0:
+                        short_score += pivot_result.bonus
+                        short_confidence = short_score / 12.0
+                        logger.info(
+                            f"✅ PIVOT BONUS: {symbol} SHORT near {pivot_result.level_name} | "
+                            f"Bonus: +{pivot_result.bonus} | New score: {short_score}/12"
+                        )
 
             # PHASE 1: Multi-Timeframe Confirmation
             # Применяем MTF фильтр ДО генерации сигнала (если включен)

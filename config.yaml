@@ -75,6 +75,15 @@ scalping:
     high_vol_score_threshold: 8
     high_vol_position_size_multiplier: 0.7
   
+  # PHASE 1: Pivot Points
+  pivot_points_enabled: false  # Включим после тестов
+  pivot_points:
+    daily_timeframe: "1D"          # Таймфрейм для расчета
+    use_last_n_days: 1             # Использовать последний день
+    level_tolerance_percent: 0.003 # Допуск около уровня (0.3%)
+    score_bonus_near_level: 1      # Бонус за вход около уровня
+    cache_ttl_seconds: 3600        # Кэш 1 час
+  
   indicators:
     sma_fast: 5
     sma_slow: 20
