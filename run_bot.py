@@ -64,10 +64,10 @@ def main() -> NoReturn:
 
     # Информационное сообщение о режиме работы
     print("=" * 70)
-    print("🤖 Запуск OKX Trading Bot")
+    print("OKX Trading Bot - Starting...")
     print("=" * 70)
-    print("⚠️  РЕЖИМ: DEMO (реальные ордера на демо-счёте OKX)")
-    print(f"📁 Конфигурация: {args.config}")
+    print("MODE: DEMO (OKX Sandbox)")
+    print(f"Config: {args.config}")
     print("=" * 70)
     print()
 
@@ -88,14 +88,14 @@ def main() -> NoReturn:
     except KeyboardInterrupt:
         # Корректное завершение при Ctrl+C
         print("\n")
-        print("🛑 Бот остановлен пользователем (Ctrl+C)")
+        print("Bot stopped by user (Ctrl+C)")
         sys.exit(0)
     except FileNotFoundError as e:
-        print(f"❌ Ошибка: Файл конфигурации не найден - {e}")
+        print(f"ERROR: Config file not found - {e}")
         sys.exit(1)
     except Exception as e:
         # Логирование критических ошибок
-        print(f"❌ Критическая ошибка при работе бота: {e}")
+        print(f"CRITICAL ERROR: {e}")
         import traceback
 
         traceback.print_exc()
