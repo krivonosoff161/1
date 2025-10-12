@@ -60,6 +60,20 @@ class ScalpingConfig(BaseModel):
     exit: ScalpingExitConfig = Field(default_factory=ScalpingExitConfig)
     max_trades_per_hour: int = Field(default=10, ge=1, le=50)
     cooldown_after_loss_minutes: int = Field(default=5, ge=1, le=30)
+    
+    # PHASE 1 Modules (flexible dict для хранения настроек модулей)
+    multi_timeframe_enabled: bool = Field(default=False)
+    multi_timeframe: Dict = Field(default_factory=dict)
+    correlation_filter_enabled: bool = Field(default=False)
+    correlation_filter: Dict = Field(default_factory=dict)
+    time_filter_enabled: bool = Field(default=False)
+    time_filter: Dict = Field(default_factory=dict)
+    volatility_modes_enabled: bool = Field(default=False)
+    volatility_modes: Dict = Field(default_factory=dict)
+    pivot_points_enabled: bool = Field(default=False)
+    pivot_points: Dict = Field(default_factory=dict)
+    volume_profile_enabled: bool = Field(default=False)
+    volume_profile: Dict = Field(default_factory=dict)
 
 
 class TradingConfig(BaseModel):
