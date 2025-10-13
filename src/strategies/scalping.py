@@ -18,6 +18,9 @@ from src.indicators import (ATR, MACD, RSI, BollingerBands,
 from src.models import (MarketData, OrderSide, OrderType, Position,
                         PositionSide, RiskMetrics, Signal, Tick)
 from src.okx_client import OKXClient
+# PHASE 1: Balance Checker
+from src.strategies.modules.balance_checker import (BalanceCheckConfig,
+                                                    BalanceChecker)
 # PHASE 1: Correlation Filter
 from src.strategies.modules.correlation_filter import (CorrelationFilter,
                                                        CorrelationFilterConfig)
@@ -302,6 +305,28 @@ class ScalpingStrategy:
             logger.info("📊 Volume Profile Filter enabled!")
         else:
             logger.info("⚪ Volume Profile Filter disabled (enable in config.yaml)")
+
+        # PHASE 1: Balance Checker
+        self.balance_checker: Optional[BalanceChecker] = None
+        if (
+            hasattr(config, "balance_checker_enabled")
+            and config.balance_checker_enabled
+        ):
+            balance_config = BalanceCheckConfig(
+                enabled=True,
+                usdt_reserve_percent=config.balance_checker.get(
+                    "usdt_reserve_percent", 10.0
+                ),
+                min_asset_balance_usd=config.balance_checker.get(
+                    "min_asset_balance_usd", 30.0
+                ),
+                min_usdt_balance=config.balance_checker.get("min_usdt_balance", 30.0),
+                log_all_checks=config.balance_checker.get("log_all_checks", False),
+            )
+            self.balance_checker = BalanceChecker(balance_config)
+            logger.info("💰 Balance Checker enabled!")
+        else:
+            logger.info("⚪ Balance Checker disabled (enable in config.yaml)")
 
         logger.info(f"Scalping strategy initialized for symbols: {config.symbols}")
 
@@ -1126,6 +1151,24 @@ class ScalpingStrategy:
             if position_size <= 0:
                 logger.warning(f"Invalid position size for {signal.symbol}")
                 return
+
+            # PHASE 1: Balance Checker - проверяем баланс перед входом
+            if self.balance_checker:
+                balances = await self.client.get_account_balance()
+                balance_check = self.balance_checker.check_balance(
+                    symbol=signal.symbol,
+                    side=signal.side,
+                    required_amount=position_size,
+                    current_price=signal.price,
+                    balances=balances,
+                )
+
+                if not balance_check.allowed:
+                    logger.warning(
+                        f"⛔ {signal.symbol} {signal.side.value} BLOCKED by Balance Checker: "
+                        f"{balance_check.reason}"
+                    )
+                    return
 
             # Calculate stop loss and take profit
             atr_value = self.market_data_cache[signal.symbol]
@@ -1994,6 +2037,11 @@ class ScalpingStrategy:
     def stop(self) -> None:
         """Stop the strategy"""
         self.active = False
+
+        # Log Balance Checker statistics
+        if self.balance_checker:
+            self.balance_checker.log_statistics()
+
         logger.info("Scalping strategy stopped")
 
     def get_performance_stats(self) -> dict:

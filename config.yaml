@@ -122,6 +122,14 @@ scalping:
   # Trade management - УВЕЛИЧИЛИ частоту
   max_trades_per_hour: 15       # ✅ Было: 10 (больше сделок если рынок позволяет)
   cooldown_after_loss_minutes: 4  # ✅ Было: 5 (быстрее возврат)
+  
+  # PHASE 1: Balance Checker - проверка баланса перед входом
+  balance_checker_enabled: true
+  balance_checker:
+    usdt_reserve_percent: 10.0    # Резерв USDT (10% не используется)
+    min_asset_balance_usd: 30.0   # Минимум $30 эквивалента актива для SHORT
+    min_usdt_balance: 30.0        # Минимум $30 USDT для LONG
+    log_all_checks: false         # Логировать каждую проверку (для отладки)
 
 # Trend Following Strategy  
 trend_following:
