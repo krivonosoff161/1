@@ -2111,7 +2111,7 @@ class ScalpingStrategy:
                     logger.error(f"❌ Error placing SL algo order: {e}")
 
                 # Добавляем Partial TP
-                await self._check_partial_take_profit(signal.symbol, position)
+                await self._check_partial_take_profit(signal.symbol, signal.price, position)
             else:
                 logger.error(
                     f"❌ Order placement FAILED: {signal.side.value} "
