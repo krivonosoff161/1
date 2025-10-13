@@ -128,8 +128,8 @@ scalping:
   balance_checker_enabled: true
   balance_checker:
     usdt_reserve_percent: 10.0    # Резерв USDT (10% не используется)
-    min_asset_balance_usd: 50.0   # Минимум $50 эквивалента актива для SHORT (OKX requirement)
-    min_usdt_balance: 50.0        # Минимум $50 USDT для LONG (OKX requirement)
+    min_asset_balance_usd: 60.0   # Минимум $60 эквивалента актива для SHORT (OKX requirement)
+    min_usdt_balance: 60.0        # Минимум $60 USDT для LONG (OKX requirement)
     log_all_checks: false         # Логировать каждую проверку (для отладки)
   
   # PHASE 1.5: Adaptive Regime Manager - автоматическое переключение режимов
