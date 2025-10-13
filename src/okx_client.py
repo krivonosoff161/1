@@ -218,6 +218,7 @@ class OKXClient:
 
         return [
             OHLCV(
+                symbol=symbol,
                 timestamp=int(candle[0]),
                 open=float(candle[1]),
                 high=float(candle[2]),

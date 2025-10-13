@@ -76,8 +76,8 @@ class ScalpingStrategy:
         self._emergency_in_progress = False
 
         # 💰 ЗАЩИТА: Минимальные размеры для операций
-        self.min_close_value_usd = 15.0  # Минимум $15 для закрытия позиции
-        self.min_order_value_usd = 30.0  # Минимум $30 для открытия (с запасом)
+        self.min_close_value_usd = 25.0  # Минимум $25 для закрытия позиции
+        self.min_order_value_usd = 50.0  # Минимум $50 для открытия (OKX requirement)
 
         # 🔒 УЛУЧШЕНИЕ 3: Break-even stop
         self.breakeven_enabled = True
