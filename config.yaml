@@ -148,13 +148,13 @@ scalping:
     # РЕЖИМ 1: TRENDING (агрессивная торговля - берем объемом)
     trending:
       # Основные пороги
-      min_score_threshold: 6            # Легкий вход
+      min_score_threshold: 6            # Легкий вход (50%)
       max_trades_per_hour: 20           # Много сделок
       position_size_multiplier: 1.2     # Крупнее позиции (+20%)
       tp_atr_multiplier: 2.0            # Дальше цель (тренд продолжится)
-      sl_atr_multiplier: 2.0            # Уже стоп (тренд сильный)
+      sl_atr_multiplier: 2.5            # Шире стоп (больше воздуха для откатов)
       cooldown_after_loss_minutes: 2    # Быстро возвращаемся
-      pivot_bonus_multiplier: 1.0       # Стандартные бонусы
+      pivot_bonus_multiplier: 1.5       # Усиленные бонусы (уровни работают в тренде)
       volume_profile_bonus_multiplier: 1.0
     
       # Параметры индикаторов для трендового рынка
@@ -171,7 +171,7 @@ scalping:
         multi_timeframe:
           block_opposite: false         # Разрешить торговлю против MTF
           score_bonus: 1                # Меньше влияния MTF
-          confirmation_timeframe: "15m"  # Таймфрейм для подтверждения
+          confirmation_timeframe: "30m"  # Долгосрочный взгляд для трендов
         
         correlation_filter:
           correlation_threshold: 0.8    # Менее строгая корреляция
@@ -196,7 +196,7 @@ scalping:
     # РЕЖИМ 2: RANGING (умеренная торговля - берем качеством)
     ranging:
       # Основные пороги
-      min_score_threshold: 6            # Средний отбор (50% качества)
+      min_score_threshold: 5            # Легче вход (42% - больше сигналов от уровней)
       max_trades_per_hour: 10           # Средне
       position_size_multiplier: 1.0     # Стандартный размер
       tp_atr_multiplier: 1.5            # Ближе цель (диапазон узкий)
@@ -244,7 +244,7 @@ scalping:
     # РЕЖИМ 3: CHOPPY (консервативная торговля - только проверенное)
     choppy:
       # Основные пороги
-      min_score_threshold: 8            # Консервативно, но реалистично
+      min_score_threshold: 7            # Строго, но реалистично (58% - достижимо с бонусами)
       max_trades_per_hour: 4            # Мало сделок
       position_size_multiplier: 0.6     # Уменьшенный размер (защита)
       tp_atr_multiplier: 1.0            # Очень близко (хватай и беги)
