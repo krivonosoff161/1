@@ -2048,28 +2048,9 @@ class ScalpingStrategy:
                 self.pending_orders[order.id] = signal.symbol
                 self.trade_count_hourly += 1
                 self.last_trade_time[signal.symbol] = datetime.utcnow()
-                
-                # 🎯 Шаг 2 и 3: Выставляем TP/SL algo orders ОТДЕЛЬНО
-                # Определяем закрывающую сторону
-                close_side = OrderSide.SELL if signal.side == OrderSide.BUY else OrderSide.BUY
-                
-                # TP algo order
-                tp_algo_id = await self.client.place_algo_order(
-                    symbol=signal.symbol,
-                    side=close_side,
-                    quantity=position_size,
-                    trigger_price=take_profit,
-                )
-                
-                # SL algo order
-                sl_algo_id = await self.client.place_stop_loss_order(
-                    symbol=signal.symbol,
-                    side=close_side,
-                    quantity=position_size,
-                    trigger_price=stop_loss,
-                )
 
                 # Create position with SL/TP levels
+                # TP/SL мониторятся ботом (SPOT не поддерживает автоматические)
                 position = Position(
                     id=order.id,
                     symbol=signal.symbol,
@@ -2092,18 +2073,10 @@ class ScalpingStrategy:
                 logger.info(f"   Side: {signal.side.value.upper()}")
                 logger.info(f"   Size: {position_size:.8f} {symbol.split('-')[0]}")
                 logger.info(f"   Entry: ${signal.price:.2f}")
-                
-                if tp_algo_id:
-                    logger.info(f"   Take Profit: ${take_profit:.2f} (algo ID: {tp_algo_id}) ✅")
-                else:
-                    logger.warning(f"   Take Profit: ${take_profit:.2f} (FAILED! bot monitors) ⚠️")
-                
-                if sl_algo_id:
-                    logger.info(f"   Stop Loss: ${stop_loss:.2f} (algo ID: {sl_algo_id}) ✅")
-                else:
-                    logger.warning(f"   Stop Loss: ${stop_loss:.2f} (FAILED! bot monitors) ⚠️")
-                
+                logger.info(f"   Take Profit: ${take_profit:.2f} (bot monitors)")
+                logger.info(f"   Stop Loss: ${stop_loss:.2f} (bot monitors)")
                 logger.info(f"   Risk/Reward: 1:{abs(take_profit-signal.price)/abs(signal.price-stop_loss):.2f}")
+                logger.info(f"   ⚠️ SPOT mode: TP/SL мониторятся ботом (проверка каждые 15 сек)")
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             else:
                 logger.error(

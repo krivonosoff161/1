@@ -376,11 +376,9 @@ class OKXClient:
         order_type: OrderType,
         quantity: float,
         price: Optional[float] = None,
-        take_profit: Optional[float] = None,
-        stop_loss: Optional[float] = None,
     ) -> Order:
         """
-        Place a new order with optional TP/SL (SPOT supported!).
+        Place a new order (simple SPOT trading).
         
         Args:
             symbol: Trading pair (e.g., "BTC-USDT")
@@ -388,11 +386,13 @@ class OKXClient:
             order_type: MARKET or LIMIT
             quantity: Order size
             price: Limit price (only for LIMIT orders)
-            take_profit: Take profit trigger price (optional)
-            stop_loss: Stop loss trigger price (optional)
         
         Returns:
-            Order object with order_id and algo_ids if TP/SL set
+            Order object
+        
+        Note:
+            TP/SL управляются ботом через активный мониторинг (_update_position_prices).
+            OKX SPOT не поддерживает автоматические TP/SL в одном запросе.
         """
         data = {
             "instId": symbol,
@@ -404,14 +404,6 @@ class OKXClient:
 
         if price is not None:
             data["px"] = str(price)
-
-        # ⚠️ attachAlgoOrds НЕ РАБОТАЕТ в SPOT (ошибка 51077)
-        # TP/SL выставляются ОТДЕЛЬНЫМИ algo orders после основного ордера
-        if take_profit or stop_loss:
-            logger.warning(
-                f"⚠️ TP/SL параметры переданы, но attachAlgoOrds не поддерживается в SPOT. "
-                f"Используйте place_algo_order() после размещения основного ордера."
-            )
 
         result = await self._make_request("POST", "/trade/order", data=data)
 
