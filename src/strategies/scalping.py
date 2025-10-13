@@ -2071,7 +2071,7 @@ class ScalpingStrategy:
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 logger.info(f"   Order ID: {order.id}")
                 logger.info(f"   Side: {signal.side.value.upper()}")
-                logger.info(f"   Size: {position_size:.8f} {symbol.split('-')[0]}")
+                logger.info(f"   Size: {position_size:.8f} {signal.symbol.split('-')[0]}")
                 logger.info(f"   Entry: ${signal.price:.2f}")
                 logger.info(f"   Take Profit: ${take_profit:.2f} (bot monitors)")
                 logger.info(f"   Stop Loss: ${stop_loss:.2f} (bot monitors)")
