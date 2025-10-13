@@ -1358,7 +1358,7 @@ class ScalpingStrategy:
                         f"⛔ {signal.symbol} {signal.side.value} BLOCKED by Balance Checker: "
                         f"{balance_check.reason}"
                     )
-                return
+                    return
 
             # Calculate stop loss and take profit
             atr_value = self.market_data_cache[signal.symbol]
