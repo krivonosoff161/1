@@ -51,7 +51,6 @@ class ModuleParameters:
     # Time Filter
     prefer_overlaps: bool
     avoid_low_liquidity_hours: bool
-    avoid_weekends: bool = True  # По умолчанию для всех режимов
     
     # Pivot Points
     pivot_level_tolerance_percent: float
@@ -63,6 +62,9 @@ class ModuleParameters:
     vp_score_bonus_near_poc: int
     vp_poc_tolerance_percent: float
     vp_lookback_candles: int
+    
+    # Time Filter (с default значением в конце)
+    avoid_weekends: bool = True  # По умолчанию для всех режимов
 
 
 @dataclass

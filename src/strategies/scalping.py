@@ -355,29 +355,29 @@ class ScalpingStrategy:
             # Создаем параметры для каждого режима
             # Параметры индикаторов для TRENDING режима
             trending_indicators = IndicatorParameters(
-                rsi_overbought=config.adaptive_regime["trending"]["indicators"].get(
+                rsi_overbought=config.adaptive_regime.get("trending", {}).get("indicators", {}).get(
                     "rsi_overbought", 75.0
                 ),
-                rsi_oversold=config.adaptive_regime["trending"]["indicators"].get(
+                rsi_oversold=config.adaptive_regime.get("trending", {}).get("indicators", {}).get(
                     "rsi_oversold", 25.0
                 ),
-                volume_threshold=config.adaptive_regime["trending"]["indicators"].get(
+                volume_threshold=config.adaptive_regime.get("trending", {}).get("indicators", {}).get(
                     "volume_threshold", 1.05
                 ),
-                sma_fast=config.adaptive_regime["trending"]["indicators"].get(
+                sma_fast=config.adaptive_regime.get("trending", {}).get("indicators", {}).get(
                     "sma_fast", 8
                 ),
-                sma_slow=config.adaptive_regime["trending"]["indicators"].get(
+                sma_slow=config.adaptive_regime.get("trending", {}).get("indicators", {}).get(
                     "sma_slow", 25
                 ),
-                atr_period=config.adaptive_regime["trending"]["indicators"].get(
+                atr_period=config.adaptive_regime.get("trending", {}).get("indicators", {}).get(
                     "atr_period", 14
                 ),
             )
             
             # Параметры модулей для TRENDING режима
             trending_modules = ModuleParameters(
-                mtf_block_opposite=config.adaptive_regime["trending"]["modules"]["multi_timeframe"].get(
+                mtf_block_opposite=config.adaptive_regime.get("trending", {}).get("modules", {}).get("multi_timeframe", {}).get(
                     "block_opposite", False
                 ),
                 mtf_score_bonus=config.adaptive_regime["trending"]["modules"]["multi_timeframe"].get(
@@ -400,6 +400,9 @@ class ScalpingStrategy:
                 ),
                 avoid_low_liquidity_hours=config.adaptive_regime["trending"]["modules"]["time_filter"].get(
                     "avoid_low_liquidity_hours", False
+                ),
+                avoid_weekends=config.adaptive_regime["trending"]["modules"]["time_filter"].get(
+                    "avoid_weekends", True
                 ),
                 pivot_level_tolerance_percent=config.adaptive_regime["trending"]["modules"]["pivot_points"].get(
                     "level_tolerance_percent", 0.4
@@ -500,6 +503,9 @@ class ScalpingStrategy:
                 ),
                 avoid_low_liquidity_hours=config.adaptive_regime["ranging"]["modules"]["time_filter"].get(
                     "avoid_low_liquidity_hours", True
+                ),
+                avoid_weekends=config.adaptive_regime["ranging"]["modules"]["time_filter"].get(
+                    "avoid_weekends", True
                 ),
                 pivot_level_tolerance_percent=config.adaptive_regime["ranging"]["modules"]["pivot_points"].get(
                     "level_tolerance_percent", 0.25

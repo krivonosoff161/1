@@ -121,8 +121,8 @@ scalping:
     max_holding_minutes: 15          # Max time to hold position
     
   # Trade management - УВЕЛИЧИЛИ частоту
-  max_trades_per_hour: 15       # ✅ Было: 10 (больше сделок если рынок позволяет)
-  cooldown_after_loss_minutes: 4  # ✅ Было: 5 (быстрее возврат)
+    max_trades_per_hour: 15       # ✅ Было: 10 (больше сделок если рынок позволяет)
+    cooldown_after_loss_minutes: 4  # ✅ Было: 5 (быстрее возврат)
   
   # PHASE 1: Balance Checker - проверка баланса перед входом
   balance_checker_enabled: true
@@ -133,7 +133,7 @@ scalping:
     log_all_checks: false         # Логировать каждую проверку (для отладки)
   
   # PHASE 1.5: Adaptive Regime Manager - автоматическое переключение режимов
-  adaptive_regime_enabled: true
+  adaptive_regime_enabled: true   # ✅ Конфигурация исправлена!
   adaptive_regime:
     # Параметры детекции режимов
     trending_adx_threshold: 20.0        # ADX >20 = тренд (было 25)
@@ -145,150 +145,150 @@ scalping:
     min_regime_duration_minutes: 5      # Минимум 5 минут в режиме (было 15)
     required_confirmations: 2           # 2 подтверждения для переключения (было 3)
     
-  # РЕЖИМ 1: TRENDING (агрессивная торговля - берем объемом)
-  trending:
-    # Основные пороги
-    min_score_threshold: 6            # Легкий вход
-    max_trades_per_hour: 20           # Много сделок
-    position_size_multiplier: 1.2     # Крупнее позиции (+20%)
-    tp_atr_multiplier: 2.0            # Дальше цель (тренд продолжится)
-    sl_atr_multiplier: 2.0            # Уже стоп (тренд сильный)
-    cooldown_after_loss_minutes: 2    # Быстро возвращаемся
-    pivot_bonus_multiplier: 1.0       # Стандартные бонусы
-    volume_profile_bonus_multiplier: 1.0
+    # РЕЖИМ 1: TRENDING (агрессивная торговля - берем объемом)
+    trending:
+      # Основные пороги
+      min_score_threshold: 6            # Легкий вход
+      max_trades_per_hour: 20           # Много сделок
+      position_size_multiplier: 1.2     # Крупнее позиции (+20%)
+      tp_atr_multiplier: 2.0            # Дальше цель (тренд продолжится)
+      sl_atr_multiplier: 2.0            # Уже стоп (тренд сильный)
+      cooldown_after_loss_minutes: 2    # Быстро возвращаемся
+      pivot_bonus_multiplier: 1.0       # Стандартные бонусы
+      volume_profile_bonus_multiplier: 1.0
     
-    # Параметры индикаторов для трендового рынка
-    indicators:
-      rsi_overbought: 75              # Шире диапазон - больше сигналов
-      rsi_oversold: 25                # Агрессивные уровни
-      volume_threshold: 1.05          # Меньше требования к объему
-      sma_fast: 8                     # Быстрее реакция на тренд
-      sma_slow: 25                    # Быстрее реакция на тренд
-      atr_period: 14                  # Стандартный период
+      # Параметры индикаторов для трендового рынка
+      indicators:
+        rsi_overbought: 75              # Шире диапазон - больше сигналов
+        rsi_oversold: 25                # Агрессивные уровни
+        volume_threshold: 1.05          # Меньше требования к объему
+        sma_fast: 8                     # Быстрее реакция на тренд
+        sma_slow: 25                    # Быстрее реакция на тренд
+        atr_period: 14                  # Стандартный период
       
-    # Параметры модулей для трендового рынка
-    modules:
-      multi_timeframe:
-        block_opposite: false         # Разрешить торговлю против MTF
-        score_bonus: 1                # Меньше влияния MTF
-        confirmation_timeframe: "5m"  # Стандартный таймфрейм
+      # Параметры модулей для трендового рынка
+      modules:
+        multi_timeframe:
+          block_opposite: false         # Разрешить торговлю против MTF
+          score_bonus: 1                # Меньше влияния MTF
+          confirmation_timeframe: "5m"  # Стандартный таймфрейм
         
-      correlation_filter:
-        correlation_threshold: 0.8    # Менее строгая корреляция
-        max_correlated_positions: 3   # Больше коррелированных позиций
-        block_same_direction_only: false
+        correlation_filter:
+          correlation_threshold: 0.8    # Менее строгая корреляция
+          max_correlated_positions: 3   # Больше коррелированных позиций
+          block_same_direction_only: false
         
-      time_filter:
-        prefer_overlaps: true         # Предпочитать активные сессии
-        avoid_low_liquidity_hours: false  # Торговать и в тихие часы
+        time_filter:
+          prefer_overlaps: true         # Предпочитать активные сессии
+          avoid_low_liquidity_hours: false  # Торговать и в тихие часы
         
-      pivot_points:
-        level_tolerance_percent: 0.4  # Шире зоны уровней
-        score_bonus_near_level: 1     # Стандартный бонус
-        use_last_n_days: 3           # Меньше исторических данных
+        pivot_points:
+          level_tolerance_percent: 0.4  # Шире зоны уровней
+          score_bonus_near_level: 1     # Стандартный бонус
+          use_last_n_days: 3           # Меньше исторических данных
         
-      volume_profile:
-        score_bonus_in_value_area: 1  # Стандартный бонус
-        score_bonus_near_poc: 1       # Стандартный бонус
-        poc_tolerance_percent: 0.4    # Шире зона POC
-        lookback_candles: 100         # Меньше исторических данных
+        volume_profile:
+          score_bonus_in_value_area: 1  # Стандартный бонус
+          score_bonus_near_poc: 1       # Стандартный бонус
+          poc_tolerance_percent: 0.4    # Шире зона POC
+          lookback_candles: 100         # Меньше исторических данных
   
-  # РЕЖИМ 2: RANGING (умеренная торговля - берем качеством)
-  ranging:
-    # Основные пороги
-    min_score_threshold: 6            # Средний отбор (50% качества)
-    max_trades_per_hour: 10           # Средне
-    position_size_multiplier: 1.0     # Стандартный размер
-    tp_atr_multiplier: 1.5            # Ближе цель (диапазон узкий)
-    sl_atr_multiplier: 2.5            # Шире стоп (много шума)
-    cooldown_after_loss_minutes: 5    # Стандартная пауза
-    pivot_bonus_multiplier: 1.5       # Усиление бонусов за уровни!
-    volume_profile_bonus_multiplier: 1.5
+    # РЕЖИМ 2: RANGING (умеренная торговля - берем качеством)
+    ranging:
+      # Основные пороги
+      min_score_threshold: 6            # Средний отбор (50% качества)
+      max_trades_per_hour: 10           # Средне
+      position_size_multiplier: 1.0     # Стандартный размер
+      tp_atr_multiplier: 1.5            # Ближе цель (диапазон узкий)
+      sl_atr_multiplier: 2.5            # Шире стоп (много шума)
+      cooldown_after_loss_minutes: 5    # Стандартная пауза
+      pivot_bonus_multiplier: 1.5       # Усиление бонусов за уровни!
+      volume_profile_bonus_multiplier: 1.5
     
-    # Параметры индикаторов для бокового рынка
-    indicators:
-      rsi_overbought: 70              # Стандартные уровни
-      rsi_oversold: 30                # Стандартные уровни
-      volume_threshold: 1.1           # Стандартные требования
-      sma_fast: 10                    # Стандартные периоды
-      sma_slow: 30                    # Стандартные периоды
-      atr_period: 14                  # Стандартный период
+      # Параметры индикаторов для бокового рынка
+      indicators:
+        rsi_overbought: 70              # Стандартные уровни
+        rsi_oversold: 30                # Стандартные уровни
+        volume_threshold: 1.1           # Стандартные требования
+        sma_fast: 10                    # Стандартные периоды
+        sma_slow: 30                    # Стандартные периоды
+        atr_period: 14                  # Стандартный период
       
-    # Параметры модулей для бокового рынка
-    modules:
-      multi_timeframe:
-        block_opposite: true          # Блокировать противоположные сигналы
-        score_bonus: 2                # Стандартное влияние MTF
-        confirmation_timeframe: "5m"  # Стандартный таймфрейм
+      # Параметры модулей для бокового рынка
+      modules:
+        multi_timeframe:
+          block_opposite: true          # Блокировать противоположные сигналы
+          score_bonus: 2                # Стандартное влияние MTF
+          confirmation_timeframe: "5m"  # Стандартный таймфрейм
         
-      correlation_filter:
-        correlation_threshold: 0.7    # Стандартная корреляция
-        max_correlated_positions: 2   # Стандартное количество
-        block_same_direction_only: true
+        correlation_filter:
+          correlation_threshold: 0.7    # Стандартная корреляция
+          max_correlated_positions: 2   # Стандартное количество
+          block_same_direction_only: true
         
-      time_filter:
-        prefer_overlaps: true         # Предпочитать пересечения сессий
-        avoid_low_liquidity_hours: true  # Избегать тихие часы
+        time_filter:
+          prefer_overlaps: true         # Предпочитать пересечения сессий
+          avoid_low_liquidity_hours: true  # Избегать тихие часы
         
-      pivot_points:
-        level_tolerance_percent: 0.25 # Точнее зоны уровней
-        score_bonus_near_level: 2     # Больше бонус за уровни
-        use_last_n_days: 5           # Стандартные исторические данные
+        pivot_points:
+          level_tolerance_percent: 0.25 # Точнее зоны уровней
+          score_bonus_near_level: 2     # Больше бонус за уровни
+          use_last_n_days: 5           # Стандартные исторические данные
         
-      volume_profile:
-        score_bonus_in_value_area: 2  # Важность зон значимости
-        score_bonus_near_poc: 2       # Важность POC
-        poc_tolerance_percent: 0.25   # Точнее зона POC
-        lookback_candles: 200         # Стандартные исторические данные
+        volume_profile:
+          score_bonus_in_value_area: 2  # Важность зон значимости
+          score_bonus_near_poc: 2       # Важность POC
+          poc_tolerance_percent: 0.25   # Точнее зона POC
+          lookback_candles: 200         # Стандартные исторические данные
   
-  # РЕЖИМ 3: CHOPPY (консервативная торговля - только проверенное)
-  choppy:
-    # Основные пороги
-    min_score_threshold: 8            # Консервативно, но реалистично
-    max_trades_per_hour: 4            # Мало сделок
-    position_size_multiplier: 0.6     # Уменьшенный размер (защита)
-    tp_atr_multiplier: 1.0            # Очень близко (хватай и беги)
-    sl_atr_multiplier: 3.5            # Очень широко (хаос)
-    cooldown_after_loss_minutes: 15   # Долгая пауза
-    pivot_bonus_multiplier: 2.0       # Максимальное усиление!
-    volume_profile_bonus_multiplier: 2.0
+    # РЕЖИМ 3: CHOPPY (консервативная торговля - только проверенное)
+    choppy:
+      # Основные пороги
+      min_score_threshold: 8            # Консервативно, но реалистично
+      max_trades_per_hour: 4            # Мало сделок
+      position_size_multiplier: 0.6     # Уменьшенный размер (защита)
+      tp_atr_multiplier: 1.0            # Очень близко (хватай и беги)
+      sl_atr_multiplier: 3.5            # Очень широко (хаос)
+      cooldown_after_loss_minutes: 15   # Долгая пауза
+      pivot_bonus_multiplier: 2.0       # Максимальное усиление!
+      volume_profile_bonus_multiplier: 2.0
     
-    # Параметры индикаторов для хаотичного рынка
-    indicators:
-      rsi_overbought: 65              # Узкий диапазон - только сильные сигналы
-      rsi_oversold: 35                # Консервативные уровни
-      volume_threshold: 1.25          # Высокие требования к объему
-      sma_fast: 12                    # Медленнее реакция (сглаживание шума)
-      sma_slow: 35                    # Медленнее реакция (сглаживание шума)
-      atr_period: 21                  # Больший период для сглаживания
+      # Параметры индикаторов для хаотичного рынка
+      indicators:
+        rsi_overbought: 65              # Узкий диапазон - только сильные сигналы
+        rsi_oversold: 35                # Консервативные уровни
+        volume_threshold: 1.25          # Высокие требования к объему
+        sma_fast: 12                    # Медленнее реакция (сглаживание шума)
+        sma_slow: 35                    # Медленнее реакция (сглаживание шума)
+        atr_period: 21                  # Больший период для сглаживания
       
-    # Параметры модулей для хаотичного рынка
-    modules:
-      multi_timeframe:
-        block_opposite: true          # Строго блокировать противоположные
-        score_bonus: 3                # Сильное влияние MTF
-        confirmation_timeframe: "15m" # Больший таймфрейм для подтверждения
+      # Параметры модулей для хаотичного рынка
+      modules:
+        multi_timeframe:
+          block_opposite: true          # Строго блокировать противоположные
+          score_bonus: 3                # Сильное влияние MTF
+          confirmation_timeframe: "15m" # Больший таймфрейм для подтверждения
         
-      correlation_filter:
-        correlation_threshold: 0.6    # Очень строгая корреляция
-        max_correlated_positions: 1   # Только одна коррелированная позиция
-        block_same_direction_only: true
+        correlation_filter:
+          correlation_threshold: 0.6    # Очень строгая корреляция
+          max_correlated_positions: 1   # Только одна коррелированная позиция
+          block_same_direction_only: true
         
-      time_filter:
-        prefer_overlaps: true         # Только пересечения сессий
-        avoid_low_liquidity_hours: true  # Строго избегать тихие часы
-        avoid_weekends: true          # Избегать выходные
+        time_filter:
+          prefer_overlaps: true         # Только пересечения сессий
+          avoid_low_liquidity_hours: true  # Строго избегать тихие часы
+          avoid_weekends: true          # Избегать выходные
         
-      pivot_points:
-        level_tolerance_percent: 0.15 # Очень точные зоны уровней
-        score_bonus_near_level: 3     # Максимальный бонус за уровни
-        use_last_n_days: 7           # Больше исторических данных
+        pivot_points:
+          level_tolerance_percent: 0.15 # Очень точные зоны уровней
+          score_bonus_near_level: 3     # Максимальный бонус за уровни
+          use_last_n_days: 7           # Больше исторических данных
         
-      volume_profile:
-        score_bonus_in_value_area: 3  # Максимальная важность зон
-        score_bonus_near_poc: 3       # Максимальная важность POC
-        poc_tolerance_percent: 0.15   # Очень точная зона POC
-        lookback_candles: 300         # Больше исторических данных
+        volume_profile:
+          score_bonus_in_value_area: 3  # Максимальная важность зон
+          score_bonus_near_poc: 3       # Максимальная важность POC
+          poc_tolerance_percent: 0.15   # Очень точная зона POC
+          lookback_candles: 300         # Больше исторических данных
   
   # Partial Take Profit - многоуровневая фиксация прибыли
   partial_tp_enabled: true
