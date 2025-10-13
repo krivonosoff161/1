@@ -196,7 +196,7 @@ scalping:
     # РЕЖИМ 2: RANGING (умеренная торговля - берем качеством)
     ranging:
       # Основные пороги
-      min_score_threshold: 5            # Легче вход (42% - больше сигналов от уровней)
+      min_score_threshold: 4            # Легкий вход (33% - максимум сигналов от уровней)
       max_trades_per_hour: 10           # Средне
       position_size_multiplier: 1.0     # Стандартный размер
       tp_atr_multiplier: 1.5            # Ближе цель (диапазон узкий)
@@ -300,7 +300,7 @@ scalping:
     - percent: 20.0           # 20% позиции
       atr_multiplier: 4.0     # На 4.0 ATR (пусть летит!)
 
-# Trend Following Strategy
+# Trend Following Strategy  
 # ⚠️ ОТКЛЮЧЕНО: Конфликтует с Scalping на BTC-USDT
 # ARM (Adaptive Regime Manager) теперь управляет режимами автоматически
 trend_following:

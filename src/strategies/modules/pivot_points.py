@@ -251,17 +251,59 @@ class PivotPointsFilter:
                 )
                 return cached_levels
 
-        # Получаем дневные свечи
+        # Получаем дневные свечи с fallback системой
+        daily_candles = None
+        
+        # Попытка 1: Дневные свечи (1D) - предпочтительный вариант
         try:
             daily_candles = await self.client.get_candles(
                 symbol=symbol, timeframe=self.config.daily_timeframe, limit=10
             )
+            if daily_candles:
+                logger.debug(f"Pivot: Got {len(daily_candles)} daily (1D) candles for {symbol}")
+        except Exception as e:
+            logger.warning(f"Pivot: Failed to get 1D candles for {symbol}: {e}")
+        
+        # Попытка 2: Fallback на 4H свечи (группируем в дневные)
+        if not daily_candles:
+            try:
+                logger.info(f"Pivot: Trying 4H candles fallback for {symbol}...")
+                h4_candles = await self.client.get_candles(
+                    symbol=symbol, timeframe="4H", limit=60  # 60 * 4H = 10 дней
+                )
+                if h4_candles:
+                    # Группируем 4H свечи в дневные (6 свечей = 1 день)
+                    daily_candles = self._group_to_daily(h4_candles, candles_per_day=6)
+                    logger.info(f"Pivot: Grouped {len(h4_candles)} 4H candles → {len(daily_candles)} daily for {symbol}")
+            except Exception as e:
+                logger.warning(f"Pivot: 4H fallback failed for {symbol}: {e}")
+        
+        # Попытка 3: Fallback на 1H свечи (группируем в дневные)
+        if not daily_candles:
+            try:
+                logger.info(f"Pivot: Trying 1H candles fallback for {symbol}...")
+                h1_candles = await self.client.get_candles(
+                    symbol=symbol, timeframe="1H", limit=240  # 240 * 1H = 10 дней
+                )
+                if h1_candles:
+                    # Группируем 1H свечи в дневные (24 свечи = 1 день)
+                    daily_candles = self._group_to_daily(h1_candles, candles_per_day=24)
+                    logger.info(f"Pivot: Grouped {len(h1_candles)} 1H candles → {len(daily_candles)} daily for {symbol}")
+            except Exception as e:
+                logger.warning(f"Pivot: 1H fallback failed for {symbol}: {e}")
+        
+        # Если все попытки провалились
+        if not daily_candles:
+            logger.error(f"Pivot: All attempts failed for {symbol}, using cached levels if available")
+            # Возвращаем из кэша если есть (даже старый)
+            if symbol in self._levels_cache:
+                cached_levels, _ = self._levels_cache[symbol]
+                logger.warning(f"Pivot: Using stale cache for {symbol}")
+                return cached_levels
+            return None
 
-            if not daily_candles:
-                logger.warning(f"No daily candles for {symbol}")
-                return None
-
-            # Рассчитываем уровни
+        # Рассчитываем уровни
+        try:
             levels = self.calculator.calculate_pivots(
                 daily_candles, self.config.use_last_n_days
             )
@@ -269,13 +311,53 @@ class PivotPointsFilter:
             if levels:
                 # Кэшируем
                 self._levels_cache[symbol] = (levels, current_time)
+                logger.debug(f"Pivot: Cached levels for {symbol}")
 
             return levels
-
+            
         except Exception as e:
-            logger.error(f"Error fetching daily candles for {symbol}: {e}")
+            logger.error(f"Pivot: Error calculating levels for {symbol}: {e}")
             return None
 
+    def _group_to_daily(self, candles: List[OHLCV], candles_per_day: int) -> List[OHLCV]:
+        """
+        Группирует свечи меньшего таймфрейма в дневные.
+        
+        Args:
+            candles: Список свечей (1H или 4H)
+            candles_per_day: Сколько свечей в одном дне (24 для 1H, 6 для 4H)
+        
+        Returns:
+            Список дневных свечей
+        """
+        if len(candles) < candles_per_day:
+            return []
+        
+        daily_candles = []
+        
+        # Группируем свечи по дням
+        for i in range(0, len(candles), candles_per_day):
+            group = candles[i:i + candles_per_day]
+            
+            # Если неполный день - пропускаем
+            if len(group) < candles_per_day:
+                continue
+            
+            # Создаем дневную свечу
+            daily_candle = OHLCV(
+                symbol=group[0].symbol,
+                timestamp=group[0].timestamp,  # Начало дня
+                open=group[0].open,           # Open первой свечи
+                high=max(c.high for c in group),  # Максимум за день
+                low=min(c.low for c in group),    # Минимум за день
+                close=group[-1].close,        # Close последней свечи
+                volume=sum(c.volume for c in group),  # Сумма объемов
+                timeframe="1D"
+            )
+            daily_candles.append(daily_candle)
+        
+        return daily_candles
+    
     def clear_cache(self, symbol: Optional[str] = None):
         """Очистить кэш уровней"""
         if symbol:
