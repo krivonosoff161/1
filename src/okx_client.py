@@ -216,7 +216,8 @@ class OKXClient:
         }
         result = await self._make_request("GET", "/market/candles", params=params)
 
-        return [
+        # OKX возвращает свечи в обратном порядке (новые первыми), нужно развернуть
+        candles = [
             OHLCV(
                 symbol=symbol,
                 timestamp=int(candle[0]),
@@ -228,6 +229,9 @@ class OKXClient:
             )
             for candle in result["data"]
         ]
+        
+        # Разворачиваем список, чтобы старые свечи были первыми
+        return list(reversed(candles))
 
     async def get_candles(
         self, symbol: str, timeframe: str = "1m", limit: int = 100
