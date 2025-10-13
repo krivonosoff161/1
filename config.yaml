@@ -136,14 +136,14 @@ scalping:
   adaptive_regime_enabled: true
   adaptive_regime:
     # Параметры детекции режимов
-    trending_adx_threshold: 25.0        # ADX >25 = сильный тренд
-    ranging_adx_threshold: 20.0         # ADX <20 = боковик
-    high_volatility_threshold: 0.05     # >5% = высокая волатильность
-    low_volatility_threshold: 0.02      # <2% = низкая волатильность
-    trend_strength_percent: 2.0         # Отклонение от SMA >2% = тренд
+    trending_adx_threshold: 20.0        # ADX >20 = тренд (было 25)
+    ranging_adx_threshold: 15.0         # ADX <15 = боковик (было 20)
+    high_volatility_threshold: 0.03     # >3% = высокая волатильность (было 5%)
+    low_volatility_threshold: 0.01      # <1% = низкая волатильность (было 2%)
+    trend_strength_percent: 1.0         # Отклонение от SMA >1% = тренд (было 2%)
     # Защита от частых переключений
-    min_regime_duration_minutes: 15     # Минимум 15 минут в режиме
-    required_confirmations: 3           # 3 подтверждения для переключения
+    min_regime_duration_minutes: 5      # Минимум 5 минут в режиме (было 15)
+    required_confirmations: 2           # 2 подтверждения для переключения (было 3)
     
     # РЕЖИМ 1: TRENDING (агрессивная торговля - берем объемом)
     trending:
