@@ -9,9 +9,9 @@ api:
     
 trading:
   symbols: 
-    - "BTC-USDT"
-    - "ETH-USDT"
-    - "SOL-USDT"
+    - "SOL-USDT"   # ✅ Solana - высокая волатильность, отличная ликвидность
+    - "AVAX-USDT"  # ✅ Avalanche - средняя волатильность, стабильная
+    - "DOGE-USDT"  # ✅ Dogecoin - ОЧЕНЬ волатильная, мем-коин (экстрим тест!)
   base_currency: "USDT"
   
 # Risk Management
@@ -128,8 +128,8 @@ scalping:
   balance_checker_enabled: true
   balance_checker:
     usdt_reserve_percent: 10.0    # Резерв USDT (10% не используется)
-    min_asset_balance_usd: 80.0   # Минимум $80 (OKX Demo требует больше для BTC/ETH)
-    min_usdt_balance: 80.0        # Минимум $80 USDT для LONG
+    min_asset_balance_usd: 50.0   # Минимум $50 (оптимально для SOL/AVAX/DOGE)
+    min_usdt_balance: 50.0        # Минимум $50 USDT для LONG
     log_all_checks: false         # Логировать каждую проверку (для отладки)
   
   # PHASE 1.5: Adaptive Regime Manager - автоматическое переключение режимов

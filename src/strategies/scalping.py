@@ -90,7 +90,7 @@ class ScalpingStrategy:
 
         # 💰 ЗАЩИТА: Минимальные размеры для операций
         self.min_close_value_usd = 30.0  # Минимум $30 для закрытия позиции
-        self.min_order_value_usd = 80.0  # Минимум $80 (OKX Demo требует больше для BTC/ETH)
+        self.min_order_value_usd = 50.0  # Минимум $50 (оптимально для альткоинов)
 
         # 🔒 УЛУЧШЕНИЕ 3: Break-even stop
         self.breakeven_enabled = True
