@@ -479,9 +479,9 @@ class ScalpingStrategy:
                     )
 
                     # Обрабатываем тик
-                    await self._process_tick(symbol, tick)
+                await self._process_tick(symbol, tick)
 
-                except Exception as e:
+        except Exception as e:
                     logger.error(f"❌ Error processing {symbol}: {e}")
 
                 # Ждем 60 секунд до следующего опроса
@@ -940,32 +940,32 @@ class ScalpingStrategy:
 
         else:
             # Старая логика "всё или ничего" (если scoring отключен)
-            long_conditions = [
-                current_price > sma_fast.value > sma_slow.value,
-                ema_fast.value > ema_slow.value,
-                30 < rsi.value < 70,
+        long_conditions = [
+            current_price > sma_fast.value > sma_slow.value,
+            ema_fast.value > ema_slow.value,
+            30 < rsi.value < 70,
                 current_price <= bb.metadata["lower_band"] * 1.002,
-                volume.value >= self.config.entry.volume_threshold,
-            ]
+            volume.value >= self.config.entry.volume_threshold,
+        ]
 
-            short_conditions = [
-                current_price < sma_fast.value < sma_slow.value,
-                ema_fast.value < ema_slow.value,
-                30 < rsi.value < 70,
+        short_conditions = [
+            current_price < sma_fast.value < sma_slow.value,
+            ema_fast.value < ema_slow.value,
+            30 < rsi.value < 70,
                 current_price >= bb.metadata["upper_band"] * 0.998,
-                volume.value >= self.config.entry.volume_threshold,
-            ]
+            volume.value >= self.config.entry.volume_threshold,
+        ]
 
-            existing_position = self.positions.get(symbol)
-            if existing_position:
+        existing_position = self.positions.get(symbol)
+        if existing_position:
                 if existing_position.side == PositionSide.LONG and any(
                     short_conditions
                 ):
-                    return None
+                return None
                 if existing_position.side == PositionSide.SHORT and any(
                     long_conditions
                 ):
-                    return None
+                return None
 
         if all(long_conditions):
             return Signal(
@@ -1168,7 +1168,7 @@ class ScalpingStrategy:
                         f"⛔ {signal.symbol} {signal.side.value} BLOCKED by Balance Checker: "
                         f"{balance_check.reason}"
                     )
-                    return
+                return
 
             # Calculate stop loss and take profit
             atr_value = self.market_data_cache[signal.symbol]
@@ -1186,6 +1186,11 @@ class ScalpingStrategy:
             )
 
             # Place order
+            logger.info(
+                f"📤 Placing order: {signal.side.value} {position_size} "
+                f"{signal.symbol} @ ${signal.price:.2f}"
+            )
+            
             order = await self.client.place_order(
                 symbol=signal.symbol,
                 side=signal.side,
@@ -1219,9 +1224,14 @@ class ScalpingStrategy:
                     f"{signal.symbol} @ {signal.price:.6f} "
                     f"(SL: {stop_loss:.6f}, TP: {take_profit:.6f})"
                 )
+            else:
+                logger.error(
+                    f"❌ Order placement FAILED: {signal.side.value} "
+                    f"{signal.symbol} - No order returned from exchange"
+                )
 
         except Exception as e:
-            logger.error(f"Error executing signal: {e}")
+            logger.error(f"❌ Error executing signal {signal.symbol}: {e}", exc_info=True)
 
     async def _calculate_position_size(self, symbol: str, price: float) -> float:
         """
@@ -1825,7 +1835,7 @@ class ScalpingStrategy:
 
         try:
             # Закрываем все позиции через отдельный метод БЕЗ обновления статистики
-            for symbol in list(self.positions.keys()):
+        for symbol in list(self.positions.keys()):
                 await self._close_position_silent(symbol, "emergency")
         finally:
             self._emergency_in_progress = False
@@ -1937,7 +1947,7 @@ class ScalpingStrategy:
 
             # Получаем открытые ордера (опционально - требует Trade права)
             try:
-                open_orders = await self.client.get_open_orders(symbol)
+            open_orders = await self.client.get_open_orders(symbol)
             except Exception as e:
                 logger.debug(
                     f"Cannot fetch open orders (requires Trade permission): {e}"
