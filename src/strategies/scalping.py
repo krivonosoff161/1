@@ -118,10 +118,11 @@ class ScalpingStrategy:
         ]
 
         # 🌊 УЛУЧШЕНИЕ 9: Market Regime Detection
-        # ⚠️ ОТКЛЮЧЕНО: В режиме RANGING блокирует 100% сигналов скальпинга!
-        self.regime_detection_enabled = False  # ❌ Отключаем для тестирования Phase 1
-        self.high_volatility_threshold = 0.02  # 2% волатильность = высокая
-        self.trend_threshold = 0.05  # 5% разница SMA50/200 = тренд
+        # ⚠️ УСТАРЕЛО: Заменено на ARM (Adaptive Regime Manager)
+        # Оставлено для совместимости, всегда False
+        self.regime_detection_enabled = False
+        self.high_volatility_threshold = 0.02
+        self.trend_threshold = 0.05
 
         # 💸 УЛУЧШЕНИЕ 10 (БОНУС): Spread filter
         self.spread_filter_enabled = True
@@ -2181,10 +2182,10 @@ class ScalpingStrategy:
                 "💰" if self.daily_pnl > 0 else "📉" if self.daily_pnl < 0 else "➖"
             )
 
-            # 🌊 УЛУЧШЕНИЕ 9: Определение режима рынка для отображения
+            # 🌊 Определение режима рынка для отображения
             market_regime = "N/A"
-            if self.regime_detection_enabled:
-                market_regime = self._detect_market_regime(symbol)
+            if self.adaptive_regime:
+                market_regime = self.adaptive_regime.current_regime.value.upper()
 
             # Красивый вывод столбцом с новыми метриками
             logger.info(f"\n{'='*60}")
