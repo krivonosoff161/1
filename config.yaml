@@ -25,12 +25,12 @@ risk:
 scalping:
   enabled: true
   symbols: ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
-  timeframe: "1m"
+  timeframe: "5m"  # 1m не работает в DEMO (статичные данные), используем 5m
   
   # PHASE 1: Multi-Timeframe Confirmation (MTF)
   multi_timeframe_enabled: true  # Включим после тестов
   multi_timeframe:
-    confirmation_timeframe: "5m"  # Таймфрейм для подтверждения
+    confirmation_timeframe: "15m"  # Таймфрейм для подтверждения (больше чем основной)
     score_bonus: 2                # Бонус к score при подтверждении
     block_opposite: true          # Блокировать противоположные сигналы
     ema_fast_period: 8            # Период быстрой EMA
@@ -171,7 +171,7 @@ scalping:
         multi_timeframe:
           block_opposite: false         # Разрешить торговлю против MTF
           score_bonus: 1                # Меньше влияния MTF
-          confirmation_timeframe: "5m"  # Стандартный таймфрейм
+          confirmation_timeframe: "15m"  # Таймфрейм для подтверждения
         
         correlation_filter:
           correlation_threshold: 0.8    # Менее строгая корреляция
@@ -219,7 +219,7 @@ scalping:
         multi_timeframe:
           block_opposite: true          # Блокировать противоположные сигналы
           score_bonus: 2                # Стандартное влияние MTF
-          confirmation_timeframe: "5m"  # Стандартный таймфрейм
+          confirmation_timeframe: "15m"  # Таймфрейм для подтверждения
         
         correlation_filter:
           correlation_threshold: 0.7    # Стандартная корреляция
@@ -267,7 +267,7 @@ scalping:
         multi_timeframe:
           block_opposite: true          # Строго блокировать противоположные
           score_bonus: 3                # Сильное влияние MTF
-          confirmation_timeframe: "15m" # Больший таймфрейм для подтверждения
+          confirmation_timeframe: "30m" # Больший таймфрейм для подтверждения (для CHOPPY)
         
         correlation_filter:
           correlation_threshold: 0.6    # Очень строгая корреляция
