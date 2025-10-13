@@ -2080,15 +2080,14 @@ class ScalpingStrategy:
 
                 # 🎯 Шаг 2: Выставляем TP algo order
                 try:
-                    tp_order = await self.client.place_algo_order(
+                    tp_order_id = await self.client.place_algo_order(
                         symbol=signal.symbol,
                         side=OrderSide.SELL if signal.side == OrderSide.BUY else OrderSide.BUY,
-                        trigger_price=take_profit,
-                        order_price=take_profit,
                         quantity=position_size,
+                        trigger_price=take_profit,
                     )
-                    if tp_order:
-                        logger.info(f"✅ TP algo order placed: ID={tp_order.id} @ ${take_profit:.2f}")
+                    if tp_order_id:
+                        logger.info(f"✅ TP algo order placed: ID={tp_order_id} @ ${take_profit:.2f}")
                     else:
                         logger.warning(f"⚠️ TP algo order FAILED for {signal.symbol}")
                 except Exception as e:
@@ -2096,15 +2095,14 @@ class ScalpingStrategy:
 
                 # 🎯 Шаг 3: Выставляем SL algo order
                 try:
-                    sl_order = await self.client.place_stop_loss_order(
+                    sl_order_id = await self.client.place_stop_loss_order(
                         symbol=signal.symbol,
                         side=OrderSide.SELL if signal.side == OrderSide.BUY else OrderSide.BUY,
-                        trigger_price=stop_loss,
-                        order_price=stop_loss,
                         quantity=position_size,
+                        trigger_price=stop_loss,
                     )
-                    if sl_order:
-                        logger.info(f"✅ SL algo order placed: ID={sl_order.id} @ ${stop_loss:.2f}")
+                    if sl_order_id:
+                        logger.info(f"✅ SL algo order placed: ID={sl_order_id} @ ${stop_loss:.2f}")
                     else:
                         logger.warning(f"⚠️ SL algo order FAILED for {signal.symbol}")
                 except Exception as e:
