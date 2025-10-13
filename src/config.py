@@ -74,6 +74,10 @@ class ScalpingConfig(BaseModel):
     pivot_points: Dict = Field(default_factory=dict)
     volume_profile_enabled: bool = Field(default=False)
     volume_profile: Dict = Field(default_factory=dict)
+    balance_checker_enabled: bool = Field(default=False)
+    balance_checker: Dict = Field(default_factory=dict)
+    adaptive_regime_enabled: bool = Field(default=False)
+    adaptive_regime: Dict = Field(default_factory=dict)
 
 
 class TradingConfig(BaseModel):
