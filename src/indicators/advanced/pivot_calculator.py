@@ -147,6 +147,9 @@ class PivotCalculator:
         s3 = low - 2 * (high - pp)
 
         # Создаем объект уровней
+        # OKX timestamp в миллисекундах, конвертируем в секунды
+        timestamp_seconds = recent_candles[-1].timestamp / 1000
+        
         levels = PivotLevels(
             pivot_point=pp,
             resistance_1=r1,
@@ -156,7 +159,7 @@ class PivotCalculator:
             support_2=s2,
             support_3=s3,
             calculated_at=datetime.utcnow().timestamp(),
-            source_date=datetime.fromtimestamp(recent_candles[-1].timestamp).strftime(
+            source_date=datetime.fromtimestamp(timestamp_seconds).strftime(
                 "%Y-%m-%d"
             ),
         )

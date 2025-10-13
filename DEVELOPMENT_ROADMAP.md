@@ -41,8 +41,8 @@ MAIN (Production)  ←──── Merge ──── DEV (Development)
 - [x] ✅ Применение bonus_multiplier для Pivot/VP (x1.5-2.0)
 - [x] ✅ Обновление SMA/ATR periods при смене режима
 - [x] ✅ Оптимизация порогов (RANGING 5/12, CHOPPY 7/12, TRENDING SL 2.5)
-- [ ] 🔧 Исправить Pivot Points ошибку (fallback на 4H/1H свечи)
-- [ ] 🔧 Понизить RANGING threshold: 5 → 4 (больше сигналов)
+- [x] ✅ Исправить Pivot Points ошибку (fallback на 4H/1H свечи) - **20:53**
+- [x] ✅ Понизить RANGING threshold: 5 → 4 (больше сигналов) - **20:54**
 - [ ] 🧪 Тестовый запуск (проверка работоспособности)
 - [ ] 🚀 Production запуск на 10 дней
 
