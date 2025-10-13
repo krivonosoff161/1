@@ -902,7 +902,7 @@ class ScalpingStrategy:
             
             if self.adaptive_regime:
                 # Обновляем режим рынка
-                candles = self.market_data_cache[symbol].candles
+                candles = self.market_data_cache[symbol].ohlcv_data
                 new_regime = self.adaptive_regime.update_regime(candles, current_price)
                 
                 # Получаем параметры для текущего режима
