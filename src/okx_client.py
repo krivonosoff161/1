@@ -405,28 +405,13 @@ class OKXClient:
         if price is not None:
             data["px"] = str(price)
 
-        # 🎯 КРИТИЧНО: TP/SL через attachAlgoOrds (OKX SPOT поддерживает!)
+        # ⚠️ attachAlgoOrds НЕ РАБОТАЕТ в SPOT (ошибка 51077)
+        # TP/SL выставляются ОТДЕЛЬНЫМИ algo orders после основного ордера
         if take_profit or stop_loss:
-            attach_algo_ords = []
-            
-            # Правильный формат для OKX SPOT attachAlgoOrds
-            # Используем УПРОЩЕННЫЙ формат без attachAlgoClOrdId
-            
-            if take_profit:
-                attach_algo_ords.append({
-                    "tpTriggerPx": str(take_profit),
-                    "tpOrdPx": "-1",  # -1 = market price при триггере
-                })
-            
-            if stop_loss:
-                attach_algo_ords.append({
-                    "slTriggerPx": str(stop_loss),
-                    "slOrdPx": "-1",
-                })
-            
-            data["attachAlgoOrds"] = attach_algo_ords
-            
-            logger.info(f"📊 Attaching TP/SL: TP={take_profit}, SL={stop_loss}")
+            logger.warning(
+                f"⚠️ TP/SL параметры переданы, но attachAlgoOrds не поддерживается в SPOT. "
+                f"Используйте place_algo_order() после размещения основного ордера."
+            )
 
         result = await self._make_request("POST", "/trade/order", data=data)
 
@@ -525,6 +510,94 @@ class OKXClient:
 
         return orders
 
+    async def place_algo_order(
+        self,
+        symbol: str,
+        side: OrderSide,
+        quantity: float,
+        trigger_price: float,
+        order_type: str = "conditional",
+    ) -> Optional[str]:
+        """
+        Выставить ALGO order (TP/SL) для SPOT.
+        
+        Args:
+            symbol: Торговая пара
+            side: BUY или SELL
+            quantity: Размер
+            trigger_price: Цена триггера (TP или SL)
+            order_type: "conditional" для TP/SL
+        
+        Returns:
+            algo order ID или None
+        """
+        data = {
+            "instId": symbol,
+            "tdMode": "cash",  # SPOT
+            "side": "buy" if side == OrderSide.BUY else "sell",
+            "ordType": order_type,
+            "sz": str(quantity),
+            "tpTriggerPx": str(trigger_price),  # Для TP
+            "tpOrdPx": "-1",  # Market при триггере
+        }
+        
+        try:
+            result = await self._make_request("POST", "/trade/order-algo", data=data)
+            
+            if result.get("code") == "0" and result.get("data"):
+                algo_id = result["data"][0].get("algoId")
+                logger.info(f"✅ Algo order placed: {algo_id} @ ${trigger_price}")
+                return algo_id
+            else:
+                logger.error(f"❌ Algo order failed: {result.get('msg')}")
+                return None
+        except Exception as e:
+            logger.error(f"Error placing algo order: {e}")
+            return None
+    
+    async def place_stop_loss_order(
+        self,
+        symbol: str,
+        side: OrderSide,
+        quantity: float,
+        trigger_price: float,
+    ) -> Optional[str]:
+        """
+        Выставить Stop Loss algo order для SPOT.
+        
+        Args:
+            symbol: Торговая пара
+            side: BUY или SELL (закрывающая сторона)
+            quantity: Размер
+            trigger_price: SL триггер цена
+        
+        Returns:
+            algo order ID или None
+        """
+        data = {
+            "instId": symbol,
+            "tdMode": "cash",
+            "side": "buy" if side == OrderSide.BUY else "sell",
+            "ordType": "conditional",
+            "sz": str(quantity),
+            "slTriggerPx": str(trigger_price),  # Для SL
+            "slOrdPx": "-1",
+        }
+        
+        try:
+            result = await self._make_request("POST", "/trade/order-algo", data=data)
+            
+            if result.get("code") == "0" and result.get("data"):
+                algo_id = result["data"][0].get("algoId")
+                logger.info(f"✅ SL algo order placed: {algo_id} @ ${trigger_price}")
+                return algo_id
+            else:
+                logger.error(f"❌ SL algo order failed: {result.get('msg')}")
+                return None
+        except Exception as e:
+            logger.error(f"Error placing SL algo order: {e}")
+            return None
+    
     async def get_algo_orders(self, symbol: Optional[str] = None, algo_type: str = "conditional") -> List[Dict]:
         """
         Получить список активных algo orders (TP/SL).
