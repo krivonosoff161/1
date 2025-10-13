@@ -71,6 +71,11 @@ class ScalpingStrategy:
         self.total_trades = 0
         self.winning_trades = 0
         self.daily_pnl = 0.0
+        
+        # API Rate Limiting (защита от превышения лимитов)
+        self.api_requests_count = 0
+        self.api_requests_window_start = datetime.utcnow()
+        self.max_requests_per_minute = 100  # Безопасный лимит (у нас 30-120/мин)
         self.max_drawdown = 0.0
 
         # 🛡️ УЛУЧШЕНИЕ 1: Max consecutive losses защита
@@ -594,21 +599,24 @@ class ScalpingStrategy:
 
     async def _trade_symbol(self, symbol: str) -> None:
         """
-        Торговля конкретным символом с опросом раз в минуту.
+        Торговля конкретным символом с опросом каждые 15 секунд.
 
-        Использует polling вместо websocket stream для большей надежности
-        и совместимости с 1-минутным таймфреймом стратегии.
+        Использует polling с rate limiting для защиты от превышения API лимитов.
+        Обеспечивает быструю реакцию на изменения рынка (4x быстрее).
         """
-        logger.info(f"🎯 Starting scalping for {symbol} (polling mode)")
+        logger.info(f"🎯 Starting scalping for {symbol} (polling mode, 15s intervals)")
 
         try:
             # Получаем начальные рыночные данные
             await self._update_market_data(symbol)
             logger.info(f"✅ {symbol}: Initial market data loaded")
 
-            # Polling loop - опрос раз в минуту
+            # Polling loop - опрос каждые 15 секунд (4x быстрее)
             while self.active:
                 try:
+                    # Проверяем API rate limiting
+                    await self._check_rate_limit()
+                    
                     # Обновляем рыночные данные (свечи)
                     await self._update_market_data(symbol)
 
@@ -630,11 +638,38 @@ class ScalpingStrategy:
                 except Exception as e:
                     logger.error(f"❌ Error processing {symbol}: {e}")
 
-                # Ждем 60 секунд до следующего опроса
-                await asyncio.sleep(60)
+                # Ждем 15 секунд до следующего опроса (4x быстрее)
+                await asyncio.sleep(15)
 
         except Exception as e:
             logger.error(f"❌ Fatal error trading {symbol}: {e}")
+
+    async def _check_rate_limit(self) -> None:
+        """
+        Проверка и контроль API rate limiting.
+        
+        Защищает от превышения лимитов OKX API:
+        - Public endpoints: 120 запросов/секунда
+        - Private endpoints: 20 запросов/секунда
+        """
+        current_time = datetime.utcnow()
+        
+        # Сброс счетчика каждую минуту
+        if (current_time - self.api_requests_window_start).seconds >= 60:
+            self.api_requests_count = 0
+            self.api_requests_window_start = current_time
+        
+        # Проверка лимита
+        if self.api_requests_count >= self.max_requests_per_minute:
+            wait_seconds = 60 - (current_time - self.api_requests_window_start).seconds
+            if wait_seconds > 0:
+                logger.warning(f"⏰ Rate limit reached ({self.api_requests_count}/{self.max_requests_per_minute}). Waiting {wait_seconds}s...")
+                await asyncio.sleep(wait_seconds)
+                self.api_requests_count = 0
+                self.api_requests_window_start = datetime.utcnow()
+        
+        # Увеличиваем счетчик
+        self.api_requests_count += 1
 
     async def _update_market_data(self, symbol: str) -> None:
         """
@@ -2020,7 +2055,7 @@ class ScalpingStrategy:
 
             except Exception as e:
                 logger.error(f"Error monitoring positions: {e}")
-                await asyncio.sleep(60)  # Wait longer on error
+                await asyncio.sleep(15)  # Wait 15 seconds on error
 
     async def _emergency_close_all(self) -> None:
         """
