@@ -2073,11 +2073,45 @@ class ScalpingStrategy:
                 logger.info(f"   Side: {signal.side.value.upper()}")
                 logger.info(f"   Size: {position_size:.8f} {signal.symbol.split('-')[0]}")
                 logger.info(f"   Entry: ${signal.price:.2f}")
-                logger.info(f"   Take Profit: ${take_profit:.2f} (bot monitors)")
-                logger.info(f"   Stop Loss: ${stop_loss:.2f} (bot monitors)")
+                logger.info(f"   Take Profit: ${take_profit:.2f}")
+                logger.info(f"   Stop Loss: ${stop_loss:.2f}")
                 logger.info(f"   Risk/Reward: 1:{abs(take_profit-signal.price)/abs(signal.price-stop_loss):.2f}")
-                logger.info(f"   ⚠️ SPOT mode: TP/SL мониторятся ботом (проверка каждые 15 сек)")
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+                # 🎯 Шаг 2: Выставляем TP algo order
+                try:
+                    tp_order = await self.client.place_algo_order(
+                        symbol=signal.symbol,
+                        side=OrderSide.SELL if signal.side == OrderSide.BUY else OrderSide.BUY,
+                        trigger_price=take_profit,
+                        order_price=take_profit,
+                        quantity=position_size,
+                    )
+                    if tp_order:
+                        logger.info(f"✅ TP algo order placed: ID={tp_order.id} @ ${take_profit:.2f}")
+                    else:
+                        logger.warning(f"⚠️ TP algo order FAILED for {signal.symbol}")
+                except Exception as e:
+                    logger.error(f"❌ Error placing TP algo order: {e}")
+
+                # 🎯 Шаг 3: Выставляем SL algo order
+                try:
+                    sl_order = await self.client.place_stop_loss_order(
+                        symbol=signal.symbol,
+                        side=OrderSide.SELL if signal.side == OrderSide.BUY else OrderSide.BUY,
+                        trigger_price=stop_loss,
+                        order_price=stop_loss,
+                        quantity=position_size,
+                    )
+                    if sl_order:
+                        logger.info(f"✅ SL algo order placed: ID={sl_order.id} @ ${stop_loss:.2f}")
+                    else:
+                        logger.warning(f"⚠️ SL algo order FAILED for {signal.symbol}")
+                except Exception as e:
+                    logger.error(f"❌ Error placing SL algo order: {e}")
+
+                # Добавляем Partial TP
+                await self._check_partial_take_profit(signal.symbol, position)
             else:
                 logger.error(
                     f"❌ Order placement FAILED: {signal.side.value} "
