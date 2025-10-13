@@ -23,6 +23,49 @@ class RegimeType(Enum):
 
 
 @dataclass
+class IndicatorParameters:
+    """Параметры индикаторов для конкретного режима."""
+    
+    rsi_overbought: float
+    rsi_oversold: float
+    volume_threshold: float
+    sma_fast: int
+    sma_slow: int
+    atr_period: int
+
+
+@dataclass
+class ModuleParameters:
+    """Параметры модулей для конкретного режима."""
+    
+    # Multi-Timeframe
+    mtf_block_opposite: bool
+    mtf_score_bonus: int
+    mtf_confirmation_timeframe: str
+    
+    # Correlation Filter
+    correlation_threshold: float
+    max_correlated_positions: int
+    block_same_direction_only: bool
+    
+    # Time Filter
+    prefer_overlaps: bool
+    avoid_low_liquidity_hours: bool
+    avoid_weekends: bool = True  # По умолчанию для всех режимов
+    
+    # Pivot Points
+    pivot_level_tolerance_percent: float
+    pivot_score_bonus_near_level: int
+    pivot_use_last_n_days: int
+    
+    # Volume Profile
+    vp_score_bonus_in_value_area: int
+    vp_score_bonus_near_poc: int
+    vp_poc_tolerance_percent: float
+    vp_lookback_candles: int
+
+
+@dataclass
 class RegimeParameters:
     """Параметры торговли для конкретного режима."""
 
@@ -40,6 +83,10 @@ class RegimeParameters:
     # Module bonuses
     pivot_bonus_multiplier: float  # Усиление бонусов от Pivot Points
     volume_profile_bonus_multiplier: float  # Усиление бонусов от Volume Profile
+    
+    # НОВОЕ: Параметры индикаторов и модулей
+    indicators: IndicatorParameters
+    modules: ModuleParameters
 
 
 @dataclass

@@ -27,6 +27,8 @@ from src.strategies.modules.balance_checker import (
 # PHASE 1.5: Adaptive Regime Manager
 from src.strategies.modules.adaptive_regime_manager import (
     AdaptiveRegimeManager,
+    IndicatorParameters,
+    ModuleParameters,
     RegimeConfig,
     RegimeParameters,
     RegimeType,
@@ -92,7 +94,7 @@ class ScalpingStrategy:
 
         # 💰 ЗАЩИТА: Минимальные размеры для операций
         self.min_close_value_usd = 30.0  # Минимум $30 для закрытия позиции
-        self.min_order_value_usd = 80.0  # Минимум $80 для открытия (OKX requirement для ETH/BTC)
+        self.min_order_value_usd = 60.0  # Минимум $60 для открытия (OKX requirement)
 
         # 🔒 УЛУЧШЕНИЕ 3: Break-even stop
         self.breakeven_enabled = True
@@ -351,6 +353,77 @@ class ScalpingStrategy:
             and config.adaptive_regime_enabled
         ):
             # Создаем параметры для каждого режима
+            # Параметры индикаторов для TRENDING режима
+            trending_indicators = IndicatorParameters(
+                rsi_overbought=config.adaptive_regime["trending"]["indicators"].get(
+                    "rsi_overbought", 75.0
+                ),
+                rsi_oversold=config.adaptive_regime["trending"]["indicators"].get(
+                    "rsi_oversold", 25.0
+                ),
+                volume_threshold=config.adaptive_regime["trending"]["indicators"].get(
+                    "volume_threshold", 1.05
+                ),
+                sma_fast=config.adaptive_regime["trending"]["indicators"].get(
+                    "sma_fast", 8
+                ),
+                sma_slow=config.adaptive_regime["trending"]["indicators"].get(
+                    "sma_slow", 25
+                ),
+                atr_period=config.adaptive_regime["trending"]["indicators"].get(
+                    "atr_period", 14
+                ),
+            )
+            
+            # Параметры модулей для TRENDING режима
+            trending_modules = ModuleParameters(
+                mtf_block_opposite=config.adaptive_regime["trending"]["modules"]["multi_timeframe"].get(
+                    "block_opposite", False
+                ),
+                mtf_score_bonus=config.adaptive_regime["trending"]["modules"]["multi_timeframe"].get(
+                    "score_bonus", 1
+                ),
+                mtf_confirmation_timeframe=config.adaptive_regime["trending"]["modules"]["multi_timeframe"].get(
+                    "confirmation_timeframe", "5m"
+                ),
+                correlation_threshold=config.adaptive_regime["trending"]["modules"]["correlation_filter"].get(
+                    "correlation_threshold", 0.8
+                ),
+                max_correlated_positions=config.adaptive_regime["trending"]["modules"]["correlation_filter"].get(
+                    "max_correlated_positions", 3
+                ),
+                block_same_direction_only=config.adaptive_regime["trending"]["modules"]["correlation_filter"].get(
+                    "block_same_direction_only", False
+                ),
+                prefer_overlaps=config.adaptive_regime["trending"]["modules"]["time_filter"].get(
+                    "prefer_overlaps", True
+                ),
+                avoid_low_liquidity_hours=config.adaptive_regime["trending"]["modules"]["time_filter"].get(
+                    "avoid_low_liquidity_hours", False
+                ),
+                pivot_level_tolerance_percent=config.adaptive_regime["trending"]["modules"]["pivot_points"].get(
+                    "level_tolerance_percent", 0.4
+                ),
+                pivot_score_bonus_near_level=config.adaptive_regime["trending"]["modules"]["pivot_points"].get(
+                    "score_bonus_near_level", 1
+                ),
+                pivot_use_last_n_days=config.adaptive_regime["trending"]["modules"]["pivot_points"].get(
+                    "use_last_n_days", 3
+                ),
+                vp_score_bonus_in_value_area=config.adaptive_regime["trending"]["modules"]["volume_profile"].get(
+                    "score_bonus_in_value_area", 1
+                ),
+                vp_score_bonus_near_poc=config.adaptive_regime["trending"]["modules"]["volume_profile"].get(
+                    "score_bonus_near_poc", 1
+                ),
+                vp_poc_tolerance_percent=config.adaptive_regime["trending"]["modules"]["volume_profile"].get(
+                    "poc_tolerance_percent", 0.4
+                ),
+                vp_lookback_candles=config.adaptive_regime["trending"]["modules"]["volume_profile"].get(
+                    "lookback_candles", 100
+                ),
+            )
+
             trending_params = RegimeParameters(
                 min_score_threshold=config.adaptive_regime["trending"].get(
                     "min_score_threshold", 6
@@ -376,6 +449,79 @@ class ScalpingStrategy:
                 volume_profile_bonus_multiplier=config.adaptive_regime[
                     "trending"
                 ].get("volume_profile_bonus_multiplier", 1.0),
+                indicators=trending_indicators,
+                modules=trending_modules,
+            )
+
+            # Параметры индикаторов для RANGING режима
+            ranging_indicators = IndicatorParameters(
+                rsi_overbought=config.adaptive_regime["ranging"]["indicators"].get(
+                    "rsi_overbought", 70.0
+                ),
+                rsi_oversold=config.adaptive_regime["ranging"]["indicators"].get(
+                    "rsi_oversold", 30.0
+                ),
+                volume_threshold=config.adaptive_regime["ranging"]["indicators"].get(
+                    "volume_threshold", 1.1
+                ),
+                sma_fast=config.adaptive_regime["ranging"]["indicators"].get(
+                    "sma_fast", 10
+                ),
+                sma_slow=config.adaptive_regime["ranging"]["indicators"].get(
+                    "sma_slow", 30
+                ),
+                atr_period=config.adaptive_regime["ranging"]["indicators"].get(
+                    "atr_period", 14
+                ),
+            )
+            
+            # Параметры модулей для RANGING режима
+            ranging_modules = ModuleParameters(
+                mtf_block_opposite=config.adaptive_regime["ranging"]["modules"]["multi_timeframe"].get(
+                    "block_opposite", True
+                ),
+                mtf_score_bonus=config.adaptive_regime["ranging"]["modules"]["multi_timeframe"].get(
+                    "score_bonus", 2
+                ),
+                mtf_confirmation_timeframe=config.adaptive_regime["ranging"]["modules"]["multi_timeframe"].get(
+                    "confirmation_timeframe", "5m"
+                ),
+                correlation_threshold=config.adaptive_regime["ranging"]["modules"]["correlation_filter"].get(
+                    "correlation_threshold", 0.7
+                ),
+                max_correlated_positions=config.adaptive_regime["ranging"]["modules"]["correlation_filter"].get(
+                    "max_correlated_positions", 2
+                ),
+                block_same_direction_only=config.adaptive_regime["ranging"]["modules"]["correlation_filter"].get(
+                    "block_same_direction_only", True
+                ),
+                prefer_overlaps=config.adaptive_regime["ranging"]["modules"]["time_filter"].get(
+                    "prefer_overlaps", True
+                ),
+                avoid_low_liquidity_hours=config.adaptive_regime["ranging"]["modules"]["time_filter"].get(
+                    "avoid_low_liquidity_hours", True
+                ),
+                pivot_level_tolerance_percent=config.adaptive_regime["ranging"]["modules"]["pivot_points"].get(
+                    "level_tolerance_percent", 0.25
+                ),
+                pivot_score_bonus_near_level=config.adaptive_regime["ranging"]["modules"]["pivot_points"].get(
+                    "score_bonus_near_level", 2
+                ),
+                pivot_use_last_n_days=config.adaptive_regime["ranging"]["modules"]["pivot_points"].get(
+                    "use_last_n_days", 5
+                ),
+                vp_score_bonus_in_value_area=config.adaptive_regime["ranging"]["modules"]["volume_profile"].get(
+                    "score_bonus_in_value_area", 2
+                ),
+                vp_score_bonus_near_poc=config.adaptive_regime["ranging"]["modules"]["volume_profile"].get(
+                    "score_bonus_near_poc", 2
+                ),
+                vp_poc_tolerance_percent=config.adaptive_regime["ranging"]["modules"]["volume_profile"].get(
+                    "poc_tolerance_percent", 0.25
+                ),
+                vp_lookback_candles=config.adaptive_regime["ranging"]["modules"]["volume_profile"].get(
+                    "lookback_candles", 200
+                ),
             )
 
             ranging_params = RegimeParameters(
@@ -402,6 +548,82 @@ class ScalpingStrategy:
                 ),
                 volume_profile_bonus_multiplier=config.adaptive_regime["ranging"].get(
                     "volume_profile_bonus_multiplier", 1.5
+                ),
+                indicators=ranging_indicators,
+                modules=ranging_modules,
+            )
+
+            # Параметры индикаторов для CHOPPY режима
+            choppy_indicators = IndicatorParameters(
+                rsi_overbought=config.adaptive_regime["choppy"]["indicators"].get(
+                    "rsi_overbought", 65.0
+                ),
+                rsi_oversold=config.adaptive_regime["choppy"]["indicators"].get(
+                    "rsi_oversold", 35.0
+                ),
+                volume_threshold=config.adaptive_regime["choppy"]["indicators"].get(
+                    "volume_threshold", 1.25
+                ),
+                sma_fast=config.adaptive_regime["choppy"]["indicators"].get(
+                    "sma_fast", 12
+                ),
+                sma_slow=config.adaptive_regime["choppy"]["indicators"].get(
+                    "sma_slow", 35
+                ),
+                atr_period=config.adaptive_regime["choppy"]["indicators"].get(
+                    "atr_period", 21
+                ),
+            )
+            
+            # Параметры модулей для CHOPPY режима
+            choppy_modules = ModuleParameters(
+                mtf_block_opposite=config.adaptive_regime["choppy"]["modules"]["multi_timeframe"].get(
+                    "block_opposite", True
+                ),
+                mtf_score_bonus=config.adaptive_regime["choppy"]["modules"]["multi_timeframe"].get(
+                    "score_bonus", 3
+                ),
+                mtf_confirmation_timeframe=config.adaptive_regime["choppy"]["modules"]["multi_timeframe"].get(
+                    "confirmation_timeframe", "15m"
+                ),
+                correlation_threshold=config.adaptive_regime["choppy"]["modules"]["correlation_filter"].get(
+                    "correlation_threshold", 0.6
+                ),
+                max_correlated_positions=config.adaptive_regime["choppy"]["modules"]["correlation_filter"].get(
+                    "max_correlated_positions", 1
+                ),
+                block_same_direction_only=config.adaptive_regime["choppy"]["modules"]["correlation_filter"].get(
+                    "block_same_direction_only", True
+                ),
+                prefer_overlaps=config.adaptive_regime["choppy"]["modules"]["time_filter"].get(
+                    "prefer_overlaps", True
+                ),
+                avoid_low_liquidity_hours=config.adaptive_regime["choppy"]["modules"]["time_filter"].get(
+                    "avoid_low_liquidity_hours", True
+                ),
+                avoid_weekends=config.adaptive_regime["choppy"]["modules"]["time_filter"].get(
+                    "avoid_weekends", True
+                ),
+                pivot_level_tolerance_percent=config.adaptive_regime["choppy"]["modules"]["pivot_points"].get(
+                    "level_tolerance_percent", 0.15
+                ),
+                pivot_score_bonus_near_level=config.adaptive_regime["choppy"]["modules"]["pivot_points"].get(
+                    "score_bonus_near_level", 3
+                ),
+                pivot_use_last_n_days=config.adaptive_regime["choppy"]["modules"]["pivot_points"].get(
+                    "use_last_n_days", 7
+                ),
+                vp_score_bonus_in_value_area=config.adaptive_regime["choppy"]["modules"]["volume_profile"].get(
+                    "score_bonus_in_value_area", 3
+                ),
+                vp_score_bonus_near_poc=config.adaptive_regime["choppy"]["modules"]["volume_profile"].get(
+                    "score_bonus_near_poc", 3
+                ),
+                vp_poc_tolerance_percent=config.adaptive_regime["choppy"]["modules"]["volume_profile"].get(
+                    "poc_tolerance_percent", 0.15
+                ),
+                vp_lookback_candles=config.adaptive_regime["choppy"]["modules"]["volume_profile"].get(
+                    "lookback_candles", 300
                 ),
             )
 
@@ -430,6 +652,8 @@ class ScalpingStrategy:
                 volume_profile_bonus_multiplier=config.adaptive_regime["choppy"].get(
                     "volume_profile_bonus_multiplier", 2.0
                 ),
+                indicators=choppy_indicators,
+                modules=choppy_modules,
             )
 
             arm_config = RegimeConfig(
@@ -461,6 +685,13 @@ class ScalpingStrategy:
             )
             self.adaptive_regime = AdaptiveRegimeManager(arm_config)
             logger.info("🧠 Adaptive Regime Manager enabled!")
+            
+            # Инициализируем параметры для текущего режима
+            initial_regime_params = self.adaptive_regime.get_current_parameters()
+            self.current_indicator_params = initial_regime_params.indicators
+            self.current_module_params = initial_regime_params.modules
+            self.current_regime_type = self.adaptive_regime.current_regime
+            logger.info(f"📊 Initial regime parameters loaded: {self.current_regime_type.value.upper()}")
         else:
             logger.info("⚪ ARM disabled (enable in config.yaml)")
 
@@ -478,6 +709,12 @@ class ScalpingStrategy:
             logger.info(
                 f"📊 Partial TP enabled: {len(self.tp_levels)} levels configured"
             )
+
+        # Инициализируем переменные для отслеживания текущих параметров
+        self.current_indicator_params = None
+        self.current_module_params = None
+        self.current_regime_type = None
+        self.regime_switches = {}  # Статистика переключений режимов
 
         logger.info(f"Scalping strategy initialized for symbols: {config.symbols}")
 
@@ -542,6 +779,240 @@ class ScalpingStrategy:
         )
 
         return manager
+
+    async def update_indicator_parameters(self, indicator_params: IndicatorParameters) -> None:
+        """
+        Динамически обновляет параметры индикаторов для текущего режима рынка.
+        
+        Args:
+            indicator_params: Новые параметры индикаторов
+        """
+        try:
+            logger.info("🔄 Updating indicator parameters...")
+            
+            # Обновляем RSI параметры
+            if hasattr(self.indicators, 'indicators') and 'RSI' in self.indicators.indicators:
+                rsi_indicator = self.indicators.indicators['RSI']
+                rsi_indicator.overbought_level = indicator_params.rsi_overbought
+                rsi_indicator.oversold_level = indicator_params.rsi_oversold
+                logger.debug(f"   RSI levels: {indicator_params.rsi_oversold}/{indicator_params.rsi_overbought}")
+            
+            # Обновляем Volume threshold
+            if hasattr(self.indicators, 'indicators') and 'VOLUME' in self.indicators.indicators:
+                volume_indicator = self.indicators.indicators['VOLUME']
+                volume_indicator.threshold = indicator_params.volume_threshold
+                logger.debug(f"   Volume threshold: {indicator_params.volume_threshold}")
+            
+            # Обновляем ATR период (требует пересоздания индикатора)
+            if hasattr(self.indicators, 'indicators') and 'ATR' in self.indicators.indicators:
+                current_atr = self.indicators.indicators['ATR']
+                if current_atr.period != indicator_params.atr_period:
+                    # Создаем новый ATR с новым периодом
+                    new_atr = ATR(indicator_params.atr_period)
+                    # Копируем историю если возможно
+                    if hasattr(current_atr, 'values') and current_atr.values:
+                        new_atr.values = current_atr.values[-indicator_params.atr_period:]
+                    self.indicators.indicators['ATR'] = new_atr
+                    logger.debug(f"   ATR period: {indicator_params.atr_period}")
+            
+            # Обновляем SMA периоды (требует пересоздания индикаторов)
+            if hasattr(self.indicators, 'indicators'):
+                # SMA Fast
+                if 'SMA_FAST' in self.indicators.indicators:
+                    current_sma = self.indicators.indicators['SMA_FAST']
+                    if current_sma.period != indicator_params.sma_fast:
+                        new_sma = SimpleMovingAverage(indicator_params.sma_fast)
+                        if hasattr(current_sma, 'values') and current_sma.values:
+                            new_sma.values = current_sma.values[-indicator_params.sma_fast:]
+                        self.indicators.indicators['SMA_FAST'] = new_sma
+                        logger.debug(f"   SMA Fast period: {indicator_params.sma_fast}")
+                
+                # SMA Slow
+                if 'SMA_SLOW' in self.indicators.indicators:
+                    current_sma = self.indicators.indicators['SMA_SLOW']
+                    if current_sma.period != indicator_params.sma_slow:
+                        new_sma = SimpleMovingAverage(indicator_params.sma_slow)
+                        if hasattr(current_sma, 'values') and current_sma.values:
+                            new_sma.values = current_sma.values[-indicator_params.sma_slow:]
+                        self.indicators.indicators['SMA_SLOW'] = new_sma
+                        logger.debug(f"   SMA Slow period: {indicator_params.sma_slow}")
+            
+            # Сохраняем текущие параметры для использования в скоринге
+            self.current_indicator_params = indicator_params
+            
+            logger.info("✅ Indicator parameters updated successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating indicator parameters: {e}")
+            raise
+
+    async def update_module_parameters(self, module_params: ModuleParameters) -> None:
+        """
+        Динамически обновляет параметры модулей для текущего режима рынка.
+        
+        Args:
+            module_params: Новые параметры модулей
+        """
+        try:
+            logger.info("🔄 Updating module parameters...")
+            
+            # Обновляем MTF параметры
+            if hasattr(self, 'mtf_filter') and self.mtf_filter:
+                self.mtf_filter.config.block_opposite = module_params.mtf_block_opposite
+                self.mtf_filter.config.score_bonus = module_params.mtf_score_bonus
+                self.mtf_filter.config.confirmation_timeframe = module_params.mtf_confirmation_timeframe
+                logger.debug(f"   MTF: block_opposite={module_params.mtf_block_opposite}, bonus={module_params.mtf_score_bonus}")
+            
+            # Обновляем Correlation Filter параметры
+            if hasattr(self, 'correlation_filter') and self.correlation_filter:
+                self.correlation_filter.config.correlation_threshold = module_params.correlation_threshold
+                self.correlation_filter.config.max_correlated_positions = module_params.max_correlated_positions
+                self.correlation_filter.config.block_same_direction_only = module_params.block_same_direction_only
+                logger.debug(f"   Correlation: threshold={module_params.correlation_threshold}, max_positions={module_params.max_correlated_positions}")
+            
+            # Обновляем Time Filter параметры
+            if hasattr(self, 'time_filter') and self.time_filter:
+                self.time_filter.config.prefer_overlaps = module_params.prefer_overlaps
+                self.time_filter.config.avoid_low_liquidity_hours = module_params.avoid_low_liquidity_hours
+                if hasattr(module_params, 'avoid_weekends'):
+                    self.time_filter.config.avoid_weekends = module_params.avoid_weekends
+                logger.debug(f"   Time Filter: prefer_overlaps={module_params.prefer_overlaps}, avoid_low_liquidity={module_params.avoid_low_liquidity_hours}")
+            
+            # Обновляем Pivot Points параметры
+            if hasattr(self, 'pivot_filter') and self.pivot_filter:
+                self.pivot_filter.config.level_tolerance_percent = module_params.pivot_level_tolerance_percent
+                self.pivot_filter.config.score_bonus_near_level = module_params.pivot_score_bonus_near_level
+                self.pivot_filter.config.use_last_n_days = module_params.pivot_use_last_n_days
+                logger.debug(f"   Pivot Points: tolerance={module_params.pivot_level_tolerance_percent}%, bonus={module_params.pivot_score_bonus_near_level}")
+            
+            # Обновляем Volume Profile параметры
+            if hasattr(self, 'volume_profile_filter') and self.volume_profile_filter:
+                self.volume_profile_filter.config.score_bonus_in_value_area = module_params.vp_score_bonus_in_value_area
+                self.volume_profile_filter.config.score_bonus_near_poc = module_params.vp_score_bonus_near_poc
+                self.volume_profile_filter.config.poc_tolerance_percent = module_params.vp_poc_tolerance_percent
+                self.volume_profile_filter.config.lookback_candles = module_params.vp_lookback_candles
+                logger.debug(f"   Volume Profile: value_area_bonus={module_params.vp_score_bonus_in_value_area}, poc_bonus={module_params.vp_score_bonus_near_poc}")
+            
+            # Сохраняем текущие параметры
+            self.current_module_params = module_params
+            
+            logger.info("✅ Module parameters updated successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating module parameters: {e}")
+            raise
+
+    async def switch_regime_parameters(self, regime_type: RegimeType) -> None:
+        """
+        Переключает все параметры на новый режим рынка с управлением переходными состояниями.
+        
+        Args:
+            regime_type: Новый тип режима рынка
+        """
+        try:
+            if not hasattr(self, 'adaptive_regime') or not self.adaptive_regime:
+                logger.warning("⚠️ ARM not available, cannot switch regime parameters")
+                return
+            
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info("🔄 REGIME TRANSITION STARTED")
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(f"   Old regime: {self.current_regime_type.value.upper() if self.current_regime_type else 'N/A'}")
+            logger.info(f"   New regime: {regime_type.value.upper()}")
+            
+            # ЭТАП 1: Анализ текущих позиций
+            open_positions_count = len(self.positions)
+            if open_positions_count > 0:
+                logger.info(f"📊 Found {open_positions_count} open positions:")
+                for symbol, position in self.positions.items():
+                    logger.info(f"   {symbol}: {position.side} | Size: {position.size} | Entry: ${position.entry_price:.2f}")
+                logger.info("   ✅ Keeping existing positions with current TP/SL (no changes on the fly)")
+            else:
+                logger.info("📊 No open positions found")
+            
+            # ЭТАП 2: Получаем параметры для нового режима
+            regime_params = self.adaptive_regime.get_current_parameters()
+            
+            logger.info(f"⚙️ Loading {regime_type.value.upper()} regime parameters...")
+            
+            # ЭТАП 3: Обновляем параметры индикаторов
+            logger.info("   🔧 Updating indicator parameters...")
+            await self.update_indicator_parameters(regime_params.indicators)
+            
+            # ЭТАП 4: Обновляем параметры модулей
+            logger.info("   🔧 Updating module parameters...")
+            await self.update_module_parameters(regime_params.modules)
+            
+            # ЭТАП 5: Обновляем торговые параметры
+            logger.info("   🔧 Updating trading parameters...")
+            old_regime_type = self.current_regime_type
+            self.current_regime_type = regime_type
+            
+            # ЭТАП 6: Логируем изменения ключевых параметров
+            logger.info("📋 Parameter changes:")
+            if old_regime_type and hasattr(self.adaptive_regime.config, f'{old_regime_type.value}_params'):
+                old_params = getattr(self.adaptive_regime.config, f'{old_regime_type.value}_params')
+                logger.info(f"   Score threshold: {old_params.min_score_threshold} → {regime_params.min_score_threshold}")
+                logger.info(f"   Max trades/hour: {old_params.max_trades_per_hour} → {regime_params.max_trades_per_hour}")
+                logger.info(f"   Position multiplier: {old_params.position_size_multiplier}x → {regime_params.position_size_multiplier}x")
+                logger.info(f"   TP multiplier: {old_params.tp_atr_multiplier} → {regime_params.tp_atr_multiplier} ATR")
+                logger.info(f"   SL multiplier: {old_params.sl_atr_multiplier} → {regime_params.sl_atr_multiplier} ATR")
+                
+                # Индикаторы
+                if hasattr(old_params, 'indicators'):
+                    logger.info(f"   RSI levels: {old_params.indicators.rsi_oversold}/{old_params.indicators.rsi_overbought} → {regime_params.indicators.rsi_oversold}/{regime_params.indicators.rsi_overbought}")
+                    logger.info(f"   Volume threshold: {old_params.indicators.volume_threshold} → {regime_params.indicators.volume_threshold}")
+                    logger.info(f"   SMA periods: {old_params.indicators.sma_fast}/{old_params.indicators.sma_slow} → {regime_params.indicators.sma_fast}/{regime_params.indicators.sma_slow}")
+            
+            # ЭТАП 7: Переходные состояния для новых ордеров
+            logger.info("🔄 Transition state management:")
+            logger.info("   ✅ Existing positions: Keep current TP/SL")
+            logger.info("   ✅ New positions: Use new regime parameters")
+            logger.info(f"   ✅ Cooldowns: Preserved from previous regime")
+            
+            # ЭТАП 8: Обновляем статистику переключений
+            if not hasattr(self, 'regime_switches'):
+                self.regime_switches = {}
+            
+            transition_key = f"{old_regime_type.value if old_regime_type else 'initial'}_to_{regime_type.value}"
+            self.regime_switches[transition_key] = self.regime_switches.get(transition_key, 0) + 1
+            
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(f"✅ REGIME TRANSITION COMPLETED: {regime_type.value.upper()}")
+            logger.info(f"   Transition count: {self.regime_switches.get(transition_key, 1)}")
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            
+        except Exception as e:
+            logger.error(f"❌ Error during regime transition: {e}")
+            # В случае ошибки, сохраняем старый режим
+            if hasattr(self, 'current_regime_type') and old_regime_type:
+                self.current_regime_type = old_regime_type
+                logger.error(f"🔄 Reverted to previous regime: {old_regime_type.value.upper()}")
+            raise
+
+    def log_regime_statistics(self) -> None:
+        """Логирует статистику переключений режимов."""
+        if not hasattr(self, 'regime_switches') or not self.regime_switches:
+            logger.info("📊 No regime switches recorded")
+            return
+        
+        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logger.info("📊 REGIME SWITCHING STATISTICS")
+        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        
+        total_switches = sum(self.regime_switches.values())
+        logger.info(f"   Total regime switches: {total_switches}")
+        
+        for transition, count in sorted(self.regime_switches.items()):
+            percentage = (count / total_switches) * 100 if total_switches > 0 else 0
+            logger.info(f"   {transition}: {count} times ({percentage:.1f}%)")
+        
+        # Анализ наиболее частых переходов
+        if self.regime_switches:
+            most_common = max(self.regime_switches.items(), key=lambda x: x[1])
+            logger.info(f"   Most common transition: {most_common[0]} ({most_common[1]} times)")
+        
+        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     async def run(self) -> None:
         """Main strategy execution loop"""
@@ -867,12 +1338,24 @@ class ScalpingStrategy:
             long_score += 2 if ema_fast.value > ema_slow.value else 0
             
             # RSI (3 балла - ВАЖНЫЙ индикатор!)
+            # Используем динамические параметры RSI если доступны
+            rsi_oversold = (
+                self.current_indicator_params.rsi_oversold 
+                if self.current_indicator_params 
+                else self.config.entry.rsi_oversold
+            )
+            rsi_overbought = (
+                self.current_indicator_params.rsi_overbought 
+                if self.current_indicator_params 
+                else self.config.entry.rsi_overbought
+            )
+            
             # Даем баллы когда RSI показывает НАПРАВЛЕНИЕ
-            if rsi.value < 40:  # Перепродано - сильный LONG
+            if rsi.value <= rsi_oversold:  # Перепродано - сильный LONG
                 long_score += 3
-            elif rsi.value < 50:  # Слабо перепродано - умеренный LONG
+            elif rsi.value <= (rsi_oversold + 10):  # Слабо перепродано - умеренный LONG
                 long_score += 2
-            elif rsi.value < 60:  # Нейтрально-бычье
+            elif rsi.value <= (rsi_oversold + 20):  # Нейтрально-бычье
                 long_score += 1
             
             # Bollinger Bands (2 балла - хорошее подтверждение)
@@ -881,8 +1364,13 @@ class ScalpingStrategy:
             )
             
             # Volume (2 балла - важное подтверждение силы)
+            volume_threshold = (
+                self.current_indicator_params.volume_threshold 
+                if self.current_indicator_params 
+                else self.config.entry.volume_threshold
+            )
             long_score += (
-                2 if volume.value >= self.config.entry.volume_threshold else 0
+                2 if volume.value >= volume_threshold else 0
             )
 
             # MACD (2 балла - надежный индикатор)
@@ -900,11 +1388,12 @@ class ScalpingStrategy:
             short_score += 2 if ema_fast.value < ema_slow.value else 0
             
             # RSI (3 балла - ВАЖНЫЙ!)
-            if rsi.value > 60:  # Перекуплено - сильный SHORT
+            # Используем те же динамические параметры RSI
+            if rsi.value >= rsi_overbought:  # Перекуплено - сильный SHORT
                 short_score += 3
-            elif rsi.value > 50:  # Слабо перекуплено - умеренный SHORT
+            elif rsi.value >= (rsi_overbought - 10):  # Слабо перекуплено - умеренный SHORT
                 short_score += 2
-            elif rsi.value > 40:  # Нейтрально-медвежье
+            elif rsi.value >= (rsi_overbought - 20):  # Нейтрально-медвежье
                 short_score += 1
             
             # Bollinger Bands (2 балла)
@@ -914,7 +1403,7 @@ class ScalpingStrategy:
             
             # Volume (2 балла)
             short_score += (
-                2 if volume.value >= self.config.entry.volume_threshold else 0
+                2 if volume.value >= volume_threshold else 0
             )
 
             # MACD (2 балла)
@@ -939,6 +1428,12 @@ class ScalpingStrategy:
                 # Обновляем режим рынка
                 candles = self.market_data_cache[symbol].ohlcv_data
                 new_regime = self.adaptive_regime.update_regime(candles, current_price)
+                
+                # Проверяем, изменился ли режим
+                if new_regime and new_regime != self.current_regime_type:
+                    logger.info(f"🔄 Regime changed: {self.current_regime_type} → {new_regime}")
+                    # Переключаем параметры на новый режим
+                    await self.switch_regime_parameters(new_regime)
                 
                 # Получаем параметры для текущего режима
                 regime_params = self.adaptive_regime.get_current_parameters()
@@ -1558,7 +2053,11 @@ class ScalpingStrategy:
                     f"{final_position_size:.6f} (${final_value:.2f} with 2% buffer)"
                 )
 
-            return final_position_size
+            # Округляем до 8 знаков после запятой (OKX requirement)
+            rounded_size = round(final_position_size, 8)
+            logger.debug(f"📐 {symbol} Position size rounded: {final_position_size:.15f} → {rounded_size:.8f}")
+            
+            return rounded_size
 
         except Exception as e:
             logger.error(f"Error calculating position size: {e}")
@@ -2296,6 +2795,9 @@ class ScalpingStrategy:
         # Log ARM statistics
         if self.adaptive_regime:
             self.adaptive_regime.log_statistics()
+        
+        # Log regime switching statistics
+        self.log_regime_statistics()
         
         logger.info("Scalping strategy stopped")
 
