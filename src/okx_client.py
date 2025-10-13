@@ -409,32 +409,24 @@ class OKXClient:
         if take_profit or stop_loss:
             attach_algo_ords = []
             
-            # Определяем противоположную сторону для закрытия
-            close_side = "sell" if side == OrderSide.BUY else "buy"
+            # Правильный формат для OKX SPOT attachAlgoOrds
+            # Используем УПРОЩЕННЫЙ формат без attachAlgoClOrdId
             
             if take_profit:
                 attach_algo_ords.append({
-                    "attachAlgoClOrdId": f"tp_{symbol.replace('-', '')}_{int(time.time()*1000)}",
                     "tpTriggerPx": str(take_profit),
                     "tpOrdPx": "-1",  # -1 = market price при триггере
-                    "tpTriggerPxType": "last",  # Триггер по last price
-                    "sz": str(quantity),
-                    "side": close_side,
                 })
             
             if stop_loss:
                 attach_algo_ords.append({
-                    "attachAlgoClOrdId": f"sl_{symbol.replace('-', '')}_{int(time.time()*1000)}",
                     "slTriggerPx": str(stop_loss),
                     "slOrdPx": "-1",
-                    "slTriggerPxType": "last",
-                    "sz": str(quantity),
-                    "side": close_side,
                 })
             
             data["attachAlgoOrds"] = attach_algo_ords
             
-            logger.info(f"📊 Attaching TP/SL algo orders: TP={take_profit}, SL={stop_loss}")
+            logger.info(f"📊 Attaching TP/SL: TP={take_profit}, SL={stop_loss}")
 
         result = await self._make_request("POST", "/trade/order", data=data)
 
