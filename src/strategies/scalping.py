@@ -817,40 +817,71 @@ class ScalpingStrategy:
                 )
                 return None  # НЕ генерируем сигнал во флэте!
 
-        # 🎯 УЛУЧШЕНИЕ 4: Scoring система вместо "всё или ничего"
+        # 🎯 УЛУЧШЕНИЕ 4: Scoring система с взвешенными баллами
         if self.scoring_enabled:
-            # Long сигнал - присваиваем баллы каждому условию
+            # Long сигнал - присваиваем баллы с разными весами
             long_score = 0
+            
+            # SMA Trend (1 балл - быстрая, может быть шумной)
             long_score += (
-                2 if (current_price > sma_fast.value > sma_slow.value) else 0
-            )  # Тренд (2 балла)
-            long_score += 2 if ema_fast.value > ema_slow.value else 0  # EMA (2)
-            long_score += 2 if 30 < rsi.value < 70 else 0  # RSI (2)
+                1 if (current_price > sma_fast.value > sma_slow.value) else 0
+            )
+            
+            # EMA Trend (2 балла - стабильнее чем SMA)
+            long_score += 2 if ema_fast.value > ema_slow.value else 0
+            
+            # RSI (3 балла - ВАЖНЫЙ индикатор!)
+            # Даем баллы когда RSI показывает НАПРАВЛЕНИЕ
+            if rsi.value < 40:  # Перепродано - сильный LONG
+                long_score += 3
+            elif rsi.value < 50:  # Слабо перепродано - умеренный LONG
+                long_score += 2
+            elif rsi.value < 60:  # Нейтрально-бычье
+                long_score += 1
+            
+            # Bollinger Bands (2 балла - хорошее подтверждение)
             long_score += (
                 2 if current_price <= bb.metadata["lower_band"] * 1.002 else 0
-            )  # BB (2)
+            )
+            
+            # Volume (2 балла - важное подтверждение силы)
             long_score += (
                 2 if volume.value >= self.config.entry.volume_threshold else 0
-            )  # Volume (2)
+            )
 
-            # 📊 УЛУЧШЕНИЕ 7: MACD confirmation (2 балла)
+            # MACD (2 балла - надежный индикатор)
             macd_line = macd.metadata.get("macd_line", 0)
             macd_signal = macd.metadata.get("signal_line", 0)
             long_score += 2 if (macd_line > macd_signal and macd_line > 0) else 0
 
-            # Short сигнал - присваиваем баллы
+            # Short сигнал - присваиваем баллы с разными весами
             short_score = 0
-            short_score += 2 if (current_price < sma_fast.value < sma_slow.value) else 0
+            
+            # SMA Trend (1 балл)
+            short_score += 1 if (current_price < sma_fast.value < sma_slow.value) else 0
+            
+            # EMA Trend (2 балла)
             short_score += 2 if ema_fast.value < ema_slow.value else 0
-            short_score += 2 if 30 < rsi.value < 70 else 0
+            
+            # RSI (3 балла - ВАЖНЫЙ!)
+            if rsi.value > 60:  # Перекуплено - сильный SHORT
+                short_score += 3
+            elif rsi.value > 50:  # Слабо перекуплено - умеренный SHORT
+                short_score += 2
+            elif rsi.value > 40:  # Нейтрально-медвежье
+                short_score += 1
+            
+            # Bollinger Bands (2 балла)
             short_score += (
                 2 if current_price >= bb.metadata["upper_band"] * 0.998 else 0
             )
+            
+            # Volume (2 балла)
             short_score += (
                 2 if volume.value >= self.config.entry.volume_threshold else 0
             )
 
-            # 📊 УЛУЧШЕНИЕ 7: MACD confirmation (2 балла)
+            # MACD (2 балла)
             short_score += 2 if (macd_line < macd_signal and macd_line < 0) else 0
 
             # Расчёт confidence (0.0 - 1.0)

@@ -55,7 +55,8 @@ scalping:
     avoid_weekends: true            # Не торговать в выходные
   
   # PHASE 1: Volatility Modes
-  volatility_modes_enabled: true  # Включим после тестов
+  # ⚠️ ОТКЛЮЧЕНО: ARM (Adaptive Regime Manager) теперь управляет волатильностью
+  volatility_modes_enabled: false  # Заменено на ARM
   volatility_modes:
     low_volatility_threshold: 0.01   # <1% = LOW VOL
     high_volatility_threshold: 0.02  # >2% = HIGH VOL
@@ -97,8 +98,8 @@ scalping:
     cache_ttl_seconds: 600         # Кэш 10 минут
   
   indicators:
-    sma_fast: 5
-    sma_slow: 20
+    sma_fast: 10        # Было: 5 (увеличено для стабильности)
+    sma_slow: 30        # Было: 20 (более четкий тренд)
     ema_fast: 8
     ema_slow: 21
     rsi_period: 14
