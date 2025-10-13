@@ -168,12 +168,23 @@ class ATR(BaseIndicator):
     def calculate(
         self, high_data: List[float], low_data: List[float], close_data: List[float]
     ) -> IndicatorResult:
+        # Проверка достаточности данных
         if (
             len(high_data) < self.period
             or len(low_data) < self.period
             or len(close_data) < self.period
         ):
-            return IndicatorResult(self.name, 0.0)
+            # Логируем причину нулевого ATR
+            min_len = min(len(high_data), len(low_data), len(close_data))
+            return IndicatorResult(
+                self.name,
+                0.0,
+                metadata={
+                    "period": self.period,
+                    "data_length": min_len,
+                    "error": f"Insufficient data: need {self.period}, got {min_len}",
+                },
+            )
 
         # Расчёт ATR (Average True Range) - мера волатильности
         # True Range = max из трёх значений:
@@ -192,14 +203,33 @@ class ATR(BaseIndicator):
         atr_value = (
             np.mean(true_ranges[-self.period :])
             if len(true_ranges) >= self.period
-            else 0
+            else 0.0
         )
+
+        # Детальная информация в метаданных
+        metadata = {
+            "period": self.period,
+            "true_ranges_count": len(true_ranges),
+            "data_length": len(close_data),
+        }
+
+        # Если ATR = 0, добавляем детальную диагностику
+        if atr_value == 0.0 and len(true_ranges) >= self.period:
+            metadata["warning"] = "ATR is zero - market might be completely flat"
+            metadata["sample_true_ranges"] = (
+                true_ranges[-5:] if len(true_ranges) >= 5 else true_ranges
+            )
+            metadata["sample_prices"] = {
+                "high": high_data[-5:] if len(high_data) >= 5 else high_data,
+                "low": low_data[-5:] if len(low_data) >= 5 else low_data,
+                "close": close_data[-5:] if len(close_data) >= 5 else close_data,
+            }
 
         return IndicatorResult(
             name=f"ATR_{self.period}",
             value=atr_value,
             signal="NEUTRAL",
-            metadata={"period": self.period},
+            metadata=metadata,
         )
 
 

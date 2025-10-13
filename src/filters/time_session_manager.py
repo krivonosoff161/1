@@ -8,7 +8,8 @@ Time Session Manager
 пересечения для максимизации шансов на успешную сделку.
 """
 
-from datetime import datetime, time as dt_time
+from datetime import datetime
+from datetime import time as dt_time
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
@@ -45,9 +46,15 @@ class TimeFilterConfig(BaseModel):
     enabled: bool = Field(default=True, description="Включить фильтр")
 
     # Торговые сессии
-    trade_asian_session: bool = Field(default=True, description="Торговать Азиатскую сессию")
-    trade_european_session: bool = Field(default=True, description="Торговать Европейскую сессию")
-    trade_american_session: bool = Field(default=True, description="Торговать Американскую сессию")
+    trade_asian_session: bool = Field(
+        default=True, description="Торговать Азиатскую сессию"
+    )
+    trade_european_session: bool = Field(
+        default=True, description="Торговать Европейскую сессию"
+    )
+    trade_american_session: bool = Field(
+        default=True, description="Торговать Американскую сессию"
+    )
 
     # Приоритет пересечений
     prefer_overlaps: bool = Field(
@@ -143,9 +150,7 @@ class TimeSessionManager:
             f"Prefer overlaps={config.prefer_overlaps}"
         )
 
-    def is_trading_allowed(
-        self, current_time: Optional[datetime] = None
-    ) -> bool:
+    def is_trading_allowed(self, current_time: Optional[datetime] = None) -> bool:
         """
         Проверить разрешена ли торговля в текущее время.
 
@@ -172,17 +177,13 @@ class TimeSessionManager:
         if self.config.avoid_weekends:
             # Суббота после 22:00 UTC до Воскресенья 22:00 UTC
             if current_weekday == 5 and current_hour >= 22:  # Saturday night
-                logger.debug(f"⏰ Trading blocked: Weekend (Saturday {current_hour}:00 UTC)")
+                logger.debug(
+                    f"⏰ Trading blocked: Weekend (Saturday {current_hour}:00 UTC)"
+                )
                 return False
             if current_weekday == 6:  # Sunday
-                logger.debug(f"⏰ Trading blocked: Weekend (Sunday {current_hour}:00 UTC)")
-                return False
-
-        # Проверка низколиквидных часов
-        if self.config.avoid_low_liquidity_hours:
-            if current_hour in self.config.low_liquidity_hours:
                 logger.debug(
-                    f"⏰ Trading blocked: Low liquidity hour ({current_hour}:00 UTC)"
+                    f"⏰ Trading blocked: Weekend (Sunday {current_hour}:00 UTC)"
                 )
                 return False
 
@@ -206,11 +207,20 @@ class TimeSessionManager:
         # Проверка активных сессий (если не требуем только пересечения)
         active_sessions = self.get_active_sessions(current_time)
         if active_sessions:
+            # Если есть активные сессии - разрешаем торговлю
             session_names = [s.name for s in active_sessions]
             logger.debug(
                 f"✅ Trading allowed: Active sessions {session_names} ({current_hour}:00 UTC)"
             )
             return True
+
+        # Проверка низколиквидных часов (только если нет активных сессий)
+        if self.config.avoid_low_liquidity_hours:
+            if current_hour in self.config.low_liquidity_hours:
+                logger.debug(
+                    f"⏰ Trading blocked: Low liquidity hour ({current_hour}:00 UTC)"
+                )
+                return False
 
         logger.debug(f"⏰ Trading blocked: No active sessions ({current_hour}:00 UTC)")
         return False
@@ -311,9 +321,7 @@ class TimeSessionManager:
         # Вне сессий - минимальная ликвидность
         return 0.5
 
-    def get_session_info(
-        self, current_time: Optional[datetime] = None
-    ) -> Dict:
+    def get_session_info(self, current_time: Optional[datetime] = None) -> Dict:
         """
         Получить полную информацию о текущем времени торговли.
 
@@ -341,9 +349,7 @@ class TimeSessionManager:
             "liquidity_multiplier": liquidity_multiplier,
         }
 
-    def _is_hour_in_range(
-        self, hour: int, start_hour: int, end_hour: int
-    ) -> bool:
+    def _is_hour_in_range(self, hour: int, start_hour: int, end_hour: int) -> bool:
         """
         Проверить находится ли час в диапазоне.
 
@@ -405,4 +411,3 @@ class TimeSessionManager:
                     return f"Next trading: {session.name} session in {hours_until}h (at {session.start_hour}:00 UTC)"
 
         return "Next trading: Tomorrow"
-

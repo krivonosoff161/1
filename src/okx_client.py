@@ -228,6 +228,22 @@ class OKXClient:
             for candle in result["data"]
         ]
 
+    async def get_candles(
+        self, symbol: str, timeframe: str = "1m", limit: int = 100
+    ) -> List[OHLCV]:
+        """
+        Get candlestick data (alias for get_klines for compatibility).
+
+        Args:
+            symbol: Trading pair symbol (e.g., "BTC-USDT")
+            timeframe: Candle timeframe (e.g., "1m", "5m", "1H", "1D")
+            limit: Number of candles to retrieve (default: 100, max: 300)
+
+        Returns:
+            List of OHLCV candles
+        """
+        return await self.get_klines(symbol, timeframe, limit)
+
     async def get_recent_trades(self, symbol: str, limit: int = 100) -> List[Trade]:
         """Get recent trades"""
         params = {"instId": symbol, "limit": str(limit)}
