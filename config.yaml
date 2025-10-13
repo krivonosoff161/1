@@ -45,7 +45,7 @@ scalping:
     block_same_direction_only: true  # Блокировать только одинаковые направления
   
   # PHASE 1: Time-Based Filter
-  time_filter_enabled: true  # Включим после тестов
+  time_filter_enabled: false  # ❌ ОТКЛЮЧЕНО для теста (крипта 24/7!)
   time_filter:
     trade_asian_session: true       # Торговать Азиатскую сессию (00:00-09:00 UTC)
     trade_european_session: true    # Торговать Европейскую сессию (07:00-16:00 UTC)
