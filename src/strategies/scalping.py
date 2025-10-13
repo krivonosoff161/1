@@ -2032,12 +2032,19 @@ class ScalpingStrategy:
                 f"📤 Placing order: {signal.side.value} {position_size} "
                 f"{signal.symbol} @ ${signal.price:.2f}"
             )
+            logger.info(
+                f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}"
+            )
 
+            # 🎯 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем TP/SL в одном запросе!
+            # OKX SPOT поддерживает attachAlgoOrds для автоматических TP/SL
             order = await self.client.place_order(
                 symbol=signal.symbol,
                 side=signal.side,
                 order_type=OrderType.MARKET,
                 quantity=position_size,
+                take_profit=take_profit,  # ✅ БИРЖА САМА УПРАВЛЯЕТ TP!
+                stop_loss=stop_loss,      # ✅ БИРЖА САМА УПРАВЛЯЕТ SL!
             )
 
             if order:
@@ -2061,11 +2068,17 @@ class ScalpingStrategy:
                 )
                 self.positions[signal.symbol] = position
 
-                logger.info(
-                    f"✅ Order placed: {signal.side.value} {position_size} "
-                    f"{signal.symbol} @ {signal.price:.6f} "
-                    f"(SL: {stop_loss:.6f}, TP: {take_profit:.6f})"
-                )
+                logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                logger.info(f"✅ POSITION OPENED: {signal.symbol} {position.side.value.upper()}")
+                logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                logger.info(f"   Order ID: {order.id}")
+                logger.info(f"   Side: {signal.side.value.upper()}")
+                logger.info(f"   Size: {position_size:.8f} {symbol.split('-')[0]}")
+                logger.info(f"   Entry: ${signal.price:.2f}")
+                logger.info(f"   Stop Loss: ${stop_loss:.2f} (auto on exchange)")
+                logger.info(f"   Take Profit: ${take_profit:.2f} (auto on exchange)")
+                logger.info(f"   Risk/Reward: 1:{abs(take_profit-signal.price)/abs(signal.price-stop_loss):.2f}")
+                logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             else:
                 logger.error(
                     f"❌ Order placement FAILED: {signal.side.value} "

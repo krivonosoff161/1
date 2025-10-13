@@ -376,11 +376,27 @@ class OKXClient:
         order_type: OrderType,
         quantity: float,
         price: Optional[float] = None,
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
     ) -> Order:
-        """Place a new order"""
+        """
+        Place a new order with optional TP/SL (SPOT supported!).
+        
+        Args:
+            symbol: Trading pair (e.g., "BTC-USDT")
+            side: BUY or SELL
+            order_type: MARKET or LIMIT
+            quantity: Order size
+            price: Limit price (only for LIMIT orders)
+            take_profit: Take profit trigger price (optional)
+            stop_loss: Stop loss trigger price (optional)
+        
+        Returns:
+            Order object with order_id and algo_ids if TP/SL set
+        """
         data = {
             "instId": symbol,
-            "tdMode": "cash",
+            "tdMode": "cash",  # SPOT mode
             "side": "buy" if side == OrderSide.BUY else "sell",
             "ordType": "limit" if order_type == OrderType.LIMIT else "market",
             "sz": str(quantity),
@@ -388,6 +404,37 @@ class OKXClient:
 
         if price is not None:
             data["px"] = str(price)
+
+        # 🎯 КРИТИЧНО: TP/SL через attachAlgoOrds (OKX SPOT поддерживает!)
+        if take_profit or stop_loss:
+            attach_algo_ords = []
+            
+            # Определяем противоположную сторону для закрытия
+            close_side = "sell" if side == OrderSide.BUY else "buy"
+            
+            if take_profit:
+                attach_algo_ords.append({
+                    "attachAlgoClOrdId": f"tp_{symbol.replace('-', '')}_{int(time.time()*1000)}",
+                    "tpTriggerPx": str(take_profit),
+                    "tpOrdPx": "-1",  # -1 = market price при триггере
+                    "tpTriggerPxType": "last",  # Триггер по last price
+                    "sz": str(quantity),
+                    "side": close_side,
+                })
+            
+            if stop_loss:
+                attach_algo_ords.append({
+                    "attachAlgoClOrdId": f"sl_{symbol.replace('-', '')}_{int(time.time()*1000)}",
+                    "slTriggerPx": str(stop_loss),
+                    "slOrdPx": "-1",
+                    "slTriggerPxType": "last",
+                    "sz": str(quantity),
+                    "side": close_side,
+                })
+            
+            data["attachAlgoOrds"] = attach_algo_ords
+            
+            logger.info(f"📊 Attaching TP/SL algo orders: TP={take_profit}, SL={stop_loss}")
 
         result = await self._make_request("POST", "/trade/order", data=data)
 
@@ -485,6 +532,59 @@ class OKXClient:
             )
 
         return orders
+
+    async def get_algo_orders(self, symbol: Optional[str] = None, algo_type: str = "conditional") -> List[Dict]:
+        """
+        Получить список активных algo orders (TP/SL).
+        
+        Args:
+            symbol: Торговая пара (опционально)
+            algo_type: Тип algo order ("conditional", "oco", "trigger")
+        
+        Returns:
+            Список algo orders
+        """
+        params = {
+            "instType": "SPOT",
+            "ordType": algo_type,
+        }
+        if symbol:
+            params["instId"] = symbol
+        
+        try:
+            result = await self._make_request("GET", "/trade/orders-algo-pending", params=params)
+            return result.get("data", [])
+        except Exception as e:
+            logger.error(f"Error getting algo orders: {e}")
+            return []
+
+    async def cancel_algo_order(self, algo_id: str, symbol: str) -> bool:
+        """
+        Отменить algo order (TP/SL).
+        
+        Args:
+            algo_id: ID algo ордера
+            symbol: Торговая пара
+        
+        Returns:
+            True если успешно отменен
+        """
+        data = {
+            "instId": symbol,
+            "algoId": algo_id,
+        }
+        
+        try:
+            result = await self._make_request("POST", "/trade/cancel-algo-order", data=data)
+            if result.get("code") == "0":
+                logger.info(f"✅ Algo order {algo_id} cancelled")
+                return True
+            else:
+                logger.warning(f"⚠️ Failed to cancel algo order {algo_id}: {result.get('msg')}")
+                return False
+        except Exception as e:
+            logger.error(f"Error cancelling algo order {algo_id}: {e}")
+            return False
 
     def _convert_status(self, okx_status: str) -> OrderStatus:
         """Convert OKX status to our OrderStatus enum"""
