@@ -609,7 +609,9 @@ class OKXClient:
                 )
                 candles.append(candle)
 
-            return candles
+            # OKX возвращает свечи в обратном порядке (новые первыми)
+            # Разворачиваем, чтобы старые свечи были первыми (для правильного расчета индикаторов)
+            return list(reversed(candles))
 
         except Exception as e:
             logger.error(f"Error getting market data for {symbol}: {e}")
