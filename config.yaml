@@ -24,7 +24,7 @@ risk:
 # Scalping Strategy
 scalping:
   enabled: true
-  symbols: ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
+  symbols: ["SOL-USDT", "AVAX-USDT", "DOGE-USDT"]  # ✅ Альткоины для тестов
   timeframe: "5m"  # 1m не работает в DEMO (статичные данные), используем 5m
   
   # PHASE 1: Multi-Timeframe Confirmation (MTF)
