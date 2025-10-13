@@ -130,10 +130,68 @@ scalping:
     min_asset_balance_usd: 50.0   # Минимум $50 эквивалента актива для SHORT (OKX requirement)
     min_usdt_balance: 50.0        # Минимум $50 USDT для LONG (OKX requirement)
     log_all_checks: false         # Логировать каждую проверку (для отладки)
+  
+  # PHASE 1.5: Adaptive Regime Manager - автоматическое переключение режимов
+  adaptive_regime_enabled: true
+  adaptive_regime:
+    # Параметры детекции режимов
+    trending_adx_threshold: 25.0        # ADX >25 = сильный тренд
+    ranging_adx_threshold: 20.0         # ADX <20 = боковик
+    high_volatility_threshold: 0.05     # >5% = высокая волатильность
+    low_volatility_threshold: 0.02      # <2% = низкая волатильность
+    trend_strength_percent: 2.0         # Отклонение от SMA >2% = тренд
+    # Защита от частых переключений
+    min_regime_duration_minutes: 15     # Минимум 15 минут в режиме
+    required_confirmations: 3           # 3 подтверждения для переключения
+    
+    # РЕЖИМ 1: TRENDING (агрессивная торговля - берем объемом)
+    trending:
+      min_score_threshold: 6            # Легкий вход
+      max_trades_per_hour: 20           # Много сделок
+      position_size_multiplier: 1.2     # Крупнее позиции (+20%)
+      tp_atr_multiplier: 2.0            # Дальше цель (тренд продолжится)
+      sl_atr_multiplier: 2.0            # Уже стоп (тренд сильный)
+      cooldown_after_loss_minutes: 2    # Быстро возвращаемся
+      pivot_bonus_multiplier: 1.0       # Стандартные бонусы
+      volume_profile_bonus_multiplier: 1.0
+    
+    # РЕЖИМ 2: RANGING (умеренная торговля - берем качеством)
+    ranging:
+      min_score_threshold: 8            # Строже отбор
+      max_trades_per_hour: 10           # Средне
+      position_size_multiplier: 1.0     # Стандартный размер
+      tp_atr_multiplier: 1.5            # Ближе цель (диапазон узкий)
+      sl_atr_multiplier: 2.5            # Шире стоп (много шума)
+      cooldown_after_loss_minutes: 5    # Стандартная пауза
+      pivot_bonus_multiplier: 1.5       # Усиление бонусов за уровни!
+      volume_profile_bonus_multiplier: 1.5
+    
+    # РЕЖИМ 3: CHOPPY (консервативная торговля - только проверенное)
+    choppy:
+      min_score_threshold: 10           # Только лучшие!
+      max_trades_per_hour: 4            # Мало сделок
+      position_size_multiplier: 0.5     # Половинный размер (защита)
+      tp_atr_multiplier: 1.0            # Очень близко (хватай и беги)
+      sl_atr_multiplier: 3.5            # Очень широко (хаос)
+      cooldown_after_loss_minutes: 15   # Долгая пауза
+      pivot_bonus_multiplier: 2.0       # Максимальное усиление!
+      volume_profile_bonus_multiplier: 2.0
+  
+  # Partial Take Profit - многоуровневая фиксация прибыли
+  partial_tp_enabled: true
+  partial_tp_levels:
+    - percent: 50.0           # 50% позиции
+      atr_multiplier: 1.5     # На 1.5 ATR
+    - percent: 30.0           # 30% позиции
+      atr_multiplier: 2.5     # На 2.5 ATR
+    - percent: 20.0           # 20% позиции
+      atr_multiplier: 4.0     # На 4.0 ATR (пусть летит!)
 
-# Trend Following Strategy  
+# Trend Following Strategy
+# ⚠️ ОТКЛЮЧЕНО: Конфликтует с Scalping на BTC-USDT
+# ARM (Adaptive Regime Manager) теперь управляет режимами автоматически
 trend_following:
-  enabled: true
+  enabled: false  # Отключено в пользу ARM
   symbols: ["BTC-USDT"]
   timeframe: "15m"
   indicators:

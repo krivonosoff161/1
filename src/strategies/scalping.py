@@ -19,8 +19,18 @@ from src.models import (MarketData, OrderSide, OrderType, Position,
                         PositionSide, RiskMetrics, Signal, Tick)
 from src.okx_client import OKXClient
 # PHASE 1: Balance Checker
-from src.strategies.modules.balance_checker import (BalanceCheckConfig,
-                                                    BalanceChecker)
+from src.strategies.modules.balance_checker import (
+    BalanceCheckConfig,
+    BalanceChecker,
+)
+
+# PHASE 1.5: Adaptive Regime Manager
+from src.strategies.modules.adaptive_regime_manager import (
+    AdaptiveRegimeManager,
+    RegimeConfig,
+    RegimeParameters,
+    RegimeType,
+)
 # PHASE 1: Correlation Filter
 from src.strategies.modules.correlation_filter import (CorrelationFilter,
                                                        CorrelationFilterConfig)
@@ -327,6 +337,141 @@ class ScalpingStrategy:
             logger.info("💰 Balance Checker enabled!")
         else:
             logger.info("⚪ Balance Checker disabled (enable in config.yaml)")
+
+        # PHASE 1.5: Adaptive Regime Manager
+        self.adaptive_regime: Optional[AdaptiveRegimeManager] = None
+        if (
+            hasattr(config, "adaptive_regime_enabled")
+            and config.adaptive_regime_enabled
+        ):
+            # Создаем параметры для каждого режима
+            trending_params = RegimeParameters(
+                min_score_threshold=config.adaptive_regime["trending"].get(
+                    "min_score_threshold", 6
+                ),
+                max_trades_per_hour=config.adaptive_regime["trending"].get(
+                    "max_trades_per_hour", 20
+                ),
+                position_size_multiplier=config.adaptive_regime["trending"].get(
+                    "position_size_multiplier", 1.2
+                ),
+                tp_atr_multiplier=config.adaptive_regime["trending"].get(
+                    "tp_atr_multiplier", 2.0
+                ),
+                sl_atr_multiplier=config.adaptive_regime["trending"].get(
+                    "sl_atr_multiplier", 2.0
+                ),
+                cooldown_after_loss_minutes=config.adaptive_regime["trending"].get(
+                    "cooldown_after_loss_minutes", 2
+                ),
+                pivot_bonus_multiplier=config.adaptive_regime["trending"].get(
+                    "pivot_bonus_multiplier", 1.0
+                ),
+                volume_profile_bonus_multiplier=config.adaptive_regime[
+                    "trending"
+                ].get("volume_profile_bonus_multiplier", 1.0),
+            )
+
+            ranging_params = RegimeParameters(
+                min_score_threshold=config.adaptive_regime["ranging"].get(
+                    "min_score_threshold", 8
+                ),
+                max_trades_per_hour=config.adaptive_regime["ranging"].get(
+                    "max_trades_per_hour", 10
+                ),
+                position_size_multiplier=config.adaptive_regime["ranging"].get(
+                    "position_size_multiplier", 1.0
+                ),
+                tp_atr_multiplier=config.adaptive_regime["ranging"].get(
+                    "tp_atr_multiplier", 1.5
+                ),
+                sl_atr_multiplier=config.adaptive_regime["ranging"].get(
+                    "sl_atr_multiplier", 2.5
+                ),
+                cooldown_after_loss_minutes=config.adaptive_regime["ranging"].get(
+                    "cooldown_after_loss_minutes", 5
+                ),
+                pivot_bonus_multiplier=config.adaptive_regime["ranging"].get(
+                    "pivot_bonus_multiplier", 1.5
+                ),
+                volume_profile_bonus_multiplier=config.adaptive_regime["ranging"].get(
+                    "volume_profile_bonus_multiplier", 1.5
+                ),
+            )
+
+            choppy_params = RegimeParameters(
+                min_score_threshold=config.adaptive_regime["choppy"].get(
+                    "min_score_threshold", 10
+                ),
+                max_trades_per_hour=config.adaptive_regime["choppy"].get(
+                    "max_trades_per_hour", 4
+                ),
+                position_size_multiplier=config.adaptive_regime["choppy"].get(
+                    "position_size_multiplier", 0.5
+                ),
+                tp_atr_multiplier=config.adaptive_regime["choppy"].get(
+                    "tp_atr_multiplier", 1.0
+                ),
+                sl_atr_multiplier=config.adaptive_regime["choppy"].get(
+                    "sl_atr_multiplier", 3.5
+                ),
+                cooldown_after_loss_minutes=config.adaptive_regime["choppy"].get(
+                    "cooldown_after_loss_minutes", 15
+                ),
+                pivot_bonus_multiplier=config.adaptive_regime["choppy"].get(
+                    "pivot_bonus_multiplier", 2.0
+                ),
+                volume_profile_bonus_multiplier=config.adaptive_regime["choppy"].get(
+                    "volume_profile_bonus_multiplier", 2.0
+                ),
+            )
+
+            arm_config = RegimeConfig(
+                enabled=True,
+                trending_adx_threshold=config.adaptive_regime.get(
+                    "trending_adx_threshold", 25.0
+                ),
+                ranging_adx_threshold=config.adaptive_regime.get(
+                    "ranging_adx_threshold", 20.0
+                ),
+                high_volatility_threshold=config.adaptive_regime.get(
+                    "high_volatility_threshold", 0.05
+                ),
+                low_volatility_threshold=config.adaptive_regime.get(
+                    "low_volatility_threshold", 0.02
+                ),
+                trend_strength_percent=config.adaptive_regime.get(
+                    "trend_strength_percent", 2.0
+                ),
+                min_regime_duration_minutes=config.adaptive_regime.get(
+                    "min_regime_duration_minutes", 15
+                ),
+                required_confirmations=config.adaptive_regime.get(
+                    "required_confirmations", 3
+                ),
+                trending_params=trending_params,
+                ranging_params=ranging_params,
+                choppy_params=choppy_params,
+            )
+            self.adaptive_regime = AdaptiveRegimeManager(arm_config)
+            logger.info("🧠 Adaptive Regime Manager enabled!")
+        else:
+            logger.info("⚪ ARM disabled (enable in config.yaml)")
+
+        # Загружаем Partial TP конфигурацию
+        if hasattr(config, "partial_tp_enabled") and config.partial_tp_enabled:
+            self.partial_tp_enabled = True
+            if hasattr(config, "partial_tp_levels"):
+                self.tp_levels = [
+                    {
+                        "percent": level.get("percent", 50) / 100.0,
+                        "atr_multiplier": level.get("atr_multiplier", 1.5),
+                    }
+                    for level in config.partial_tp_levels
+                ]
+            logger.info(
+                f"📊 Partial TP enabled: {len(self.tp_levels)} levels configured"
+            )
 
         logger.info(f"Scalping strategy initialized for symbols: {config.symbols}")
 
@@ -720,14 +865,27 @@ class ScalpingStrategy:
                 if existing_position.side == PositionSide.SHORT and long_score > 0:
                     return None
 
-                # PHASE 1: Volatility Modes - адаптация порога scoring
+            # PHASE 1.5: ARM - адаптация порога на основе режима рынка
             current_score_threshold = self.min_score_threshold
-            if self.volatility_adapter and atr:
-                # Рассчитываем текущую волатильность
+            
+            if self.adaptive_regime:
+                # Обновляем режим рынка
+                candles = self.market_data_cache[symbol].candles
+                new_regime = self.adaptive_regime.update_regime(candles, current_price)
+                
+                # Получаем параметры для текущего режима
+                regime_params = self.adaptive_regime.get_current_parameters()
+                current_score_threshold = regime_params.min_score_threshold
+                
+                logger.debug(
+                    f"🧠 Market Regime: {self.adaptive_regime.current_regime.value.upper()} | "
+                    f"Threshold: {current_score_threshold}/12"
+                )
+            elif self.volatility_adapter and atr:
+                # Fallback: используем Volatility Adapter если ARM отключен
                 current_volatility = self.volatility_adapter.calculate_volatility(
                     atr.value, current_price
                 )
-                # Получаем адаптированные параметры
                 vol_params = self.volatility_adapter.get_parameters(current_volatility)
                 current_score_threshold = vol_params.score_threshold
 
@@ -1298,18 +1456,24 @@ class ScalpingStrategy:
 
             final_position_size = min(position_size, max_position_size)
 
-            # 🌊 УЛУЧШЕНИЕ 9: Корректировка размера по market regime
-            if self.regime_detection_enabled:
+            # PHASE 1.5: ARM - корректировка размера по режиму рынка
+            if self.adaptive_regime:
+                regime_params = self.adaptive_regime.get_current_parameters()
+                multiplier = regime_params.position_size_multiplier
+                final_position_size *= multiplier
+                logger.debug(
+                    f"🧠 ARM: {self.adaptive_regime.current_regime.value.upper()} "
+                    f"mode → size multiplier {multiplier}x"
+                )
+            elif self.regime_detection_enabled:
+                # Fallback: старая логика если ARM отключен
                 regime = self._detect_market_regime(symbol)
-
-                # Мультипликаторы для разных режимов
                 if regime == "HIGH_VOLATILITY":
-                    final_position_size *= 0.7  # Уменьшаем на 30% в волатильности
+                    final_position_size *= 0.7
                     logger.info(f"🌊 HIGH VOLATILITY detected, reducing size by 30%")
                 elif regime == "TRENDING":
-                    final_position_size *= 1.2  # Увеличиваем на 20% на тренде
+                    final_position_size *= 1.2
                     logger.info(f"🌊 TRENDING market detected, increasing size by 20%")
-                # RANGING - без изменений (1.0)
 
             # 🛡️ КРИТИЧЕСКАЯ ЗАЩИТА: Проверка минимального размера ордера
             # OKX минимум ~$10, берем $30 с запасом +2% (учитываем комиссии и движение цены)
@@ -1341,7 +1505,7 @@ class ScalpingStrategy:
 
         Использует ATR (Average True Range) для динамического определения
         расстояния до уровней выхода. Расстояния масштабируются
-        мультипликаторами из конфигурации.
+        мультипликаторами из конфигурации или ARM.
 
         Args:
             entry_price: Цена входа в позицию
@@ -1351,8 +1515,18 @@ class ScalpingStrategy:
         Returns:
             tuple: (stop_loss_price, take_profit_price)
         """
-        stop_distance = atr * self.config.exit.stop_loss_atr_multiplier
-        profit_distance = atr * self.config.exit.take_profit_atr_multiplier
+        # PHASE 1.5: Используем параметры ARM если включен
+        if self.adaptive_regime:
+            regime_params = self.adaptive_regime.get_current_parameters()
+            sl_multiplier = regime_params.sl_atr_multiplier
+            tp_multiplier = regime_params.tp_atr_multiplier
+        else:
+            # Fallback: используем конфигурацию по умолчанию
+            sl_multiplier = self.config.exit.stop_loss_atr_multiplier
+            tp_multiplier = self.config.exit.take_profit_atr_multiplier
+
+        stop_distance = atr * sl_multiplier
+        profit_distance = atr * tp_multiplier
 
         if side == OrderSide.BUY:
             stop_loss = entry_price - stop_distance
@@ -2047,11 +2221,15 @@ class ScalpingStrategy:
     def stop(self) -> None:
         """Stop the strategy"""
         self.active = False
-
+        
         # Log Balance Checker statistics
         if self.balance_checker:
             self.balance_checker.log_statistics()
-
+        
+        # Log ARM statistics
+        if self.adaptive_regime:
+            self.adaptive_regime.log_statistics()
+        
         logger.info("Scalping strategy stopped")
 
     def get_performance_stats(self) -> dict:
