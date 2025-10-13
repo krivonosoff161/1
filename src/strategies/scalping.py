@@ -65,6 +65,10 @@ class ScalpingStrategy:
         self.total_trades = 0
         self.winning_trades = 0
         self.daily_pnl = 0.0
+        
+        # 📊 История сделок для детального логирования
+        self.trade_history = []  # Список завершенных сделок
+        self.max_history_size = 50  # Храним последние 50 сделок
 
         # API Rate Limiting (защита от превышения лимитов)
         self.api_requests_count = 0
@@ -1422,7 +1426,7 @@ class ScalpingStrategy:
             # EMA Trend (2 балла - стабильнее чем SMA)
             long_score += 2 if ema_fast.value > ema_slow.value else 0
 
-            # RSI (3 балла - ВАЖНЫЙ индикатор!)
+            # RSI (3-4 балла - ВАЖНЫЙ индикатор! + confluence bonus)
             # Используем динамические параметры RSI если доступны
             rsi_oversold = (
                 self.current_indicator_params.rsi_oversold
@@ -1435,12 +1439,18 @@ class ScalpingStrategy:
                 else self.config.entry.rsi_overbought
             )
 
-            # Даем баллы когда RSI показывает НАПРАВЛЕНИЕ
-            if rsi.value <= rsi_oversold:  # Перепродано - сильный LONG
-                long_score += 3
-            elif rsi.value <= (rsi_oversold + 10):  # Слабо перепродано - умеренный LONG
+            # 🎯 ГАРМОНИЗАЦИЯ: Зональная логика RSI
+            # Extreme zone (очень сильный сигнал)
+            if rsi.value <= (rsi_oversold - 5):  # Например <25 для RANGING
+                long_score += 4  # EXTREME! +1 bonus
+            # Strong zone (сильный сигнал)
+            elif rsi.value <= rsi_oversold:  # Перепродано
+                long_score += 3  # Стандарт
+            # Weak zone (слабый сигнал)
+            elif rsi.value <= (rsi_oversold + 10):
                 long_score += 2
-            elif rsi.value <= (rsi_oversold + 20):  # Нейтрально-бычье
+            # Neutral-bullish
+            elif rsi.value <= (rsi_oversold + 20):
                 long_score += 1
 
             # Bollinger Bands (2 балла - хорошее подтверждение)
@@ -1468,15 +1478,16 @@ class ScalpingStrategy:
             # EMA Trend (2 балла)
             short_score += 2 if ema_fast.value < ema_slow.value else 0
 
-            # RSI (3 балла - ВАЖНЫЙ!)
+            # RSI (3-4 балла - ВАЖНЫЙ! + confluence bonus)
             # Используем те же динамические параметры RSI
-            if rsi.value >= rsi_overbought:  # Перекуплено - сильный SHORT
-                short_score += 3
-            elif rsi.value >= (
-                rsi_overbought - 10
-            ):  # Слабо перекуплено - умеренный SHORT
+            # 🎯 ГАРМОНИЗАЦИЯ: Зональная логика RSI для SHORT
+            if rsi.value >= (rsi_overbought + 5):  # Extreme overbought
+                short_score += 4  # EXTREME! +1 bonus
+            elif rsi.value >= rsi_overbought:  # Strong overbought
+                short_score += 3  # Стандарт
+            elif rsi.value >= (rsi_overbought - 10):  # Weak overbought
                 short_score += 2
-            elif rsi.value >= (rsi_overbought - 20):  # Нейтрально-медвежье
+            elif rsi.value >= (rsi_overbought - 20):  # Neutral-bearish
                 short_score += 1
 
             # Bollinger Bands (2 балла)
@@ -2616,6 +2627,50 @@ class ScalpingStrategy:
                 # Обновляем PnL с учётом комиссий
                 self.daily_pnl += net_pnl
 
+                # 📊 ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ РЕЗУЛЬТАТА СДЕЛКИ
+                win_rate = (self.winning_trades / self.total_trades * 100) if self.total_trades > 0 else 0
+                
+                logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                if net_pnl > 0:
+                    logger.info(f"✅ TRADE COMPLETED: {symbol} {position.side.value.upper()} | WIN")
+                else:
+                    logger.info(f"❌ TRADE COMPLETED: {symbol} {position.side.value.upper()} | LOSS")
+                logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                logger.info(f"   Reason: {reason.upper()}")
+                logger.info(f"   Entry: ${position.entry_price:.2f}")
+                logger.info(f"   Exit: ${current_price:.2f}")
+                logger.info(f"   Size: {position.size:.8f} {symbol.split('-')[0]}")
+                logger.info(f"   Holding time: {holding_time}")
+                logger.info(f"   Gross PnL: ${position.unrealized_pnl:.2f}")
+                logger.info(f"   Commission: ${total_commission:.2f}")
+                logger.info(f"   Net PnL: ${net_pnl:.2f} ({(net_pnl/position.entry_price/position.size)*100:.2f}%)")
+                logger.info(f"   Daily PnL: ${self.daily_pnl:.2f}")
+                logger.info(f"   Total trades: {self.total_trades} (Win rate: {win_rate:.1f}%)")
+                logger.info(f"   Consecutive losses: {self.consecutive_losses}")
+                logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                
+                # 📊 Сохраняем сделку в историю
+                trade_record = {
+                    'timestamp': datetime.utcnow(),
+                    'symbol': symbol,
+                    'side': position.side.value.upper(),
+                    'entry_price': position.entry_price,
+                    'exit_price': current_price,
+                    'size': position.size,
+                    'holding_time': str(holding_time),
+                    'gross_pnl': position.unrealized_pnl,
+                    'commission': total_commission,
+                    'net_pnl': net_pnl,
+                    'reason': reason.upper(),
+                    'result': 'WIN' if net_pnl > 0 else 'LOSS'
+                }
+                
+                self.trade_history.append(trade_record)
+                
+                # Ограничиваем размер истории
+                if len(self.trade_history) > self.max_history_size:
+                    self.trade_history = self.trade_history[-self.max_history_size:]
+
                 # Remove position
                 del self.positions[symbol]
 
@@ -2623,19 +2678,6 @@ class ScalpingStrategy:
                 if symbol in self.position_partial_info:
                     del self.position_partial_info[symbol]
 
-                # 📊 УЛУЧШЕННОЕ ЛОГИРОВАНИЕ: Детали закрытия с комиссиями
-                win_rate = (
-                    (self.winning_trades / self.total_trades * 100)
-                    if self.total_trades > 0
-                    else 0.0
-                )
-                logger.info(
-                    f"✅ Position closed: {symbol} {reason} | "
-                    f"Gross PnL: ${position.unrealized_pnl:.4f} | "
-                    f"Commission: -${total_commission:.4f} | "
-                    f"NET PnL: ${net_pnl:.4f} | "
-                    f"Win rate: {win_rate:.1f}%"
-                )
 
         except Exception as e:
             logger.error(f"Error closing position {symbol}: {e}")
@@ -2847,7 +2889,24 @@ class ScalpingStrategy:
             logger.info(f"{pnl_emoji} ДНЕВНОЙ PnL: ${self.daily_pnl:.2f}")
             logger.info(f"🛡️ CONSECUTIVE LOSSES: {self.consecutive_losses}")
             logger.info(f"🌊 MARKET REGIME: {market_regime}")
-            logger.info(f"{'='*60}\n")
+            logger.info(f"{'='*60}")
+            
+            # 📊 ТАБЛИЦА ПОСЛЕДНИХ СДЕЛОК (по этому символу)
+            symbol_trades = [t for t in self.trade_history if t['symbol'] == symbol]
+            if symbol_trades:
+                logger.info(f"\n📋 ПОСЛЕДНИЕ СДЕЛКИ {symbol}:")
+                logger.info(f"{'─'*60}")
+                for trade in symbol_trades[-5:]:  # Последние 5 сделок по паре
+                    result_emoji = "✅" if trade['result'] == 'WIN' else "❌"
+                    time_str = trade['timestamp'].strftime("%H:%M:%S")
+                    logger.info(
+                        f"{result_emoji} {time_str} | {trade['side']:5} | "
+                        f"Entry ${trade['entry_price']:>10,.2f} → Exit ${trade['exit_price']:>10,.2f} | "
+                        f"PnL ${trade['net_pnl']:>7.2f} | {trade['reason']}"
+                    )
+                logger.info(f"{'─'*60}\n")
+            else:
+                logger.info(f"\n📋 Нет завершенных сделок для {symbol}\n")
 
         except Exception as e:
             logger.error(f"Error logging trading status for {symbol}: {e}")
