@@ -1,6 +1,7 @@
 """
 Scalping trading strategy implementation
 """
+
 import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -16,7 +17,7 @@ from src.indicators import (ATR, MACD, RSI, BollingerBands,
                             ExponentialMovingAverage, IndicatorManager,
                             SimpleMovingAverage, VolumeIndicator)
 from src.models import (MarketData, OrderSide, OrderType, Position,
-                        PositionSide, RiskMetrics, Signal, Tick)
+                        PositionSide, Signal, Tick)
 from src.okx_client import OKXClient
 # PHASE 1.5: Adaptive Regime Manager
 from src.strategies.modules.adaptive_regime_manager import (
@@ -89,10 +90,10 @@ class ScalpingStrategy:
         self._emergency_in_progress = False
 
         # 💰 ЗАЩИТА: Минимальные размеры для операций
-        self.min_close_value_usd = 30.0  # Минимум $30 для закрытия позиции
-        self.min_order_value_usd = (
-            30.0  # Минимум $30 (золотая середина для демо/малого баланса)
-        )
+        # ВАЖНО: Каждая пара на OKX имеет свой minSz!
+        # TODO: Получать реальные minSz через get_instruments()
+        self.min_close_value_usd = 30.0  # Минимум $30 для закрытия
+        self.min_order_value_usd = 30.0  # Минимум $30 (безопасное значение)
 
         # 🔒 УЛУЧШЕНИЕ 3: Break-even stop
         self.breakeven_enabled = True
@@ -111,7 +112,8 @@ class ScalpingStrategy:
 
         # ⏰ УЛУЧШЕНИЕ 8: Session filtering
         self.session_filtering_enabled = True
-        self.trade_overlaps_only = False  # ✅ ИЗМЕНЕНО: Торговать во ВСЕ активные сессии, не только в пересечения
+        # ✅ ИЗМЕНЕНО: Торговать во ВСЕ активные сессии
+        self.trade_overlaps_only = False
         self.trading_sessions = {
             "asian": (0, 9),  # UTC 00:00-09:00
             "european": (7, 16),  # UTC 07:00-16:00
@@ -123,11 +125,7 @@ class ScalpingStrategy:
         ]
 
         # 🌊 УЛУЧШЕНИЕ 9: Market Regime Detection
-        # ⚠️ УСТАРЕЛО: Заменено на ARM (Adaptive Regime Manager)
-        # Оставлено для совместимости, всегда False
-        self.regime_detection_enabled = False
-        self.high_volatility_threshold = 0.02
-        self.trend_threshold = 0.05
+        # ✅ ЗАМЕНЕНО НА ARM (Adaptive Regime Manager) - см. adaptive_regime выше
 
         # 💸 УЛУЧШЕНИЕ 10 (БОНУС): Spread filter
         self.spread_filter_enabled = True
@@ -732,9 +730,8 @@ class ScalpingStrategy:
             self.current_indicator_params = initial_regime_params.indicators
             self.current_module_params = initial_regime_params.modules
             self.current_regime_type = self.adaptive_regime.current_regime
-            logger.info(
-                f"📊 Initial regime parameters loaded: {self.current_regime_type.value.upper()}"
-            )
+            regime_name = self.current_regime_type.value.upper()
+            logger.info(f"📊 Initial regime parameters loaded: {regime_name}")
         else:
             logger.info("⚪ ARM disabled (enable in config.yaml)")
 
@@ -843,9 +840,9 @@ class ScalpingStrategy:
                 rsi_indicator = self.indicators.indicators["RSI"]
                 rsi_indicator.overbought_level = indicator_params.rsi_overbought
                 rsi_indicator.oversold_level = indicator_params.rsi_oversold
-                logger.debug(
-                    f"   RSI levels: {indicator_params.rsi_oversold}/{indicator_params.rsi_overbought}"
-                )
+                rsi_os = indicator_params.rsi_oversold
+                rsi_ob = indicator_params.rsi_overbought
+                logger.debug(f"   RSI levels: {rsi_os}/{rsi_ob}")
 
             # Обновляем Volume threshold
             if (
@@ -866,10 +863,12 @@ class ScalpingStrategy:
                 current_atr = self.indicators.indicators["ATR"]
                 if current_atr.period != indicator_params.atr_period:
                     # Создаем новый ATR с новым периодом
-                    new_atr = ATR(indicator_params.atr_period)
+                    old_period = current_atr.period
+                    new_period = indicator_params.atr_period
+                    new_atr = ATR(new_period)
                     self.indicators.indicators["ATR"] = new_atr
                     logger.debug(
-                        f"   ✅ ATR period updated: {current_atr.period} → {indicator_params.atr_period}"
+                        f"   ✅ ATR period updated: {old_period} → {new_period}"
                     )
 
             # Обновляем SMA периоды (требует пересоздания индикаторов)
@@ -878,40 +877,48 @@ class ScalpingStrategy:
                 if "SMA_FAST" in self.indicators.indicators:
                     current_sma = self.indicators.indicators["SMA_FAST"]
                     if current_sma.period != indicator_params.sma_fast:
-                        new_sma = SimpleMovingAverage(indicator_params.sma_fast)
+                        old_p = current_sma.period
+                        new_p = indicator_params.sma_fast
+                        new_sma = SimpleMovingAverage(new_p)
                         self.indicators.indicators["SMA_FAST"] = new_sma
                         logger.debug(
-                            f"   ✅ SMA Fast period updated: {current_sma.period} → {indicator_params.sma_fast}"
+                            f"   ✅ SMA Fast period updated: {old_p} → {new_p}"
                         )
 
                 # SMA Slow
                 if "SMA_SLOW" in self.indicators.indicators:
                     current_sma = self.indicators.indicators["SMA_SLOW"]
                     if current_sma.period != indicator_params.sma_slow:
-                        new_sma = SimpleMovingAverage(indicator_params.sma_slow)
+                        old_p = current_sma.period
+                        new_p = indicator_params.sma_slow
+                        new_sma = SimpleMovingAverage(new_p)
                         self.indicators.indicators["SMA_SLOW"] = new_sma
                         logger.debug(
-                            f"   ✅ SMA Slow period updated: {current_sma.period} → {indicator_params.sma_slow}"
+                            f"   ✅ SMA Slow period updated: {old_p} → {new_p}"
                         )
-                
+
                 # EMA Fast
                 if "EMA_FAST" in self.indicators.indicators:
                     current_ema = self.indicators.indicators["EMA_FAST"]
                     if current_ema.period != indicator_params.ema_fast:
-                        new_ema = ExponentialMovingAverage(indicator_params.ema_fast)
+                        old_p = current_ema.period
+                        new_p = indicator_params.ema_fast
+                        new_ema = ExponentialMovingAverage(new_p)
                         self.indicators.indicators["EMA_FAST"] = new_ema
                         logger.debug(
-                            f"   ✅ EMA Fast period updated: {current_ema.period} → {indicator_params.ema_fast}"
+                            f"   ✅ EMA Fast period updated: {old_p} → {new_p}"
                         )
-                
+
                 # EMA Slow
                 if "EMA_SLOW" in self.indicators.indicators:
                     current_ema = self.indicators.indicators["EMA_SLOW"]
                     if current_ema.period != indicator_params.ema_slow:
-                        new_ema = ExponentialMovingAverage(indicator_params.ema_slow)
+                        old_p = current_ema.period
+                        new_p = indicator_params.ema_slow
+                        new_ema = ExponentialMovingAverage(new_p)
                         self.indicators.indicators["EMA_SLOW"] = new_ema
                         logger.debug(
-                            f"   ✅ EMA Slow period updated: {current_ema.period} → {indicator_params.ema_slow}"
+                            f"   ✅ EMA Slow period updated: {old_p} → {new_p}"
                         )
 
             # Сохраняем текущие параметры для использования в скоринге
@@ -940,9 +947,9 @@ class ScalpingStrategy:
                 self.mtf_filter.config.confirmation_timeframe = (
                     module_params.mtf_confirmation_timeframe
                 )
-                logger.debug(
-                    f"   MTF: block_opposite={module_params.mtf_block_opposite}, bonus={module_params.mtf_score_bonus}"
-                )
+                block_opp = module_params.mtf_block_opposite
+                bonus = module_params.mtf_score_bonus
+                logger.debug(f"   MTF: block_opposite={block_opp}, bonus={bonus}")
 
             # Обновляем Correlation Filter параметры
             if hasattr(self, "correlation_filter") and self.correlation_filter:
@@ -955,8 +962,10 @@ class ScalpingStrategy:
                 self.correlation_filter.config.block_same_direction_only = (
                     module_params.block_same_direction_only
                 )
+                thresh = module_params.correlation_threshold
+                max_pos = module_params.max_correlated_positions
                 logger.debug(
-                    f"   Correlation: threshold={module_params.correlation_threshold}, max_positions={module_params.max_correlated_positions}"
+                    f"   Correlation: threshold={thresh}, max_positions={max_pos}"
                 )
 
             # Обновляем Time Filter параметры
@@ -969,8 +978,11 @@ class ScalpingStrategy:
                     self.time_filter.config.avoid_weekends = (
                         module_params.avoid_weekends
                     )
+                pref_ovr = module_params.prefer_overlaps
+                avoid_low = module_params.avoid_low_liquidity_hours
                 logger.debug(
-                    f"   Time Filter: prefer_overlaps={module_params.prefer_overlaps}, avoid_low_liquidity={module_params.avoid_low_liquidity_hours}"
+                    f"   Time Filter: prefer_overlaps={pref_ovr}, "
+                    f"avoid_low_liquidity={avoid_low}"
                 )
 
             # Обновляем Pivot Points параметры
@@ -984,9 +996,9 @@ class ScalpingStrategy:
                 self.pivot_filter.config.use_last_n_days = (
                     module_params.pivot_use_last_n_days
                 )
-                logger.debug(
-                    f"   Pivot Points: tolerance={module_params.pivot_level_tolerance_percent}%, bonus={module_params.pivot_score_bonus_near_level}"
-                )
+                tol = module_params.pivot_level_tolerance_percent
+                bonus = module_params.pivot_score_bonus_near_level
+                logger.debug(f"   Pivot Points: tolerance={tol}%, bonus={bonus}")
 
             # Обновляем Volume Profile параметры
             if hasattr(self, "volume_profile_filter") and self.volume_profile_filter:
@@ -1002,8 +1014,11 @@ class ScalpingStrategy:
                 self.volume_profile_filter.config.lookback_candles = (
                     module_params.vp_lookback_candles
                 )
+                va_bonus = module_params.vp_score_bonus_in_value_area
+                poc_bonus = module_params.vp_score_bonus_near_poc
                 logger.debug(
-                    f"   Volume Profile: value_area_bonus={module_params.vp_score_bonus_in_value_area}, poc_bonus={module_params.vp_score_bonus_near_poc}"
+                    f"   Volume Profile: value_area_bonus={va_bonus}, "
+                    f"poc_bonus={poc_bonus}"
                 )
 
             # Сохраняем текущие параметры
@@ -1017,7 +1032,9 @@ class ScalpingStrategy:
 
     async def switch_regime_parameters(self, regime_type: RegimeType) -> None:
         """
-        Переключает все параметры на новый режим рынка с управлением переходными состояниями.
+        Переключает параметры на новый режим рынка.
+        
+        Управляет переходными состояниями при смене режима.
 
         Args:
             regime_type: Новый тип режима рынка
@@ -1030,9 +1047,12 @@ class ScalpingStrategy:
             logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             logger.info("🔄 REGIME TRANSITION STARTED")
             logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            logger.info(
-                f"   Old regime: {self.current_regime_type.value.upper() if self.current_regime_type else 'N/A'}"
+            old_name = (
+                self.current_regime_type.value.upper()
+                if self.current_regime_type
+                else "N/A"
             )
+            logger.info(f"   Old regime: {old_name}")
             logger.info(f"   New regime: {regime_type.value.upper()}")
 
             # ЭТАП 1: Анализ текущих позиций
@@ -1040,11 +1060,15 @@ class ScalpingStrategy:
             if open_positions_count > 0:
                 logger.info(f"📊 Found {open_positions_count} open positions:")
                 for symbol, position in self.positions.items():
+                    side = position.side
+                    size = position.size
+                    entry = position.entry_price
                     logger.info(
-                        f"   {symbol}: {position.side} | Size: {position.size} | Entry: ${position.entry_price:.2f}"
+                        f"   {symbol}: {side} | Size: {size} | Entry: ${entry:.2f}"
                     )
                 logger.info(
-                    "   ✅ Keeping existing positions with current TP/SL (no changes on the fly)"
+                    "   ✅ Keeping existing positions with current TP/SL "
+                    "(no changes on the fly)"
                 )
             else:
                 logger.info("📊 No open positions found")
@@ -1076,44 +1100,51 @@ class ScalpingStrategy:
                     self.adaptive_regime.config, f"{old_regime_type.value}_params"
                 )
                 logger.info(
-                    f"   Score threshold: {old_params.min_score_threshold} → {regime_params.min_score_threshold}"
+                    f"   Score threshold: {old_params.min_score_threshold} → "
+                    f"{regime_params.min_score_threshold}"
                 )
                 logger.info(
-                    f"   Max trades/hour: {old_params.max_trades_per_hour} → {regime_params.max_trades_per_hour}"
+                    f"   Max trades/hour: {old_params.max_trades_per_hour} → "
+                    f"{regime_params.max_trades_per_hour}"
+                )
+                old_mult = old_params.position_size_multiplier
+                new_mult = regime_params.position_size_multiplier
+                logger.info(f"   Position multiplier: {old_mult}x → {new_mult}x")
+                logger.info(
+                    f"   TP multiplier: {old_params.tp_atr_multiplier} → "
+                    f"{regime_params.tp_atr_multiplier} ATR"
                 )
                 logger.info(
-                    f"   Position multiplier: {old_params.position_size_multiplier}x → {regime_params.position_size_multiplier}x"
-                )
-                logger.info(
-                    f"   TP multiplier: {old_params.tp_atr_multiplier} → {regime_params.tp_atr_multiplier} ATR"
-                )
-                logger.info(
-                    f"   SL multiplier: {old_params.sl_atr_multiplier} → {regime_params.sl_atr_multiplier} ATR"
+                    f"   SL multiplier: {old_params.sl_atr_multiplier} → "
+                    f"{regime_params.sl_atr_multiplier} ATR"
                 )
 
                 # Индикаторы
                 if hasattr(old_params, "indicators"):
-                    logger.info(
-                        f"   RSI levels: {old_params.indicators.rsi_oversold}/{old_params.indicators.rsi_overbought} → {regime_params.indicators.rsi_oversold}/{regime_params.indicators.rsi_overbought}"
-                    )
-                    logger.info(
-                        f"   Volume threshold: {old_params.indicators.volume_threshold} → {regime_params.indicators.volume_threshold}"
-                    )
-                    logger.info(
-                        f"   SMA periods: {old_params.indicators.sma_fast}/{old_params.indicators.sma_slow} → {regime_params.indicators.sma_fast}/{regime_params.indicators.sma_slow}"
-                    )
+                    old_rsi = f"{old_params.indicators.rsi_oversold}/{old_params.indicators.rsi_overbought}"
+                    new_rsi = f"{regime_params.indicators.rsi_oversold}/{regime_params.indicators.rsi_overbought}"
+                    logger.info(f"   RSI levels: {old_rsi} → {new_rsi}")
+
+                    old_vol = old_params.indicators.volume_threshold
+                    new_vol = regime_params.indicators.volume_threshold
+                    logger.info(f"   Volume threshold: {old_vol} → {new_vol}")
+
+                    old_sma = f"{old_params.indicators.sma_fast}/{old_params.indicators.sma_slow}"
+                    new_sma = f"{regime_params.indicators.sma_fast}/{regime_params.indicators.sma_slow}"
+                    logger.info(f"   SMA periods: {old_sma} → {new_sma}")
 
             # ЭТАП 7: Переходные состояния для новых ордеров
             logger.info("🔄 Transition state management:")
             logger.info("   ✅ Existing positions: Keep current TP/SL")
             logger.info("   ✅ New positions: Use new regime parameters")
-            logger.info(f"   ✅ Cooldowns: Preserved from previous regime")
+            logger.info("   ✅ Cooldowns: Preserved from previous regime")
 
             # ЭТАП 8: Обновляем статистику переключений
             if not hasattr(self, "regime_switches"):
                 self.regime_switches = {}
 
-            transition_key = f"{old_regime_type.value if old_regime_type else 'initial'}_to_{regime_type.value}"
+            old_val = old_regime_type.value if old_regime_type else "initial"
+            transition_key = f"{old_val}_to_{regime_type.value}"
             self.regime_switches[transition_key] = (
                 self.regime_switches.get(transition_key, 0) + 1
             )
@@ -1195,8 +1226,17 @@ class ScalpingStrategy:
             # 💰 УЛУЧШЕНИЕ 2: Установка начального баланса для daily profit lock
             balances = await self.client.get_account_balance()
             if balances:
-                self.daily_start_balance = sum(b.total for b in balances)
-                logger.info(f"💼 Daily start balance: ${self.daily_start_balance:.2f}")
+                # ТОЛЬКО USDT баланс для контроля прибыли/убытков
+                usdt_balance = next((b for b in balances if b.currency == "USDT"), None)
+                if usdt_balance:
+                    self.daily_start_balance = usdt_balance.total
+                    balance = self.daily_start_balance
+                    logger.info(f"💼 Daily start balance (USDT only): ${balance:.2f}")
+                else:
+                    logger.warning(
+                        "⚠️ USDT balance not found, daily profit lock disabled"
+                    )
+                    self.daily_start_balance = 0.0
 
             # Create tasks for each symbol
             tasks = []
@@ -1450,7 +1490,7 @@ class ScalpingStrategy:
         min_volatility = self.config.entry.min_volatility_atr
         if self.current_indicator_params:
             min_volatility = self.current_indicator_params.min_volatility_atr
-        
+
         if atr.value < min_volatility:
             # Детальная диагностика для ATR = 0
             if atr.value == 0.0:
@@ -1466,16 +1506,8 @@ class ScalpingStrategy:
                 )
             return None
 
-        # 🛡️ КРИТИЧЕСКАЯ ЗАЩИТА: Фильтр RANGING режима (не торговать во флэте)
-        if self.regime_detection_enabled:
-            market_regime = self._detect_market_regime(symbol)
-
-            if market_regime == "RANGING":
-                logger.debug(
-                    f"⚪ {symbol} RANGING market detected - skipping trade "
-                    f"(flat market = high risk for scalping)"
-                )
-                return None  # НЕ генерируем сигнал во флэте!
+        # 🛡️ Market Regime контролируется ARM (Adaptive Regime Manager)
+        # ARM автоматически переключает min_score_threshold и другие параметры
 
         # 🎯 УЛУЧШЕНИЕ 4: Scoring система с взвешенными баллами
         if self.scoring_enabled:
@@ -1988,7 +2020,7 @@ class ScalpingStrategy:
         if self.adaptive_regime:
             regime_params = self.adaptive_regime.get_current_parameters()
             max_trades = regime_params.max_trades_per_hour
-        
+
         if self.trade_count_hourly >= max_trades:
             logger.debug(
                 f"🚫 {symbol}: Hourly trade limit reached "
@@ -2001,7 +2033,7 @@ class ScalpingStrategy:
         if self.adaptive_regime:
             regime_params = self.adaptive_regime.get_current_parameters()
             cooldown_minutes = regime_params.cooldown_after_loss_minutes
-        
+
         if symbol in self.last_loss_time:
             cooldown_end = self.last_loss_time[symbol] + timedelta(
                 minutes=cooldown_minutes
@@ -2100,7 +2132,6 @@ class ScalpingStrategy:
                     return  # ❌ НЕ открываем SHORT без актива!
 
             # Calculate stop loss and take profit
-            atr_value = self.market_data_cache[signal.symbol]
             indicators = self.indicators.calculate_all(
                 self.market_data_cache[signal.symbol]
             )
@@ -2113,6 +2144,31 @@ class ScalpingStrategy:
             stop_loss, take_profit = self._calculate_exit_levels(
                 signal.price, signal.side, atr_result.value
             )
+            
+            # 🛡️ КРИТИЧНО! Проверка минимума с учетом algo orders
+            # Для SHORT: TP ниже entry → может быть меньше минимума!
+            # Для LONG: SL ниже entry → может быть меньше минимума!
+            if signal.side == OrderSide.BUY:  # LONG
+                # Для LONG проверяем SL (он ниже entry)
+                min_value = position_size * stop_loss
+                check_level = "SL"
+            else:  # SELL (SHORT)
+                # Для SHORT проверяем TP (он ниже entry)
+                min_value = position_size * take_profit
+                check_level = "TP"
+            
+            if min_value < self.min_order_value_usd:
+                # Увеличиваем размер чтобы даже TP/SL был >= минимума
+                required_size = (self.min_order_value_usd * 1.02) / (
+                    stop_loss if signal.side == OrderSide.BUY else take_profit
+                )
+                old_size = position_size
+                position_size = round(required_size, 8)
+                logger.info(
+                    f"⬆️ Position size increased for algo orders: "
+                    f"{old_size:.6f} → {position_size:.6f} "
+                    f"({check_level} ${min_value:.2f} < min ${self.min_order_value_usd})"
+                )
 
             # Place order
             logger.info(
@@ -2139,9 +2195,11 @@ class ScalpingStrategy:
                 position = Position(
                     id=order.id,
                     symbol=signal.symbol,
-                    side=PositionSide.LONG
-                    if signal.side == OrderSide.BUY
-                    else PositionSide.SHORT,
+                    side=(
+                        PositionSide.LONG
+                        if signal.side == OrderSide.BUY
+                        else PositionSide.SHORT
+                    ),
                     entry_price=signal.price,
                     current_price=signal.price,
                     size=position_size,
@@ -2173,9 +2231,11 @@ class ScalpingStrategy:
                 try:
                     tp_order_id = await self.client.place_algo_order(
                         symbol=signal.symbol,
-                        side=OrderSide.SELL
-                        if signal.side == OrderSide.BUY
-                        else OrderSide.BUY,
+                        side=(
+                            OrderSide.SELL
+                            if signal.side == OrderSide.BUY
+                            else OrderSide.BUY
+                        ),
                         quantity=position_size,
                         trigger_price=take_profit,
                     )
@@ -2192,9 +2252,11 @@ class ScalpingStrategy:
                 try:
                     sl_order_id = await self.client.place_stop_loss_order(
                         symbol=signal.symbol,
-                        side=OrderSide.SELL
-                        if signal.side == OrderSide.BUY
-                        else OrderSide.BUY,
+                        side=(
+                            OrderSide.SELL
+                            if signal.side == OrderSide.BUY
+                            else OrderSide.BUY
+                        ),
                         quantity=position_size,
                         trigger_price=stop_loss,
                     )
@@ -2278,7 +2340,7 @@ class ScalpingStrategy:
             if self.adaptive_regime:
                 regime_params = self.adaptive_regime.get_current_parameters()
                 sl_multiplier = regime_params.sl_atr_multiplier
-            
+
             stop_distance = atr_result.value * sl_multiplier
 
             # Position size = risk amount / stop distance
@@ -2301,15 +2363,6 @@ class ScalpingStrategy:
                     f"🧠 ARM: {self.adaptive_regime.current_regime.value.upper()} "
                     f"mode → size multiplier {multiplier}x"
                 )
-            elif self.regime_detection_enabled:
-                # Fallback: старая логика если ARM отключен
-                regime = self._detect_market_regime(symbol)
-                if regime == "HIGH_VOLATILITY":
-                    final_position_size *= 0.7
-                    logger.info(f"🌊 HIGH VOLATILITY detected, reducing size by 30%")
-                elif regime == "TRENDING":
-                    final_position_size *= 1.2
-                    logger.info(f"🌊 TRENDING market detected, increasing size by 20%")
 
             # 🛡️ КРИТИЧЕСКАЯ ЗАЩИТА: Проверка минимального размера ордера
             # OKX минимум ~$10, берем $30 с запасом +2% (учитываем комиссии и движение цены)
@@ -2516,7 +2569,7 @@ class ScalpingStrategy:
         if self.adaptive_regime:
             regime_params = self.adaptive_regime.get_current_parameters()
             max_holding = regime_params.max_holding_minutes
-        
+
         holding_time = datetime.utcnow() - position.timestamp
         if holding_time.seconds / 60 > max_holding:
             await self._close_position(symbol, "time_limit")
@@ -2694,7 +2747,9 @@ class ScalpingStrategy:
 
         # 🛡️ КРИТИЧЕСКАЯ ЗАЩИТА #2: Проверка активности бота
         if not self.active:
-            logger.warning(f"🛑 Bot is not active, skipping position close for {symbol}")
+            logger.warning(
+                f"🛑 Bot is not active, skipping position close for {symbol}"
+            )
             return
 
         position = self.positions.get(symbol)
@@ -2810,6 +2865,9 @@ class ScalpingStrategy:
                     if self.total_trades > 0
                     else 0
                 )
+
+                # Вычисляем время удержания
+                holding_time = datetime.utcnow() - position.timestamp
 
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 if net_pnl > 0:
@@ -3123,7 +3181,6 @@ class ScalpingStrategy:
         trailing_stop: bool = True,
         partial_tp: bool = True,
         session_filtering: bool = True,
-        market_regime: bool = True,
         spread_filter: bool = True,
     ) -> None:
         """
@@ -3140,8 +3197,10 @@ class ScalpingStrategy:
             trailing_stop: Включить trailing stop
             partial_tp: Включить partial take profit (многоуровневый выход)
             session_filtering: Фильтр по торговым сессиям
-            market_regime: Адаптация размера по режиму рынка
             spread_filter: Фильтр по спреду
+
+        Note:
+            Market regime адаптация теперь управляется ARM (Adaptive Regime Manager)
         """
         self.scoring_enabled = scoring
         self.max_consecutive_losses = max_consecutive_losses
@@ -3151,7 +3210,6 @@ class ScalpingStrategy:
         self.trailing_stop_enabled = trailing_stop
         self.partial_tp_enabled = partial_tp
         self.session_filtering_enabled = session_filtering
-        self.regime_detection_enabled = market_regime
         self.spread_filter_enabled = spread_filter
 
         logger.info(
@@ -3223,7 +3281,7 @@ class ScalpingStrategy:
                 "partial_tp": self.partial_tp_enabled,
                 "breakeven": self.breakeven_enabled,
                 "session_filtering": self.session_filtering_enabled,
-                "market_regime": self.regime_detection_enabled,
+                "adaptive_regime_manager": self.adaptive_regime is not None,
                 "spread_filter": self.spread_filter_enabled,
             },
         }

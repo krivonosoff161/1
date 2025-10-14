@@ -24,8 +24,11 @@ risk:
 # Scalping Strategy
 scalping:
   enabled: true
-  symbols: ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
+  symbols: ["SOL-USDT", "AVAX-USDT", "DOGE-USDT"]
   timeframe: "1m"
+  
+  # 🧠 ARM (Adaptive Regime Manager) - автоматическая адаптация к рынку
+  adaptive_regime_enabled: true
   indicators:
     sma_fast: 5
     sma_slow: 20
@@ -121,3 +124,183 @@ backtest:
   end_date: "2024-01-01"
   initial_balance: 10000
   commission: 0.001  # 0.1% commission
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🧠 ADAPTIVE REGIME MANAGER (ARM) - Автоматическая адаптация к рынку
+# ═══════════════════════════════════════════════════════════════════════════
+adaptive_regime:
+  # Параметры детекции режимов
+  trending_adx_threshold: 25.0      # ADX >25 = тренд
+  ranging_adx_threshold: 20.0       # ADX <20 = боковик
+  high_volatility_threshold: 0.05   # >5% = высокая волатильность
+  low_volatility_threshold: 0.02    # <2% = низкая волатильность
+  trend_strength_percent: 2.0       # Цена >2% от SMA = тренд
+  
+  # Защита от частого переключения
+  min_regime_duration_minutes: 15   # Минимум 15 мин в одном режиме
+  required_confirmations: 3         # Нужно 3 подтверждения для переключения
+  
+  # ─────────────────────────────────────────────────────────────────────────
+  # 📈 TRENDING РЕЖИМ - Агрессивная торговля по тренду
+  # ─────────────────────────────────────────────────────────────────────────
+  trending:
+    # Торговые параметры
+    min_score_threshold: 6           # Легко входим (6/12 = 50%)
+    max_trades_per_hour: 20          # Частая торговля
+    position_size_multiplier: 1.2    # Увеличенная позиция
+    tp_atr_multiplier: 2.0           # Далекий TP (тренд продолжается)
+    sl_atr_multiplier: 2.5           # Средний SL
+    max_holding_minutes: 60          # 🔥 НОВОЕ! Долго держим (тренд!)
+    cooldown_after_loss_minutes: 2   # Быстро возвращаемся
+    pivot_bonus_multiplier: 1.5      # Усиленные бонусы от Pivot
+    volume_profile_bonus_multiplier: 1.0  # Стандартные бонусы от VP
+    
+    # Индикаторы
+    indicators:
+      rsi_overbought: 75             # Широкий диапазон
+      rsi_oversold: 25               # Широкий диапазон
+      volume_threshold: 1.05         # Легко достигается
+      sma_fast: 8                    # Быстрые SMA
+      sma_slow: 25                   # Быстрые SMA
+      ema_fast: 8                    # 🔥 НОВОЕ! Быстрая EMA
+      ema_slow: 21                   # 🔥 НОВОЕ! Медленная EMA
+      atr_period: 14                 # Стандартный ATR
+      min_volatility_atr: 0.0003     # 🔥 НОВОЕ! Низкий порог (торгуем слабые тренды)
+    
+    # Модули
+    modules:
+      multi_timeframe:
+        block_opposite: false         # Не блокируем (тренд может быть слабым)
+        score_bonus: 1                # Минимальный бонус
+        confirmation_timeframe: "30m" # Подтверждение на 30m
+      
+      correlation_filter:
+        correlation_threshold: 0.8    # Мягкий порог (можем торговать коррелированные)
+        max_correlated_positions: 3   # Все 3 позиции могут коррелировать
+        block_same_direction_only: false  # Торгуем все направления
+      
+      time_filter:
+        prefer_overlaps: true         # Предпочитаем пересечения сессий
+        avoid_low_liquidity_hours: false  # Торгуем всегда
+        avoid_weekends: true
+      
+      pivot_points:
+        level_tolerance_percent: 0.4  # Широкая зона
+        score_bonus_near_level: 1     # Минимальный бонус
+        use_last_n_days: 3
+      
+      volume_profile:
+        score_bonus_in_value_area: 1  # Минимальный бонус
+        score_bonus_near_poc: 1       # Минимальный бонус
+        poc_tolerance_percent: 0.4    # Широкая зона
+        lookback_candles: 100
+  
+  # ─────────────────────────────────────────────────────────────────────────
+  # ⚖️ RANGING РЕЖИМ - Торговля от уровней (КЛЮЧЕВОЙ РЕЖИМ!)
+  # ─────────────────────────────────────────────────────────────────────────
+  ranging:
+    # Торговые параметры
+    min_score_threshold: 4           # Легкий вход (акцент на уровни)
+    max_trades_per_hour: 10          # Умеренная частота
+    position_size_multiplier: 1.0    # Стандартная позиция
+    tp_atr_multiplier: 1.5           # Близкий TP (диапазон ограничен)
+    sl_atr_multiplier: 2.5           # Средний SL
+    max_holding_minutes: 20          # 🔥 НОВОЕ! Средняя длительность
+    cooldown_after_loss_minutes: 5   # Средний кулдаун
+    pivot_bonus_multiplier: 1.5      # 🔥 Усиленные бонусы (основа прибыли!)
+    volume_profile_bonus_multiplier: 1.5  # 🔥 Усиленные бонусы (основа прибыли!)
+    
+    # Индикаторы
+    indicators:
+      rsi_overbought: 70             # Классический диапазон
+      rsi_oversold: 30               # Классический диапазон
+      volume_threshold: 1.1          # Умеренный порог
+      sma_fast: 10                   # Медленнее SMA
+      sma_slow: 30                   # Медленнее SMA
+      ema_fast: 10                   # 🔥 НОВОЕ! Средняя EMA
+      ema_slow: 30                   # 🔥 НОВОЕ! Медленная EMA
+      atr_period: 14                 # Стандартный ATR
+      min_volatility_atr: 0.0005     # 🔥 НОВОЕ! Средний порог (стабильность)
+    
+    # Модули
+    modules:
+      multi_timeframe:
+        block_opposite: true          # Строго блокируем против тренда HTF
+        score_bonus: 2                # Удвоенный бонус
+        confirmation_timeframe: "15m" # Подтверждение на 15m
+      
+      correlation_filter:
+        correlation_threshold: 0.7    # Средний порог
+        max_correlated_positions: 2   # Максимум 2 коррелированные
+        block_same_direction_only: true  # Блокируем только в одну сторону
+      
+      time_filter:
+        prefer_overlaps: true         # Предпочитаем пересечения
+        avoid_low_liquidity_hours: true   # Избегаем низкой ликвидности
+        avoid_weekends: true
+      
+      pivot_points:
+        level_tolerance_percent: 0.25 # Узкая зона (точнее входы)
+        score_bonus_near_level: 2     # 🔥 УДВОЕННЫЙ бонус!
+        use_last_n_days: 5
+      
+      volume_profile:
+        score_bonus_in_value_area: 2  # 🔥 УДВОЕННЫЙ бонус!
+        score_bonus_near_poc: 2       # 🔥 УДВОЕННЫЙ бонус!
+        poc_tolerance_percent: 0.25   # Узкая зона
+        lookback_candles: 200
+  
+  # ─────────────────────────────────────────────────────────────────────────
+  # 💥 CHOPPY РЕЖИМ - Защитный режим (выживание в хаосе)
+  # ─────────────────────────────────────────────────────────────────────────
+  choppy:
+    # Торговые параметры
+    min_score_threshold: 7           # Строгий вход (только отличные сигналы)
+    max_trades_per_hour: 4           # Минимальная частота (защита)
+    position_size_multiplier: 0.6    # Уменьшенная позиция (защита)
+    tp_atr_multiplier: 1.0           # Очень близкий TP (быстро хватаем)
+    sl_atr_multiplier: 3.5           # Широкий SL (хаос = большие свечи)
+    max_holding_minutes: 8           # 🔥 НОВОЕ! Быстрый выход (разворот!)
+    cooldown_after_loss_minutes: 15  # Долгий кулдаун (защита)
+    pivot_bonus_multiplier: 2.0      # 🔥🔥 УДВОЕННЫЕ бонусы (критично!)
+    volume_profile_bonus_multiplier: 2.0  # 🔥🔥 УДВОЕННЫЕ бонусы (критично!)
+    
+    # Индикаторы
+    indicators:
+      rsi_overbought: 65             # Узкий диапазон
+      rsi_oversold: 35               # Узкий диапазон
+      volume_threshold: 1.25         # Строгий порог
+      sma_fast: 12                   # Медленные SMA (сглаживание)
+      sma_slow: 35                   # Медленные SMA (сглаживание)
+      ema_fast: 13                   # 🔥 НОВОЕ! Медленная EMA (сглаживание хаоса)
+      ema_slow: 34                   # 🔥 НОВОЕ! Медленная EMA (сглаживание хаоса)
+      atr_period: 21                 # 🔥 Длинный ATR (сглаживание хаоса!)
+      min_volatility_atr: 0.0008     # 🔥 НОВОЕ! Высокий порог (только сильные движения)
+    
+    # Модули
+    modules:
+      multi_timeframe:
+        block_opposite: true          # Строго блокируем против тренда
+        score_bonus: 3                # 🔥 ТРОЙНОЙ бонус!
+        confirmation_timeframe: "30m" # Подтверждение на 30m
+      
+      correlation_filter:
+        correlation_threshold: 0.6    # Строгий порог
+        max_correlated_positions: 1   # Только 1 коррелированная!
+        block_same_direction_only: true  # Блокируем одинаковые направления
+      
+      time_filter:
+        prefer_overlaps: true         # Предпочитаем пересечения
+        avoid_low_liquidity_hours: true   # Избегаем низкой ликвидности
+        avoid_weekends: true
+      
+      pivot_points:
+        level_tolerance_percent: 0.15 # Супер-узкая зона
+        score_bonus_near_level: 3     # 🔥🔥 ТРОЙНОЙ бонус!
+        use_last_n_days: 7
+      
+      volume_profile:
+        score_bonus_in_value_area: 3  # 🔥🔥 ТРОЙНОЙ бонус!
+        score_bonus_near_poc: 3       # 🔥🔥 ТРОЙНОЙ бонус!
+        poc_tolerance_percent: 0.15   # Супер-узкая зона
+        lookback_candles: 300

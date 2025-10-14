@@ -41,7 +41,7 @@ logger.add(
         "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
         "{name}:{function} | {message}"
     ),
-    level="DEBUG",  # ✅ Временно DEBUG для диагностики Balance Checker
+    level="INFO",  # Основной уровень логирования
     rotation="10 MB",  # ✅ Частая ротация для маленьких файлов
     retention="30 days",
     compression="zip",

@@ -401,6 +401,11 @@ class OKXClient:
             "ordType": "limit" if order_type == OrderType.LIMIT else "market",
             "sz": str(quantity),
         }
+        
+        # Для MARKET ордеров указываем что sz в базовой валюте
+        # Это важно для корректной проверки минимумов биржей
+        if order_type == OrderType.MARKET:
+            data["tgtCcy"] = "base_ccy"  # sz в AVAX/SOL/DOGE
 
         if price is not None:
             data["px"] = str(price)
@@ -529,6 +534,7 @@ class OKXClient:
             "side": "buy" if side == OrderSide.BUY else "sell",
             "ordType": order_type,
             "sz": str(quantity),
+            # Примечание: tgtCcy НЕ поддерживается для algo orders!
             "tpTriggerPx": str(trigger_price),  # Для TP
             "tpOrdPx": "-1",  # Market при триггере
         }
@@ -572,6 +578,7 @@ class OKXClient:
             "side": "buy" if side == OrderSide.BUY else "sell",
             "ordType": "conditional",
             "sz": str(quantity),
+            # Примечание: tgtCcy НЕ поддерживается для algo orders!
             "slTriggerPx": str(trigger_price),  # Для SL
             "slOrdPx": "-1",
         }
