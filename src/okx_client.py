@@ -229,7 +229,7 @@ class OKXClient:
             )
             for candle in result["data"]
         ]
-        
+
         # Разворачиваем список, чтобы старые свечи были первыми
         return list(reversed(candles))
 
@@ -379,17 +379,17 @@ class OKXClient:
     ) -> Order:
         """
         Place a new order (simple SPOT trading).
-        
+
         Args:
             symbol: Trading pair (e.g., "BTC-USDT")
             side: BUY or SELL
             order_type: MARKET or LIMIT
             quantity: Order size
             price: Limit price (only for LIMIT orders)
-        
+
         Returns:
             Order object
-        
+
         Note:
             TP/SL управляются ботом через активный мониторинг (_update_position_prices).
             OKX SPOT не поддерживает автоматические TP/SL в одном запросе.
@@ -401,11 +401,6 @@ class OKXClient:
             "ordType": "limit" if order_type == OrderType.LIMIT else "market",
             "sz": str(quantity),
         }
-        
-        # Для MARKET ордеров указываем что sz в базовой валюте
-        # Это важно для корректной проверки минимумов биржей
-        if order_type == OrderType.MARKET:
-            data["tgtCcy"] = "base_ccy"  # sz в AVAX/SOL/DOGE
 
         if price is not None:
             data["px"] = str(price)
@@ -517,21 +512,21 @@ class OKXClient:
     ) -> Optional[str]:
         """
         Выставить ALGO order (TP/SL) для SPOT.
-        
+
         Args:
             symbol: Торговая пара
             side: BUY или SELL
             quantity: Размер
             trigger_price: Цена триггера (TP или SL)
             order_type: "conditional" для TP/SL
-        
+
         Returns:
             algo order ID или None
         """
         # Форматируем trigger price с фиксированными 6 знаками после запятой
         # Это важно для корректной обработки биржей!
         formatted_trigger = f"{trigger_price:.6f}"
-        
+
         data = {
             "instId": symbol,
             "tdMode": "cash",  # SPOT
@@ -542,10 +537,10 @@ class OKXClient:
             "tpTriggerPx": formatted_trigger,  # Для TP
             "tpOrdPx": "-1",  # Market при триггере
         }
-        
+
         try:
             result = await self._make_request("POST", "/trade/order-algo", data=data)
-            
+
             if result.get("code") == "0" and result.get("data"):
                 algo_id = result["data"][0].get("algoId")
                 logger.info(f"✅ Algo order placed: {algo_id} @ ${trigger_price}")
@@ -556,7 +551,7 @@ class OKXClient:
         except Exception as e:
             logger.error(f"Error placing algo order: {e}")
             return None
-    
+
     async def place_stop_loss_order(
         self,
         symbol: str,
@@ -566,20 +561,20 @@ class OKXClient:
     ) -> Optional[str]:
         """
         Выставить Stop Loss algo order для SPOT.
-        
+
         Args:
             symbol: Торговая пара
             side: BUY или SELL (закрывающая сторона)
             quantity: Размер
             trigger_price: SL триггер цена
-        
+
         Returns:
             algo order ID или None
         """
         # Форматируем trigger price с фиксированными 6 знаками после запятой
         # Это важно для корректной обработки биржей!
         formatted_trigger = f"{trigger_price:.6f}"
-        
+
         data = {
             "instId": symbol,
             "tdMode": "cash",
@@ -590,10 +585,10 @@ class OKXClient:
             "slTriggerPx": formatted_trigger,  # Для SL
             "slOrdPx": "-1",
         }
-        
+
         try:
             result = await self._make_request("POST", "/trade/order-algo", data=data)
-            
+
             if result.get("code") == "0" and result.get("data"):
                 algo_id = result["data"][0].get("algoId")
                 logger.info(f"✅ SL algo order placed: {algo_id} @ ${trigger_price}")
@@ -604,7 +599,7 @@ class OKXClient:
         except Exception as e:
             logger.error(f"Error placing SL algo order: {e}")
             return None
-    
+
     async def place_oco_order(
         self,
         symbol: str,
@@ -615,24 +610,24 @@ class OKXClient:
     ) -> Optional[str]:
         """
         Размещение OCO (One-Cancels-Other) ордера с TP и SL.
-        
+
         OCO ордер объединяет TP и SL в один - при срабатывании одного,
         второй автоматически отменяется.
-        
+
         Args:
             symbol: Торговая пара
             side: Направление закрытия (SELL для LONG, BUY для SHORT)
             quantity: Количество в базовой валюте
             tp_trigger_price: Take Profit триггер цена
             sl_trigger_price: Stop Loss триггер цена
-        
+
         Returns:
             algo order ID или None
         """
         # Форматируем trigger prices с фиксированными 6 знаками
         formatted_tp = f"{tp_trigger_price:.6f}"
         formatted_sl = f"{sl_trigger_price:.6f}"
-        
+
         data = {
             "instId": symbol,
             "tdMode": "cash",  # SPOT
@@ -644,15 +639,15 @@ class OKXClient:
             "slTriggerPx": formatted_sl,
             "slOrdPx": "-1",  # Market при триггере SL
         }
-        
+
         # КРИТИЧНО! tgtCcy нужен ТОЛЬКО для BUY (SHORT закрытие)
         # Для SELL (LONG закрытие) sz в базовой валюте по умолчанию
         if side == OrderSide.BUY:
             data["tgtCcy"] = "base_ccy"
-        
+
         try:
             result = await self._make_request("POST", "/trade/order-algo", data=data)
-            
+
             if result.get("code") == "0" and result.get("data"):
                 algo_id = result["data"][0].get("algoId")
                 logger.info(
@@ -666,15 +661,17 @@ class OKXClient:
         except Exception as e:
             logger.error(f"Error placing OCO order: {e}")
             return None
-    
-    async def get_algo_orders(self, symbol: Optional[str] = None, algo_type: str = "conditional") -> List[Dict]:
+
+    async def get_algo_orders(
+        self, symbol: Optional[str] = None, algo_type: str = "conditional"
+    ) -> List[Dict]:
         """
         Получить список активных algo orders (TP/SL).
-        
+
         Args:
             symbol: Торговая пара (опционально)
             algo_type: Тип algo order ("conditional", "oco", "trigger")
-        
+
         Returns:
             Список algo orders
         """
@@ -684,9 +681,11 @@ class OKXClient:
         }
         if symbol:
             params["instId"] = symbol
-        
+
         try:
-            result = await self._make_request("GET", "/trade/orders-algo-pending", params=params)
+            result = await self._make_request(
+                "GET", "/trade/orders-algo-pending", params=params
+            )
             return result.get("data", [])
         except Exception as e:
             logger.error(f"Error getting algo orders: {e}")
@@ -695,11 +694,11 @@ class OKXClient:
     async def cancel_algo_order(self, algo_id: str, symbol: str) -> bool:
         """
         Отменить algo order (TP/SL).
-        
+
         Args:
             algo_id: ID algo ордера
             symbol: Торговая пара
-        
+
         Returns:
             True если успешно отменен
         """
@@ -707,14 +706,18 @@ class OKXClient:
             "instId": symbol,
             "algoId": algo_id,
         }
-        
+
         try:
-            result = await self._make_request("POST", "/trade/cancel-algo-order", data=data)
+            result = await self._make_request(
+                "POST", "/trade/cancel-algo-order", data=data
+            )
             if result.get("code") == "0":
                 logger.info(f"✅ Algo order {algo_id} cancelled")
                 return True
             else:
-                logger.warning(f"⚠️ Failed to cancel algo order {algo_id}: {result.get('msg')}")
+                logger.warning(
+                    f"⚠️ Failed to cancel algo order {algo_id}: {result.get('msg')}"
+                )
                 return False
         except Exception as e:
             logger.error(f"Error cancelling algo order {algo_id}: {e}")

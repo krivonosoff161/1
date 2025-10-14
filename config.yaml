@@ -9,9 +9,8 @@ api:
     
 trading:
   symbols: 
-    - "SOL-USDT"   # ✅ Solana - высокая волатильность, отличная ликвидность
-    - "AVAX-USDT"  # ✅ Avalanche - средняя волатильность, стабильная
-    - "DOGE-USDT"  # ✅ Dogecoin - ОЧЕНЬ волатильная, мем-коин (экстрим тест!)
+    - "BTC-USDT"   # ✅ Bitcoin - лучшая ликвидность
+    - "ETH-USDT"   # ✅ Ethereum - вторая по капитализации
   base_currency: "USDT"
   
 # Risk Management
@@ -24,7 +23,7 @@ risk:
 # Scalping Strategy
 scalping:
   enabled: true
-  symbols: ["SOL-USDT", "AVAX-USDT", "DOGE-USDT"]  # ✅ Альткоины для тестов
+  symbols: ["BTC-USDT", "ETH-USDT"]  # ✅ Комбо параметры: 2 пары, $70 позиция
   timeframe: "5m"  # 1m не работает в DEMO (статичные данные), используем 5m
   
   # PHASE 1: Multi-Timeframe Confirmation (MTF)

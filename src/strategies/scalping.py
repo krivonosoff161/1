@@ -881,9 +881,7 @@ class ScalpingStrategy:
                         new_p = indicator_params.sma_fast
                         new_sma = SimpleMovingAverage(new_p)
                         self.indicators.indicators["SMA_FAST"] = new_sma
-                        logger.debug(
-                            f"   ✅ SMA Fast period updated: {old_p} → {new_p}"
-                        )
+                        logger.debug(f"   ✅ SMA Fast period updated: {old_p} → {new_p}")
 
                 # SMA Slow
                 if "SMA_SLOW" in self.indicators.indicators:
@@ -893,9 +891,7 @@ class ScalpingStrategy:
                         new_p = indicator_params.sma_slow
                         new_sma = SimpleMovingAverage(new_p)
                         self.indicators.indicators["SMA_SLOW"] = new_sma
-                        logger.debug(
-                            f"   ✅ SMA Slow period updated: {old_p} → {new_p}"
-                        )
+                        logger.debug(f"   ✅ SMA Slow period updated: {old_p} → {new_p}")
 
                 # EMA Fast
                 if "EMA_FAST" in self.indicators.indicators:
@@ -905,9 +901,7 @@ class ScalpingStrategy:
                         new_p = indicator_params.ema_fast
                         new_ema = ExponentialMovingAverage(new_p)
                         self.indicators.indicators["EMA_FAST"] = new_ema
-                        logger.debug(
-                            f"   ✅ EMA Fast period updated: {old_p} → {new_p}"
-                        )
+                        logger.debug(f"   ✅ EMA Fast period updated: {old_p} → {new_p}")
 
                 # EMA Slow
                 if "EMA_SLOW" in self.indicators.indicators:
@@ -917,9 +911,7 @@ class ScalpingStrategy:
                         new_p = indicator_params.ema_slow
                         new_ema = ExponentialMovingAverage(new_p)
                         self.indicators.indicators["EMA_SLOW"] = new_ema
-                        logger.debug(
-                            f"   ✅ EMA Slow period updated: {old_p} → {new_p}"
-                        )
+                        logger.debug(f"   ✅ EMA Slow period updated: {old_p} → {new_p}")
 
             # Сохраняем текущие параметры для использования в скоринге
             self.current_indicator_params = indicator_params
@@ -1033,7 +1025,7 @@ class ScalpingStrategy:
     async def switch_regime_parameters(self, regime_type: RegimeType) -> None:
         """
         Переключает параметры на новый режим рынка.
-        
+
         Управляет переходными состояниями при смене режима.
 
         Args:
@@ -2101,6 +2093,35 @@ class ScalpingStrategy:
             # PHASE 1: Balance Checker - проверяем баланс перед входом
             if self.balance_checker:
                 balances = await self.client.get_account_balance()
+
+                # 🛡️ КРИТИЧЕСКАЯ ПРОВЕРКА: Блокируем торговлю если есть займы
+                base_asset = signal.symbol.split("-")[0]
+                quote_asset = signal.symbol.split("-")[1]
+
+                try:
+                    borrowed_base = await self.client.get_borrowed_balance(base_asset)
+                    borrowed_quote = await self.client.get_borrowed_balance(quote_asset)
+
+                    if borrowed_base > 0 or borrowed_quote > 0:
+                        logger.error(
+                            f"⛔ {signal.symbol} {signal.side.value} BLOCKED: "
+                            f"BORROWED FUNDS DETECTED! "
+                            f"{base_asset}: {borrowed_base:.6f} | "
+                            f"{quote_asset}: {borrowed_quote:.6f}"
+                        )
+                        logger.error(
+                            "🚨 TRADING SUSPENDED! "
+                            "Repay all loans and switch to SPOT mode!"
+                        )
+                        return
+                except Exception as e:
+                    logger.error(f"Failed to check borrowed balance: {e}")
+                    # В случае ошибки проверки - блокируем торговлю!
+                    logger.error(
+                        "⛔ Trade blocked due to borrowed balance check failure"
+                    )
+                    return
+
                 balance_check = self.balance_checker.check_balance(
                     symbol=signal.symbol,
                     side=signal.side,
@@ -2144,7 +2165,7 @@ class ScalpingStrategy:
             stop_loss, take_profit = self._calculate_exit_levels(
                 signal.price, signal.side, atr_result.value
             )
-            
+
             # 🛡️ КРИТИЧНО! Проверка минимума для OCO MARKET orders
             # OCO объединяет TP и SL в один ордер - при срабатывании одного
             # второй автоматически отменяется
@@ -2154,26 +2175,26 @@ class ScalpingStrategy:
             # SHORT: entry $43 → TP $42.35 ✅, SL $44.07 ✅
             #
             # Для SHORT нужно больше т.к. TP (ниже entry) должен быть >= $40
-            
-            MIN_LONG_OCO = 70.0   # Минимум для LONG OCO ордера (BTC/ETH)
+
+            MIN_LONG_OCO = 70.0  # Минимум для LONG OCO ордера (BTC/ETH)
             MIN_SHORT_OCO = 70.0  # Минимум для SHORT OCO ордера
-            
+
             # Определяем минимум в зависимости от направления
             if signal.side == OrderSide.BUY:  # LONG
                 min_position_value = MIN_LONG_OCO
             else:  # SHORT
                 min_position_value = MIN_SHORT_OCO
-            
+
             # Проверяем минимум entry (с буфером +5%)
             position_value = position_size * signal.price
-            
+
             if position_value < min_position_value:
                 # Увеличиваем размер до минимума + 5% буфер
                 required_value = min_position_value * 1.05
                 old_size = position_size
                 position_size = round(required_value / signal.price, 8)
                 new_value = position_size * signal.price
-                
+
                 logger.info(
                     f"⬆️ Position size increased for OCO order: "
                     f"{old_size:.6f} → {position_size:.6f} "
@@ -2242,10 +2263,11 @@ class ScalpingStrategy:
                 try:
                     # Определяем сторону закрытия
                     close_side = (
-                        OrderSide.SELL if signal.side == OrderSide.BUY
+                        OrderSide.SELL
+                        if signal.side == OrderSide.BUY
                         else OrderSide.BUY
                     )
-                    
+
                     oco_order_id = await self.client.place_oco_order(
                         symbol=signal.symbol,
                         side=close_side,
@@ -2253,7 +2275,7 @@ class ScalpingStrategy:
                         tp_trigger_price=take_profit,
                         sl_trigger_price=stop_loss,
                     )
-                    
+
                     if oco_order_id:
                         logger.info(
                             f"✅ OCO order placed: ID={oco_order_id} | "
@@ -2745,9 +2767,7 @@ class ScalpingStrategy:
 
         # 🛡️ КРИТИЧЕСКАЯ ЗАЩИТА #2: Проверка активности бота
         if not self.active:
-            logger.warning(
-                f"🛑 Bot is not active, skipping position close for {symbol}"
-            )
+            logger.warning(f"🛑 Bot is not active, skipping position close for {symbol}")
             return
 
         position = self.positions.get(symbol)
