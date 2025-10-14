@@ -33,8 +33,8 @@ current_date = datetime.now().strftime("%Y-%m-%d")
 logger.add(
     f"logs/trading_bot_{current_date}.log",
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function} | {message}",
-    level="DEBUG",
-    rotation="100 MB",
+    level="INFO",  # ✅ Только важное (DEBUG при отладке)
+    rotation="10 MB",  # ✅ Частая ротация для маленьких файлов
     retention="30 days",
     compression="zip",
     encoding="utf-8",
