@@ -150,7 +150,7 @@ adaptive_regime:
     position_size_multiplier: 1.0    # Стандартная позиция
     tp_atr_multiplier: 1.2           # 🔥 СКАЛЬП! TP 1.2% (было 2.0%)
     sl_atr_multiplier: 1.0           # 🔥 СКАЛЬП! SL 1.0% (было 2.5%)
-    max_holding_minutes: 10          # Быстрое удержание
+    max_holding_minutes: 5           # 🔥 СКАЛЬП! Быстрый выход
     cooldown_after_loss_minutes: 2   # Быстро возвращаемся
     pivot_bonus_multiplier: 1.5      # Усиленные бонусы от Pivot
     volume_profile_bonus_multiplier: 1.0  # Стандартные бонусы от VP
@@ -205,7 +205,7 @@ adaptive_regime:
     position_size_multiplier: 1.0    # Стандартная позиция
     tp_atr_multiplier: 1.0           # 🔥 СКАЛЬП! TP 1.0% (было 1.5%)
     sl_atr_multiplier: 0.8           # 🔥 СКАЛЬП! SL 0.8% (было 2.5%)
-    max_holding_minutes: 5           # Быстрое удержание
+    max_holding_minutes: 4           # 🔥 СКАЛЬП! Быстрый выход
     cooldown_after_loss_minutes: 3   # Средний кулдаун
     pivot_bonus_multiplier: 1.5      # 🔥 Усиленные бонусы (основа прибыли!)
     volume_profile_bonus_multiplier: 1.5  # 🔥 Усиленные бонусы (основа прибыли!)
