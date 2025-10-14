@@ -2146,28 +2146,45 @@ class ScalpingStrategy:
             )
             
             # 🛡️ КРИТИЧНО! Проверка минимума с учетом algo orders
-            # Для SHORT: TP ниже entry → может быть меньше минимума!
-            # Для LONG: SL ниже entry → может быть меньше минимума!
-            if signal.side == OrderSide.BUY:  # LONG
-                # Для LONG проверяем SL (он ниже entry)
-                min_value = position_size * stop_loss
-                check_level = "SL"
-            else:  # SELL (SHORT)
-                # Для SHORT проверяем TP (он ниже entry)
-                min_value = position_size * take_profit
-                check_level = "TP"
+            # Для SHORT: TP ниже entry, SL выше entry
+            # Для LONG: SL ниже entry, TP выше entry
+            # ВАЖНО: Минимум $60 для TP/SL (разный для разных пар: DOGE/SOL ~$50, AVAX ~$60)
             
-            if min_value < self.min_order_value_usd:
-                # Увеличиваем размер чтобы даже TP/SL был >= минимума
-                required_size = (self.min_order_value_usd * 1.02) / (
-                    stop_loss if signal.side == OrderSide.BUY else take_profit
-                )
+            MIN_TP_VALUE = 60.0  # Минимум для TP algo orders
+            MIN_SL_VALUE = 60.0  # Минимум для SL algo orders
+            
+            # Проверяем TP (нижний уровень)
+            if signal.side == OrderSide.BUY:  # LONG
+                tp_value = position_size * take_profit  # TP выше
+                sl_value = position_size * stop_loss    # SL ниже
+            else:  # SELL (SHORT)
+                tp_value = position_size * take_profit  # TP ниже
+                sl_value = position_size * stop_loss    # SL выше
+            
+            # Проверяем минимумы
+            needs_increase = False
+            required_multiplier = 1.0
+            
+            if tp_value < MIN_TP_VALUE:
+                check_price = take_profit
+                required_multiplier = (MIN_TP_VALUE * 1.02) / tp_value
+                needs_increase = True
+                reason = f"TP ${tp_value:.2f} < ${MIN_TP_VALUE}"
+            
+            if sl_value < MIN_SL_VALUE:
+                check_price = stop_loss
+                sl_multiplier = (MIN_SL_VALUE * 1.02) / sl_value
+                if sl_multiplier > required_multiplier:
+                    required_multiplier = sl_multiplier
+                    reason = f"SL ${sl_value:.2f} < ${MIN_SL_VALUE}"
+                    needs_increase = True
+            
+            if needs_increase:
                 old_size = position_size
-                position_size = round(required_size, 8)
+                position_size = round(position_size * required_multiplier, 8)
                 logger.info(
                     f"⬆️ Position size increased for algo orders: "
-                    f"{old_size:.6f} → {position_size:.6f} "
-                    f"({check_level} ${min_value:.2f} < min ${self.min_order_value_usd})"
+                    f"{old_size:.6f} → {position_size:.6f} ({reason})"
                 )
 
             # Place order

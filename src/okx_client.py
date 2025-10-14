@@ -528,6 +528,10 @@ class OKXClient:
         Returns:
             algo order ID или None
         """
+        # Форматируем trigger price с фиксированными 6 знаками после запятой
+        # Это важно для корректной обработки биржей!
+        formatted_trigger = f"{trigger_price:.6f}"
+        
         data = {
             "instId": symbol,
             "tdMode": "cash",  # SPOT
@@ -535,7 +539,7 @@ class OKXClient:
             "ordType": order_type,
             "sz": str(quantity),
             # Примечание: tgtCcy НЕ поддерживается для algo orders!
-            "tpTriggerPx": str(trigger_price),  # Для TP
+            "tpTriggerPx": formatted_trigger,  # Для TP
             "tpOrdPx": "-1",  # Market при триггере
         }
         
@@ -572,6 +576,10 @@ class OKXClient:
         Returns:
             algo order ID или None
         """
+        # Форматируем trigger price с фиксированными 6 знаками после запятой
+        # Это важно для корректной обработки биржей!
+        formatted_trigger = f"{trigger_price:.6f}"
+        
         data = {
             "instId": symbol,
             "tdMode": "cash",
@@ -579,7 +587,7 @@ class OKXClient:
             "ordType": "conditional",
             "sz": str(quantity),
             # Примечание: tgtCcy НЕ поддерживается для algo orders!
-            "slTriggerPx": str(trigger_price),  # Для SL
+            "slTriggerPx": formatted_trigger,  # Для SL
             "slOrdPx": "-1",
         }
         
