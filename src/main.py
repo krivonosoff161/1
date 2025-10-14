@@ -98,7 +98,8 @@ class BotRunner:
         """
         logger.info("Initializing bot...")
         await self.client.connect()
-        # await self.strategy.initialize()  # Закомментировано, т.к. метод может отсутствовать
+        # await self.strategy.initialize()
+        # Метод может отсутствовать, закомментировано
         logger.info("Bot initialized.")
 
     async def run(self) -> None:
@@ -137,11 +138,11 @@ def main() -> None:
         default="config.yaml",
         help="Path to configuration file",
     )
-    args = parser.parse_args()
+    parser.parse_args()  # Парсим для валидации, но пока не используем
 
-    # Загружаем конфигурацию (метод load нужно будет реализовать в APIConfig)
+    # Загружаем конфигурацию (метод load нужно будет реализовать)
     config = APIConfig()
-    # config.load(args.config)  # Закомментировано до реализации метода
+    # config.load(args.config)  # Закомментировано до реализации
     # Выставляем демо-режим для тестирования на демо-счёте OKX
     config.sandbox = True
 

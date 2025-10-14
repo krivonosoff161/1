@@ -197,12 +197,9 @@ class BalanceChecker:
                     f"required=${required_usdt:.2f}, "
                     f"min=${self.config.min_usdt_balance:.2f}"
                 )
+                logger.error("🐛 BUG: Balance check blocked but conditions unclear!")
                 logger.error(
-                    "🐛 BUG: Balance check blocked but conditions unclear!"
-                )
-                logger.error(
-                    f"   available >= required: "
-                    f"{available_usdt >= required_usdt}"
+                    f"   available >= required: " f"{available_usdt >= required_usdt}"
                 )
                 logger.error(
                     f"   required >= minimum: "
