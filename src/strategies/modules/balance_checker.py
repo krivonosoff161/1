@@ -5,8 +5,7 @@ Balance Checker Module - проверка баланса перед открыт
 достаточного баланса для открытия LONG (USDT) и SHORT (актив) позиций.
 """
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict
 
 from loguru import logger
 
@@ -107,25 +106,63 @@ class BalanceChecker:
         balances: list[Balance],
     ) -> BalanceCheckResult:
         """Проверка баланса USDT для LONG позиции."""
+        # 🔍 DEBUG: Логируем входящие данные
+        logger.debug(
+            f"🔍 Balance check for {symbol}: "
+            f"required_amount={required_amount:.8f}, price=${current_price:.8f}"
+        )
+        logger.debug(
+            f"   Received {len(balances)} balances: {[b.currency for b in balances]}"
+        )
+
         # Находим баланс USDT
         usdt_balance = next(
             (b for b in balances if b.currency == "USDT"),
             Balance(currency="USDT", free=0.0, used=0.0, total=0.0),
         )
 
+        # 🔍 DEBUG: Логируем найденный баланс
+        logger.debug(
+            f"   USDT balance: free=${usdt_balance.free:.2f}, "
+            f"used=${usdt_balance.used:.2f}"
+        )
+
         # Рассчитываем доступный баланс с учетом резерва
-        reserve_amount = usdt_balance.free * (self.config.usdt_reserve_percent / 100.0)
+        reserve_percent = self.config.usdt_reserve_percent / 100.0
+        reserve_amount = usdt_balance.free * reserve_percent
         available_usdt = usdt_balance.free - reserve_amount
 
         # Требуемая сумма в USDT
         required_usdt = required_amount * current_price
 
-        if available_usdt >= required_usdt >= self.config.min_usdt_balance:
-            if self.config.log_all_checks:
-                logger.debug(
-                    f"✅ {symbol} LONG: Balance OK "
-                    f"(have ${available_usdt:.2f}, need ${required_usdt:.2f})"
-                )
+        # 🔍 DEBUG: Логируем расчёты
+        logger.debug(
+            f"   Calculations: reserve=${reserve_amount:.2f}, "
+            f"available=${available_usdt:.2f}, required=${required_usdt:.2f}, "
+            f"min=${self.config.min_usdt_balance:.2f}"
+        )
+
+        # 🔍 DEBUG: Проверяем каждую часть условия
+        check1 = available_usdt >= required_usdt
+        check2 = required_usdt >= self.config.min_usdt_balance
+        final_check = check1 and check2
+
+        logger.debug(
+            f"   Condition checks: "
+            f"available>=required={check1}, "
+            f"required>=minimum={check2}, "
+            f"final={final_check}"
+        )
+
+        if (
+            available_usdt >= required_usdt
+            and required_usdt >= self.config.min_usdt_balance
+        ):
+            # ✅ Проверка прошла успешно
+            logger.debug(
+                f"✅ {symbol} LONG: Balance OK "
+                f"(have ${available_usdt:.2f}, need ${required_usdt:.2f})"
+            )
 
             return BalanceCheckResult(
                 allowed=True,
@@ -135,12 +172,42 @@ class BalanceChecker:
                 currency="USDT",
             )
         else:
+            # ❌ Недостаточно баланса - детально логируем ПОЧЕМУ
             self._record_blocked_signal(symbol, "LONG")
 
-            reason = (
-                f"Insufficient USDT balance "
-                f"(have ${available_usdt:.2f}, need ${required_usdt:.2f})"
-            )
+            # Определяем точную причину блокировки
+            if available_usdt < required_usdt:
+                reason = (
+                    f"Insufficient USDT balance "
+                    f"(have ${available_usdt:.2f}, need ${required_usdt:.2f})"
+                )
+                logger.debug("   BLOCK reason: available < required")
+            elif required_usdt < self.config.min_usdt_balance:
+                reason = (
+                    f"Order too small "
+                    f"(${required_usdt:.2f} < "
+                    f"minimum ${self.config.min_usdt_balance:.2f})"
+                )
+                logger.debug("   BLOCK reason: order < minimum")
+            else:
+                # Это НЕ ДОЛЖНО ПРОИСХОДИТЬ!
+                reason = (
+                    f"Unknown block reason! "
+                    f"available=${available_usdt:.2f}, "
+                    f"required=${required_usdt:.2f}, "
+                    f"min=${self.config.min_usdt_balance:.2f}"
+                )
+                logger.error(
+                    "🐛 BUG: Balance check blocked but conditions unclear!"
+                )
+                logger.error(
+                    f"   available >= required: "
+                    f"{available_usdt >= required_usdt}"
+                )
+                logger.error(
+                    f"   required >= minimum: "
+                    f"{required_usdt >= self.config.min_usdt_balance}"
+                )
 
             logger.warning(f"⚠️ {symbol} LONG BLOCKED: {reason}")
 
