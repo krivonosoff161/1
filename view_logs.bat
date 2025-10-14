@@ -163,8 +163,10 @@ if "%choice%"=="7" (
 if "%choice%"=="8" (
     cls
     echo =====================================
-    echo   СТАТИСТИКА ТОРГОВЛИ:
+    echo   СТАТИСТИКА (текущий лог):
     echo =====================================
+    echo.
+    echo Файл: %log_file%
     echo.
     echo Сгенерировано сигналов:
     findstr /C:"SIGNAL GENERATED" "%log_file%" 2>nul | find /C "SIGNAL"
@@ -199,15 +201,32 @@ if "%choice%"=="8" (
 if "%choice%"=="9" (
     cls
     echo =====================================
-    echo   ВСЕ ФАЙЛЫ ЛОГОВ:
+    echo   СТАТИСТИКА (ВСЕ логи за сегодня):
     echo =====================================
     echo.
-    dir /B logs\trading_bot_*.log 2>nul
-    if %ERRORLEVEL% NEQ 0 (
-        echo Файлы логов не найдены!
+    echo Обработка всех файлов...
+    echo.
+    
+    set total_signals=0
+    set total_opened=0
+    set total_closed=0
+    set total_errors=0
+    
+    for %%f in (logs\trading_bot_*.log) do (
+        echo Сканирую: %%~nxf
     )
     echo.
-    echo Текущий лог: %log_file%
+    echo Сгенерировано сигналов:
+    for %%f in (logs\trading_bot_*.log) do findstr /C:"SIGNAL GENERATED" "%%f" 2>nul | find /C "SIGNAL"
+    echo.
+    echo Открыто позиций:
+    for %%f in (logs\trading_bot_*.log) do findstr /C:"POSITION OPENED" "%%f" 2>nul | find /C "OPENED"
+    echo.
+    echo Закрыто позиций:
+    for %%f in (logs\trading_bot_*.log) do findstr /C:"POSITION CLOSED" "%%f" 2>nul | find /C "CLOSED"
+    echo.
+    echo Ошибок:
+    for %%f in (logs\trading_bot_*.log) do findstr /C:"ERROR" "%%f" 2>nul | find /C "ERROR"
     echo.
     echo =====================================
     echo.
