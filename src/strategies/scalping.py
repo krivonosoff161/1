@@ -1923,18 +1923,28 @@ class ScalpingStrategy:
         # if self.session_filtering_enabled:
         #     ... старый код удален
 
-        # Check hourly trade limit
-        if self.trade_count_hourly >= self.config.max_trades_per_hour:
+        # Check hourly trade limit (ARM может перекрыть!)
+        max_trades = self.config.max_trades_per_hour
+        if self.adaptive_regime:
+            regime_params = self.adaptive_regime.get_current_parameters()
+            max_trades = regime_params.max_trades_per_hour
+        
+        if self.trade_count_hourly >= max_trades:
             logger.debug(
                 f"🚫 {symbol}: Hourly trade limit reached "
-                f"({self.trade_count_hourly}/{self.config.max_trades_per_hour})"
+                f"({self.trade_count_hourly}/{max_trades})"
             )
             return False
 
-        # Check cooldown after loss
+        # Check cooldown after loss (ARM может перекрыть!)
+        cooldown_minutes = self.config.cooldown_after_loss_minutes
+        if self.adaptive_regime:
+            regime_params = self.adaptive_regime.get_current_parameters()
+            cooldown_minutes = regime_params.cooldown_after_loss_minutes
+        
         if symbol in self.last_loss_time:
             cooldown_end = self.last_loss_time[symbol] + timedelta(
-                minutes=self.config.cooldown_after_loss_minutes
+                minutes=cooldown_minutes
             )
             if datetime.utcnow() < cooldown_end:
                 remaining = (cooldown_end - datetime.utcnow()).total_seconds() / 60
@@ -2203,8 +2213,13 @@ class ScalpingStrategy:
             if not atr_result or atr_result.value <= 0:
                 return 0.0
 
-            # Calculate stop loss distance
-            stop_distance = atr_result.value * self.config.exit.stop_loss_atr_multiplier
+            # Calculate stop loss distance (ARM может перекрыть!)
+            sl_multiplier = self.config.exit.stop_loss_atr_multiplier
+            if self.adaptive_regime:
+                regime_params = self.adaptive_regime.get_current_parameters()
+                sl_multiplier = regime_params.sl_atr_multiplier
+            
+            stop_distance = atr_result.value * sl_multiplier
 
             # Position size = risk amount / stop distance
             position_size = risk_amount / stop_distance

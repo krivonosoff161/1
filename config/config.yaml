@@ -14,12 +14,12 @@ trading:
     - "SOL-USDT"
   base_currency: "USDT"
   
-# Risk Management - 🛡️ ГАРМОНИЗИРОВАННЫЕ НАСТРОЙКИ
+# Risk Management
 risk:
-  max_position_size_percent: 3.0  # Max 3% of balance per position (⬇️ было 5%)
-  max_daily_loss_percent: 5.0     # Stop trading if daily loss exceeds 5% (⬇️ было 10%)
-  risk_per_trade_percent: 0.5     # Risk 0.5% per trade (⬇️ было 1%)
-  max_open_positions: 2           # Maximum concurrent positions (⬇️ было 3)
+  max_position_size_percent: 5.0  # Max 5% of balance per position
+  max_daily_loss_percent: 10.0    # Stop trading if daily loss exceeds 10%
+  risk_per_trade_percent: 1.0     # Risk 1% per trade
+  max_open_positions: 3           # Maximum concurrent positions
 
 # Scalping Strategy
 scalping:
@@ -36,22 +36,22 @@ scalping:
     bollinger_period: 20
     bollinger_std: 2.0
   
-  # Entry conditions - 🎯 БОЛЕЕ СТРОГИЕ (качество > количество)
+  # Entry conditions - СМЯГЧЕННЫЕ для больше сигналов
   entry:
-    min_volatility_atr: 0.0006  # ⬆️ Было: 0.0004 (торгуем только при хорошей волатильности)
-    rsi_overbought: 70          # Было: 68 (возврат к классике)
-    rsi_oversold: 30            # Было: 32 (возврат к классике)
-    volume_threshold: 1.3       # ⬆️ Было: 1.15 (требуем больше объёма)
+    min_volatility_atr: 0.0004  # ✅ Было: 0.0005 (торгуем в более спокойном рынке)
+    rsi_overbought: 68          # ✅ Было: 70 (шире диапазон)
+    rsi_oversold: 32            # ✅ Было: 30 (шире диапазон)
+    volume_threshold: 1.15      # ✅ Было: 1.2 (меньше требование к объему)
   
-  # Exit conditions - ⚖️ БАЛАНС РИСКА И ПРИБЫЛИ
+  # Exit conditions  
   exit:
-    take_profit_atr_multiplier: 2.0  # ⬆️ Было: 1.5 (дальше цель - больше профит)
-    stop_loss_atr_multiplier: 2.0    # ⬇️ Было: 2.5 (ближе стоп - меньше убыток)
-    max_holding_minutes: 30          # ⬆️ Было: 15 (даём больше времени развиться тренду)
+    take_profit_atr_multiplier: 1.5  # Было: 2.0 (ближе цель - быстрее фиксация)
+    stop_loss_atr_multiplier: 2.5    # Было: 1.5 (больше воздуха - меньше ложных срабатываний)
+    max_holding_minutes: 15          # Max time to hold position
     
-  # Trade management - 🎛️ ОПТИМИЗИРОВАННАЯ ЧАСТОТА
-  max_trades_per_hour: 8        # ⬇️ Было: 15 (меньше = качественнее)
-  cooldown_after_loss_minutes: 10  # ⬆️ Было: 4 (больше пауза после убытка)
+  # Trade management - УВЕЛИЧИЛИ частоту (но ARM может перекрыть!)
+  max_trades_per_hour: 15       # ✅ Было: 10 (больше сделок если рынок позволяет)
+  cooldown_after_loss_minutes: 4  # ✅ Было: 5 (быстрее возврат)
 
 # Trend Following Strategy  
 trend_following:
@@ -78,12 +78,12 @@ trend_following:
     stop_loss_percent: 1.5
     trailing_stop_atr_multiplier: 2.0
 
-# Logging - 📝 ОПТИМИЗАЦИЯ (меньше файлов, проще анализ)
+# Logging
 logging:
-  level: "INFO"  # ✅ DEBUG только при отладке
+  level: "INFO"
   format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
-  rotation: "20 MB"   # ⬇️ Было: 100 MB (чаще ротация)
-  retention: "7 days"  # ⬇️ Было: 30 days (меньше хранение)
+  rotation: "100 MB"
+  retention: "30 days"
   
 # Notifications
 notifications:
