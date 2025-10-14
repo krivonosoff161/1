@@ -65,7 +65,7 @@ class ScalpingStrategy:
         self.total_trades = 0
         self.winning_trades = 0
         self.daily_pnl = 0.0
-        
+
         # 📊 История сделок для детального логирования
         self.trade_history = []  # Список завершенных сделок
         self.max_history_size = 50  # Храним последние 50 сделок
@@ -90,7 +90,9 @@ class ScalpingStrategy:
 
         # 💰 ЗАЩИТА: Минимальные размеры для операций
         self.min_close_value_usd = 30.0  # Минимум $30 для закрытия позиции
-        self.min_order_value_usd = 50.0  # Минимум $50 (оптимально для альткоинов)
+        self.min_order_value_usd = (
+            30.0  # Минимум $30 (золотая середина для демо/малого баланса)
+        )
 
         # 🔒 УЛУЧШЕНИЕ 3: Break-even stop
         self.breakeven_enabled = True
@@ -1809,31 +1811,31 @@ class ScalpingStrategy:
                 ):
                     return None
 
-        if all(long_conditions):
-            return Signal(
-                symbol=symbol,
-                side=OrderSide.BUY,
-                strength=0.8,
-                price=current_price,
-                timestamp=datetime.utcnow(),
-                strategy_id=self.strategy_id,
-                indicators={k: v.value for k, v in indicators.items()},
-                confidence=1.0,
-            )
+            if all(long_conditions):
+                return Signal(
+                    symbol=symbol,
+                    side=OrderSide.BUY,
+                    strength=0.8,
+                    price=current_price,
+                    timestamp=datetime.utcnow(),
+                    strategy_id=self.strategy_id,
+                    indicators={k: v.value for k, v in indicators.items()},
+                    confidence=1.0,
+                )
 
-        elif all(short_conditions):
-            return Signal(
-                symbol=symbol,
-                side=OrderSide.SELL,
-                strength=0.8,
-                price=current_price,
-                timestamp=datetime.utcnow(),
-                strategy_id=self.strategy_id,
-                indicators={k: v.value for k, v in indicators.items()},
-                confidence=1.0,
-            )
+            elif all(short_conditions):
+                return Signal(
+                    symbol=symbol,
+                    side=OrderSide.SELL,
+                    strength=0.8,
+                    price=current_price,
+                    timestamp=datetime.utcnow(),
+                    strategy_id=self.strategy_id,
+                    indicators={k: v.value for k, v in indicators.items()},
+                    confidence=1.0,
+                )
 
-        return None
+            return None
 
     def _detect_market_regime(self, symbol: str) -> str:
         """
@@ -2012,6 +2014,21 @@ class ScalpingStrategy:
                     )
                     return
 
+            # 🛡️ ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Блокировка SHORT без актива (предотвращение займов)
+            if signal.side == OrderSide.SELL:
+                base_asset = signal.symbol.split("-")[
+                    0
+                ]  # Извлекаем актив (SOL, DOGE, etc)
+                asset_balance = await self.client.get_balance(base_asset)
+
+                if asset_balance < position_size:
+                    logger.error(
+                        f"🚨 {signal.symbol} SHORT BLOCKED: No {base_asset} on balance! "
+                        f"Have: {asset_balance:.8f}, Need: {position_size:.8f} - "
+                        f"Preventing automatic borrowing in SPOT mode!"
+                    )
+                    return  # ❌ НЕ открываем SHORT без актива!
+
             # Calculate stop loss and take profit
             atr_value = self.market_data_cache[signal.symbol]
             indicators = self.indicators.calculate_all(
@@ -2032,9 +2049,7 @@ class ScalpingStrategy:
                 f"📤 Placing order: {signal.side.value} {position_size} "
                 f"{signal.symbol} @ ${signal.price:.2f}"
             )
-            logger.info(
-                f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}"
-            )
+            logger.info(f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}")
 
             # 🎯 Шаг 1: Открываем основной ордер (БЕЗ TP/SL)
             order = await self.client.place_order(
@@ -2067,27 +2082,37 @@ class ScalpingStrategy:
                 self.positions[signal.symbol] = position
 
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                logger.info(f"✅ POSITION OPENED: {signal.symbol} {position.side.value.upper()}")
+                logger.info(
+                    f"✅ POSITION OPENED: {signal.symbol} {position.side.value.upper()}"
+                )
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 logger.info(f"   Order ID: {order.id}")
                 logger.info(f"   Side: {signal.side.value.upper()}")
-                logger.info(f"   Size: {position_size:.8f} {signal.symbol.split('-')[0]}")
+                logger.info(
+                    f"   Size: {position_size:.8f} {signal.symbol.split('-')[0]}"
+                )
                 logger.info(f"   Entry: ${signal.price:.2f}")
                 logger.info(f"   Take Profit: ${take_profit:.2f}")
                 logger.info(f"   Stop Loss: ${stop_loss:.2f}")
-                logger.info(f"   Risk/Reward: 1:{abs(take_profit-signal.price)/abs(signal.price-stop_loss):.2f}")
+                logger.info(
+                    f"   Risk/Reward: 1:{abs(take_profit-signal.price)/abs(signal.price-stop_loss):.2f}"
+                )
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
                 # 🎯 Шаг 2: Выставляем TP algo order
                 try:
                     tp_order_id = await self.client.place_algo_order(
                         symbol=signal.symbol,
-                        side=OrderSide.SELL if signal.side == OrderSide.BUY else OrderSide.BUY,
+                        side=OrderSide.SELL
+                        if signal.side == OrderSide.BUY
+                        else OrderSide.BUY,
                         quantity=position_size,
                         trigger_price=take_profit,
                     )
                     if tp_order_id:
-                        logger.info(f"✅ TP algo order placed: ID={tp_order_id} @ ${take_profit:.2f}")
+                        logger.info(
+                            f"✅ TP algo order placed: ID={tp_order_id} @ ${take_profit:.2f}"
+                        )
                     else:
                         logger.warning(f"⚠️ TP algo order FAILED for {signal.symbol}")
                 except Exception as e:
@@ -2097,19 +2122,25 @@ class ScalpingStrategy:
                 try:
                     sl_order_id = await self.client.place_stop_loss_order(
                         symbol=signal.symbol,
-                        side=OrderSide.SELL if signal.side == OrderSide.BUY else OrderSide.BUY,
+                        side=OrderSide.SELL
+                        if signal.side == OrderSide.BUY
+                        else OrderSide.BUY,
                         quantity=position_size,
                         trigger_price=stop_loss,
                     )
                     if sl_order_id:
-                        logger.info(f"✅ SL algo order placed: ID={sl_order_id} @ ${stop_loss:.2f}")
+                        logger.info(
+                            f"✅ SL algo order placed: ID={sl_order_id} @ ${stop_loss:.2f}"
+                        )
                     else:
                         logger.warning(f"⚠️ SL algo order FAILED for {signal.symbol}")
                 except Exception as e:
                     logger.error(f"❌ Error placing SL algo order: {e}")
 
                 # Добавляем Partial TP
-                await self._check_partial_take_profit(signal.symbol, signal.price, position)
+                await self._check_partial_take_profit(
+                    signal.symbol, signal.price, position
+                )
             else:
                 logger.error(
                     f"❌ Order placement FAILED: {signal.side.value} "
@@ -2213,13 +2244,32 @@ class ScalpingStrategy:
             )
 
             if position_value_usd < self.min_order_value_usd:
-                # Увеличиваем размер до минимума $30 + 2% запас
+                # Увеличиваем размер до минимума + 2% запас
                 final_position_size = (self.min_order_value_usd * 1.02) / price
                 final_value = final_position_size * price
                 logger.info(
                     f"⬆️ {symbol} Position size increased to meet ${self.min_order_value_usd} minimum: "
                     f"{final_position_size:.6f} (${final_value:.2f} with 2% buffer)"
                 )
+
+                # 🛡️ КРИТИЧНО! Проверяем баланс ПОСЛЕ увеличения до минимума
+                if self.balance_checker:
+                    # Определяем направление для проверки баланса
+                    # (нужно смотреть на signal, но у нас его тут нет, поэтому проверим оба)
+                    # Используем эвристику: для большинства пар нужен USDT (LONG)
+                    balances_check = await self.client.get_account_balance()
+
+                    # Проверяем USDT баланс (для LONG) - основной случай
+                    balance_result = self.balance_checker._check_usdt_balance(
+                        symbol, final_position_size, price, balances_check
+                    )
+
+                    if not balance_result.allowed:
+                        logger.error(
+                            f"⛔ {symbol}: Insufficient balance after increasing to minimum! "
+                            f"{balance_result.reason} - SKIPPING TRADE to prevent automatic borrowing"
+                        )
+                        return 0.0  # ❌ Отменяем сделку полностью!
 
             # Округляем до 8 знаков после запятой (OKX requirement)
             rounded_size = round(final_position_size, 8)
@@ -2576,7 +2626,10 @@ class ScalpingStrategy:
             current_price = position.current_price
             tick = await self.client.get_ticker(symbol)
             if tick:
-                current_price = tick.last
+                # ✅ ИСПРАВЛЕНО: get_ticker возвращает dict, не объект Tick
+                current_price = float(
+                    tick.get("last", tick.get("lastPx", current_price))
+                )
 
             # 🛡️ ЗАЩИТА #3: Проверка минимального размера для закрытия
             position_value = position.size * current_price
@@ -2672,13 +2725,21 @@ class ScalpingStrategy:
                 self.daily_pnl += net_pnl
 
                 # 📊 ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ РЕЗУЛЬТАТА СДЕЛКИ
-                win_rate = (self.winning_trades / self.total_trades * 100) if self.total_trades > 0 else 0
-                
+                win_rate = (
+                    (self.winning_trades / self.total_trades * 100)
+                    if self.total_trades > 0
+                    else 0
+                )
+
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 if net_pnl > 0:
-                    logger.info(f"✅ TRADE COMPLETED: {symbol} {position.side.value.upper()} | WIN")
+                    logger.info(
+                        f"✅ TRADE COMPLETED: {symbol} {position.side.value.upper()} | WIN"
+                    )
                 else:
-                    logger.info(f"❌ TRADE COMPLETED: {symbol} {position.side.value.upper()} | LOSS")
+                    logger.info(
+                        f"❌ TRADE COMPLETED: {symbol} {position.side.value.upper()} | LOSS"
+                    )
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 logger.info(f"   Reason: {reason.upper()}")
                 logger.info(f"   Entry: ${position.entry_price:.2f}")
@@ -2687,33 +2748,37 @@ class ScalpingStrategy:
                 logger.info(f"   Holding time: {holding_time}")
                 logger.info(f"   Gross PnL: ${position.unrealized_pnl:.2f}")
                 logger.info(f"   Commission: ${total_commission:.2f}")
-                logger.info(f"   Net PnL: ${net_pnl:.2f} ({(net_pnl/position.entry_price/position.size)*100:.2f}%)")
+                logger.info(
+                    f"   Net PnL: ${net_pnl:.2f} ({(net_pnl/position.entry_price/position.size)*100:.2f}%)"
+                )
                 logger.info(f"   Daily PnL: ${self.daily_pnl:.2f}")
-                logger.info(f"   Total trades: {self.total_trades} (Win rate: {win_rate:.1f}%)")
+                logger.info(
+                    f"   Total trades: {self.total_trades} (Win rate: {win_rate:.1f}%)"
+                )
                 logger.info(f"   Consecutive losses: {self.consecutive_losses}")
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                
+
                 # 📊 Сохраняем сделку в историю
                 trade_record = {
-                    'timestamp': datetime.utcnow(),
-                    'symbol': symbol,
-                    'side': position.side.value.upper(),
-                    'entry_price': position.entry_price,
-                    'exit_price': current_price,
-                    'size': position.size,
-                    'holding_time': str(holding_time),
-                    'gross_pnl': position.unrealized_pnl,
-                    'commission': total_commission,
-                    'net_pnl': net_pnl,
-                    'reason': reason.upper(),
-                    'result': 'WIN' if net_pnl > 0 else 'LOSS'
+                    "timestamp": datetime.utcnow(),
+                    "symbol": symbol,
+                    "side": position.side.value.upper(),
+                    "entry_price": position.entry_price,
+                    "exit_price": current_price,
+                    "size": position.size,
+                    "holding_time": str(holding_time),
+                    "gross_pnl": position.unrealized_pnl,
+                    "commission": total_commission,
+                    "net_pnl": net_pnl,
+                    "reason": reason.upper(),
+                    "result": "WIN" if net_pnl > 0 else "LOSS",
                 }
-                
+
                 self.trade_history.append(trade_record)
-                
+
                 # Ограничиваем размер истории
                 if len(self.trade_history) > self.max_history_size:
-                    self.trade_history = self.trade_history[-self.max_history_size:]
+                    self.trade_history = self.trade_history[-self.max_history_size :]
 
                 # Remove position
                 del self.positions[symbol]
@@ -2721,7 +2786,6 @@ class ScalpingStrategy:
                 # 🎯 Очистка partial TP info
                 if symbol in self.position_partial_info:
                     del self.position_partial_info[symbol]
-
 
         except Exception as e:
             logger.error(f"Error closing position {symbol}: {e}")
@@ -2922,6 +2986,16 @@ class ScalpingStrategy:
             if self.adaptive_regime:
                 market_regime = self.adaptive_regime.current_regime.value.upper()
 
+            # Подсчёт сделок по текущей паре
+            symbol_trades = [t for t in self.trade_history if t["symbol"] == symbol]
+            symbol_trades_count = len(symbol_trades)
+            symbol_wins = len([t for t in symbol_trades if t["result"] == "WIN"])
+            symbol_win_rate = (
+                (symbol_wins / symbol_trades_count * 100)
+                if symbol_trades_count > 0
+                else 0
+            )
+
             # Красивый вывод столбцом с новыми метриками
             logger.info(f"\n{'='*60}")
             logger.info(f"📈 ПАРА: {symbol}")
@@ -2929,20 +3003,25 @@ class ScalpingStrategy:
             logger.info(f"💼 БАЛАНС: {balance_str}")
             logger.info(f"📋 ОТКРЫТЫЕ ОРДЕРА: {len(open_orders)}")
             logger.info(f"{position_emoji} ПОЗИЦИЯ: {position_info}")
-            logger.info(f"📊 СДЕЛКИ: {self.total_trades} (Успешных: {win_rate:.1f}%)")
+            logger.info(
+                f"📊 ВСЕГО СДЕЛОК: {self.total_trades} (Успешных: {win_rate:.1f}%)"
+            )
+            logger.info(
+                f"🎯 СДЕЛОК ПО {symbol}: {symbol_trades_count} (Успешных: {symbol_win_rate:.1f}%)"
+            )
             logger.info(f"{pnl_emoji} ДНЕВНОЙ PnL: ${self.daily_pnl:.2f}")
             logger.info(f"🛡️ CONSECUTIVE LOSSES: {self.consecutive_losses}")
             logger.info(f"🌊 MARKET REGIME: {market_regime}")
             logger.info(f"{'='*60}")
-            
+
             # 📊 ТАБЛИЦА ПОСЛЕДНИХ СДЕЛОК (по этому символу)
-            symbol_trades = [t for t in self.trade_history if t['symbol'] == symbol]
+            symbol_trades = [t for t in self.trade_history if t["symbol"] == symbol]
             if symbol_trades:
                 logger.info(f"\n📋 ПОСЛЕДНИЕ СДЕЛКИ {symbol}:")
                 logger.info(f"{'─'*60}")
                 for trade in symbol_trades[-5:]:  # Последние 5 сделок по паре
-                    result_emoji = "✅" if trade['result'] == 'WIN' else "❌"
-                    time_str = trade['timestamp'].strftime("%H:%M:%S")
+                    result_emoji = "✅" if trade["result"] == "WIN" else "❌"
+                    time_str = trade["timestamp"].strftime("%H:%M:%S")
                     logger.info(
                         f"{result_emoji} {time_str} | {trade['side']:5} | "
                         f"Entry ${trade['entry_price']:>10,.2f} → Exit ${trade['exit_price']:>10,.2f} | "
