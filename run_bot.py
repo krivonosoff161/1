@@ -71,19 +71,32 @@ def main() -> NoReturn:
     print("=" * 70)
     print()
 
+    async def run_with_cleanup():
+        """Запуск бота с корректным завершением."""
+        bot = None
+        try:
+            # Загружаем конфигурацию из YAML файла
+            config = load_config(args.config)
+
+            # Инициализируем бота с конфигурациями
+            bot = BotRunner(
+                config=config.get_okx_config(),
+                risk_config=config.risk,
+                strategy_config=config.scalping,
+            )
+
+            # Инициализируем и запускаем
+            await bot.initialize()
+            await bot.run()
+
+        finally:
+            # Всегда закрываем соединения
+            if bot is not None:
+                await bot.shutdown()
+
     try:
-        # Загружаем конфигурацию из YAML файла
-        config = load_config(args.config)
-
-        # Инициализируем бота с конфигурациями
-        bot = BotRunner(
-            config=config.get_okx_config(),
-            risk_config=config.risk,
-            strategy_config=config.scalping,
-        )
-
         # Запускаем бота (asyncio.run создаёт и управляет event loop)
-        asyncio.run(bot.run())
+        asyncio.run(run_with_cleanup())
 
     except KeyboardInterrupt:
         # Корректное завершение при Ctrl+C

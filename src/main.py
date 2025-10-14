@@ -115,6 +115,17 @@ class BotRunner:
         logger.info("Running bot...")
         await self.strategy.run()
 
+    async def shutdown(self) -> None:
+        """
+        Корректное завершение работы бота.
+
+        Закрывает все открытые соединения и освобождает ресурсы.
+        Должен вызываться при остановке бота.
+        """
+        logger.info("Shutting down bot...")
+        await self.client.disconnect()
+        logger.info("Bot shutdown complete.")
+
 
 def main() -> None:
     """
