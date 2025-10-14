@@ -31,7 +31,10 @@ class IndicatorParameters:
     volume_threshold: float
     sma_fast: int
     sma_slow: int
+    ema_fast: int
+    ema_slow: int
     atr_period: int
+    min_volatility_atr: float
 
 
 @dataclass
@@ -80,6 +83,7 @@ class RegimeParameters:
     # Exit levels
     tp_atr_multiplier: float
     sl_atr_multiplier: float
+    max_holding_minutes: int  # Максимальное время удержания позиции
     # Risk management
     cooldown_after_loss_minutes: int
     # Module bonuses

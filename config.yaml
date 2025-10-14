@@ -153,6 +153,7 @@ scalping:
       position_size_multiplier: 1.2     # Крупнее позиции (+20%)
       tp_atr_multiplier: 2.0            # Дальше цель (тренд продолжится)
       sl_atr_multiplier: 2.5            # Шире стоп (больше воздуха для откатов)
+      max_holding_minutes: 60           # Долго держим (тренд продолжается!)
       cooldown_after_loss_minutes: 2    # Быстро возвращаемся
       pivot_bonus_multiplier: 1.5       # Усиленные бонусы (уровни работают в тренде)
       volume_profile_bonus_multiplier: 1.0
@@ -164,7 +165,10 @@ scalping:
         volume_threshold: 1.05          # Меньше требования к объему
         sma_fast: 8                     # Быстрее реакция на тренд
         sma_slow: 25                    # Быстрее реакция на тренд
+        ema_fast: 8                     # Быстрая EMA для тренда
+        ema_slow: 21                    # Медленная EMA для тренда
         atr_period: 14                  # Стандартный период
+        min_volatility_atr: 0.0003      # Низкий порог - торгуем слабые тренды
       
       # Параметры модулей для трендового рынка
       modules:
@@ -201,6 +205,7 @@ scalping:
       position_size_multiplier: 1.0     # Стандартный размер
       tp_atr_multiplier: 1.5            # Ближе цель (диапазон узкий)
       sl_atr_multiplier: 2.5            # Шире стоп (много шума)
+      max_holding_minutes: 25           # Средне (диапазон ограничен)
       cooldown_after_loss_minutes: 5    # Стандартная пауза
       pivot_bonus_multiplier: 1.5       # Усиление бонусов за уровни!
       volume_profile_bonus_multiplier: 1.5
@@ -212,7 +217,10 @@ scalping:
         volume_threshold: 1.1           # Стандартные требования
         sma_fast: 10                    # Стандартные периоды
         sma_slow: 30                    # Стандартные периоды
+        ema_fast: 10                    # Средняя EMA для ranging
+        ema_slow: 30                    # Средняя EMA для ranging
         atr_period: 14                  # Стандартный период
+        min_volatility_atr: 0.0005      # Средний порог - стабильность
       
       # Параметры модулей для бокового рынка
       modules:
@@ -249,6 +257,7 @@ scalping:
       position_size_multiplier: 0.6     # Уменьшенный размер (защита)
       tp_atr_multiplier: 1.0            # Очень близко (хватай и беги)
       sl_atr_multiplier: 3.5            # Очень широко (хаос)
+      max_holding_minutes: 8            # Быстро выходим (риск разворота!)
       cooldown_after_loss_minutes: 15   # Долгая пауза
       pivot_bonus_multiplier: 2.0       # Максимальное усиление!
       volume_profile_bonus_multiplier: 2.0
@@ -260,7 +269,10 @@ scalping:
         volume_threshold: 1.25          # Высокие требования к объему
         sma_fast: 12                    # Медленнее реакция (сглаживание шума)
         sma_slow: 35                    # Медленнее реакция (сглаживание шума)
+        ema_fast: 13                    # Медленная EMA для choppy (сглаживание)
+        ema_slow: 34                    # Медленная EMA для choppy (сглаживание)
         atr_period: 21                  # Больший период для сглаживания
+        min_volatility_atr: 0.0008      # Высокий порог - только сильная волатильность!
       
       # Параметры модулей для хаотичного рынка
       modules:

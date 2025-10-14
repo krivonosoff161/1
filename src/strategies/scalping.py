@@ -368,9 +368,18 @@ class ScalpingStrategy:
                 sma_slow=config.adaptive_regime.get("trending", {})
                 .get("indicators", {})
                 .get("sma_slow", 25),
+                ema_fast=config.adaptive_regime.get("trending", {})
+                .get("indicators", {})
+                .get("ema_fast", 8),
+                ema_slow=config.adaptive_regime.get("trending", {})
+                .get("indicators", {})
+                .get("ema_slow", 21),
                 atr_period=config.adaptive_regime.get("trending", {})
                 .get("indicators", {})
                 .get("atr_period", 14),
+                min_volatility_atr=config.adaptive_regime.get("trending", {})
+                .get("indicators", {})
+                .get("min_volatility_atr", 0.0003),
             )
 
             # Параметры модулей для TRENDING режима
@@ -442,6 +451,9 @@ class ScalpingStrategy:
                 sl_atr_multiplier=config.adaptive_regime["trending"].get(
                     "sl_atr_multiplier", 2.0
                 ),
+                max_holding_minutes=config.adaptive_regime["trending"].get(
+                    "max_holding_minutes", 60
+                ),
                 cooldown_after_loss_minutes=config.adaptive_regime["trending"].get(
                     "cooldown_after_loss_minutes", 2
                 ),
@@ -472,8 +484,17 @@ class ScalpingStrategy:
                 sma_slow=config.adaptive_regime["ranging"]["indicators"].get(
                     "sma_slow", 30
                 ),
+                ema_fast=config.adaptive_regime["ranging"]["indicators"].get(
+                    "ema_fast", 10
+                ),
+                ema_slow=config.adaptive_regime["ranging"]["indicators"].get(
+                    "ema_slow", 30
+                ),
                 atr_period=config.adaptive_regime["ranging"]["indicators"].get(
                     "atr_period", 14
+                ),
+                min_volatility_atr=config.adaptive_regime["ranging"]["indicators"].get(
+                    "min_volatility_atr", 0.0005
                 ),
             )
 
@@ -545,6 +566,9 @@ class ScalpingStrategy:
                 sl_atr_multiplier=config.adaptive_regime["ranging"].get(
                     "sl_atr_multiplier", 2.5
                 ),
+                max_holding_minutes=config.adaptive_regime["ranging"].get(
+                    "max_holding_minutes", 25
+                ),
                 cooldown_after_loss_minutes=config.adaptive_regime["ranging"].get(
                     "cooldown_after_loss_minutes", 5
                 ),
@@ -575,8 +599,17 @@ class ScalpingStrategy:
                 sma_slow=config.adaptive_regime["choppy"]["indicators"].get(
                     "sma_slow", 35
                 ),
+                ema_fast=config.adaptive_regime["choppy"]["indicators"].get(
+                    "ema_fast", 13
+                ),
+                ema_slow=config.adaptive_regime["choppy"]["indicators"].get(
+                    "ema_slow", 34
+                ),
                 atr_period=config.adaptive_regime["choppy"]["indicators"].get(
                     "atr_period", 21
+                ),
+                min_volatility_atr=config.adaptive_regime["choppy"]["indicators"].get(
+                    "min_volatility_atr", 0.0008
                 ),
             )
 
@@ -647,6 +680,9 @@ class ScalpingStrategy:
                 ),
                 sl_atr_multiplier=config.adaptive_regime["choppy"].get(
                     "sl_atr_multiplier", 3.5
+                ),
+                max_holding_minutes=config.adaptive_regime["choppy"].get(
+                    "max_holding_minutes", 8
                 ),
                 cooldown_after_loss_minutes=config.adaptive_regime["choppy"].get(
                     "cooldown_after_loss_minutes", 15
@@ -856,6 +892,26 @@ class ScalpingStrategy:
                         self.indicators.indicators["SMA_SLOW"] = new_sma
                         logger.debug(
                             f"   ✅ SMA Slow period updated: {current_sma.period} → {indicator_params.sma_slow}"
+                        )
+                
+                # EMA Fast
+                if "EMA_FAST" in self.indicators.indicators:
+                    current_ema = self.indicators.indicators["EMA_FAST"]
+                    if current_ema.period != indicator_params.ema_fast:
+                        new_ema = ExponentialMovingAverage(indicator_params.ema_fast)
+                        self.indicators.indicators["EMA_FAST"] = new_ema
+                        logger.debug(
+                            f"   ✅ EMA Fast period updated: {current_ema.period} → {indicator_params.ema_fast}"
+                        )
+                
+                # EMA Slow
+                if "EMA_SLOW" in self.indicators.indicators:
+                    current_ema = self.indicators.indicators["EMA_SLOW"]
+                    if current_ema.period != indicator_params.ema_slow:
+                        new_ema = ExponentialMovingAverage(indicator_params.ema_slow)
+                        self.indicators.indicators["EMA_SLOW"] = new_ema
+                        logger.debug(
+                            f"   ✅ EMA Slow period updated: {current_ema.period} → {indicator_params.ema_slow}"
                         )
 
             # Сохраняем текущие параметры для использования в скоринге
@@ -1390,8 +1446,12 @@ class ScalpingStrategy:
 
         current_price = tick.price
 
-        # Check minimum volatility
-        if atr.value < self.config.entry.min_volatility_atr:
+        # Check minimum volatility (ARM может перекрыть!)
+        min_volatility = self.config.entry.min_volatility_atr
+        if self.current_indicator_params:
+            min_volatility = self.current_indicator_params.min_volatility_atr
+        
+        if atr.value < min_volatility:
             # Детальная диагностика для ATR = 0
             if atr.value == 0.0:
                 error_info = atr.metadata.get("error", "Unknown reason")
@@ -1402,7 +1462,7 @@ class ScalpingStrategy:
             else:
                 logger.debug(
                     f"🚫 {symbol}: Low volatility: ATR={atr.value:.6f} "
-                    f"(min={self.config.entry.min_volatility_atr})"
+                    f"(min={min_volatility})"
                 )
             return None
 
@@ -2451,9 +2511,14 @@ class ScalpingStrategy:
         if self.partial_tp_enabled:
             await self._check_partial_take_profit(symbol, current_price, position)
 
-        # Check time-based exit
+        # Check time-based exit (ARM может перекрыть!)
+        max_holding = self.config.exit.max_holding_minutes
+        if self.adaptive_regime:
+            regime_params = self.adaptive_regime.get_current_parameters()
+            max_holding = regime_params.max_holding_minutes
+        
         holding_time = datetime.utcnow() - position.timestamp
-        if holding_time.seconds / 60 > self.config.exit.max_holding_minutes:
+        if holding_time.seconds / 60 > max_holding:
             await self._close_position(symbol, "time_limit")
             return
 
