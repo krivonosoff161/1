@@ -2145,46 +2145,40 @@ class ScalpingStrategy:
                 signal.price, signal.side, atr_result.value
             )
             
-            # 🛡️ КРИТИЧНО! Проверка минимума с учетом algo orders
-            # Для SHORT: TP ниже entry, SL выше entry
-            # Для LONG: SL ниже entry, TP выше entry
-            # ВАЖНО: Минимум $60 для TP/SL (разный для разных пар: DOGE/SOL ~$50, AVAX ~$60)
+            # 🛡️ КРИТИЧНО! Проверка минимума для OCO MARKET orders
+            # OCO объединяет TP и SL в один ордер - при срабатывании одного
+            # второй автоматически отменяется
+            #
+            # Минимумы найдены тестами на реальной бирже OKX:
+            # LONG: entry $30 → TP $30.45 ✅, SL $29.25 ✅
+            # SHORT: entry $43 → TP $42.35 ✅, SL $44.07 ✅
+            #
+            # Для SHORT нужно больше т.к. TP (ниже entry) должен быть >= $40
             
-            MIN_TP_VALUE = 60.0  # Минимум для TP algo orders
-            MIN_SL_VALUE = 60.0  # Минимум для SL algo orders
+            MIN_LONG_OCO = 30.0   # Минимум для LONG OCO ордера
+            MIN_SHORT_OCO = 43.0  # Минимум для SHORT OCO ордера (выше!)
             
-            # Проверяем TP (нижний уровень)
+            # Определяем минимум в зависимости от направления
             if signal.side == OrderSide.BUY:  # LONG
-                tp_value = position_size * take_profit  # TP выше
-                sl_value = position_size * stop_loss    # SL ниже
-            else:  # SELL (SHORT)
-                tp_value = position_size * take_profit  # TP ниже
-                sl_value = position_size * stop_loss    # SL выше
+                min_position_value = MIN_LONG_OCO
+            else:  # SHORT
+                min_position_value = MIN_SHORT_OCO
             
-            # Проверяем минимумы
-            needs_increase = False
-            required_multiplier = 1.0
+            # Проверяем минимум entry (с буфером +5%)
+            position_value = position_size * signal.price
             
-            if tp_value < MIN_TP_VALUE:
-                check_price = take_profit
-                required_multiplier = (MIN_TP_VALUE * 1.02) / tp_value
-                needs_increase = True
-                reason = f"TP ${tp_value:.2f} < ${MIN_TP_VALUE}"
-            
-            if sl_value < MIN_SL_VALUE:
-                check_price = stop_loss
-                sl_multiplier = (MIN_SL_VALUE * 1.02) / sl_value
-                if sl_multiplier > required_multiplier:
-                    required_multiplier = sl_multiplier
-                    reason = f"SL ${sl_value:.2f} < ${MIN_SL_VALUE}"
-                    needs_increase = True
-            
-            if needs_increase:
+            if position_value < min_position_value:
+                # Увеличиваем размер до минимума + 5% буфер
+                required_value = min_position_value * 1.05
                 old_size = position_size
-                position_size = round(position_size * required_multiplier, 8)
+                position_size = round(required_value / signal.price, 8)
+                new_value = position_size * signal.price
+                
                 logger.info(
-                    f"⬆️ Position size increased for algo orders: "
-                    f"{old_size:.6f} → {position_size:.6f} ({reason})"
+                    f"⬆️ Position size increased for OCO order: "
+                    f"{old_size:.6f} → {position_size:.6f} "
+                    f"(${position_value:.2f} → ${new_value:.2f}, "
+                    f"min ${min_position_value} + 5% buffer)"
                 )
 
             # Place order
@@ -2244,47 +2238,34 @@ class ScalpingStrategy:
                 )
                 logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-                # 🎯 Шаг 2: Выставляем TP algo order
+                # 🎯 Шаг 2: Выставляем OCO ордер (TP + SL в одном!)
                 try:
-                    tp_order_id = await self.client.place_algo_order(
-                        symbol=signal.symbol,
-                        side=(
-                            OrderSide.SELL
-                            if signal.side == OrderSide.BUY
-                            else OrderSide.BUY
-                        ),
-                        quantity=position_size,
-                        trigger_price=take_profit,
+                    # Определяем сторону закрытия
+                    close_side = (
+                        OrderSide.SELL if signal.side == OrderSide.BUY
+                        else OrderSide.BUY
                     )
-                    if tp_order_id:
+                    
+                    oco_order_id = await self.client.place_oco_order(
+                        symbol=signal.symbol,
+                        side=close_side,
+                        quantity=position_size,
+                        tp_trigger_price=take_profit,
+                        sl_trigger_price=stop_loss,
+                    )
+                    
+                    if oco_order_id:
                         logger.info(
-                            f"✅ TP algo order placed: ID={tp_order_id} @ ${take_profit:.2f}"
+                            f"✅ OCO order placed: ID={oco_order_id} | "
+                            f"TP @ ${take_profit:.2f}, SL @ ${stop_loss:.2f}"
                         )
                     else:
-                        logger.warning(f"⚠️ TP algo order FAILED for {signal.symbol}")
-                except Exception as e:
-                    logger.error(f"❌ Error placing TP algo order: {e}")
-
-                # 🎯 Шаг 3: Выставляем SL algo order
-                try:
-                    sl_order_id = await self.client.place_stop_loss_order(
-                        symbol=signal.symbol,
-                        side=(
-                            OrderSide.SELL
-                            if signal.side == OrderSide.BUY
-                            else OrderSide.BUY
-                        ),
-                        quantity=position_size,
-                        trigger_price=stop_loss,
-                    )
-                    if sl_order_id:
-                        logger.info(
-                            f"✅ SL algo order placed: ID={sl_order_id} @ ${stop_loss:.2f}"
+                        logger.warning(
+                            f"⚠️ OCO order FAILED for {signal.symbol} - "
+                            f"position without automatic TP/SL protection!"
                         )
-                    else:
-                        logger.warning(f"⚠️ SL algo order FAILED for {signal.symbol}")
                 except Exception as e:
-                    logger.error(f"❌ Error placing SL algo order: {e}")
+                    logger.error(f"❌ Error placing OCO order: {e}")
 
                 # Добавляем Partial TP
                 await self._check_partial_take_profit(

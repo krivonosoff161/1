@@ -605,6 +605,68 @@ class OKXClient:
             logger.error(f"Error placing SL algo order: {e}")
             return None
     
+    async def place_oco_order(
+        self,
+        symbol: str,
+        side: OrderSide,
+        quantity: float,
+        tp_trigger_price: float,
+        sl_trigger_price: float,
+    ) -> Optional[str]:
+        """
+        Размещение OCO (One-Cancels-Other) ордера с TP и SL.
+        
+        OCO ордер объединяет TP и SL в один - при срабатывании одного,
+        второй автоматически отменяется.
+        
+        Args:
+            symbol: Торговая пара
+            side: Направление закрытия (SELL для LONG, BUY для SHORT)
+            quantity: Количество в базовой валюте
+            tp_trigger_price: Take Profit триггер цена
+            sl_trigger_price: Stop Loss триггер цена
+        
+        Returns:
+            algo order ID или None
+        """
+        # Форматируем trigger prices с фиксированными 6 знаками
+        formatted_tp = f"{tp_trigger_price:.6f}"
+        formatted_sl = f"{sl_trigger_price:.6f}"
+        
+        data = {
+            "instId": symbol,
+            "tdMode": "cash",  # SPOT
+            "side": "buy" if side == OrderSide.BUY else "sell",
+            "ordType": "oco",
+            "sz": str(quantity),
+            "tpTriggerPx": formatted_tp,
+            "tpOrdPx": "-1",  # Market при триггере TP
+            "slTriggerPx": formatted_sl,
+            "slOrdPx": "-1",  # Market при триггере SL
+        }
+        
+        # КРИТИЧНО! tgtCcy нужен ТОЛЬКО для BUY (SHORT закрытие)
+        # Для SELL (LONG закрытие) sz в базовой валюте по умолчанию
+        if side == OrderSide.BUY:
+            data["tgtCcy"] = "base_ccy"
+        
+        try:
+            result = await self._make_request("POST", "/trade/order-algo", data=data)
+            
+            if result.get("code") == "0" and result.get("data"):
+                algo_id = result["data"][0].get("algoId")
+                logger.info(
+                    f"✅ OCO order placed: {algo_id} | "
+                    f"TP @ ${tp_trigger_price:.2f}, SL @ ${sl_trigger_price:.2f}"
+                )
+                return algo_id
+            else:
+                logger.error(f"❌ OCO order failed: {result.get('msg')}")
+                return None
+        except Exception as e:
+            logger.error(f"Error placing OCO order: {e}")
+            return None
+    
     async def get_algo_orders(self, symbol: Optional[str] = None, algo_type: str = "conditional") -> List[Dict]:
         """
         Получить список активных algo orders (TP/SL).
