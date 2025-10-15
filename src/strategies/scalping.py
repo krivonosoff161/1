@@ -621,7 +621,9 @@ class ScalpingStrategy:
                 ].get("score_bonus", 3),
                 mtf_confirmation_timeframe=config.adaptive_regime["choppy"]["modules"][
                     "multi_timeframe"
-                ].get("confirmation_timeframe", "15m"),  # 15m для скальпа
+                ].get(
+                    "confirmation_timeframe", "15m"
+                ),  # 15m для скальпа
                 correlation_threshold=config.adaptive_regime["choppy"]["modules"][
                     "correlation_filter"
                 ].get("correlation_threshold", 0.6),
@@ -642,13 +644,17 @@ class ScalpingStrategy:
                 ].get("avoid_weekends", True),
                 pivot_level_tolerance_percent=config.adaptive_regime["choppy"][
                     "modules"
-                ]["pivot_points"].get("level_tolerance_percent", 0.2),  # СКАЛЬП: не слишком узко
+                ]["pivot_points"].get(
+                    "level_tolerance_percent", 0.2
+                ),  # СКАЛЬП: не слишком узко
                 pivot_score_bonus_near_level=config.adaptive_regime["choppy"][
                     "modules"
                 ]["pivot_points"].get("score_bonus_near_level", 3),
                 pivot_use_last_n_days=config.adaptive_regime["choppy"]["modules"][
                     "pivot_points"
-                ].get("use_last_n_days", 5),  # СКАЛЬП: средний период
+                ].get(
+                    "use_last_n_days", 5
+                ),  # СКАЛЬП: средний период
                 vp_score_bonus_in_value_area=config.adaptive_regime["choppy"][
                     "modules"
                 ]["volume_profile"].get("score_bonus_in_value_area", 3),
@@ -2244,24 +2250,26 @@ class ScalpingStrategy:
                 if signal.side == OrderSide.BUY:
                     try:
                         # 🔧 Инициализируем словарь для отслеживания балансов
-                        if not hasattr(self, 'previous_balances'):
+                        if not hasattr(self, "previous_balances"):
                             self.previous_balances = {}
-                        
+
                         # Получаем баланс базовой валюты
                         base_currency = signal.symbol.split("-")[0]
-                        
+
                         # 🔧 ИСПРАВЛЕНИЕ БАГА: Сохраняем баланс ДО покупки
-                        previous_balance = self.previous_balances.get(base_currency, 0.0)
-                        
+                        previous_balance = self.previous_balances.get(
+                            base_currency, 0.0
+                        )
+
                         # Ждем секунду для обновления баланса
                         await asyncio.sleep(1)
-                        
+
                         # Получаем текущий баланс ПОСЛЕ покупки
                         current_balance = await self.client.get_balance(base_currency)
 
                         # 🔧 ИСПРАВЛЕНИЕ: Вычисляем разницу (только купленное!)
                         actual_position_size = current_balance - previous_balance
-                        
+
                         # 🛡️ Защита от отрицательных значений
                         if actual_position_size < 0:
                             logger.warning(
@@ -2269,7 +2277,7 @@ class ScalpingStrategy:
                                 f"Previous: {previous_balance:.8f}, Current: {current_balance:.8f}"
                             )
                             actual_position_size = position_size
-                        
+
                         # 🔧 Обновляем кэш баланса для следующей сделки
                         self.previous_balances[base_currency] = current_balance
 
@@ -2343,7 +2351,7 @@ class ScalpingStrategy:
                     if oco_order_id:
                         # Сохраняем OCO ID в позиции для отслеживания
                         position.algo_order_id = oco_order_id
-                        
+
                         logger.info(
                             f"✅ OCO order placed: ID={oco_order_id} | "
                             f"TP @ ${take_profit:.2f}, SL @ ${stop_loss:.2f}"
@@ -2561,16 +2569,18 @@ class ScalpingStrategy:
         # 🎯 НОВОЕ: Проверка статуса OCO ордера
         if position.algo_order_id:
             try:
-                oco_status = await self.client.get_algo_order_status(position.algo_order_id)
-                
+                oco_status = await self.client.get_algo_order_status(
+                    position.algo_order_id
+                )
+
                 if oco_status:
                     state = oco_status.get("state")
-                    
+
                     # state: "live" - активен, "filled" - исполнен, "canceled" - отменен
                     if state == "filled":
                         # OCO сработал! Определяем TP или SL
                         actual_px = float(oco_status.get("actualPx", current_price))
-                        
+
                         # Определяем что сработало
                         if position.side == PositionSide.LONG:
                             if actual_px >= position.take_profit * 0.99:
@@ -2582,21 +2592,21 @@ class ScalpingStrategy:
                                 reason = "take_profit_oco"
                             else:
                                 reason = "stop_loss_oco"
-                        
+
                         logger.info(
                             f"🎯 OCO executed! {symbol} {reason.upper()} @ ${actual_px:.2f}"
                         )
-                        
+
                         # Обновляем статистику и удаляем позицию
-                        await self._record_trade_completion(
-                            symbol, actual_px, reason
-                        )
+                        await self._record_trade_completion(symbol, actual_px, reason)
                         return  # Позиция закрыта
-                        
+
                     elif state == "canceled":
-                        logger.warning(f"⚠️ OCO canceled for {symbol}, position unprotected!")
+                        logger.warning(
+                            f"⚠️ OCO canceled for {symbol}, position unprotected!"
+                        )
                         position.algo_order_id = None  # Больше не отслеживаем
-                        
+
             except Exception as e:
                 logger.debug(f"Could not check OCO status for {symbol}: {e}")
 
@@ -2911,21 +2921,38 @@ class ScalpingStrategy:
             # 🛡️ ЗАЩИТА #4: Проверка баланса ПЕРЕД закрытием (КРИТИЧНО!)
             base_currency = symbol.split("-")[0]  # BTC, ETH, и т.д.
             quote_currency = symbol.split("-")[1]  # USDT
-            
+
             if position.side == PositionSide.LONG:
                 # Для закрытия LONG нужно продать - проверяем базовую валюту (BTC/ETH)
                 actual_balance = await self.client.get_balance(base_currency)
-                
+
                 if actual_balance < position.size * 0.99:  # -1% допуск на округление
-                    logger.error(
-                        f"❌ {symbol} LONG position is PHANTOM! "
-                        f"Cannot SELL: have {actual_balance:.8f} {base_currency}, "
-                        f"position shows {position.size:.8f}. "
-                        f"Removing phantom position to prevent loan!"
-                    )
-                    # Удаляем фантомную позицию из трекинга
-                    del self.positions[symbol]
-                    return  # НЕ пытаемся продать то чего нет!
+                    # 🔧 ИСПРАВЛЕНИЕ: Проверяем время позиции перед удалением
+                    time_since_open = (
+                        datetime.utcnow() - position.timestamp
+                    ).total_seconds()
+
+                    if time_since_open < 300:  # Менее 5 минут
+                        logger.warning(
+                            f"⚠️ {symbol} LONG closed on exchange! "
+                            f"Have {actual_balance:.8f} {base_currency}, "
+                            f"was {position.size:.8f}. "
+                            f"Age: {time_since_open:.0f}s - OCO TP/SL likely"
+                        )
+                        # Записываем как успешное закрытие
+                        await self._record_trade_completion(
+                            symbol, current_price, "oco_closed"
+                        )
+                        del self.positions[symbol]
+                        return
+                    else:
+                        logger.error(
+                            f"❌ {symbol} LONG is PHANTOM! "
+                            f"Have {actual_balance:.8f}, shows {position.size:.8f}. "
+                            f"Age: {time_since_open:.0f}s - removing!"
+                        )
+                        del self.positions[symbol]
+                        return
             else:
                 # Для закрытия SHORT нужно купить обратно - проверяем USDT
                 required_usdt = position.size * current_price * 1.01  # +1% запас
@@ -3132,9 +3159,9 @@ class ScalpingStrategy:
     ) -> None:
         """
         Записать завершение сделки (когда OCO уже закрыл позицию на бирже).
-        
+
         Обновляет статистику торговли без размещения ордера закрытия.
-        
+
         Args:
             symbol: Торговая пара
             exit_price: Цена закрытия
@@ -3143,27 +3170,27 @@ class ScalpingStrategy:
         position = self.positions.get(symbol)
         if not position:
             return
-            
+
         try:
             base_currency = symbol.split("-")[0]
-            
+
             # Расчет PnL
             if position.side == PositionSide.LONG:
                 gross_pnl = (exit_price - position.entry_price) * position.size
             else:
                 gross_pnl = (position.entry_price - exit_price) * position.size
-            
+
             # Комиссии
             commission_rate = 0.001
             open_commission = position.size * position.entry_price * commission_rate
             close_commission = position.size * exit_price * commission_rate
             total_commission = open_commission + close_commission
-            
+
             net_pnl = gross_pnl - total_commission
-            
+
             # Update statistics
             self.total_trades += 1
-            
+
             if net_pnl > 0:
                 self.winning_trades += 1
                 self.consecutive_losses = 0
@@ -3171,46 +3198,57 @@ class ScalpingStrategy:
             else:
                 self.last_loss_time[symbol] = datetime.utcnow()
                 self.consecutive_losses += 1
-                
+
                 if self.consecutive_losses > self.max_consecutive_losses:
                     self.consecutive_losses = self.max_consecutive_losses
-                    
+
                 logger.warning(
                     f"❌ Loss #{self.consecutive_losses} of {self.max_consecutive_losses}"
                 )
-                
+
                 if self.consecutive_losses >= self.max_consecutive_losses:
                     logger.error(
                         f"🛑 MAX CONSECUTIVE LOSSES REACHED: {self.consecutive_losses}!"
                     )
                     self.active = False
-            
+
             self.daily_pnl += net_pnl
-            
+
             # Статистика по символу
             if symbol not in self.trade_stats_per_symbol:
                 self.trade_stats_per_symbol[symbol] = {
-                    "total": 0, "wins": 0, "losses": 0, "pnl": 0.0
+                    "total": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "pnl": 0.0,
                 }
-            
+
             self.trade_stats_per_symbol[symbol]["total"] += 1
             self.trade_stats_per_symbol[symbol]["pnl"] += net_pnl
-            
+
             if net_pnl > 0:
                 self.trade_stats_per_symbol[symbol]["wins"] += 1
             else:
                 self.trade_stats_per_symbol[symbol]["losses"] += 1
-            
+
             # Время удержания
             holding_time = datetime.utcnow() - position.timestamp
-            win_rate = (self.winning_trades / self.total_trades * 100) if self.total_trades > 0 else 0
-            
+            win_rate = (
+                (self.winning_trades / self.total_trades * 100)
+                if self.total_trades > 0
+                else 0
+            )
+
             # Логирование
             logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             if net_pnl > 0:
-                logger.info(f"✅ TRADE COMPLETED: {symbol} {position.side.value.upper()} | WIN")
+                logger.info(
+                    f"✅ TRADE COMPLETED: {symbol} {position.side.value.upper()} | WIN"
+                )
             else:
-                logger.info(f"❌ TRADE COMPLETED: {symbol} {position.side.value.upper()} | LOSS")
+                logger.info(
+                    f"❌ TRADE COMPLETED: {symbol} {position.side.value.upper()} | LOSS"
+                )
             logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             logger.info(f"   Reason: {reason.upper()}")
             logger.info(f"   Entry: ${position.entry_price:.2f}")
@@ -3219,34 +3257,40 @@ class ScalpingStrategy:
             logger.info(f"   Holding time: {holding_time}")
             logger.info(f"   Gross PnL: ${gross_pnl:.2f}")
             logger.info(f"   Commission: ${total_commission:.2f}")
-            logger.info(f"   Net PnL: ${net_pnl:.2f} ({(net_pnl/position.entry_price/position.size*100):.2f}%)")
+            logger.info(
+                f"   Net PnL: ${net_pnl:.2f} ({(net_pnl/position.entry_price/position.size*100):.2f}%)"
+            )
             logger.info(f"   Daily PnL: ${self.daily_pnl:.2f}")
-            logger.info(f"   Total trades: {self.total_trades} (Win rate: {win_rate:.1f}%)")
+            logger.info(
+                f"   Total trades: {self.total_trades} (Win rate: {win_rate:.1f}%)"
+            )
             logger.info(f"   Consecutive losses: {self.consecutive_losses}")
             logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            
+
             # Сохраняем в историю
-            self.trade_history.append({
-                "symbol": symbol,
-                "side": position.side.value,
-                "entry_price": position.entry_price,
-                "exit_price": exit_price,
-                "size": position.size,
-                "pnl": net_pnl,
-                "timestamp": datetime.utcnow(),
-                "reason": reason,
-            })
-            
+            self.trade_history.append(
+                {
+                    "symbol": symbol,
+                    "side": position.side.value,
+                    "entry_price": position.entry_price,
+                    "exit_price": exit_price,
+                    "size": position.size,
+                    "pnl": net_pnl,
+                    "timestamp": datetime.utcnow(),
+                    "reason": reason,
+                }
+            )
+
             if len(self.trade_history) > self.max_history_size:
-                self.trade_history = self.trade_history[-self.max_history_size:]
-            
+                self.trade_history = self.trade_history[-self.max_history_size :]
+
             # Remove position
             del self.positions[symbol]
-            
+
             # Очистка partial TP info
             if symbol in self.position_partial_info:
                 del self.position_partial_info[symbol]
-                
+
         except Exception as e:
             logger.error(f"Error recording trade completion for {symbol}: {e}")
 
@@ -3275,11 +3319,11 @@ class ScalpingStrategy:
             # 🛡️ ЗАЩИТА: Проверка баланса ПЕРЕД закрытием (даже в emergency!)
             base_currency = symbol.split("-")[0]
             quote_currency = symbol.split("-")[1]
-            
+
             if position.side == PositionSide.LONG:
                 # Для SELL нужен BTC/ETH
                 actual_balance = await self.client.get_balance(base_currency)
-                
+
                 if actual_balance < position.size * 0.99:
                     logger.error(
                         f"❌ {symbol} PHANTOM LONG position in emergency! "
@@ -3292,7 +3336,7 @@ class ScalpingStrategy:
                 # Для BUY нужен USDT
                 required_usdt = position.size * current_price * 1.01
                 usdt_balance = await self.client.get_balance(quote_currency)
-                
+
                 if usdt_balance < required_usdt:
                     logger.error(
                         f"❌ Insufficient USDT to close SHORT {symbol} in emergency: "
