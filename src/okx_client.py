@@ -181,6 +181,11 @@ class OKXClient:
 
         except Exception as e:
             logger.error(f"Request failed: {e}")
+            logger.error(f"Failed request details: {method} {endpoint}")
+            if params:
+                logger.error(f"Params: {params}")
+            if data:
+                logger.error(f"Data: {data}")
             raise
 
     async def health_check(self) -> bool:
