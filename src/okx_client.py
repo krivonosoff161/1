@@ -290,6 +290,29 @@ class OKXClient:
 
         return balances
 
+    async def get_balance(self, currency: str) -> float:
+        """
+        Get available balance for specific currency.
+
+        Args:
+            currency: Currency code (e.g., "BTC", "ETH", "USDT")
+
+        Returns:
+            Available balance amount
+        """
+        try:
+            result = await self._make_request("GET", "/account/balance")
+
+            for account in result["data"]:
+                for detail in account.get("details", []):
+                    if detail["ccy"] == currency:
+                        return float(detail.get("availBal", 0))
+
+            return 0.0
+        except Exception as e:
+            logger.error(f"Error getting balance for {currency}: {e}")
+            return 0.0
+
     async def get_account_config(self) -> Dict[str, Any]:
         """
         Get account configuration to check trading mode (SPOT vs MARGIN).
@@ -401,6 +424,10 @@ class OKXClient:
             "ordType": "limit" if order_type == OrderType.LIMIT else "market",
             "sz": str(quantity),
         }
+
+        # КРИТИЧНО! tgtCcy='quote_ccy' для MARKET BUY (безопасно, без займов)
+        if order_type == OrderType.MARKET and side == OrderSide.BUY:
+            data["tgtCcy"] = "quote_ccy"
 
         if price is not None:
             data["px"] = str(price)

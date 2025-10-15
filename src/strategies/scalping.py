@@ -2202,25 +2202,67 @@ class ScalpingStrategy:
                     f"min ${min_position_value} + 5% buffer)"
                 )
 
-            # Place order
-            logger.info(
-                f"📤 Placing order: {signal.side.value} {position_size} "
-                f"{signal.symbol} @ ${signal.price:.2f}"
-            )
-            logger.info(f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}")
+                position_value = new_value
 
             # 🎯 Шаг 1: Открываем основной ордер (БЕЗ TP/SL)
-            order = await self.client.place_order(
-                symbol=signal.symbol,
-                side=signal.side,
-                order_type=OrderType.MARKET,
-                quantity=position_size,
-            )
+            if signal.side == OrderSide.BUY:
+                # LONG: передаем сумму в USDT (tgtCcy='quote_ccy' - безопасно)
+                logger.info(
+                    f"📤 Placing LONG order: BUY ${position_value:.2f} USDT "
+                    f"{signal.symbol} @ ${signal.price:.2f}"
+                )
+                logger.info(f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}")
+
+                order = await self.client.place_order(
+                    symbol=signal.symbol,
+                    side=signal.side,
+                    order_type=OrderType.MARKET,
+                    quantity=position_value,  # Сумма в USDT
+                )
+            else:
+                # SHORT: передаем количество монет (как раньше)
+                logger.info(
+                    f"📤 Placing SHORT order: SELL {position_size} "
+                    f"{signal.symbol} @ ${signal.price:.2f}"
+                )
+                logger.info(f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}")
+
+                order = await self.client.place_order(
+                    symbol=signal.symbol,
+                    side=signal.side,
+                    order_type=OrderType.MARKET,
+                    quantity=position_size,  # Количество монет
+                )
 
             if order:
                 self.pending_orders[order.id] = signal.symbol
                 self.trade_count_hourly += 1
                 self.last_trade_time[signal.symbol] = datetime.utcnow()
+
+                # 🎯 Для BUY ордеров получаем фактически купленное количество
+                actual_position_size = position_size
+                if signal.side == OrderSide.BUY:
+                    try:
+                        # Ждем секунду для обновления баланса
+                        await asyncio.sleep(1)
+
+                        # Получаем баланс базовой валюты
+                        base_currency = signal.symbol.split("-")[0]
+                        current_balance = await self.client.get_balance(base_currency)
+
+                        # Фактически купленное количество может отличаться из-за slippage
+                        actual_position_size = current_balance
+
+                        logger.info(
+                            f"📊 BUY completed: expected ~{position_size:.8f}, "
+                            f"actual balance {actual_position_size:.8f} {base_currency}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not get actual position size for BUY: {e}"
+                        )
+                        # Используем расчетное значение
+                        actual_position_size = position_value / signal.price
 
                 # Create position with SL/TP levels
                 # TP/SL мониторятся ботом (SPOT не поддерживает автоматические)
@@ -2234,7 +2276,7 @@ class ScalpingStrategy:
                     ),
                     entry_price=signal.price,
                     current_price=signal.price,
-                    size=position_size,
+                    size=actual_position_size,  # Используем фактический размер
                     stop_loss=stop_loss,
                     take_profit=take_profit,
                     timestamp=datetime.utcnow(),
@@ -2249,7 +2291,7 @@ class ScalpingStrategy:
                 logger.info(f"   Order ID: {order.id}")
                 logger.info(f"   Side: {signal.side.value.upper()}")
                 logger.info(
-                    f"   Size: {position_size:.8f} {signal.symbol.split('-')[0]}"
+                    f"   Size: {actual_position_size:.8f} {signal.symbol.split('-')[0]}"
                 )
                 logger.info(f"   Entry: ${signal.price:.2f}")
                 logger.info(f"   Take Profit: ${take_profit:.2f}")
@@ -2271,7 +2313,7 @@ class ScalpingStrategy:
                     oco_order_id = await self.client.place_oco_order(
                         symbol=signal.symbol,
                         side=close_side,
-                        quantity=position_size,
+                        quantity=actual_position_size,  # Используем фактический размер
                         tp_trigger_price=take_profit,
                         sl_trigger_price=stop_loss,
                     )
