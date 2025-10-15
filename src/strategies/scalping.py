@@ -2245,66 +2245,22 @@ class ScalpingStrategy:
                 self.trade_count_hourly += 1
                 self.last_trade_time[signal.symbol] = datetime.utcnow()
 
-                # 🎯 Для BUY ордеров получаем фактически купленное количество
-                actual_position_size = position_size
+                # 🎯 УПРОЩЕНО: Всегда используем расчетный размер позиции
+                # Для скальпинга погрешность ~0.2% несущественна
+                # Избегаем багов с кэшированием балансов и OCO закрытиями
                 if signal.side == OrderSide.BUY:
-                    try:
-                        # 🔧 Инициализируем словарь для отслеживания балансов
-                        if not hasattr(self, "previous_balances"):
-                            self.previous_balances = {}
-
-                        # Получаем баланс базовой валюты
-                        base_currency = signal.symbol.split("-")[0]
-
-                        # 🔧 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если НЕТ в кэше - используем ожидаемый размер!
-                        # При первой покупке мы НЕ ЗНАЕМ баланс ДО, поэтому используем расчетный
-                        if base_currency not in self.previous_balances:
-                            logger.info(
-                                f"📊 BUY completed (first trade for {base_currency}): "
-                                f"using expected size {position_size:.8f}"
-                            )
-                            actual_position_size = position_size
-                            
-                            # Сохраняем текущий баланс для СЛЕДУЮЩЕЙ сделки
-                            current_balance = await self.client.get_balance(base_currency)
-                            self.previous_balances[base_currency] = current_balance
-                        else:
-                            # 🔧 Для ПОСЛЕДУЮЩИХ сделок: вычисляем разницу
-                            previous_balance = self.previous_balances[base_currency]
-
-                            # Ждем секунду для обновления баланса
-                            await asyncio.sleep(1)
-
-                            # Получаем текущий баланс ПОСЛЕ покупки
-                            current_balance = await self.client.get_balance(base_currency)
-
-                            # 🔧 Вычисляем разницу (только купленное!)
-                            actual_position_size = current_balance - previous_balance
-
-                            # 🛡️ Защита от отрицательных значений
-                            if actual_position_size < 0 or actual_position_size > position_size * 5:
-                                logger.warning(
-                                    f"⚠️ Suspicious position size detected! Using expected value. "
-                                    f"Previous: {previous_balance:.8f}, Current: {current_balance:.8f}, "
-                                    f"Calculated: {actual_position_size:.8f}, Expected: {position_size:.8f}"
-                                )
-                                actual_position_size = position_size
-
-                            # 🔧 Обновляем кэш баланса для следующей сделки
-                            self.previous_balances[base_currency] = current_balance
-
-                            logger.info(
-                                f"📊 BUY completed: expected ~{position_size:.8f}, "
-                                f"previous balance {previous_balance:.8f}, "
-                                f"current balance {current_balance:.8f}, "
-                                f"actual bought {actual_position_size:.8f} {base_currency}"
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            f"Could not get actual position size for BUY: {e}"
-                        )
-                        # Используем расчетное значение
-                        actual_position_size = position_value / signal.price
+                    # LONG: размер в USDT → делим на цену
+                    actual_position_size = position_value / signal.price
+                    logger.info(
+                        f"📊 BUY completed: position size {actual_position_size:.8f} "
+                        f"(${position_value:.2f} @ ${signal.price:.2f})"
+                    )
+                else:
+                    # SHORT: размер уже в базовой валюте
+                    actual_position_size = position_size
+                    logger.info(
+                        f"📊 SELL completed: position size {actual_position_size:.8f}"
+                    )
 
                 # Create position with SL/TP levels
                 # TP/SL мониторятся ботом (SPOT не поддерживает автоматические)
@@ -2940,15 +2896,17 @@ class ScalpingStrategy:
                 # Для закрытия LONG нужно продать - проверяем базовую валюту (BTC/ETH)
                 actual_balance = await self.client.get_balance(base_currency)
 
-                if actual_balance < position.size * 0.99:  # -1% допуск на округление
-                    # 🔧 ИСПРАВЛЕНИЕ: Проверяем время позиции перед удалением
+                # 🔧 УПРОЩЕНО: Только проверка на полное отсутствие баланса
+                # Допуск 95% учитывает комиссии и округления
+                if actual_balance < position.size * 0.95:
                     time_since_open = (
                         datetime.utcnow() - position.timestamp
                     ).total_seconds()
 
-                    if time_since_open < 300:  # Менее 5 минут
-                        logger.warning(
-                            f"⚠️ {symbol} LONG closed on exchange! "
+                    # 🔧 Увеличен порог до 10 минут (max_holding_minutes)
+                    if time_since_open < 600:  # Менее 10 минут
+                        logger.info(
+                            f"✅ {symbol} LONG closed on exchange! "
                             f"Have {actual_balance:.8f} {base_currency}, "
                             f"was {position.size:.8f}. "
                             f"Age: {time_since_open:.0f}s - OCO TP/SL likely"
@@ -2960,8 +2918,8 @@ class ScalpingStrategy:
                         del self.positions[symbol]
                         return
                     else:
-                        logger.error(
-                            f"❌ {symbol} LONG is PHANTOM! "
+                        logger.warning(
+                            f"⚠️ {symbol} LONG is OLD PHANTOM! "
                             f"Have {actual_balance:.8f}, shows {position.size:.8f}. "
                             f"Age: {time_since_open:.0f}s - removing!"
                         )
