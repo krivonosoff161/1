@@ -444,13 +444,13 @@ class ScalpingStrategy:
                     "position_size_multiplier", 1.2
                 ),
                 tp_atr_multiplier=config.adaptive_regime["trending"].get(
-                    "tp_atr_multiplier", 2.0
+                    "tp_atr_multiplier", 0.3
                 ),
                 sl_atr_multiplier=config.adaptive_regime["trending"].get(
-                    "sl_atr_multiplier", 2.0
+                    "sl_atr_multiplier", 0.25
                 ),
                 max_holding_minutes=config.adaptive_regime["trending"].get(
-                    "max_holding_minutes", 60
+                    "max_holding_minutes", 5
                 ),
                 cooldown_after_loss_minutes=config.adaptive_regime["trending"].get(
                     "cooldown_after_loss_minutes", 2
@@ -559,13 +559,13 @@ class ScalpingStrategy:
                     "position_size_multiplier", 1.0
                 ),
                 tp_atr_multiplier=config.adaptive_regime["ranging"].get(
-                    "tp_atr_multiplier", 1.5
+                    "tp_atr_multiplier", 0.25
                 ),
                 sl_atr_multiplier=config.adaptive_regime["ranging"].get(
-                    "sl_atr_multiplier", 2.5
+                    "sl_atr_multiplier", 0.2
                 ),
                 max_holding_minutes=config.adaptive_regime["ranging"].get(
-                    "max_holding_minutes", 25
+                    "max_holding_minutes", 3
                 ),
                 cooldown_after_loss_minutes=config.adaptive_regime["ranging"].get(
                     "cooldown_after_loss_minutes", 5
@@ -674,13 +674,13 @@ class ScalpingStrategy:
                     "position_size_multiplier", 0.5
                 ),
                 tp_atr_multiplier=config.adaptive_regime["choppy"].get(
-                    "tp_atr_multiplier", 1.0
+                    "tp_atr_multiplier", 0.2
                 ),
                 sl_atr_multiplier=config.adaptive_regime["choppy"].get(
-                    "sl_atr_multiplier", 3.5
+                    "sl_atr_multiplier", 0.15
                 ),
                 max_holding_minutes=config.adaptive_regime["choppy"].get(
-                    "max_holding_minutes", 8
+                    "max_holding_minutes", 2
                 ),
                 cooldown_after_loss_minutes=config.adaptive_regime["choppy"].get(
                     "cooldown_after_loss_minutes", 15

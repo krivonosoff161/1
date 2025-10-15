@@ -150,9 +150,9 @@ scalping:
       min_score_threshold: 6            # Легкий вход (50%)
       max_trades_per_hour: 20           # Много сделок
       position_size_multiplier: 1.2     # Крупнее позиции (+20%)
-      tp_atr_multiplier: 2.0            # Дальше цель (тренд продолжится)
-      sl_atr_multiplier: 2.5            # Шире стоп (больше воздуха для откатов)
-      max_holding_minutes: 60           # Долго держим (тренд продолжается!)
+      tp_atr_multiplier: 0.3            # СКАЛЬП: $150 TP (+0.13%) с учетом комиссии
+      sl_atr_multiplier: 0.25           # СКАЛЬП: $125 SL (-0.11%)
+      max_holding_minutes: 5            # СКАЛЬП: 5 минут максимум!
       cooldown_after_loss_minutes: 2    # Быстро возвращаемся
       pivot_bonus_multiplier: 1.5       # Усиленные бонусы (уровни работают в тренде)
       volume_profile_bonus_multiplier: 1.0
@@ -202,9 +202,9 @@ scalping:
       min_score_threshold: 4            # Легкий вход (33% - максимум сигналов от уровней)
       max_trades_per_hour: 10           # Средне
       position_size_multiplier: 1.0     # Стандартный размер
-      tp_atr_multiplier: 1.5            # Ближе цель (диапазон узкий)
-      sl_atr_multiplier: 2.5            # Шире стоп (много шума)
-      max_holding_minutes: 25           # Средне (диапазон ограничен)
+      tp_atr_multiplier: 0.25           # СКАЛЬП: $125 TP (+0.11%) с учетом комиссии
+      sl_atr_multiplier: 0.2            # СКАЛЬП: $100 SL (-0.09%)
+      max_holding_minutes: 3            # СКАЛЬП: 3 минуты максимум!
       cooldown_after_loss_minutes: 5    # Стандартная пауза
       pivot_bonus_multiplier: 1.5       # Усиление бонусов за уровни!
       volume_profile_bonus_multiplier: 1.5
@@ -254,9 +254,9 @@ scalping:
       min_score_threshold: 7            # Строго, но реалистично (58% - достижимо с бонусами)
       max_trades_per_hour: 4            # Мало сделок
       position_size_multiplier: 0.6     # Уменьшенный размер (защита)
-      tp_atr_multiplier: 1.0            # Очень близко (хватай и беги)
-      sl_atr_multiplier: 3.5            # Очень широко (хаос)
-      max_holding_minutes: 8            # Быстро выходим (риск разворота!)
+      tp_atr_multiplier: 0.2            # СКАЛЬП: $100 TP (+0.09%) минимум с учетом комиссии
+      sl_atr_multiplier: 0.15           # СКАЛЬП: $75 SL (-0.07%) жесткий стоп
+      max_holding_minutes: 2            # СКАЛЬП: 2 минуты - хватай и беги!
       cooldown_after_loss_minutes: 15   # Долгая пауза
       pivot_bonus_multiplier: 2.0       # Максимальное усиление!
       volume_profile_bonus_multiplier: 2.0

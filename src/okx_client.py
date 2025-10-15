@@ -351,8 +351,11 @@ class OKXClient:
                 for account in result["data"]:
                     for detail in account.get("details", []):
                         if detail.get("ccy") == currency:
-                            # 'borrowFroz' = frozen borrowed amount
-                            borrowed = float(detail.get("borrowFroz", 0))
+                            # 'liab' = actual borrowed amount (liability)
+                            # На SPOT режиме должно быть "0" или ""
+                            borrowed_str = detail.get("liab", "0")
+                            borrowed = float(borrowed_str) if borrowed_str else 0.0
+                            
                             if borrowed > 0:
                                 logger.warning(
                                     f"⚠️ BORROWED DETECTED: {borrowed:.6f} {currency}"
