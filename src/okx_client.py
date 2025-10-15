@@ -360,7 +360,7 @@ class OKXClient:
                             # На SPOT режиме должно быть "0" или ""
                             borrowed_str = detail.get("liab", "0")
                             borrowed = float(borrowed_str) if borrowed_str else 0.0
-                            
+
                             if borrowed > 0:
                                 logger.warning(
                                     f"⚠️ BORROWED DETECTED: {borrowed:.6f} {currency}"
@@ -729,21 +729,35 @@ class OKXClient:
     async def get_algo_order_status(self, algo_id: str) -> Optional[Dict]:
         """
         Получить статус конкретного algo ордера.
-        
+
         Args:
             algo_id: ID algo ордера
-            
+
         Returns:
             Информация об ордере или None если не найден
         """
         try:
+            # 🔧 ИСПРАВЛЕНИЕ: Сначала пробуем активные ордера
             result = await self._make_request(
-                "GET", "/trade/orders-algo-history",
-                params={"algoId": algo_id, "instType": "SPOT"}
+                "GET",
+                "/trade/orders-algo-pending",
+                params={"algoId": algo_id, "instType": "SPOT", "ordType": "oco"},
             )
-            
-            if result.get("data"):
+
+            if result.get("data") and len(result["data"]) > 0:
                 return result["data"][0]
+            
+            # Если не найден в активных, проверяем историю
+            # (ордер мог уже исполниться)
+            result = await self._make_request(
+                "GET",
+                "/trade/orders-algo-history",
+                params={"algoId": algo_id, "instType": "SPOT", "ordType": "oco"},
+            )
+
+            if result.get("data") and len(result["data"]) > 0:
+                return result["data"][0]
+            
             return None
         except Exception as e:
             logger.debug(f"Could not get algo order status for {algo_id}: {e}")
