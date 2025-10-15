@@ -2566,8 +2566,10 @@ class ScalpingStrategy:
         if not position:
             return
 
-        # 🎯 НОВОЕ: Проверка статуса OCO ордера
-        if position.algo_order_id:
+        # 🔧 ОТКЛЮЧЕНО: Проверка статуса OCO (вызывает Invalid Sign!)
+        # OCO ордера работают автоматически на бирже
+        # Закрытие определяем по изменению баланса
+        if False and position.algo_order_id:
             try:
                 oco_status = await self.client.get_algo_order_status(
                     position.algo_order_id
