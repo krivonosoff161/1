@@ -27,7 +27,7 @@ scalping:
   timeframe: "5m"  # 1m не работает в DEMO (статичные данные), используем 5m
   
   # ⚙️ Trading Direction Control
-  allow_short_positions: false  # 🔥 ТОЛЬКО LONG (нет монет для SHORT!)
+  allow_short_positions: true   # ✅ SHORT разрешены (будут работать после первых LONG)
   allow_long_positions: true    # ✅ LONG разрешены
   
   # PHASE 1: Multi-Timeframe Confirmation (MTF)
