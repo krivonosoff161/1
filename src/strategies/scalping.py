@@ -1596,6 +1596,32 @@ class ScalpingStrategy:
             # Расчёт confidence (0.0 - 1.0)
             long_confidence = long_score / 12.0  # Максимум 12 баллов (с MACD)
             short_confidence = short_score / 12.0
+            
+            # 📊 ДЕТАЛЬНЫЙ ВЫВОД СКОРИНГА (каждые 30 сек)
+            current_time = datetime.utcnow()
+            if not hasattr(self, '_last_detail_log'):
+                self._last_detail_log = {}
+            
+            last_log = self._last_detail_log.get(symbol, current_time)
+            if (current_time - last_log).total_seconds() >= 30:
+                logger.info(
+                    f"📊 {symbol} SCORING DETAILS:\n"
+                    f"  LONG: {long_score}/12\n"
+                    f"    SMA: +{1 if (current_price > sma_fast.value > sma_slow.value) else 0}\n"
+                    f"    EMA: +{2 if ema_fast.value > ema_slow.value else 0}\n"
+                    f"    RSI: +{4 if rsi.value <= (rsi_oversold - 5) else (3 if rsi.value <= rsi_oversold else (2 if rsi.value <= (rsi_oversold + 10) else (1 if rsi.value <= (rsi_oversold + 20) else 0)))}\n"
+                    f"    BB: +{2 if current_price <= bb.metadata.get('lower_band', 0) * 1.002 else 0}\n"
+                    f"    Vol: +{2 if volume.value >= volume_threshold else 0}\n"
+                    f"    MACD: +{2 if (macd_line > macd_signal and macd_line > 0) else 0}\n"
+                    f"  SHORT: {short_score}/12\n"
+                    f"    SMA: +{1 if (current_price < sma_fast.value < sma_slow.value) else 0}\n"
+                    f"    EMA: +{2 if ema_fast.value < ema_slow.value else 0}\n"
+                    f"    RSI: +{4 if rsi.value >= (rsi_overbought + 5) else (3 if rsi.value >= rsi_overbought else (2 if rsi.value >= (rsi_overbought - 10) else (1 if rsi.value >= (rsi_overbought - 20) else 0)))}\n"
+                    f"    BB: +{2 if current_price >= bb.metadata.get('upper_band', 0) * 0.998 else 0}\n"
+                    f"    Vol: +{2 if volume.value >= volume_threshold else 0}\n"
+                    f"    MACD: +{2 if (macd_line < macd_signal and macd_line < 0) else 0}"
+                )
+                self._last_detail_log[symbol] = current_time
 
             # Проверка существующей позиции
             existing_position = self.positions.get(symbol)
