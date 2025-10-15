@@ -2841,17 +2841,33 @@ class ScalpingStrategy:
                 OrderSide.SELL if position.side == PositionSide.LONG else OrderSide.BUY
             )
 
-            # 🛡️ ЗАЩИТА #4: Проверка баланса для закрытия SHORT
-            if position.side == PositionSide.SHORT:
+            # 🛡️ ЗАЩИТА #4: Проверка баланса ПЕРЕД закрытием (КРИТИЧНО!)
+            base_currency = symbol.split("-")[0]  # BTC, ETH, и т.д.
+            quote_currency = symbol.split("-")[1]  # USDT
+            
+            if position.side == PositionSide.LONG:
+                # Для закрытия LONG нужно продать - проверяем базовую валюту (BTC/ETH)
+                actual_balance = await self.client.get_balance(base_currency)
+                
+                if actual_balance < position.size * 0.99:  # -1% допуск на округление
+                    logger.error(
+                        f"❌ {symbol} LONG position is PHANTOM! "
+                        f"Cannot SELL: have {actual_balance:.8f} {base_currency}, "
+                        f"position shows {position.size:.8f}. "
+                        f"Removing phantom position to prevent loan!"
+                    )
+                    # Удаляем фантомную позицию из трекинга
+                    del self.positions[symbol]
+                    return  # НЕ пытаемся продать то чего нет!
+            else:
                 # Для закрытия SHORT нужно купить обратно - проверяем USDT
                 required_usdt = position.size * current_price * 1.01  # +1% запас
-                base_currency = "USDT"
-                base_balance = await self.client.get_balance(base_currency)
+                usdt_balance = await self.client.get_balance(quote_currency)
 
-                if base_balance < required_usdt:
+                if usdt_balance < required_usdt:
                     logger.error(
                         f"❌ Insufficient USDT to close SHORT {symbol}: "
-                        f"Need ${required_usdt:.2f}, have ${base_balance:.2f} - cannot close!"
+                        f"Need ${required_usdt:.2f}, have ${usdt_balance:.2f} - cannot close!"
                     )
                     return  # НЕ пытаемся закрыть без средств!
 
@@ -3065,6 +3081,34 @@ class ScalpingStrategy:
             order_side = (
                 OrderSide.SELL if position.side == PositionSide.LONG else OrderSide.BUY
             )
+
+            # 🛡️ ЗАЩИТА: Проверка баланса ПЕРЕД закрытием (даже в emergency!)
+            base_currency = symbol.split("-")[0]
+            quote_currency = symbol.split("-")[1]
+            
+            if position.side == PositionSide.LONG:
+                # Для SELL нужен BTC/ETH
+                actual_balance = await self.client.get_balance(base_currency)
+                
+                if actual_balance < position.size * 0.99:
+                    logger.error(
+                        f"❌ {symbol} PHANTOM LONG position in emergency! "
+                        f"Cannot SELL: have {actual_balance:.8f} {base_currency}, "
+                        f"need {position.size:.8f}. Removing phantom position!"
+                    )
+                    del self.positions[symbol]
+                    return
+            else:
+                # Для BUY нужен USDT
+                required_usdt = position.size * current_price * 1.01
+                usdt_balance = await self.client.get_balance(quote_currency)
+                
+                if usdt_balance < required_usdt:
+                    logger.error(
+                        f"❌ Insufficient USDT to close SHORT {symbol} in emergency: "
+                        f"Need ${required_usdt:.2f}, have ${usdt_balance:.2f}"
+                    )
+                    return
 
             logger.warning(
                 f"🔇 SILENT CLOSE: {order_side.value} {position.size:.6f} {symbol} "
