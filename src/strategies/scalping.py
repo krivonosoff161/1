@@ -1260,14 +1260,14 @@ class ScalpingStrategy:
         Использует polling с rate limiting для защиты от превышения API лимитов.
         Обеспечивает быструю реакцию на изменения рынка (4x быстрее).
         """
-        logger.info(f"🎯 Starting scalping for {symbol} (polling mode, 15s intervals)")
+        logger.info(f"🎯 Starting scalping for {symbol} (polling mode, 5s intervals)")
 
         try:
             # Получаем начальные рыночные данные
             await self._update_market_data(symbol)
             logger.info(f"✅ {symbol}: Initial market data loaded")
 
-            # Polling loop - опрос каждые 15 секунд (4x быстрее)
+            # Polling loop - опрос каждые 5 секунд (реалистичный скальпинг)
             while self.active:
                 try:
                     # Проверяем API rate limiting
@@ -1294,8 +1294,8 @@ class ScalpingStrategy:
                 except Exception as e:
                     logger.error(f"❌ Error processing {symbol}: {e}")
 
-                # Ждем 15 секунд до следующего опроса (4x быстрее)
-                await asyncio.sleep(15)
+                # Ждем 5 секунд до следующего опроса (реалистичный скальпинг)
+                await asyncio.sleep(5)
 
         except Exception as e:
             logger.error(f"❌ Fatal error trading {symbol}: {e}")
