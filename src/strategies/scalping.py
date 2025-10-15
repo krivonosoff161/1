@@ -2243,19 +2243,41 @@ class ScalpingStrategy:
                 actual_position_size = position_size
                 if signal.side == OrderSide.BUY:
                     try:
-                        # Ждем секунду для обновления баланса
-                        await asyncio.sleep(1)
-
+                        # 🔧 Инициализируем словарь для отслеживания балансов
+                        if not hasattr(self, 'previous_balances'):
+                            self.previous_balances = {}
+                        
                         # Получаем баланс базовой валюты
                         base_currency = signal.symbol.split("-")[0]
+                        
+                        # 🔧 ИСПРАВЛЕНИЕ БАГА: Сохраняем баланс ДО покупки
+                        previous_balance = self.previous_balances.get(base_currency, 0.0)
+                        
+                        # Ждем секунду для обновления баланса
+                        await asyncio.sleep(1)
+                        
+                        # Получаем текущий баланс ПОСЛЕ покупки
                         current_balance = await self.client.get_balance(base_currency)
 
-                        # Фактически купленное количество может отличаться из-за slippage
-                        actual_position_size = current_balance
+                        # 🔧 ИСПРАВЛЕНИЕ: Вычисляем разницу (только купленное!)
+                        actual_position_size = current_balance - previous_balance
+                        
+                        # 🛡️ Защита от отрицательных значений
+                        if actual_position_size < 0:
+                            logger.warning(
+                                f"⚠️ Negative position size detected! Using expected value. "
+                                f"Previous: {previous_balance:.8f}, Current: {current_balance:.8f}"
+                            )
+                            actual_position_size = position_size
+                        
+                        # 🔧 Обновляем кэш баланса для следующей сделки
+                        self.previous_balances[base_currency] = current_balance
 
                         logger.info(
                             f"📊 BUY completed: expected ~{position_size:.8f}, "
-                            f"actual balance {actual_position_size:.8f} {base_currency}"
+                            f"previous balance {previous_balance:.8f}, "
+                            f"current balance {current_balance:.8f}, "
+                            f"actual bought {actual_position_size:.8f} {base_currency}"
                         )
                     except Exception as e:
                         logger.warning(
