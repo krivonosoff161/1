@@ -433,9 +433,9 @@ class OKXClient:
             "sz": str(quantity),
         }
 
-        # КРИТИЧНО! tgtCcy='quote_ccy' для MARKET BUY (безопасно, без займов)
-        if order_type == OrderType.MARKET and side == OrderSide.BUY:
-            data["tgtCcy"] = "quote_ccy"
+        # 🔧 ИСПРАВЛЕНО: tgtCcy='quote_ccy' ТОЛЬКО для открытия LONG (quantity в USDT)
+        # Для закрытия SHORT (BUY) quantity уже в базовой валюте - НЕ нужен tgtCcy!
+        # НЕ добавляем tgtCcy - OKX сам определит по типу quantity
 
         if price is not None:
             data["px"] = str(price)
