@@ -433,13 +433,14 @@ class OKXClient:
             "sz": str(quantity),
         }
 
-        # 🔧 ИСПРАВЛЕНО: tgtCcy для BUY только если quantity > 10
-        # Если quantity > 10 = это сумма в USDT (открытие LONG)
-        # Если quantity < 1 = это количество монет (закрытие SHORT)
+        # 🔧 КРИТИЧНО! tgtCcy для BUY MARKET ордеров
+        # quantity > 10 = открытие LONG (сумма в USDT) → tgtCcy='quote_ccy'
+        # quantity < 1 = закрытие SHORT (количество BTC/ETH) → tgtCcy='base_ccy'
         if order_type == OrderType.MARKET and side == OrderSide.BUY:
             if quantity > 10:  # Открытие LONG (сумма в USDT)
                 data["tgtCcy"] = "quote_ccy"
-            # Иначе это закрытие SHORT - sz в базовой валюте, tgtCcy не нужен
+            else:  # Закрытие SHORT (количество монет)
+                data["tgtCcy"] = "base_ccy"
 
         if price is not None:
             data["px"] = str(price)
