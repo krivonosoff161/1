@@ -2256,37 +2256,49 @@ class ScalpingStrategy:
                         # Получаем баланс базовой валюты
                         base_currency = signal.symbol.split("-")[0]
 
-                        # 🔧 ИСПРАВЛЕНИЕ БАГА: Сохраняем баланс ДО покупки
-                        previous_balance = self.previous_balances.get(
-                            base_currency, 0.0
-                        )
-
-                        # Ждем секунду для обновления баланса
-                        await asyncio.sleep(1)
-
-                        # Получаем текущий баланс ПОСЛЕ покупки
-                        current_balance = await self.client.get_balance(base_currency)
-
-                        # 🔧 ИСПРАВЛЕНИЕ: Вычисляем разницу (только купленное!)
-                        actual_position_size = current_balance - previous_balance
-
-                        # 🛡️ Защита от отрицательных значений
-                        if actual_position_size < 0:
-                            logger.warning(
-                                f"⚠️ Negative position size detected! Using expected value. "
-                                f"Previous: {previous_balance:.8f}, Current: {current_balance:.8f}"
+                        # 🔧 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если НЕТ в кэше - используем ожидаемый размер!
+                        # При первой покупке мы НЕ ЗНАЕМ баланс ДО, поэтому используем расчетный
+                        if base_currency not in self.previous_balances:
+                            logger.info(
+                                f"📊 BUY completed (first trade for {base_currency}): "
+                                f"using expected size {position_size:.8f}"
                             )
                             actual_position_size = position_size
+                            
+                            # Сохраняем текущий баланс для СЛЕДУЮЩЕЙ сделки
+                            current_balance = await self.client.get_balance(base_currency)
+                            self.previous_balances[base_currency] = current_balance
+                        else:
+                            # 🔧 Для ПОСЛЕДУЮЩИХ сделок: вычисляем разницу
+                            previous_balance = self.previous_balances[base_currency]
 
-                        # 🔧 Обновляем кэш баланса для следующей сделки
-                        self.previous_balances[base_currency] = current_balance
+                            # Ждем секунду для обновления баланса
+                            await asyncio.sleep(1)
 
-                        logger.info(
-                            f"📊 BUY completed: expected ~{position_size:.8f}, "
-                            f"previous balance {previous_balance:.8f}, "
-                            f"current balance {current_balance:.8f}, "
-                            f"actual bought {actual_position_size:.8f} {base_currency}"
-                        )
+                            # Получаем текущий баланс ПОСЛЕ покупки
+                            current_balance = await self.client.get_balance(base_currency)
+
+                            # 🔧 Вычисляем разницу (только купленное!)
+                            actual_position_size = current_balance - previous_balance
+
+                            # 🛡️ Защита от отрицательных значений
+                            if actual_position_size < 0 or actual_position_size > position_size * 5:
+                                logger.warning(
+                                    f"⚠️ Suspicious position size detected! Using expected value. "
+                                    f"Previous: {previous_balance:.8f}, Current: {current_balance:.8f}, "
+                                    f"Calculated: {actual_position_size:.8f}, Expected: {position_size:.8f}"
+                                )
+                                actual_position_size = position_size
+
+                            # 🔧 Обновляем кэш баланса для следующей сделки
+                            self.previous_balances[base_currency] = current_balance
+
+                            logger.info(
+                                f"📊 BUY completed: expected ~{position_size:.8f}, "
+                                f"previous balance {previous_balance:.8f}, "
+                                f"current balance {current_balance:.8f}, "
+                                f"actual bought {actual_position_size:.8f} {base_currency}"
+                            )
                     except Exception as e:
                         logger.warning(
                             f"Could not get actual position size for BUY: {e}"
