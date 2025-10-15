@@ -433,9 +433,13 @@ class OKXClient:
             "sz": str(quantity),
         }
 
-        # 🔧 ИСПРАВЛЕНО: tgtCcy='quote_ccy' ТОЛЬКО для открытия LONG (quantity в USDT)
-        # Для закрытия SHORT (BUY) quantity уже в базовой валюте - НЕ нужен tgtCcy!
-        # НЕ добавляем tgtCcy - OKX сам определит по типу quantity
+        # 🔧 ИСПРАВЛЕНО: tgtCcy для BUY только если quantity > 10
+        # Если quantity > 10 = это сумма в USDT (открытие LONG)
+        # Если quantity < 1 = это количество монет (закрытие SHORT)
+        if order_type == OrderType.MARKET and side == OrderSide.BUY:
+            if quantity > 10:  # Открытие LONG (сумма в USDT)
+                data["tgtCcy"] = "quote_ccy"
+            # Иначе это закрытие SHORT - sz в базовой валюте, tgtCcy не нужен
 
         if price is not None:
             data["px"] = str(price)
