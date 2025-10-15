@@ -353,10 +353,10 @@ class ScalpingStrategy:
             trending_indicators = IndicatorParameters(
                 rsi_overbought=config.adaptive_regime.get("trending", {})
                 .get("indicators", {})
-                .get("rsi_overbought", 75.0),
+                .get("rsi_overbought", 70.0),  # СКАЛЬП: четкие сигналы
                 rsi_oversold=config.adaptive_regime.get("trending", {})
                 .get("indicators", {})
-                .get("rsi_oversold", 25.0),
+                .get("rsi_oversold", 30.0),  # СКАЛЬП: четкие сигналы
                 volume_threshold=config.adaptive_regime.get("trending", {})
                 .get("indicators", {})
                 .get("volume_threshold", 1.05),
@@ -592,22 +592,22 @@ class ScalpingStrategy:
                     "volume_threshold", 1.25
                 ),
                 sma_fast=config.adaptive_regime["choppy"]["indicators"].get(
-                    "sma_fast", 12
+                    "sma_fast", 8
                 ),
                 sma_slow=config.adaptive_regime["choppy"]["indicators"].get(
-                    "sma_slow", 35
+                    "sma_slow", 25
                 ),
                 ema_fast=config.adaptive_regime["choppy"]["indicators"].get(
-                    "ema_fast", 13
+                    "ema_fast", 8
                 ),
                 ema_slow=config.adaptive_regime["choppy"]["indicators"].get(
-                    "ema_slow", 34
+                    "ema_slow", 21
                 ),
                 atr_period=config.adaptive_regime["choppy"]["indicators"].get(
-                    "atr_period", 21
+                    "atr_period", 14
                 ),
                 min_volatility_atr=config.adaptive_regime["choppy"]["indicators"].get(
-                    "min_volatility_atr", 0.0008
+                    "min_volatility_atr", 0.0004
                 ),
             )
 
@@ -621,7 +621,7 @@ class ScalpingStrategy:
                 ].get("score_bonus", 3),
                 mtf_confirmation_timeframe=config.adaptive_regime["choppy"]["modules"][
                     "multi_timeframe"
-                ].get("confirmation_timeframe", "15m"),
+                ].get("confirmation_timeframe", "15m"),  # 15m для скальпа
                 correlation_threshold=config.adaptive_regime["choppy"]["modules"][
                     "correlation_filter"
                 ].get("correlation_threshold", 0.6),
@@ -642,13 +642,13 @@ class ScalpingStrategy:
                 ].get("avoid_weekends", True),
                 pivot_level_tolerance_percent=config.adaptive_regime["choppy"][
                     "modules"
-                ]["pivot_points"].get("level_tolerance_percent", 0.15),
+                ]["pivot_points"].get("level_tolerance_percent", 0.2),  # СКАЛЬП: не слишком узко
                 pivot_score_bonus_near_level=config.adaptive_regime["choppy"][
                     "modules"
                 ]["pivot_points"].get("score_bonus_near_level", 3),
                 pivot_use_last_n_days=config.adaptive_regime["choppy"]["modules"][
                     "pivot_points"
-                ].get("use_last_n_days", 7),
+                ].get("use_last_n_days", 5),  # СКАЛЬП: средний период
                 vp_score_bonus_in_value_area=config.adaptive_regime["choppy"][
                     "modules"
                 ]["volume_profile"].get("score_bonus_in_value_area", 3),
@@ -2319,6 +2319,9 @@ class ScalpingStrategy:
                     )
 
                     if oco_order_id:
+                        # Сохраняем OCO ID в позиции для отслеживания
+                        position.algo_order_id = oco_order_id
+                        
                         logger.info(
                             f"✅ OCO order placed: ID={oco_order_id} | "
                             f"TP @ ${take_profit:.2f}, SL @ ${stop_loss:.2f}"
@@ -2532,6 +2535,48 @@ class ScalpingStrategy:
         position = self.positions.get(symbol)
         if not position:
             return
+
+        # 🎯 НОВОЕ: Проверка статуса OCO ордера
+        if position.algo_order_id:
+            try:
+                oco_status = await self.client.get_algo_order_status(position.algo_order_id)
+                
+                if oco_status:
+                    state = oco_status.get("state")
+                    
+                    # state: "live" - активен, "filled" - исполнен, "canceled" - отменен
+                    if state == "filled":
+                        # OCO сработал! Определяем TP или SL
+                        actual_px = float(oco_status.get("actualPx", current_price))
+                        
+                        # Определяем что сработало
+                        if position.side == PositionSide.LONG:
+                            if actual_px >= position.take_profit * 0.99:
+                                reason = "take_profit_oco"
+                            else:
+                                reason = "stop_loss_oco"
+                        else:
+                            if actual_px <= position.take_profit * 1.01:
+                                reason = "take_profit_oco"
+                            else:
+                                reason = "stop_loss_oco"
+                        
+                        logger.info(
+                            f"🎯 OCO executed! {symbol} {reason.upper()} @ ${actual_px:.2f}"
+                        )
+                        
+                        # Обновляем статистику и удаляем позицию
+                        await self._record_trade_completion(
+                            symbol, actual_px, reason
+                        )
+                        return  # Позиция закрыта
+                        
+                    elif state == "canceled":
+                        logger.warning(f"⚠️ OCO canceled for {symbol}, position unprotected!")
+                        position.algo_order_id = None  # Больше не отслеживаем
+                        
+            except Exception as e:
+                logger.debug(f"Could not check OCO status for {symbol}: {e}")
 
         # Update position price
         position.update_price(current_price)
@@ -3059,6 +3104,129 @@ class ScalpingStrategy:
         finally:
             self._emergency_in_progress = False
             logger.info("🚨 Emergency close completed")
+
+    async def _record_trade_completion(
+        self, symbol: str, exit_price: float, reason: str
+    ) -> None:
+        """
+        Записать завершение сделки (когда OCO уже закрыл позицию на бирже).
+        
+        Обновляет статистику торговли без размещения ордера закрытия.
+        
+        Args:
+            symbol: Торговая пара
+            exit_price: Цена закрытия
+            reason: Причина (take_profit_oco, stop_loss_oco)
+        """
+        position = self.positions.get(symbol)
+        if not position:
+            return
+            
+        try:
+            base_currency = symbol.split("-")[0]
+            
+            # Расчет PnL
+            if position.side == PositionSide.LONG:
+                gross_pnl = (exit_price - position.entry_price) * position.size
+            else:
+                gross_pnl = (position.entry_price - exit_price) * position.size
+            
+            # Комиссии
+            commission_rate = 0.001
+            open_commission = position.size * position.entry_price * commission_rate
+            close_commission = position.size * exit_price * commission_rate
+            total_commission = open_commission + close_commission
+            
+            net_pnl = gross_pnl - total_commission
+            
+            # Update statistics
+            self.total_trades += 1
+            
+            if net_pnl > 0:
+                self.winning_trades += 1
+                self.consecutive_losses = 0
+                logger.info(f"✅ Win streak reset, consecutive losses: 0")
+            else:
+                self.last_loss_time[symbol] = datetime.utcnow()
+                self.consecutive_losses += 1
+                
+                if self.consecutive_losses > self.max_consecutive_losses:
+                    self.consecutive_losses = self.max_consecutive_losses
+                    
+                logger.warning(
+                    f"❌ Loss #{self.consecutive_losses} of {self.max_consecutive_losses}"
+                )
+                
+                if self.consecutive_losses >= self.max_consecutive_losses:
+                    logger.error(
+                        f"🛑 MAX CONSECUTIVE LOSSES REACHED: {self.consecutive_losses}!"
+                    )
+                    self.active = False
+            
+            self.daily_pnl += net_pnl
+            
+            # Статистика по символу
+            if symbol not in self.trade_stats_per_symbol:
+                self.trade_stats_per_symbol[symbol] = {
+                    "total": 0, "wins": 0, "losses": 0, "pnl": 0.0
+                }
+            
+            self.trade_stats_per_symbol[symbol]["total"] += 1
+            self.trade_stats_per_symbol[symbol]["pnl"] += net_pnl
+            
+            if net_pnl > 0:
+                self.trade_stats_per_symbol[symbol]["wins"] += 1
+            else:
+                self.trade_stats_per_symbol[symbol]["losses"] += 1
+            
+            # Время удержания
+            holding_time = datetime.utcnow() - position.timestamp
+            win_rate = (self.winning_trades / self.total_trades * 100) if self.total_trades > 0 else 0
+            
+            # Логирование
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            if net_pnl > 0:
+                logger.info(f"✅ TRADE COMPLETED: {symbol} {position.side.value.upper()} | WIN")
+            else:
+                logger.info(f"❌ TRADE COMPLETED: {symbol} {position.side.value.upper()} | LOSS")
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(f"   Reason: {reason.upper()}")
+            logger.info(f"   Entry: ${position.entry_price:.2f}")
+            logger.info(f"   Exit: ${exit_price:.2f}")
+            logger.info(f"   Size: {position.size:.8f} {base_currency}")
+            logger.info(f"   Holding time: {holding_time}")
+            logger.info(f"   Gross PnL: ${gross_pnl:.2f}")
+            logger.info(f"   Commission: ${total_commission:.2f}")
+            logger.info(f"   Net PnL: ${net_pnl:.2f} ({(net_pnl/position.entry_price/position.size*100):.2f}%)")
+            logger.info(f"   Daily PnL: ${self.daily_pnl:.2f}")
+            logger.info(f"   Total trades: {self.total_trades} (Win rate: {win_rate:.1f}%)")
+            logger.info(f"   Consecutive losses: {self.consecutive_losses}")
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            
+            # Сохраняем в историю
+            self.trade_history.append({
+                "symbol": symbol,
+                "side": position.side.value,
+                "entry_price": position.entry_price,
+                "exit_price": exit_price,
+                "size": position.size,
+                "pnl": net_pnl,
+                "timestamp": datetime.utcnow(),
+                "reason": reason,
+            })
+            
+            if len(self.trade_history) > self.max_history_size:
+                self.trade_history = self.trade_history[-self.max_history_size:]
+            
+            # Remove position
+            del self.positions[symbol]
+            
+            # Очистка partial TP info
+            if symbol in self.position_partial_info:
+                del self.position_partial_info[symbol]
+                
+        except Exception as e:
+            logger.error(f"Error recording trade completion for {symbol}: {e}")
 
     async def _close_position_silent(self, symbol: str, reason: str) -> None:
         """

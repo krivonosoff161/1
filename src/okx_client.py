@@ -721,6 +721,29 @@ class OKXClient:
             logger.error(f"Error getting algo orders: {e}")
             return []
 
+    async def get_algo_order_status(self, algo_id: str) -> Optional[Dict]:
+        """
+        Получить статус конкретного algo ордера.
+        
+        Args:
+            algo_id: ID algo ордера
+            
+        Returns:
+            Информация об ордере или None если не найден
+        """
+        try:
+            result = await self._make_request(
+                "GET", "/trade/orders-algo-history",
+                params={"algoId": algo_id, "instType": "SPOT"}
+            )
+            
+            if result.get("data"):
+                return result["data"][0]
+            return None
+        except Exception as e:
+            logger.debug(f"Could not get algo order status for {algo_id}: {e}")
+            return None
+
     async def cancel_algo_order(self, algo_id: str, symbol: str) -> bool:
         """
         Отменить algo order (TP/SL).

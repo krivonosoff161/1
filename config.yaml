@@ -159,8 +159,8 @@ scalping:
     
       # Параметры индикаторов для трендового рынка
       indicators:
-        rsi_overbought: 75              # Шире диапазон - больше сигналов
-        rsi_oversold: 25                # Агрессивные уровни
+        rsi_overbought: 70              # СКАЛЬП: четкие сигналы (не слишком широко)
+        rsi_oversold: 30                # СКАЛЬП: четкие сигналы
         volume_threshold: 1.05          # Меньше требования к объему
         sma_fast: 8                     # Быстрее реакция на тренд
         sma_slow: 25                    # Быстрее реакция на тренд
@@ -266,19 +266,19 @@ scalping:
         rsi_overbought: 65              # Узкий диапазон - только сильные сигналы
         rsi_oversold: 35                # Консервативные уровни
         volume_threshold: 1.25          # Высокие требования к объему
-        sma_fast: 12                    # Медленнее реакция (сглаживание шума)
-        sma_slow: 35                    # Медленнее реакция (сглаживание шума)
-        ema_fast: 13                    # Медленная EMA для choppy (сглаживание)
-        ema_slow: 34                    # Медленная EMA для choppy (сглаживание)
-        atr_period: 21                  # Больший период для сглаживания
-        min_volatility_atr: 0.0008      # Высокий порог - только сильная волатильность!
+        sma_fast: 8                     # СКАЛЬП: быстрая реакция (2 мин позиции!)
+        sma_slow: 25                    # СКАЛЬП: быстрая реакция
+        ema_fast: 8                     # СКАЛЬП: быстрая EMA для 2-мин позиций
+        ema_slow: 21                    # СКАЛЬП: быстрая EMA
+        atr_period: 14                  # СКАЛЬП: стандартный (не сглаживать)
+        min_volatility_atr: 0.0004      # СКАЛЬП: ниже RANGING (больше сигналов)
       
       # Параметры модулей для хаотичного рынка
       modules:
         multi_timeframe:
           block_opposite: true          # Строго блокировать противоположные
           score_bonus: 3                # Сильное влияние MTF
-          confirmation_timeframe: "30m" # Больший таймфрейм для подтверждения (для CHOPPY)
+          confirmation_timeframe: "15m" # СКАЛЬП: быстрый таймфрейм для 2-мин позиций
         
         correlation_filter:
           correlation_threshold: 0.6    # Очень строгая корреляция
@@ -291,9 +291,9 @@ scalping:
           avoid_weekends: true          # Избегать выходные
         
         pivot_points:
-          level_tolerance_percent: 0.15 # Очень точные зоны уровней
+          level_tolerance_percent: 0.2  # СКАЛЬП: не слишком узко ($225 зона для BTC)
           score_bonus_near_level: 3     # Максимальный бонус за уровни
-          use_last_n_days: 7           # Больше исторических данных
+          use_last_n_days: 5            # СКАЛЬП: средний период (не переобучать)
         
         volume_profile:
           score_bonus_in_value_area: 3  # Максимальная важность зон
@@ -301,8 +301,8 @@ scalping:
           poc_tolerance_percent: 0.15   # Очень точная зона POC
           lookback_candles: 300         # Больше исторических данных
   
-  # Partial Take Profit - многоуровневая фиксация прибыли
-  partial_tp_enabled: true
+  # Partial Take Profit - ОТКЛЮЧЕНО для скальпинга (позиции слишком малы)
+  partial_tp_enabled: false
   partial_tp_levels:
     - percent: 50.0           # 50% позиции
       atr_multiplier: 1.5     # На 1.5 ATR

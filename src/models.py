@@ -103,6 +103,7 @@ class Position:
     strategy_id: Optional[str] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    algo_order_id: Optional[str] = None  # ID OCO ордера для отслеживания
 
     def __post_init__(self):
         if self.timestamp is None:
