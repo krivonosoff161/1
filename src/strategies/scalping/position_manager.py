@@ -121,26 +121,17 @@ class PositionManager:
             # Обновляем цену позиции
             position.update_price(current_price)
 
-            # 1. Проверка OCO через БАЛАНС (обходим Invalid Sign!)
-            # Вместо проверки статуса - проверяем исчез ли актив
+            # 1. 🔥 НОВОЕ: Проверка OCO через /trade/fills API (САМЫЙ НАДЕЖНЫЙ!)
             if position.algo_order_id:
-                balance_closed = await self._check_balance_closure(position)
-                if balance_closed:
-                    # Определяем TP или SL по текущей цене
-                    if position.side == PositionSide.LONG:
-                        if current_price >= position.take_profit * 0.999:
-                            reason = "oco_take_profit"
-                        else:
-                            reason = "oco_stop_loss"
-                    else:  # SHORT
-                        if current_price <= position.take_profit * 1.001:
-                            reason = "oco_take_profit"
-                        else:
-                            reason = "oco_stop_loss"
+                fills_result = await self._check_fills_closure(position)
+                if fills_result:
+                    reason, exit_price = fills_result
+                    # Сохраняем реальную цену закрытия для точного PnL
+                    position.exit_price = exit_price
 
                     logger.info(
-                        f"✅ OCO обнаружен (через баланс): {symbol} {reason} | "
-                        f"Позиция закрыта биржей!"
+                        f"✅ OCO закрытие подтверждено: {symbol} {reason} | "
+                        f"Exit: ${exit_price:.2f}"
                     )
                     to_close.append((symbol, reason))
                     continue
@@ -181,8 +172,85 @@ class PositionManager:
 
         return to_close
 
+    async def _check_fills_closure(
+        self, position: Position
+    ) -> Optional[Tuple[str, float]]:
+        """
+        🔥 НОВЫЙ МЕТОД (18.10.2025): Проверка закрытия через /trade/fills API!
+
+        САМЫЙ НАДЕЖНЫЙ способ отследить OCO закрытия (обход Invalid Sign).
+
+        Логика:
+        1. Получаем последние fills для символа
+        2. Ищем fill с algoId == position.algo_order_id
+        3. Определяем TP/SL по execType
+
+        Returns:
+            Optional[Tuple[str, float]]: (reason, exit_price) если закрыта, None иначе
+        """
+        try:
+            if not position.algo_order_id:
+                return None
+
+            # Получаем последние fills за последние 5 минут
+            fills = await self.client.get_recent_fills(symbol=position.symbol, limit=50)
+
+            if not fills:
+                return None
+
+            # Ищем fill связанный с нашим OCO
+            for fill in fills:
+                # OKX fills содержат algoId для OCO ордеров
+                fill_algo_id = fill.get("algoId", "")
+
+                if fill_algo_id == position.algo_order_id:
+                    exec_type = fill.get("execType", "")
+                    fill_px = float(fill.get("fillPx", 0))
+                    fill_side = fill.get("side", "")
+
+                    logger.debug(
+                        f"🔍 Found fill for {position.symbol}: "
+                        f"execType={exec_type}, fillPx={fill_px}, side={fill_side}"
+                    )
+
+                    # Определяем TP или SL
+                    # execType может быть: "T" (TP) или "S" (SL)
+                    if exec_type == "T":
+                        reason = "oco_take_profit"
+                    elif exec_type == "S":
+                        reason = "oco_stop_loss"
+                    else:
+                        # Фолбэк: определяем по цене
+                        if position.side == PositionSide.LONG:
+                            reason = (
+                                "oco_take_profit"
+                                if fill_px >= position.take_profit * 0.999
+                                else "oco_stop_loss"
+                            )
+                        else:  # SHORT
+                            reason = (
+                                "oco_take_profit"
+                                if fill_px <= position.take_profit * 1.001
+                                else "oco_stop_loss"
+                            )
+
+                    logger.info(
+                        f"✅ OCO закрытие найдено (через fills): {position.symbol} | "
+                        f"Reason: {reason}, Exit: ${fill_px:.2f}"
+                    )
+
+                    return (reason, fill_px)
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"Fills closure check failed: {e}")
+            return None
+
     async def _check_balance_closure(self, position: Position) -> bool:
         """
+        ⚠️ DEPRECATED (18.10.2025): Используем _check_fills_closure() вместо этого!
+
         Проверка закрытия позиции через баланс (обход Invalid Sign!).
 
         Логика:

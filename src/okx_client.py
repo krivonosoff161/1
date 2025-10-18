@@ -790,6 +790,49 @@ class OKXClient:
             logger.error(f"❌ Error checking OCO status {algo_id}: {e}")
             return None
 
+    async def get_recent_fills(
+        self, symbol: Optional[str] = None, limit: int = 100
+    ) -> List[Dict]:
+        """
+        Получить последние исполненные ордера (fills).
+
+        🔥 КРИТИЧНО для отслеживания OCO закрытий!
+
+        Args:
+            symbol: Торговая пара (опционально, если None - все пары)
+            limit: Максимум записей (по умолчанию 100)
+
+        Returns:
+            List[Dict]: Список исполненных ордеров
+        """
+        try:
+            params = {
+                "instType": "SPOT",
+                "limit": str(limit),
+            }
+
+            if symbol:
+                params["instId"] = symbol
+
+            result = await self._make_request(
+                "GET",
+                "/trade/fills",
+                params=params,
+            )
+
+            if result.get("data"):
+                logger.debug(
+                    f"✅ Retrieved {len(result['data'])} fills"
+                    + (f" for {symbol}" if symbol else "")
+                )
+                return result["data"]
+
+            return []
+
+        except Exception as e:
+            logger.error(f"❌ Error getting fills: {e}")
+            return []
+
     async def cancel_algo_order(self, algo_id: str, symbol: str) -> bool:
         """
         Отменить algo order (TP/SL).
