@@ -10,7 +10,7 @@
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, Tuple
 
 from loguru import logger
@@ -150,20 +150,9 @@ class RiskController:
                 f"Hourly trade limit ({self.trade_count_hourly}/{max_trades_per_hour})",
             )
 
-        # 7. Cooldown после последней сделки
-        cooldown_minutes = self.config.cooldown_after_loss_minutes
-
-        if self.adaptive_regime:
-            regime_params = self.adaptive_regime.get_current_parameters()
-            cooldown_minutes = regime_params.cooldown_after_loss_minutes
-
-        last_trade = self.last_trade_time.get(symbol)
-        if last_trade:
-            time_since_last = (datetime.utcnow() - last_trade).total_seconds() / 60
-
-            if time_since_last < cooldown_minutes:
-                remaining = cooldown_minutes - time_since_last
-                return False, f"Cooldown active ({remaining:.1f} min remaining)"
+        # 7. 🔥 КУЛДАУН УБРАН! Теперь торгуем постоянно без пауз!
+        # Причина: пользователь хочет больше сделок, агрессивную торговлю
+        # Решение: убрать кулдаун, полагаться на hourly trade limit (ARM)
 
         # Все проверки пройдены
         return True, "OK"

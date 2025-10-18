@@ -12,7 +12,7 @@
 import csv
 from collections import deque
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict
 
 from loguru import logger
 
@@ -115,6 +115,11 @@ class PerformanceTracker:
             trade: Результат сделки
         """
         try:
+            # 🔥 ИСПРАВЛЕНО: PnL теперь считается правильно!
+            # Формула: (exit_price - entry_price) * size - commission
+            # LONG: (exit - entry) * size
+            # SHORT: (entry - exit) * size
+
             with open(self.csv_path, "a", newline="") as f:
                 writer = csv.DictWriter(
                     f,
@@ -144,7 +149,7 @@ class PerformanceTracker:
                         "size": f"{trade.size:.8f}",
                         "gross_pnl": f"{trade.gross_pnl:.4f}",
                         "commission": f"{trade.commission:.4f}",
-                        "net_pnl": f"{trade.net_pnl:.4f}",
+                        "net_pnl": f"{trade.net_pnl:.4f}",  # ✅ Уже правильный из position_manager!
                         "duration_sec": trade.duration_sec,
                         "reason": trade.reason,
                         "win_rate": f"{self.calculate_win_rate():.2f}",

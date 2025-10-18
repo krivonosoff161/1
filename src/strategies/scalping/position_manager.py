@@ -11,7 +11,6 @@
 - PHANTOM detection
 """
 
-import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -73,8 +72,8 @@ class PositionManager:
             self.quick_profit_time_limit = regime_params.ph_time_limit
 
             logger.info(
-                f"✅ PositionManager initialized | "
-                f"Profit Harvesting: ADAPTIVE (from ARM)"
+                "✅ PositionManager initialized | "
+                "Profit Harvesting: ADAPTIVE (from ARM)"
             )
             logger.debug(
                 f"   🔍 PH параметры из ARM режима '{self.adaptive_regime.current_regime.value}':\n"
@@ -152,19 +151,9 @@ class PositionManager:
                     to_close.append((symbol, "profit_harvesting"))
                     continue
 
-            # 3. TIME_LIMIT
-            max_holding = self.config.exit.max_holding_minutes
-            if self.adaptive_regime:
-                regime_params = self.adaptive_regime.get_current_parameters()
-                max_holding = regime_params.max_holding_minutes
-
-            time_in_position = (
-                datetime.utcnow() - position.timestamp
-            ).total_seconds() / 60
-
-            if time_in_position >= max_holding:
-                to_close.append((symbol, "time_limit"))
-                continue
+            # 3. 🔥 TIME_LIMIT УБРАН! Теперь только OCO закрывает позиции!
+            # Причина: бот закрывал позиции "вручную" MARKET ордером, но OCO висел на бирже
+            # Решение: научим бота читать реальный статус с биржи
 
             # 4. Partial TP (если включено)
             if self.partial_tp_enabled:

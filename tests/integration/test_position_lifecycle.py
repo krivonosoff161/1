@@ -100,6 +100,10 @@ async def test_short_position_lifecycle():
     tp_price = current_price * 0.999  # -0.1% для TP (SHORT прибыль = цена вниз)
     sl_price = current_price * 1.001  # +0.1% для SL (SHORT лосс = цена вверх)
 
+    # Проверяем что SL выше текущей цены
+    if sl_price <= current_price:
+        sl_price = current_price * 1.002  # +0.2% для SL
+
     print(f"\n[6] Выставляем OCO ордер:")
     print(f"   TP: ${tp_price:.2f} (-0.1%)")
     print(f"   SL: ${sl_price:.2f} (+0.1%)")
@@ -116,10 +120,10 @@ async def test_short_position_lifecycle():
     # Шаг 7: Проверяем статус OCO
     print("\n[7] Проверяем статус OCO...")
     try:
-        # Пробуем получить через API историю алго-ордеров
+        # Пробуем получить через API активные алго-ордера
         oco_status = await client._make_request(
             "GET",
-            "/trade/orders-algo-history",
+            "/trade/orders-algo-pending",
             params={
                 "instType": "SPOT",
                 "ordType": "oco",
@@ -131,9 +135,11 @@ async def test_short_position_lifecycle():
                 print(
                     f"   OCO {order.get('algoId')}: {order.get('state')} | {order.get('instId')}"
                 )
+        else:
+            print("   Нет активных OCO ордеров")
 
     except Exception as e:
-        print(f"   Не удалось получить историю OCO: {e}")
+        print(f"   Не удалось получить OCO статус: {e}")
 
     # Шаг 8: Ждем 5 секунд (чтобы увидеть, сработает ли OCO)
     print("\n[8] Ждем 5 секунд (OCO может сработать)...")
@@ -191,7 +197,8 @@ async def test_short_position_lifecycle():
             id=result["data"][0]["ordId"],
             symbol=symbol,
             side=OrderSide.BUY,
-            quantity=position_size,
+            type=OrderType.MARKET,
+            amount=position_size,
             price=current_price,
             status=OrderStatus.PENDING,
         )
@@ -215,7 +222,7 @@ async def test_short_position_lifecycle():
         usdt_diff = final_usdt - initial_usdt
         print(f"\n   P&L: ${usdt_diff:.2f} USDT")
 
-    await client.close()
+    await client.session.close()
     print("\n" + "=" * 60)
     print("TEST COMPLETED")
     print("=" * 60)
@@ -374,7 +381,7 @@ async def test_long_position_lifecycle():
         usdt_diff = final_usdt - initial_usdt
         print(f"\n   P&L: ${usdt_diff:.2f} USDT")
 
-    await client.close()
+    await client.session.close()
     print("\n" + "=" * 60)
     print("TEST COMPLETED")
     print("=" * 60)
