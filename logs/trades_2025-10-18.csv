@@ -1,4 +1,0 @@
-timestamp,symbol,side,entry_price,exit_price,size,gross_pnl,commission,net_pnl,duration_sec,reason,win_rate
-2025-10-18T17:12:54.831507,ETH-USDT,short,3861.2500,3866.2500,0.01903529,-0.0952,0.1471,-0.2423,487.051458,time_limit,0.00
-2025-10-18T17:21:37.629839,ETH-USDT,short,3869.9600,3872.0300,0.01899244,-0.0393,0.1470,-0.1864,481.210235,time_limit,0.00
-2025-10-18T17:26:03.327795,BTC-USDT,short,106775.1000,106814.6000,0.00068836,-0.0272,0.1470,-0.1742,483.392652,time_limit,0.00

@@ -47,6 +47,10 @@ class SignalGenerator:
         self.indicators_manager = indicators_manager
 
         # Phase 1 модули
+        # Сохраняем ссылку на все модули
+        self.modules = modules
+        
+        # Извлекаем конкретные модули для удобства
         self.mtf_filter = modules.get("mtf")
         self.correlation_filter = modules.get("correlation")
         self.pivot_filter = modules.get("pivot")
