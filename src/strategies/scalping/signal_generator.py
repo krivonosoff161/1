@@ -574,6 +574,9 @@ class SignalGenerator:
             self.current_module_params = regime_params.modules
             self.min_score_threshold = regime_params.min_score_threshold
 
+            # 🔥 КРИТИЧНО: Обновляем параметры МОДУЛЕЙ!
+            self._update_module_parameters(regime_params.modules)
+
             logger.info(
                 f"✅ Parameters updated for {new_regime.value.upper()} regime:\n"
                 f"  Score threshold: {regime_params.min_score_threshold}/12\n"
@@ -582,3 +585,86 @@ class SignalGenerator:
                 f"  Max holding: {regime_params.max_holding_minutes} min\n"
                 f"  Position size: {regime_params.position_size_multiplier}x"
             )
+        elif not self.current_regime_type:
+            # 🔍 ПЕРВЫЙ ЗАПУСК: Логируем начальный режим ДЕТАЛЬНО
+            self.current_regime_type = self.adaptive_regime.current_regime
+            regime_params = self.adaptive_regime.get_current_parameters()
+
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(
+                f"🎯 ARM НАЧАЛЬНЫЙ РЕЖИМ: {self.current_regime_type.value.upper()}"
+            )
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(f"  Score threshold: {regime_params.min_score_threshold}/12")
+            logger.info(
+                f"  TP/SL: {regime_params.tp_atr_multiplier}/{regime_params.sl_atr_multiplier} ATR"
+            )
+            logger.info(f"  Max holding: {regime_params.max_holding_minutes} min")
+            logger.info(f"  Position size: {regime_params.position_size_multiplier}x")
+            logger.info("")
+            logger.info(f"  📊 ИНДИКАТОРЫ:")
+            logger.info(
+                f"     Volume threshold: {regime_params.indicators.volume_threshold}"
+            )
+            logger.info(
+                f"     RSI boundaries: {regime_params.indicators.rsi_oversold}-{regime_params.indicators.rsi_overbought}"
+            )
+            logger.info("")
+            logger.info(f"  ✨ PROFIT HARVESTING:")
+            logger.info(f"     Enabled: {'YES' if regime_params.ph_enabled else 'NO'}")
+            logger.info(f"     Threshold: ${regime_params.ph_threshold:.2f}")
+            logger.info(
+                f"     Time Limit: {regime_params.ph_time_limit}s ({regime_params.ph_time_limit/60:.1f} min)"
+            )
+            logger.info("")
+            logger.info(f"  🔧 МОДУЛИ:")
+            logger.info(
+                f"     MTF block_opposite: {regime_params.modules.mtf_block_opposite}"
+            )
+            logger.info(
+                f"     MTF score_bonus: {regime_params.modules.mtf_score_bonus}"
+            )
+            logger.info(
+                f"     Correlation threshold: {regime_params.modules.correlation_threshold}"
+            )
+            logger.info(
+                f"     Correlation max_positions: {regime_params.modules.max_correlated_positions}"
+            )
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    def _update_module_parameters(self, module_params):
+        """
+        Обновить параметры модулей Phase 1 при переключении режима ARM.
+
+        Args:
+            module_params: ModuleParameters из ARM
+        """
+        from src.strategies.modules.correlation_filter import \
+            CorrelationFilterConfig
+        from src.strategies.modules.multi_timeframe import MTFConfig
+
+        logger.info("🔧 Обновление параметров модулей...")
+
+        # 1. Multi-Timeframe
+        if self.mtf_filter:
+            mtf_config = MTFConfig(
+                enabled=True,
+                confirmation_timeframe=module_params.mtf_confirmation_timeframe,
+                score_bonus=module_params.mtf_score_bonus,
+                block_opposite=module_params.mtf_block_opposite,
+                ema_fast_period=8,
+                ema_slow_period=21,
+            )
+            self.mtf_filter.update_parameters(mtf_config)
+
+        # 2. Correlation Filter
+        if self.correlation_filter:
+            corr_config = CorrelationFilterConfig(
+                enabled=True,
+                correlation_threshold=module_params.correlation_threshold,
+                max_correlated_positions=module_params.max_correlated_positions,
+                block_same_direction_only=module_params.block_same_direction_only,
+            )
+            self.correlation_filter.update_parameters(corr_config)
+
+        logger.info("✅ Модули обновлены!")

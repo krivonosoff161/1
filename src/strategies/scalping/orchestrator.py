@@ -631,28 +631,35 @@ class ScalpingOrchestrator:
         Args:
             symbol: Торговый символ
         """
+        logger.debug(f"🔄 TICK START: {symbol}")
+
         # 1. Rate limit
         await self._check_rate_limit()
+        logger.debug(f"   ✔ Rate limit OK")
 
         # 2. Обновление рыночных данных
         await self._update_market_data(symbol)
+        logger.debug(f"   ✔ Market data updated")
 
         # 3. Получение текущей цены
         try:
             ticker = await self.client.get_ticker(symbol)
             current_price = float(ticker.get("last", 0))
+            logger.debug(f"   ✔ Current price: ${current_price:.2f}")
         except Exception as e:
             logger.error(f"Failed to get ticker for {symbol}: {e}")
             return
 
         # 4. Мониторинг существующих позиций
         if symbol in self.positions:
+            logger.debug(f"   ↻ Monitoring existing position...")
             current_prices = {symbol: current_price}
             to_close = await self.position_manager.monitor_positions(
                 {symbol: self.positions[symbol]}, current_prices
             )
 
             for close_symbol, reason in to_close:
+                logger.debug(f"   ⚠ Closing position: {reason}")
                 await self._close_position(close_symbol, current_price, reason)
 
             return  # Если есть позиция - не открываем новую
@@ -664,15 +671,19 @@ class ScalpingOrchestrator:
         )
 
         if not can_trade:
-            logger.debug(f"🚫 {symbol}: Cannot trade - {reason}")
+            logger.debug(f"   🚫 Cannot trade: {reason}")
             return
+
+        logger.debug(f"   ✔ Can trade: {reason}")
 
         # 6. Генерация сигнала
         market_data = self.market_data_cache.get(symbol)
         if not market_data:
+            logger.debug(f"   ⚠ No market data in cache")
             return
 
         indicators = self.indicators.calculate_all(market_data)
+        logger.debug(f"   ✔ Indicators calculated: {len(indicators)} items")
 
         # Создаем tick объект
         from src.models import Tick
@@ -686,24 +697,32 @@ class ScalpingOrchestrator:
 
         # ARM обновление (внутри signal_generator)
         if self.modules.get("arm"):
+            logger.debug(f"   🧠 Updating ARM regime...")
             await self.signal_generator.update_regime_parameters(
                 market_data.ohlcv_data, current_price
             )
 
+        logger.debug(f"   🎯 Generating signal...")
         signal = await self.signal_generator.generate_signal(
             symbol, indicators, tick, self.positions
         )
 
         if not signal:
+            logger.debug(f"   ⚪ No signal generated")
             return
 
+        logger.info(
+            f"   🔔 SIGNAL: {signal.side.value.upper()} | Score: {signal.confidence:.1f}"
+        )
+
         # 7. Исполнение сигнала
+        logger.debug(f"   💼 Executing signal...")
         position = await self.order_executor.execute_signal(signal, market_data)
 
         if position:
             self.positions[symbol] = position
             self.risk_controller.record_trade_opened(symbol)
-            logger.info(f"✅ Position added to tracking: {symbol}")
+            logger.info(f"   ✅ Position opened and tracking started")
 
     async def _close_position(self, symbol: str, current_price: float, reason: str):
         """

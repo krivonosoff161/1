@@ -121,13 +121,29 @@ class PositionManager:
             # Обновляем цену позиции
             position.update_price(current_price)
 
-            # 1. Проверка OCO статуса
-            # ⚠️ ВРЕМЕННО ОТКЛЮЧЕНО: Invalid Sign блокирует проверку
-            # if position.algo_order_id:
-            #     oco_status = await self._check_oco_status(position)
-            #     if oco_status:
-            #         to_close.append((symbol, oco_status))
-            #         continue
+            # 1. Проверка OCO через БАЛАНС (обходим Invalid Sign!)
+            # Вместо проверки статуса - проверяем исчез ли актив
+            if position.algo_order_id:
+                balance_closed = await self._check_balance_closure(position)
+                if balance_closed:
+                    # Определяем TP или SL по текущей цене
+                    if position.side == PositionSide.LONG:
+                        if current_price >= position.take_profit * 0.999:
+                            reason = "oco_take_profit"
+                        else:
+                            reason = "oco_stop_loss"
+                    else:  # SHORT
+                        if current_price <= position.take_profit * 1.001:
+                            reason = "oco_take_profit"
+                        else:
+                            reason = "oco_stop_loss"
+
+                    logger.info(
+                        f"✅ OCO обнаружен (через баланс): {symbol} {reason} | "
+                        f"Позиция закрыта биржей!"
+                    )
+                    to_close.append((symbol, reason))
+                    continue
 
             # 2. ✨ PROFIT HARVESTING (досрочный выход с микро-профитом)
             # Обновляем PH параметры из ARM (если переключился режим)
@@ -165,9 +181,44 @@ class PositionManager:
 
         return to_close
 
+    async def _check_balance_closure(self, position: Position) -> bool:
+        """
+        Проверка закрытия позиции через баланс (обход Invalid Sign!).
+
+        Логика:
+        - LONG: проверяем баланс BTC/ETH (если = 0 → закрыта биржей)
+        - SHORT: не проверяем (нужен USDT, всегда есть)
+
+        Returns:
+            bool: True если позиция закрыта биржей
+        """
+        try:
+            # Только для LONG (SHORT всегда имеет USDT баланс)
+            if position.side != PositionSide.LONG:
+                return False
+
+            base_currency = position.symbol.split("-")[0]
+            actual_balance = await self.client.get_balance(base_currency)
+
+            # Если баланс < 1% от ожидаемого → позиция закрыта биржей
+            if actual_balance < position.size * 0.01:
+                logger.info(
+                    f"🔍 Balance Check: {position.symbol} LONG закрыта биржей | "
+                    f"Expected: {position.size:.8f}, Actual: {actual_balance:.8f}"
+                )
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.debug(f"Balance closure check failed: {e}")
+            return False
+
     async def _check_oco_status(self, position: Position) -> Optional[str]:
         """
         Проверка статуса OCO ордера.
+
+        КРИТИЧНО (18.10.2025): Правильное определение TP/SL для PnL!
 
         Returns:
             str: Reason если OCO сработал, None иначе
@@ -175,25 +226,52 @@ class PositionManager:
         try:
             oco_status = await self.client.get_algo_order_status(position.algo_order_id)
 
-            if oco_status.get("state") == "filled":
+            if not oco_status:
+                return None
+
+            state = oco_status.get("state")
+
+            # 🔍 DEBUG: Логируем ЧТО получили от биржи
+            logger.debug(
+                f"🔍 OCO Status {position.symbol}: "
+                f"state={state}, "
+                f"actualSide={oco_status.get('actualSide')}, "
+                f"actualPx={oco_status.get('actualPx')}"
+            )
+
+            if state == "filled":
+                actual_side = oco_status.get("actualSide", "")
                 actual_px = float(oco_status.get("actualPx", 0))
 
-                # Определяем что сработало
-                if abs(actual_px - position.take_profit) < abs(
-                    actual_px - position.stop_loss
-                ):
+                # Определяем что сработало ПО actualSide (надежнее!)
+                if actual_side == "tp":
                     reason = "oco_take_profit"
-                else:
+                elif actual_side == "sl":
                     reason = "oco_stop_loss"
+                else:
+                    # Fallback: по цене
+                    if abs(actual_px - position.take_profit) < abs(
+                        actual_px - position.stop_loss
+                    ):
+                        reason = "oco_take_profit"
+                    else:
+                        reason = "oco_stop_loss"
 
                 logger.info(
-                    f"✅ OCO triggered for {position.symbol}: "
-                    f"{reason} @ ${actual_px:.4f}"
+                    f"💰 OCO FILLED: {position.symbol} | "
+                    f"Reason: {reason} | "
+                    f"Price: ${actual_px:.4f} | "
+                    f"TP: ${position.take_profit:.4f} | "
+                    f"SL: ${position.stop_loss:.4f}"
                 )
+
+                # Обновляем цену позиции на РЕАЛЬНУЮ цену закрытия от биржи!
+                position.update_price(actual_px)
+
                 return reason
 
         except Exception as e:
-            logger.debug(f"Failed to check OCO status: {e}")
+            logger.error(f"❌ Error checking OCO status {position.symbol}: {e}")
 
         return None
 

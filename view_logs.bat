@@ -25,19 +25,20 @@ echo Поиск файлов логов...
 echo.
 
 REM Find latest log file
+set "log_file="
 for /f "delims=" %%i in ('dir /B /O-D logs\trading_bot_*.log 2^>nul') do (
-    set "log_file=logs\%%i"
-    goto :FOUND
+    if not defined log_file set "log_file=logs\%%i"
 )
 
 REM If no log file found
-echo Файлы логов не найдены!
-echo Сначала запустите бота: start_bot.bat
-echo.
-pause
-exit /b 1
+if not defined log_file (
+    echo Файлы логов не найдены!
+    echo Сначала запустите бота: start_bot.bat
+    echo.
+    pause
+    exit /b 1
+)
 
-:FOUND
 echo Найден лог: %log_file%
 for %%A in ("%log_file%") do echo Размер: %%~zA байт
 echo.
@@ -47,13 +48,13 @@ echo =====================================
 echo.
 echo 1. Последние 50 строк
 echo 2. Последние 100 строк
-echo 3. Весь лог (медленно для больших файлов!)
+echo 3. Последние 200 строк
 echo 4. Мониторинг в реальном времени
 echo 5. Открыть в Notepad
-echo 6. Только ошибки
+echo 6. Только ошибки (ERROR)
 echo 7. Только сигналы и сделки
-echo 8. Статистика (текущий лог)
-echo 9. Статистика (ВСЕ логи за день)
+echo 8. Profit Harvesting логи
+echo 9. Статистика быстрая
 echo 0. Выход
 echo.
 set /p choice="Ваш выбор (0-9): "
@@ -64,7 +65,7 @@ if "%choice%"=="1" (
     echo   ПОСЛЕДНИЕ 50 СТРОК:
     echo =====================================
     echo.
-    powershell -command "Get-Content '%log_file%' -Tail 50 -Encoding UTF8"
+    powershell -NoProfile -Command "Get-Content '%log_file%' -Tail 50 -Encoding UTF8"
     echo.
     echo =====================================
     echo.
@@ -78,7 +79,7 @@ if "%choice%"=="2" (
     echo   ПОСЛЕДНИЕ 100 СТРОК:
     echo =====================================
     echo.
-    powershell -command "Get-Content '%log_file%' -Tail 100 -Encoding UTF8"
+    powershell -NoProfile -Command "Get-Content '%log_file%' -Tail 100 -Encoding UTF8"
     echo.
     echo =====================================
     echo.
@@ -89,10 +90,10 @@ if "%choice%"=="2" (
 if "%choice%"=="3" (
     cls
     echo =====================================
-    echo   ВСЕ ЛОГИ (может быть медленно!):
+    echo   ПОСЛЕДНИЕ 200 СТРОК:
     echo =====================================
     echo.
-    type "%log_file%"
+    powershell -NoProfile -Command "Get-Content '%log_file%' -Tail 200 -Encoding UTF8"
     echo.
     echo =====================================
     echo.
@@ -107,10 +108,8 @@ if "%choice%"=="4" (
     echo   Нажмите Ctrl+C для остановки
     echo =====================================
     echo.
-    powershell -command "Get-Content '%log_file%' -Wait -Tail 20 -Encoding UTF8"
+    powershell -NoProfile -Command "Get-Content '%log_file%' -Wait -Tail 20 -Encoding UTF8"
     echo.
-    echo Возврат в меню...
-    timeout /t 2 >nul
     goto MENU
 )
 
@@ -119,8 +118,7 @@ if "%choice%"=="5" (
     echo Открываю лог в Notepad...
     start notepad "%log_file%"
     echo.
-    echo Notepad запущен. Возврат в меню через 2 секунды...
-    timeout /t 2 >nul
+    timeout /t 1 >nul
     goto MENU
 )
 
@@ -130,11 +128,7 @@ if "%choice%"=="6" (
     echo   ТОЛЬКО ОШИБКИ:
     echo =====================================
     echo.
-    findstr /C:"ERROR" /C:"WARNING" "%log_file%"
-    if %ERRORLEVEL% NEQ 0 (
-        echo.
-        echo Ошибок не найдено! Отлично!
-    )
+    powershell -NoProfile -Command "Get-Content '%log_file%' -Encoding UTF8 | Select-String 'ERROR|CRITICAL' | Select-Object -Last 50"
     echo.
     echo =====================================
     echo.
@@ -148,11 +142,7 @@ if "%choice%"=="7" (
     echo   ТОЛЬКО СИГНАЛЫ И СДЕЛКИ:
     echo =====================================
     echo.
-    findstr /C:"SIGNAL" /C:"POSITION" /C:"OPENED" /C:"CLOSED" /C:"executed" "%log_file%"
-    if %ERRORLEVEL% NEQ 0 (
-        echo.
-        echo Сигналов пока нет. Ожидаем рыночных условий...
-    )
+    powershell -NoProfile -Command "Get-Content '%log_file%' -Encoding UTF8 | Select-String 'SIGNAL GENERATED|POSITION OPENED|TRADE CLOSED' | Select-Object -Last 30"
     echo.
     echo =====================================
     echo.
@@ -163,34 +153,12 @@ if "%choice%"=="7" (
 if "%choice%"=="8" (
     cls
     echo =====================================
-    echo   СТАТИСТИКА (текущий лог):
+    echo   PROFIT HARVESTING ЛОГИ:
     echo =====================================
     echo.
-    echo Файл: %log_file%
-    echo.
-    echo Сгенерировано сигналов:
-    findstr /C:"SIGNAL GENERATED" "%log_file%" 2>nul | find /C "SIGNAL"
-    echo.
-    echo Открыто позиций:
-    findstr /C:"POSITION OPENED" "%log_file%" 2>nul | find /C "OPENED"
-    echo.
-    echo Закрыто позиций:
-    findstr /C:"POSITION CLOSED" "%log_file%" 2>nul | find /C "CLOSED"
-    echo.
-    echo Выполнено Partial TP:
-    findstr /C:"Partial TP executed" "%log_file%" 2>nul | find /C "executed"
-    echo.
-    echo Активирован Break-even:
-    findstr /C:"Break-even" "%log_file%" 2>nul | find /C "Break-even"
-    echo.
-    echo Ошибок:
-    findstr /C:"ERROR" "%log_file%" 2>nul | find /C "ERROR"
-    echo.
-    echo =====================================
-    echo.
-    echo Последние 10 важных событий:
+    echo PH Checks (последние 20):
     echo --------------------------------
-    findstr /C:"SIGNAL" /C:"POSITION" /C:"OPENED" /C:"CLOSED" "%log_file%" 2>nul | powershell -command "$input | Select-Object -Last 10"
+    powershell -NoProfile -Command "Get-Content '%log_file%' -Encoding UTF8 | Select-String 'PH Check|PROFIT HARVESTING' | Select-Object -Last 20"
     echo.
     echo =====================================
     echo.
@@ -201,32 +169,14 @@ if "%choice%"=="8" (
 if "%choice%"=="9" (
     cls
     echo =====================================
-    echo   СТАТИСТИКА (ВСЕ логи за сегодня):
+    echo   СТАТИСТИКА БЫСТРАЯ:
     echo =====================================
     echo.
-    echo Обработка всех файлов...
+    echo Файл: %log_file%
     echo.
     
-    set total_signals=0
-    set total_opened=0
-    set total_closed=0
-    set total_errors=0
+    powershell -NoProfile -Command "$content = Get-Content '%log_file%' -Encoding UTF8; $signals = ($content | Select-String 'SIGNAL GENERATED').Count; $opened = ($content | Select-String 'POSITION OPENED').Count; $closed = ($content | Select-String 'TRADE CLOSED').Count; $ph = ($content | Select-String 'PROFIT HARVESTING TRIGGERED').Count; $errors = ($content | Select-String 'ERROR').Count; Write-Host \"Сигналов: $signals\"; Write-Host \"Открыто: $opened\"; Write-Host \"Закрыто: $closed\"; Write-Host \"PH сработало: $ph\"; Write-Host \"Ошибок: $errors\""
     
-    for %%f in (logs\trading_bot_*.log) do (
-        echo Сканирую: %%~nxf
-    )
-    echo.
-    echo Сгенерировано сигналов:
-    for %%f in (logs\trading_bot_*.log) do findstr /C:"SIGNAL GENERATED" "%%f" 2>nul | find /C "SIGNAL"
-    echo.
-    echo Открыто позиций:
-    for %%f in (logs\trading_bot_*.log) do findstr /C:"POSITION OPENED" "%%f" 2>nul | find /C "OPENED"
-    echo.
-    echo Закрыто позиций:
-    for %%f in (logs\trading_bot_*.log) do findstr /C:"POSITION CLOSED" "%%f" 2>nul | find /C "CLOSED"
-    echo.
-    echo Ошибок:
-    for %%f in (logs\trading_bot_*.log) do findstr /C:"ERROR" "%%f" 2>nul | find /C "ERROR"
     echo.
     echo =====================================
     echo.
@@ -248,6 +198,3 @@ echo.
 echo Неверный выбор! Попробуйте снова...
 timeout /t 2 >nul
 goto MENU
-
-
-

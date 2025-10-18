@@ -742,30 +742,52 @@ class OKXClient:
             Информация об ордере или None если не найден
         """
         try:
-            # 🔧 ИСПРАВЛЕНИЕ: Сначала пробуем активные ордера
-            result = await self._make_request(
-                "GET",
-                "/trade/orders-algo-pending",
-                params={"algoId": algo_id, "instType": "SPOT", "ordType": "oco"},
-            )
-
-            if result.get("data") and len(result["data"]) > 0:
-                return result["data"][0]
-            
-            # Если не найден в активных, проверяем историю
-            # (ордер мог уже исполниться)
+            # 🔧 КРИТИЧНО: Проверяем статус OCO (сначала история, потом активные)
+            # История (если уже закрыт)
             result = await self._make_request(
                 "GET",
                 "/trade/orders-algo-history",
-                params={"algoId": algo_id, "instType": "SPOT", "ordType": "oco"},
+                params={
+                    "ordType": "oco",
+                    "instType": "SPOT",
+                },
             )
 
-            if result.get("data") and len(result["data"]) > 0:
-                return result["data"][0]
-            
+            # Ищем наш algoId в истории
+            if result.get("data"):
+                for order in result["data"]:
+                    if order.get("algoId") == algo_id:
+                        logger.debug(
+                            f"✅ Found OCO {algo_id} in history: "
+                            f"state={order.get('state')}, "
+                            f"actualSide={order.get('actualSide')}"
+                        )
+                        return order
+
+            # Если не в истории - проверяем активные
+            result = await self._make_request(
+                "GET",
+                "/trade/orders-algo-pending",
+                params={
+                    "ordType": "oco",
+                    "instType": "SPOT",
+                },
+            )
+
+            # Ищем наш algoId в активных
+            if result.get("data"):
+                for order in result["data"]:
+                    if order.get("algoId") == algo_id:
+                        logger.debug(
+                            f"✅ Found OCO {algo_id} in pending: state={order.get('state')}"
+                        )
+                        return order
+
+            logger.debug(f"⚪ OCO {algo_id} not found (neither history nor pending)")
             return None
+
         except Exception as e:
-            logger.debug(f"Could not get algo order status for {algo_id}: {e}")
+            logger.error(f"❌ Error checking OCO status {algo_id}: {e}")
             return None
 
     async def cancel_algo_order(self, algo_id: str, symbol: str) -> bool:

@@ -94,9 +94,26 @@ class MultiTimeframeFilter:
             f"bonus={config.score_bonus}, block_opposite={config.block_opposite}"
         )
 
-    async def check_confirmation(
-        self, symbol: str, signal_side: str
-    ) -> MTFResult:
+    def update_parameters(self, new_config: MTFConfig):
+        """
+        Обновить параметры MTF (при переключении режима ARM).
+
+        Args:
+            new_config: Новая конфигурация MTF
+        """
+        old_block = self.config.block_opposite
+        old_bonus = self.config.score_bonus
+
+        self.config = new_config
+
+        logger.info(
+            f"🔄 MTF параметры обновлены:\n"
+            f"   block_opposite: {old_block} → {new_config.block_opposite}\n"
+            f"   score_bonus: {old_bonus} → {new_config.score_bonus}\n"
+            f"   timeframe: {new_config.confirmation_timeframe}"
+        )
+
+    async def check_confirmation(self, symbol: str, signal_side: str) -> MTFResult:
         """
         Проверить подтверждение сигнала на старшем таймфрейме.
 
@@ -354,4 +371,3 @@ class MultiTimeframeFilter:
         else:
             self._candles_cache.clear()
             logger.debug("MTF: Весь кэш очищен")
-

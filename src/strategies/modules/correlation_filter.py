@@ -12,7 +12,8 @@ from typing import Dict, List, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from src.filters.correlation_manager import CorrelationConfig, CorrelationManager
+from src.filters.correlation_manager import (CorrelationConfig,
+                                             CorrelationManager)
 from src.models import Position, PositionSide
 from src.okx_client import OKXClient
 
@@ -106,6 +107,29 @@ class CorrelationFilter:
             f"same_direction_only={config.block_same_direction_only}"
         )
 
+    def update_parameters(self, new_config: CorrelationFilterConfig):
+        """
+        Обновить параметры Correlation Filter (при переключении режима ARM).
+
+        Args:
+            new_config: Новая конфигурация
+        """
+        old_threshold = self.config.correlation_threshold
+        old_max = self.config.max_correlated_positions
+
+        self.config = new_config
+
+        # Обновляем порог в CorrelationManager
+        self.correlation_manager.config.high_correlation_threshold = (
+            new_config.correlation_threshold
+        )
+
+        logger.info(
+            f"🔄 Correlation Filter параметры обновлены:\n"
+            f"   threshold: {old_threshold} → {new_config.correlation_threshold}\n"
+            f"   max_positions: {old_max} → {new_config.max_correlated_positions}"
+        )
+
     async def check_entry(
         self,
         symbol: str,
@@ -171,9 +195,7 @@ class CorrelationFilter:
                     if self.config.block_same_direction_only:
                         # Блокируем только если направления совпадают
                         position_direction = (
-                            "LONG"
-                            if position.side == PositionSide.LONG
-                            else "SHORT"
+                            "LONG" if position.side == PositionSide.LONG else "SHORT"
                         )
                         if signal_side == position_direction:
                             correlated_positions.append(open_symbol)
@@ -226,9 +248,7 @@ class CorrelationFilter:
             )
 
         except Exception as e:
-            logger.error(
-                f"Correlation Filter error for {symbol}: {e}", exc_info=True
-            )
+            logger.error(f"Correlation Filter error for {symbol}: {e}", exc_info=True)
             # При ошибке разрешаем (fail-safe)
             return CorrelationFilterResult(
                 allowed=True,
@@ -264,4 +284,3 @@ class CorrelationFilter:
             "max_positions": self.config.max_correlated_positions,
             **cache_stats,
         }
-

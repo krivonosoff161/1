@@ -90,14 +90,15 @@ class RegimeParameters:
     pivot_bonus_multiplier: float  # Усиление бонусов от Pivot Points
     volume_profile_bonus_multiplier: float  # Усиление бонусов от Volume Profile
 
-    # ✨ НОВОЕ (18.10.2025): Profit Harvesting (адаптивный под режим)
-    ph_enabled: bool = True  # Включен ли Profit Harvesting
-    ph_threshold: float = 0.20  # Минимальный профит в USD для досрочного закрытия
-    ph_time_limit: int = 120  # Максимальное время (сек) для PH
-
     # НОВОЕ: Параметры индикаторов и модулей
     indicators: IndicatorParameters
     modules: ModuleParameters
+
+    # ✨ НОВОЕ (18.10.2025): Profit Harvesting (адаптивный под режим)
+    # ВАЖНО: Поля с default значениями ПОСЛЕ обязательных!
+    ph_enabled: bool = True  # Включен ли Profit Harvesting
+    ph_threshold: float = 0.20  # Минимальный профит в USD для досрочного закрытия
+    ph_time_limit: int = 120  # Максимальное время (сек) для PH
 
 
 @dataclass
@@ -185,6 +186,16 @@ class AdaptiveRegimeManager:
 
         # Определяем режим на основе индикаторов
         regime, confidence, reason = self._classify_regime(indicators)
+
+        # 🔍 DEBUG: Логируем детекцию режима
+        logger.debug(
+            f"🧠 ARM Detect Regime:\n"
+            f"   Detected: {regime.value.upper()} (confidence: {confidence:.1%})\n"
+            f"   Reason: {reason}\n"
+            f"   ADX proxy: {indicators.get('adx_proxy', 0):.1f}\n"
+            f"   Volatility: {indicators.get('volatility_percent', 0):.2%}\n"
+            f"   Reversals: {indicators.get('reversals', 0)}"
+        )
 
         return RegimeDetectionResult(
             regime=regime, confidence=confidence, indicators=indicators, reason=reason
