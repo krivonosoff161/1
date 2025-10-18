@@ -222,7 +222,7 @@ class ScalpingOrchestrator:
             adx_config = ADXFilterConfig(
                 enabled=True,
                 adx_threshold=self.config.adx_filter.get("adx_threshold", 25.0),
-                di_difference=self.config.adx_filter.get("di_difference", 5.0),
+                di_difference=self.config.adx_filter.get("di_difference", 1.5),  # 🔥 ИЗМЕНЕНО: 5.0→1.5 (начальный RANGING!)
                 adx_period=self.config.adx_filter.get("adx_period", 14),
                 timeframe=self.config.adx_filter.get("timeframe", "15m"),
             )
