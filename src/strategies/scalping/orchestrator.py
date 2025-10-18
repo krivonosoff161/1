@@ -418,7 +418,7 @@ class ScalpingOrchestrator:
                 pivot_score_bonus_near_level=1,
                 pivot_use_last_n_days=3,
                 adx_threshold=25.0,       # 🆕 Сильный тренд для TRENDING
-                adx_di_difference=10.0,   # 🆕 Четкое направление
+                adx_di_difference=7.0,    # 🔥 СНИЖЕНО: 10.0→7.0 (реалистичнее!)
                 vp_score_bonus_in_value_area=1,
                 vp_score_bonus_near_poc=1,
                 vp_poc_tolerance_percent=0.4,
@@ -479,7 +479,7 @@ class ScalpingOrchestrator:
                 pivot_score_bonus_near_level=2,
                 pivot_use_last_n_days=5,
                 adx_threshold=15.0,       # 🆕 Слабый тренд OK для RANGING
-                adx_di_difference=3.0,    # 🆕 Направление не критично
+                adx_di_difference=1.5,    # 🔥 СНИЖЕНО: 3.0→1.5 (мягче!)
                 vp_score_bonus_in_value_area=2,
                 vp_score_bonus_near_poc=2,
                 vp_poc_tolerance_percent=0.25,
@@ -540,7 +540,7 @@ class ScalpingOrchestrator:
                 pivot_score_bonus_near_level=3,
                 pivot_use_last_n_days=5,
                 adx_threshold=10.0,       # 🆕 Минимальный порог для CHOPPY
-                adx_di_difference=2.0,    # 🆕 Направление не важно
+                adx_di_difference=1.0,    # 🔥 СНИЖЕНО: 2.0→1.0 (минимум!)
                 vp_score_bonus_in_value_area=3,
                 vp_score_bonus_near_poc=3,
                 vp_poc_tolerance_percent=0.15,
