@@ -43,7 +43,7 @@ class OrderExecutor:
         self.adaptive_regime = adaptive_regime
 
         # Минимальные размеры ордеров
-        self.min_order_value_usd = 30.0  # Для обычных MARKET
+        self.min_order_value_usd = 35.0  # 🔥 ИСПРАВЛЕНО: Минимум $35 для ордеров
         self.MIN_LONG_OCO = 70.0  # Для LONG OCO
         self.MIN_SHORT_OCO = 70.0  # Для SHORT OCO
 

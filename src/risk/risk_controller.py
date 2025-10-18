@@ -41,7 +41,7 @@ class RiskController:
         self.telegram = telegram_notifier
 
         # Лимиты
-        self.max_consecutive_losses = 3
+        self.max_consecutive_losses = 10  # 🔥 ИСПРАВЛЕНО: 3→10 (для скальпинга!)
         self.max_daily_loss_percent = risk_config.max_daily_loss_percent
         self.daily_profit_target_percent = 5.0  # Фиксация прибыли
         self.max_open_positions = risk_config.max_open_positions

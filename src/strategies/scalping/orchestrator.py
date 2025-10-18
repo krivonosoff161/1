@@ -212,6 +212,25 @@ class ScalpingOrchestrator:
         else:
             logger.info("⚪ Correlation Filter disabled")
 
+        # 🆕 ADX Filter (сила тренда)
+        if (
+            hasattr(self.config, "adx_filter_enabled")
+            and self.config.adx_filter_enabled
+        ):
+            from src.strategies.modules.adx_filter import ADXFilterConfig, ADXFilter
+            
+            adx_config = ADXFilterConfig(
+                enabled=True,
+                adx_threshold=self.config.adx_filter.get("adx_threshold", 25.0),
+                di_difference=self.config.adx_filter.get("di_difference", 5.0),
+                adx_period=self.config.adx_filter.get("adx_period", 14),
+                timeframe=self.config.adx_filter.get("timeframe", "15m"),
+            )
+            modules["adx"] = ADXFilter(adx_config)
+            logger.info("✅ ADX Filter enabled")
+        else:
+            logger.info("⚪ ADX Filter disabled")
+
         # Pivot Points
         if (
             hasattr(self.config, "pivot_points_enabled")
@@ -398,6 +417,8 @@ class ScalpingOrchestrator:
                 pivot_level_tolerance_percent=0.4,
                 pivot_score_bonus_near_level=1,
                 pivot_use_last_n_days=3,
+                adx_threshold=25.0,       # 🆕 Сильный тренд для TRENDING
+                adx_di_difference=10.0,   # 🆕 Четкое направление
                 vp_score_bonus_in_value_area=1,
                 vp_score_bonus_near_poc=1,
                 vp_poc_tolerance_percent=0.4,
@@ -457,6 +478,8 @@ class ScalpingOrchestrator:
                 pivot_level_tolerance_percent=0.25,
                 pivot_score_bonus_near_level=2,
                 pivot_use_last_n_days=5,
+                adx_threshold=15.0,       # 🆕 Слабый тренд OK для RANGING
+                adx_di_difference=3.0,    # 🆕 Направление не критично
                 vp_score_bonus_in_value_area=2,
                 vp_score_bonus_near_poc=2,
                 vp_poc_tolerance_percent=0.25,
@@ -516,6 +539,8 @@ class ScalpingOrchestrator:
                 pivot_level_tolerance_percent=0.2,
                 pivot_score_bonus_near_level=3,
                 pivot_use_last_n_days=5,
+                adx_threshold=10.0,       # 🆕 Минимальный порог для CHOPPY
+                adx_di_difference=2.0,    # 🆕 Направление не важно
                 vp_score_bonus_in_value_area=3,
                 vp_score_bonus_near_poc=3,
                 vp_poc_tolerance_percent=0.15,

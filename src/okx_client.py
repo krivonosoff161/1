@@ -795,40 +795,45 @@ class OKXClient:
     ) -> List[Dict]:
         """
         Получить последние исполненные ордера (fills).
-
+        
         🔥 КРИТИЧНО для отслеживания OCO закрытий!
-
+        
         Args:
             symbol: Торговая пара (опционально, если None - все пары)
             limit: Максимум записей (по умолчанию 100)
-
+        
         Returns:
             List[Dict]: Список исполненных ордеров
         """
         try:
+            # 🔥 ИСПРАВЛЕНО: НЕ передаем instId - это ломает подпись!
+            # Получаем ВСЕ fills, потом фильтруем по symbol на клиенте
             params = {
                 "instType": "SPOT",
                 "limit": str(limit),
             }
-
-            if symbol:
-                params["instId"] = symbol
-
+            
             result = await self._make_request(
                 "GET",
                 "/trade/fills",
                 params=params,
             )
-
+            
             if result.get("data"):
+                fills = result["data"]
+                
+                # Фильтруем по symbol если указан
+                if symbol:
+                    fills = [f for f in fills if f.get("instId") == symbol]
+                
                 logger.debug(
-                    f"✅ Retrieved {len(result['data'])} fills"
+                    f"✅ Retrieved {len(fills)} fills"
                     + (f" for {symbol}" if symbol else "")
                 )
-                return result["data"]
-
+                return fills
+            
             return []
-
+            
         except Exception as e:
             logger.error(f"❌ Error getting fills: {e}")
             return []

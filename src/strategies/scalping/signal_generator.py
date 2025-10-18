@@ -374,6 +374,32 @@ class SignalGenerator:
                         f"Bonus: +{mtf_result.bonus} | New score: {short_score}/12"
                     )
 
+        # 🆕 PHASE 2: ADX Filter (сила тренда)
+        if self.modules.get("adx") and signal_direction:
+            # Получаем свечи для ADX (используем основной таймфрейм)
+            candles = market_data.ohlcv_data[-50:]  # Последние 50 свечей
+            
+            # Определяем side для проверки
+            from src.models import OrderSide
+            side = OrderSide.BUY if signal_direction == "LONG" else OrderSide.SELL
+            
+            # Проверяем ADX
+            adx_result = self.modules["adx"].check_trend_strength(
+                symbol, side, candles
+            )
+            
+            if not adx_result.allowed:
+                logger.warning(
+                    f"🚫 ADX BLOCKED: {symbol} {signal_direction} | "
+                    f"Reason: {adx_result.reason}"
+                )
+                return None
+            
+            logger.info(
+                f"✅ ADX CONFIRMED: {symbol} {signal_direction} | "
+                f"{adx_result.reason}"
+            )
+
         # Логируем итоговый скоринг
         logger.info(
             f"📊 {symbol} FINAL SCORING: LONG {long_score}/12 ({long_confidence:.1%}) | "
@@ -666,5 +692,18 @@ class SignalGenerator:
                 block_same_direction_only=module_params.block_same_direction_only,
             )
             self.correlation_filter.update_parameters(corr_config)
+
+        # 3. 🆕 ADX Filter
+        if self.modules.get("adx"):
+            from src.strategies.modules.adx_filter import ADXFilterConfig
+            
+            adx_config = ADXFilterConfig(
+                enabled=True,
+                adx_threshold=module_params.adx_threshold,
+                di_difference=module_params.adx_di_difference,
+                adx_period=14,  # Фиксированный период
+                timeframe="15m",  # Фиксированный таймфрейм
+            )
+            self.modules["adx"].update_parameters(adx_config)
 
         logger.info("✅ Модули обновлены!")

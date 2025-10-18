@@ -66,6 +66,10 @@ class ModuleParameters:
     vp_poc_tolerance_percent: float
     vp_lookback_candles: int
 
+    # 🆕 ADX Filter (сила тренда)
+    adx_threshold: float = 25.0        # Минимальная сила тренда
+    adx_di_difference: float = 5.0     # Разница между +DI и -DI
+
     # Time Filter (с default значением в конце)
     avoid_weekends: bool = True  # По умолчанию для всех режимов
 

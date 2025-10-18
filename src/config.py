@@ -66,6 +66,8 @@ class ScalpingConfig(BaseModel):
     multi_timeframe: Dict = Field(default_factory=dict)
     correlation_filter_enabled: bool = Field(default=False)
     correlation_filter: Dict = Field(default_factory=dict)
+    adx_filter_enabled: bool = Field(default=False)  # 🆕 ADX Filter
+    adx_filter: Dict = Field(default_factory=dict)   # 🆕 ADX параметры
     time_filter_enabled: bool = Field(default=False)
     time_filter: Dict = Field(default_factory=dict)
     volatility_modes_enabled: bool = Field(default=False)
