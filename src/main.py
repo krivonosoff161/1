@@ -15,43 +15,20 @@ from loguru import logger
 
 from src.config import APIConfig, RiskConfig, ScalpingConfig
 from src.okx_client import OKXClient
-from src.strategies.scalping import ScalpingStrategy
+# 🆕 НОВАЯ МОДУЛЬНАЯ АРХИТЕКТУРА
+from src.strategies.scalping import ScalpingOrchestrator
+# ✅ НОВОЕ: Единый полный лог с ротацией
+from src.utils.logging_setup import setup_logging
 
-# Настройка логирования в файл
-logger.remove()  # Удаляем стандартный обработчик
-logger.add(
-    sys.stderr,
-    format=(
-        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan> | "
-        "<level>{message}</level>"
-    ),
-    level="INFO",
-)
+# Для совместимости (если нужно переключиться обратно)
+# from src.strategies.scalping_old import ScalpingStrategy
+
 
 # Создаем папку для логов если её нет
 Path("logs").mkdir(exist_ok=True)
 
-# Добавляем логирование в файл с ротацией
-current_date = datetime.now().strftime("%Y-%m-%d")
-logger.add(
-    f"logs/trading_bot_{current_date}.log",
-    format=(
-        "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
-        "{name}:{function} | {message}"
-    ),
-    level="INFO",  # Основной уровень логирования
-    rotation="10 MB",  # ✅ Частая ротация для маленьких файлов
-    retention="30 days",
-    compression="zip",
-    encoding="utf-8",
-)
-
-logger.info("=" * 60)
-logger.info("OKX Trading Bot - Logging initialized")
-logger.info(f"Log file: logs/trading_bot_{current_date}.log")
-logger.info("=" * 60)
+# Настраиваем логирование
+setup_logging(log_level="DEBUG")  # Полный лог для отладки
 
 
 class BotRunner:
@@ -83,7 +60,8 @@ class BotRunner:
         """
         self.config = config
         self.client = OKXClient(config)
-        self.strategy = ScalpingStrategy(self.client, strategy_config, risk_config)
+        # 🆕 НОВАЯ АРХИТЕКТУРА: ScalpingOrchestrator
+        self.strategy = ScalpingOrchestrator(self.client, strategy_config, risk_config)
 
     async def initialize(self) -> None:
         """

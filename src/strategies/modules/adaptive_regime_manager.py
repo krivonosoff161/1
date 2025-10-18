@@ -25,7 +25,7 @@ class RegimeType(Enum):
 @dataclass
 class IndicatorParameters:
     """Параметры индикаторов для конкретного режима."""
-    
+
     rsi_overbought: float
     rsi_oversold: float
     volume_threshold: float
@@ -40,32 +40,32 @@ class IndicatorParameters:
 @dataclass
 class ModuleParameters:
     """Параметры модулей для конкретного режима."""
-    
+
     # Multi-Timeframe
     mtf_block_opposite: bool
     mtf_score_bonus: int
     mtf_confirmation_timeframe: str
-    
+
     # Correlation Filter
     correlation_threshold: float
     max_correlated_positions: int
     block_same_direction_only: bool
-    
+
     # Time Filter
     prefer_overlaps: bool
     avoid_low_liquidity_hours: bool
-    
+
     # Pivot Points
     pivot_level_tolerance_percent: float
     pivot_score_bonus_near_level: int
     pivot_use_last_n_days: int
-    
+
     # Volume Profile
     vp_score_bonus_in_value_area: int
     vp_score_bonus_near_poc: int
     vp_poc_tolerance_percent: float
     vp_lookback_candles: int
-    
+
     # Time Filter (с default значением в конце)
     avoid_weekends: bool = True  # По умолчанию для всех режимов
 
@@ -89,7 +89,12 @@ class RegimeParameters:
     # Module bonuses
     pivot_bonus_multiplier: float  # Усиление бонусов от Pivot Points
     volume_profile_bonus_multiplier: float  # Усиление бонусов от Volume Profile
-    
+
+    # ✨ НОВОЕ (18.10.2025): Profit Harvesting (адаптивный под режим)
+    ph_enabled: bool = True  # Включен ли Profit Harvesting
+    ph_threshold: float = 0.20  # Минимальный профит в USD для досрочного закрытия
+    ph_time_limit: int = 120  # Максимальное время (сек) для PH
+
     # НОВОЕ: Параметры индикаторов и модулей
     indicators: IndicatorParameters
     modules: ModuleParameters
@@ -210,11 +215,11 @@ class AdaptiveRegimeManager:
 
         # ADX (упрощенный - направленность движения)
         # Используем разницу между High-Low за период
-        directional_movement = sum(
-            [abs(highs[i] - lows[i]) for i in range(-14, 0)]
-        )
+        directional_movement = sum([abs(highs[i] - lows[i]) for i in range(-14, 0)])
         total_movement = sum([highs[i] - lows[i] for i in range(-14, 0)])
-        adx_proxy = (directional_movement / total_movement * 100) if total_movement > 0 else 0
+        adx_proxy = (
+            (directional_movement / total_movement * 100) if total_movement > 0 else 0
+        )
 
         # Trend strength (отклонение от SMA)
         trend_deviation = ((current_price - sma_50) / sma_50) * 100
@@ -274,9 +279,7 @@ class AdaptiveRegimeManager:
             trend_dev > self.config.trend_strength_percent
             and adx > self.config.trending_adx_threshold
         ):
-            confidence = min(
-                1.0, (trend_dev / 5.0) * 0.6 + (adx / 50.0) * 0.4
-            )
+            confidence = min(1.0, (trend_dev / 5.0) * 0.6 + (adx / 50.0) * 0.4)
             reason = (
                 f"Strong trend (deviation {trend_dev:.2%}, ADX {adx:.1f}) "
                 f"→ Trending market"
@@ -360,9 +363,7 @@ class AdaptiveRegimeManager:
         """
         # Проверка 1: Минимальное время в текущем режиме
         time_in_current = datetime.utcnow() - self.regime_start_time
-        if time_in_current < timedelta(
-            minutes=self.config.min_regime_duration_minutes
-        ):
+        if time_in_current < timedelta(minutes=self.config.min_regime_duration_minutes):
             # Исключение: CHOPPY режим может включиться немедленно (защита!)
             if detection.regime != RegimeType.CHOPPY or detection.confidence < 0.8:
                 return None
@@ -422,8 +423,14 @@ class AdaptiveRegimeManager:
         logger.info(f"   Position size: {params.position_size_multiplier}x")
         logger.info(f"   TP: {params.tp_atr_multiplier} ATR")
         logger.info(f"   SL: {params.sl_atr_multiplier} ATR")
+        logger.info(f"   Max holding: {params.max_holding_minutes} min")
+        logger.info(f"   Cooldown after loss: {params.cooldown_after_loss_minutes} min")
+        logger.info("")
+        logger.info("✨ Profit Harvesting (adaptive):")
+        logger.info(f"   Enabled: {'YES' if params.ph_enabled else 'NO'}")
+        logger.info(f"   Threshold: ${params.ph_threshold:.2f}")
         logger.info(
-            f"   Cooldown after loss: {params.cooldown_after_loss_minutes} min"
+            f"   Time Limit: {params.ph_time_limit}s ({params.ph_time_limit/60:.1f} min)"
         )
         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
@@ -442,15 +449,11 @@ class AdaptiveRegimeManager:
         time_distribution = {}
         if total_time > 0:
             for regime, td in self.time_in_regime.items():
-                time_distribution[regime.value] = (
-                    td.total_seconds() / total_time * 100
-                )
+                time_distribution[regime.value] = td.total_seconds() / total_time * 100
 
         return {
             "current_regime": self.current_regime.value,
-            "time_in_current_regime": str(
-                datetime.utcnow() - self.regime_start_time
-            ),
+            "time_in_current_regime": str(datetime.utcnow() - self.regime_start_time),
             "total_switches": sum(self.regime_switches.values()),
             "switches_by_type": self.regime_switches,
             "time_distribution": time_distribution,
@@ -480,4 +483,3 @@ class AdaptiveRegimeManager:
                 logger.info(f"  {switch}: {count} times")
 
         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-

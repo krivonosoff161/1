@@ -1596,12 +1596,12 @@ class ScalpingStrategy:
             # Расчёт confidence (0.0 - 1.0)
             long_confidence = long_score / 12.0  # Максимум 12 баллов (с MACD)
             short_confidence = short_score / 12.0
-            
+
             # 📊 ДЕТАЛЬНЫЙ ВЫВОД СКОРИНГА (каждые 30 сек)
             current_time = datetime.utcnow()
-            if not hasattr(self, '_last_detail_log'):
+            if not hasattr(self, "_last_detail_log"):
                 self._last_detail_log = {}
-            
+
             last_log = self._last_detail_log.get(symbol, current_time)
             if (current_time - last_log).total_seconds() >= 30:
                 logger.info(
