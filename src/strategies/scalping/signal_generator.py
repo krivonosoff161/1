@@ -80,6 +80,7 @@ class SignalGenerator:
         indicators: Dict,
         tick,
         current_positions: Dict[str, Position],
+        market_data=None,  # 🆕 Для ADX фильтра
     ) -> Optional[Signal]:
         """
         Генерация торгового сигнала через scoring систему.
@@ -89,6 +90,7 @@ class SignalGenerator:
             indicators: Рассчитанные индикаторы
             tick: Текущий тик
             current_positions: Текущие открытые позиции
+            market_data: Рыночные данные (для ADX)
 
         Returns:
             Signal или None
@@ -379,12 +381,11 @@ class SignalGenerator:
                     )
 
         # 🆕 PHASE 2: ADX Filter (сила тренда)
-        if self.modules.get("adx") and signal_direction:
+        if self.modules.get("adx") and signal_direction and market_data:
             # Получаем свечи для ADX (используем основной таймфрейм)
             candles = market_data.ohlcv_data[-50:]  # Последние 50 свечей
             
             # Определяем side для проверки
-            from src.models import OrderSide
             side = OrderSide.BUY if signal_direction == "LONG" else OrderSide.SELL
             
             # Проверяем ADX

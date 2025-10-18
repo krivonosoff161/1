@@ -71,7 +71,7 @@ class ADXFilter:
         )
 
     def check_trend_strength(
-        self, symbol: str, side: OrderSide, candles: List[Dict]
+        self, symbol: str, side: OrderSide, candles: List
     ) -> ADXResult:
         """
         Проверяет силу и направление тренда.
@@ -175,10 +175,10 @@ class ADXFilter:
         if len(candles) < self.config.adx_period + 1:
             return 0.0
 
-        # Извлекаем данные
-        highs = np.array([float(c["high"]) for c in candles])
-        lows = np.array([float(c["low"]) for c in candles])
-        closes = np.array([float(c["close"]) for c in candles])
+        # Извлекаем данные (candles = List[OHLCV])
+        highs = np.array([float(c.high) for c in candles])
+        lows = np.array([float(c.low) for c in candles])
+        closes = np.array([float(c.close) for c in candles])
 
         # True Range
         tr = self._calculate_tr(highs, lows, closes)
@@ -206,14 +206,14 @@ class ADXFilter:
 
         return float(adx_vals[-1])
 
-    def _calculate_plus_di(self, candles: List[Dict]) -> float:
+    def _calculate_plus_di(self, candles: List) -> float:
         """Расчет +DI (Plus Directional Indicator)."""
         if len(candles) < self.config.adx_period + 1:
             return 0.0
 
-        highs = np.array([float(c["high"]) for c in candles])
-        lows = np.array([float(c["low"]) for c in candles])
-        closes = np.array([float(c["close"]) for c in candles])
+        highs = np.array([float(c.high) for c in candles])
+        lows = np.array([float(c.low) for c in candles])
+        closes = np.array([float(c.close) for c in candles])
 
         tr = self._calculate_tr(highs, lows, closes)
         plus_dm = self._calculate_plus_dm(highs)
@@ -225,14 +225,14 @@ class ADXFilter:
 
         return float(plus_di[-1])
 
-    def _calculate_minus_di(self, candles: List[Dict]) -> float:
+    def _calculate_minus_di(self, candles: List) -> float:
         """Расчет -DI (Minus Directional Indicator)."""
         if len(candles) < self.config.adx_period + 1:
             return 0.0
 
-        highs = np.array([float(c["high"]) for c in candles])
-        lows = np.array([float(c["low"]) for c in candles])
-        closes = np.array([float(c["close"]) for c in candles])
+        highs = np.array([float(c.high) for c in candles])
+        lows = np.array([float(c.low) for c in candles])
+        closes = np.array([float(c.close) for c in candles])
 
         tr = self._calculate_tr(highs, lows, closes)
         minus_dm = self._calculate_minus_dm(lows)

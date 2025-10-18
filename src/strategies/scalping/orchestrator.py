@@ -729,7 +729,7 @@ class ScalpingOrchestrator:
 
         logger.debug(f"   🎯 Generating signal...")
         signal = await self.signal_generator.generate_signal(
-            symbol, indicators, tick, self.positions
+            symbol, indicators, tick, self.positions, market_data  # 🆕 Передаем market_data для ADX
         )
 
         if not signal:
