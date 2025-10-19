@@ -3,7 +3,7 @@
 
 Координирует все модули:
 - SignalGenerator
-- OrderExecutor  
+- OrderExecutor
 - PositionManager
 - RiskController
 - PerformanceTracker
@@ -217,12 +217,15 @@ class ScalpingOrchestrator:
             hasattr(self.config, "adx_filter_enabled")
             and self.config.adx_filter_enabled
         ):
-            from src.strategies.modules.adx_filter import ADXFilterConfig, ADXFilter
-            
+            from src.strategies.modules.adx_filter import (ADXFilter,
+                                                           ADXFilterConfig)
+
             adx_config = ADXFilterConfig(
                 enabled=True,
                 adx_threshold=self.config.adx_filter.get("adx_threshold", 25.0),
-                di_difference=self.config.adx_filter.get("di_difference", 1.5),  # 🔥 ИЗМЕНЕНО: 5.0→1.5 (начальный RANGING!)
+                di_difference=self.config.adx_filter.get(
+                    "di_difference", 1.5
+                ),  # 🔥 ИЗМЕНЕНО: 5.0→1.5 (начальный RANGING!)
                 adx_period=self.config.adx_filter.get("adx_period", 14),
                 timeframe=self.config.adx_filter.get("timeframe", "15m"),
             )
@@ -355,197 +358,339 @@ class ScalpingOrchestrator:
         return modules
 
     def _create_arm_config(self) -> RegimeConfig:
-        """Создание конфигурации ARM из config.yaml"""
-        # TODO: Реализовать полную загрузку из config
-        # Пока используем дефолтные значения
-        from src.strategies.modules.adaptive_regime_manager import RegimeType
+        """
+        Создание конфигурации ARM из config.yaml.
 
+        ✅ ВСЕ ПАРАМЕТРЫ загружаются из config.yaml!
+        ✅ Fallback значения обновлены на актуальные (19.10.2025)
+        """
         # Загружаем параметры из config.adaptive_regime
         arm_settings = self.config.adaptive_regime
 
-        # Создаем параметры для каждого режима
-        # (Это упрощенная версия - полная логика в старом scalping.py)
+        # Извлекаем настройки для каждого режима
+        trending_cfg = arm_settings.get("trending", {})
+        trending_indicators = trending_cfg.get("indicators", {})
+        trending_modules = trending_cfg.get("modules", {})
 
         trending_params = RegimeParameters(
-            min_score_threshold=arm_settings.get("trending", {}).get(
-                "min_score_threshold", 6
-            ),
-            max_trades_per_hour=arm_settings.get("trending", {}).get(
-                "max_trades_per_hour", 20
-            ),
-            position_size_multiplier=arm_settings.get("trending", {}).get(
-                "position_size_multiplier", 1.2
-            ),
-            tp_atr_multiplier=arm_settings.get("trending", {}).get(
-                "tp_atr_multiplier", 1.5
-            ),
-            sl_atr_multiplier=arm_settings.get("trending", {}).get(
-                "sl_atr_multiplier", 1.25
-            ),
-            max_holding_minutes=arm_settings.get("trending", {}).get(
-                "max_holding_minutes", 10
-            ),
-            cooldown_after_loss_minutes=arm_settings.get("trending", {}).get(
+            # Основные параметры
+            min_score_threshold=trending_cfg.get(
+                "min_score_threshold", 5
+            ),  # 🔥 ОБНОВЛЕНО: 6→5
+            max_trades_per_hour=trending_cfg.get("max_trades_per_hour", 20),
+            position_size_multiplier=trending_cfg.get("position_size_multiplier", 1.2),
+            tp_atr_multiplier=trending_cfg.get(
+                "tp_atr_multiplier", 1.2
+            ),  # 🔥 ОБНОВЛЕНО: 1.5→1.2
+            sl_atr_multiplier=trending_cfg.get(
+                "sl_atr_multiplier", 0.9
+            ),  # 🔥 ОБНОВЛЕНО: 1.25→0.9
+            max_holding_minutes=trending_cfg.get(
+                "max_holding_minutes", 60
+            ),  # 🔥 ОБНОВЛЕНО: 10→60
+            cooldown_after_loss_minutes=trending_cfg.get(
                 "cooldown_after_loss_minutes", 2
             ),
-            pivot_bonus_multiplier=arm_settings.get("trending", {}).get(
-                "pivot_bonus_multiplier", 1.5
-            ),
-            volume_profile_bonus_multiplier=arm_settings.get("trending", {}).get(
+            pivot_bonus_multiplier=trending_cfg.get("pivot_bonus_multiplier", 1.5),
+            volume_profile_bonus_multiplier=trending_cfg.get(
                 "volume_profile_bonus_multiplier", 1.0
             ),
+            # ✅ Profit Harvesting (теперь берётся из config!)
+            ph_enabled=trending_cfg.get("ph_enabled", True),
+            ph_threshold=trending_cfg.get(
+                "ph_threshold", 0.35
+            ),  # 🔥 ОБНОВЛЕНО: 0.20→0.35
+            ph_time_limit=trending_cfg.get(
+                "ph_time_limit", 300
+            ),  # 🔥 ОБНОВЛЕНО: 120→300
+            # ✅ Индикаторы (теперь берутся из config!)
             indicators=IndicatorParameters(
-                rsi_overbought=70,
-                rsi_oversold=30,
-                volume_threshold=1.05,
-                sma_fast=8,
-                sma_slow=25,
-                ema_fast=8,
-                ema_slow=21,
-                atr_period=14,
-                min_volatility_atr=0.0003,
+                rsi_overbought=trending_indicators.get("rsi_overbought", 70),
+                rsi_oversold=trending_indicators.get("rsi_oversold", 30),
+                volume_threshold=trending_indicators.get(
+                    "volume_threshold", 1.10
+                ),  # 🔥 ОБНОВЛЕНО: 1.05→1.10
+                sma_fast=trending_indicators.get("sma_fast", 8),
+                sma_slow=trending_indicators.get("sma_slow", 25),
+                ema_fast=trending_indicators.get("ema_fast", 8),
+                ema_slow=trending_indicators.get("ema_slow", 21),
+                atr_period=trending_indicators.get("atr_period", 14),
+                min_volatility_atr=trending_indicators.get(
+                    "min_volatility_atr", 0.0003
+                ),
             ),
+            # ✅ Модули (теперь берутся из config!)
             modules=ModuleParameters(
-                mtf_block_opposite=False,
-                mtf_score_bonus=1,
-                mtf_confirmation_timeframe="30m",
-                correlation_threshold=0.8,
-                max_correlated_positions=3,
-                block_same_direction_only=False,
-                prefer_overlaps=True,
-                avoid_low_liquidity_hours=False,
-                pivot_level_tolerance_percent=0.4,
-                pivot_score_bonus_near_level=1,
-                pivot_use_last_n_days=3,
-                adx_threshold=25.0,       # 🆕 Сильный тренд для TRENDING
-                adx_di_difference=7.0,    # 🔥 СНИЖЕНО: 10.0→7.0 (реалистичнее!)
-                vp_score_bonus_in_value_area=1,
-                vp_score_bonus_near_poc=1,
-                vp_poc_tolerance_percent=0.4,
-                vp_lookback_candles=100,
-                avoid_weekends=True,
+                mtf_block_opposite=trending_modules.get("multi_timeframe", {}).get(
+                    "block_opposite", False
+                ),
+                mtf_score_bonus=trending_modules.get("multi_timeframe", {}).get(
+                    "score_bonus", 1
+                ),
+                mtf_confirmation_timeframe=trending_modules.get(
+                    "multi_timeframe", {}
+                ).get("confirmation_timeframe", "30m"),
+                correlation_threshold=trending_modules.get(
+                    "correlation_filter", {}
+                ).get("correlation_threshold", 0.8),
+                max_correlated_positions=trending_modules.get(
+                    "correlation_filter", {}
+                ).get("max_correlated_positions", 3),
+                block_same_direction_only=trending_modules.get(
+                    "correlation_filter", {}
+                ).get("block_same_direction_only", False),
+                prefer_overlaps=trending_modules.get("time_filter", {}).get(
+                    "prefer_overlaps", True
+                ),
+                avoid_low_liquidity_hours=trending_modules.get("time_filter", {}).get(
+                    "avoid_low_liquidity_hours", False
+                ),
+                pivot_level_tolerance_percent=trending_modules.get(
+                    "pivot_points", {}
+                ).get("level_tolerance_percent", 0.4),
+                pivot_score_bonus_near_level=trending_modules.get(
+                    "pivot_points", {}
+                ).get("score_bonus_near_level", 1),
+                pivot_use_last_n_days=trending_modules.get("pivot_points", {}).get(
+                    "use_last_n_days", 3
+                ),
+                adx_threshold=trending_modules.get("adx_filter", {}).get(
+                    "adx_threshold", 22.0
+                ),  # 🔥 ОБНОВЛЕНО: 25.0→22.0
+                adx_di_difference=trending_modules.get("adx_filter", {}).get(
+                    "adx_di_difference", 4.0
+                ),  # 🔥 ОБНОВЛЕНО: 7.0→4.0
+                vp_score_bonus_in_value_area=trending_modules.get(
+                    "volume_profile", {}
+                ).get("score_bonus_in_value_area", 1),
+                vp_score_bonus_near_poc=trending_modules.get("volume_profile", {}).get(
+                    "score_bonus_near_poc", 1
+                ),
+                vp_poc_tolerance_percent=trending_modules.get("volume_profile", {}).get(
+                    "poc_tolerance_percent", 0.4
+                ),
+                vp_lookback_candles=trending_modules.get("volume_profile", {}).get(
+                    "lookback_candles", 100
+                ),
+                avoid_weekends=trending_modules.get("time_filter", {}).get(
+                    "avoid_weekends", True
+                ),
             ),
         )
+
+        # RANGING РЕЖИМ
+        ranging_cfg = arm_settings.get("ranging", {})
+        ranging_indicators = ranging_cfg.get("indicators", {})
+        ranging_modules = ranging_cfg.get("modules", {})
 
         ranging_params = RegimeParameters(
-            min_score_threshold=arm_settings.get("ranging", {}).get(
-                "min_score_threshold", 3
-            ),
-            max_trades_per_hour=arm_settings.get("ranging", {}).get(
-                "max_trades_per_hour", 10
-            ),
-            position_size_multiplier=arm_settings.get("ranging", {}).get(
-                "position_size_multiplier", 1.0
-            ),
-            tp_atr_multiplier=arm_settings.get("ranging", {}).get(
-                "tp_atr_multiplier", 1.25
-            ),
-            sl_atr_multiplier=arm_settings.get("ranging", {}).get(
-                "sl_atr_multiplier", 1.0
-            ),
-            max_holding_minutes=arm_settings.get("ranging", {}).get(
-                "max_holding_minutes", 5
-            ),
-            cooldown_after_loss_minutes=arm_settings.get("ranging", {}).get(
+            # Основные параметры
+            min_score_threshold=ranging_cfg.get(
+                "min_score_threshold", 4
+            ),  # 🔥 ОБНОВЛЕНО: 3→4
+            max_trades_per_hour=ranging_cfg.get("max_trades_per_hour", 10),
+            position_size_multiplier=ranging_cfg.get("position_size_multiplier", 1.0),
+            tp_atr_multiplier=ranging_cfg.get(
+                "tp_atr_multiplier", 0.9
+            ),  # 🔥 ОБНОВЛЕНО: 1.25→0.9
+            sl_atr_multiplier=ranging_cfg.get(
+                "sl_atr_multiplier", 0.7
+            ),  # 🔥 ОБНОВЛЕНО: 1.0→0.7
+            max_holding_minutes=ranging_cfg.get(
+                "max_holding_minutes", 60
+            ),  # 🔥 ОБНОВЛЕНО: 5→60
+            cooldown_after_loss_minutes=ranging_cfg.get(
                 "cooldown_after_loss_minutes", 5
             ),
-            pivot_bonus_multiplier=arm_settings.get("ranging", {}).get(
-                "pivot_bonus_multiplier", 1.5
-            ),
-            volume_profile_bonus_multiplier=arm_settings.get("ranging", {}).get(
+            pivot_bonus_multiplier=ranging_cfg.get("pivot_bonus_multiplier", 1.5),
+            volume_profile_bonus_multiplier=ranging_cfg.get(
                 "volume_profile_bonus_multiplier", 1.5
             ),
+            # ✅ Profit Harvesting
+            ph_enabled=ranging_cfg.get("ph_enabled", True),
+            ph_threshold=ranging_cfg.get(
+                "ph_threshold", 0.28
+            ),  # 🔥 ОБНОВЛЕНО: 0.20→0.28
+            ph_time_limit=ranging_cfg.get("ph_time_limit", 300),  # 🔥 ОБНОВЛЕНО: 120→300
+            # ✅ Индикаторы
             indicators=IndicatorParameters(
-                rsi_overbought=70,
-                rsi_oversold=30,
-                volume_threshold=1.1,
-                sma_fast=10,
-                sma_slow=30,
-                ema_fast=10,
-                ema_slow=30,
-                atr_period=14,
-                min_volatility_atr=0.0005,
+                rsi_overbought=ranging_indicators.get(
+                    "rsi_overbought", 65
+                ),  # 🔥 ОБНОВЛЕНО: 70→65
+                rsi_oversold=ranging_indicators.get(
+                    "rsi_oversold", 35
+                ),  # 🔥 ОБНОВЛЕНО: 30→35
+                volume_threshold=ranging_indicators.get(
+                    "volume_threshold", 1.10
+                ),  # 🔥 ОБНОВЛЕНО: 1.1→1.10
+                sma_fast=ranging_indicators.get("sma_fast", 10),
+                sma_slow=ranging_indicators.get("sma_slow", 30),
+                ema_fast=ranging_indicators.get("ema_fast", 10),
+                ema_slow=ranging_indicators.get("ema_slow", 30),
+                atr_period=ranging_indicators.get("atr_period", 14),
+                min_volatility_atr=ranging_indicators.get("min_volatility_atr", 0.0005),
             ),
+            # ✅ Модули
             modules=ModuleParameters(
-                mtf_block_opposite=True,
-                mtf_score_bonus=2,
-                mtf_confirmation_timeframe="15m",
-                correlation_threshold=0.7,
-                max_correlated_positions=2,
-                block_same_direction_only=True,
-                prefer_overlaps=True,
-                avoid_low_liquidity_hours=True,
-                pivot_level_tolerance_percent=0.25,
-                pivot_score_bonus_near_level=2,
-                pivot_use_last_n_days=5,
-                adx_threshold=15.0,       # 🆕 Слабый тренд OK для RANGING
-                adx_di_difference=1.5,    # 🔥 СНИЖЕНО: 3.0→1.5 (мягче!)
-                vp_score_bonus_in_value_area=2,
-                vp_score_bonus_near_poc=2,
-                vp_poc_tolerance_percent=0.25,
-                vp_lookback_candles=200,
-                avoid_weekends=True,
+                mtf_block_opposite=ranging_modules.get("multi_timeframe", {}).get(
+                    "block_opposite", False
+                ),  # 🔥 ОБНОВЛЕНО: True→False
+                mtf_score_bonus=ranging_modules.get("multi_timeframe", {}).get(
+                    "score_bonus", 2
+                ),
+                mtf_confirmation_timeframe=ranging_modules.get(
+                    "multi_timeframe", {}
+                ).get("confirmation_timeframe", "15m"),
+                correlation_threshold=ranging_modules.get("correlation_filter", {}).get(
+                    "correlation_threshold", 0.7
+                ),
+                max_correlated_positions=ranging_modules.get(
+                    "correlation_filter", {}
+                ).get("max_correlated_positions", 2),
+                block_same_direction_only=ranging_modules.get(
+                    "correlation_filter", {}
+                ).get("block_same_direction_only", True),
+                prefer_overlaps=ranging_modules.get("time_filter", {}).get(
+                    "prefer_overlaps", True
+                ),
+                avoid_low_liquidity_hours=ranging_modules.get("time_filter", {}).get(
+                    "avoid_low_liquidity_hours", True
+                ),
+                pivot_level_tolerance_percent=ranging_modules.get(
+                    "pivot_points", {}
+                ).get("level_tolerance_percent", 0.25),
+                pivot_score_bonus_near_level=ranging_modules.get(
+                    "pivot_points", {}
+                ).get("score_bonus_near_level", 2),
+                pivot_use_last_n_days=ranging_modules.get("pivot_points", {}).get(
+                    "use_last_n_days", 5
+                ),
+                adx_threshold=ranging_modules.get("adx_filter", {}).get(
+                    "adx_threshold", 15.0
+                ),
+                adx_di_difference=ranging_modules.get("adx_filter", {}).get(
+                    "adx_di_difference", 1.5
+                ),
+                vp_score_bonus_in_value_area=ranging_modules.get(
+                    "volume_profile", {}
+                ).get("score_bonus_in_value_area", 2),
+                vp_score_bonus_near_poc=ranging_modules.get("volume_profile", {}).get(
+                    "score_bonus_near_poc", 2
+                ),
+                vp_poc_tolerance_percent=ranging_modules.get("volume_profile", {}).get(
+                    "poc_tolerance_percent", 0.25
+                ),
+                vp_lookback_candles=ranging_modules.get("volume_profile", {}).get(
+                    "lookback_candles", 200
+                ),
+                avoid_weekends=ranging_modules.get("time_filter", {}).get(
+                    "avoid_weekends", True
+                ),
             ),
         )
 
+        # CHOPPY РЕЖИМ
+        choppy_cfg = arm_settings.get("choppy", {})
+        choppy_indicators = choppy_cfg.get("indicators", {})
+        choppy_modules = choppy_cfg.get("modules", {})
+
         choppy_params = RegimeParameters(
-            min_score_threshold=arm_settings.get("choppy", {}).get(
-                "min_score_threshold", 5
-            ),
-            max_trades_per_hour=arm_settings.get("choppy", {}).get(
-                "max_trades_per_hour", 4
-            ),
-            position_size_multiplier=arm_settings.get("choppy", {}).get(
-                "position_size_multiplier", 0.6
-            ),
-            tp_atr_multiplier=arm_settings.get("choppy", {}).get(
-                "tp_atr_multiplier", 1.0
-            ),
-            sl_atr_multiplier=arm_settings.get("choppy", {}).get(
-                "sl_atr_multiplier", 0.75
-            ),
-            max_holding_minutes=arm_settings.get("choppy", {}).get(
-                "max_holding_minutes", 3
-            ),
-            cooldown_after_loss_minutes=arm_settings.get("choppy", {}).get(
-                "cooldown_after_loss_minutes", 15
-            ),
-            pivot_bonus_multiplier=arm_settings.get("choppy", {}).get(
-                "pivot_bonus_multiplier", 2.0
-            ),
-            volume_profile_bonus_multiplier=arm_settings.get("choppy", {}).get(
+            # Основные параметры
+            min_score_threshold=choppy_cfg.get(
+                "min_score_threshold", 7
+            ),  # 🔥 ОБНОВЛЕНО: 5→7
+            max_trades_per_hour=choppy_cfg.get("max_trades_per_hour", 4),
+            position_size_multiplier=choppy_cfg.get(
+                "position_size_multiplier", 0.8
+            ),  # 🔥 ОБНОВЛЕНО: 0.6→0.8
+            tp_atr_multiplier=choppy_cfg.get(
+                "tp_atr_multiplier", 0.7
+            ),  # 🔥 ОБНОВЛЕНО: 1.0→0.7
+            sl_atr_multiplier=choppy_cfg.get(
+                "sl_atr_multiplier", 0.5
+            ),  # 🔥 ОБНОВЛЕНО: 0.75→0.5
+            max_holding_minutes=choppy_cfg.get(
+                "max_holding_minutes", 30
+            ),  # 🔥 ОБНОВЛЕНО: 3→30
+            cooldown_after_loss_minutes=choppy_cfg.get(
+                "cooldown_after_loss_minutes", 10
+            ),  # 🔥 ОБНОВЛЕНО: 15→10
+            pivot_bonus_multiplier=choppy_cfg.get("pivot_bonus_multiplier", 2.0),
+            volume_profile_bonus_multiplier=choppy_cfg.get(
                 "volume_profile_bonus_multiplier", 2.0
             ),
+            # ✅ Profit Harvesting
+            ph_enabled=choppy_cfg.get("ph_enabled", True),
+            ph_threshold=choppy_cfg.get("ph_threshold", 0.35),  # 🔥 ОБНОВЛЕНО: 0.20→0.35
+            ph_time_limit=choppy_cfg.get("ph_time_limit", 150),  # 🔥 ОБНОВЛЕНО: 120→150
+            # ✅ Индикаторы
             indicators=IndicatorParameters(
-                rsi_overbought=65,
-                rsi_oversold=35,
-                volume_threshold=1.25,
-                sma_fast=8,
-                sma_slow=25,
-                ema_fast=8,
-                ema_slow=21,
-                atr_period=14,
-                min_volatility_atr=0.0004,
+                rsi_overbought=choppy_indicators.get("rsi_overbought", 65),
+                rsi_oversold=choppy_indicators.get("rsi_oversold", 35),
+                volume_threshold=choppy_indicators.get("volume_threshold", 1.25),
+                sma_fast=choppy_indicators.get("sma_fast", 10),  # 🔥 ОБНОВЛЕНО: 8→10
+                sma_slow=choppy_indicators.get("sma_slow", 30),  # 🔥 ОБНОВЛЕНО: 25→30
+                ema_fast=choppy_indicators.get("ema_fast", 10),  # 🔥 ОБНОВЛЕНО: 8→10
+                ema_slow=choppy_indicators.get("ema_slow", 30),  # 🔥 ОБНОВЛЕНО: 21→30
+                atr_period=choppy_indicators.get("atr_period", 14),
+                min_volatility_atr=choppy_indicators.get("min_volatility_atr", 0.0004),
             ),
+            # ✅ Модули
             modules=ModuleParameters(
-                mtf_block_opposite=False,
-                mtf_score_bonus=2,
-                mtf_confirmation_timeframe="15m",
-                correlation_threshold=0.6,
-                max_correlated_positions=1,
-                block_same_direction_only=True,
-                prefer_overlaps=True,
-                avoid_low_liquidity_hours=True,
-                pivot_level_tolerance_percent=0.2,
-                pivot_score_bonus_near_level=3,
-                pivot_use_last_n_days=5,
-                adx_threshold=10.0,       # 🆕 Минимальный порог для CHOPPY
-                adx_di_difference=1.0,    # 🔥 СНИЖЕНО: 2.0→1.0 (минимум!)
-                vp_score_bonus_in_value_area=3,
-                vp_score_bonus_near_poc=3,
-                vp_poc_tolerance_percent=0.15,
-                vp_lookback_candles=300,
-                avoid_weekends=True,
+                mtf_block_opposite=choppy_modules.get("multi_timeframe", {}).get(
+                    "block_opposite", False
+                ),
+                mtf_score_bonus=choppy_modules.get("multi_timeframe", {}).get(
+                    "score_bonus", 2
+                ),
+                mtf_confirmation_timeframe=choppy_modules.get(
+                    "multi_timeframe", {}
+                ).get("confirmation_timeframe", "15m"),
+                correlation_threshold=choppy_modules.get("correlation_filter", {}).get(
+                    "correlation_threshold", 0.6
+                ),
+                max_correlated_positions=choppy_modules.get(
+                    "correlation_filter", {}
+                ).get("max_correlated_positions", 1),
+                block_same_direction_only=choppy_modules.get(
+                    "correlation_filter", {}
+                ).get("block_same_direction_only", True),
+                prefer_overlaps=choppy_modules.get("time_filter", {}).get(
+                    "prefer_overlaps", True
+                ),
+                avoid_low_liquidity_hours=choppy_modules.get("time_filter", {}).get(
+                    "avoid_low_liquidity_hours", True
+                ),
+                pivot_level_tolerance_percent=choppy_modules.get(
+                    "pivot_points", {}
+                ).get("level_tolerance_percent", 0.2),
+                pivot_score_bonus_near_level=choppy_modules.get("pivot_points", {}).get(
+                    "score_bonus_near_level", 3
+                ),
+                pivot_use_last_n_days=choppy_modules.get("pivot_points", {}).get(
+                    "use_last_n_days", 5
+                ),
+                adx_threshold=choppy_modules.get("adx_filter", {}).get(
+                    "adx_threshold", 10.0
+                ),
+                adx_di_difference=choppy_modules.get("adx_filter", {}).get(
+                    "adx_di_difference", 1.0
+                ),
+                vp_score_bonus_in_value_area=choppy_modules.get(
+                    "volume_profile", {}
+                ).get("score_bonus_in_value_area", 3),
+                vp_score_bonus_near_poc=choppy_modules.get("volume_profile", {}).get(
+                    "score_bonus_near_poc", 3
+                ),
+                vp_poc_tolerance_percent=choppy_modules.get("volume_profile", {}).get(
+                    "poc_tolerance_percent", 0.15
+                ),
+                vp_lookback_candles=choppy_modules.get("volume_profile", {}).get(
+                    "lookback_candles", 300
+                ),
+                avoid_weekends=choppy_modules.get("time_filter", {}).get(
+                    "avoid_weekends", True
+                ),
             ),
         )
 
@@ -729,7 +874,11 @@ class ScalpingOrchestrator:
 
         logger.debug(f"   🎯 Generating signal...")
         signal = await self.signal_generator.generate_signal(
-            symbol, indicators, tick, self.positions, market_data  # 🆕 Передаем market_data для ADX
+            symbol,
+            indicators,
+            tick,
+            self.positions,
+            market_data,  # 🆕 Передаем market_data для ADX
         )
 
         if not signal:
@@ -808,7 +957,8 @@ class ScalpingOrchestrator:
         elif self.api_requests_count >= self.max_requests_per_minute:
             wait_time = 60 - elapsed
             logger.warning(
-                f"⚠️ API rate limit reached ({self.api_requests_count}/{self.max_requests_per_minute}) - "
+                f"⚠️ API rate limit reached "
+                f"({self.api_requests_count}/{self.max_requests_per_minute}) - "
                 f"waiting {wait_time:.1f}s"
             )
             await asyncio.sleep(wait_time)
