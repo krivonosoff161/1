@@ -189,35 +189,35 @@ class PositionManager:
 
             # Ищем ЗАКРЫВАЮЩИЙ fill
             # 🔥 ИСПРАВЛЕНО (19.10.2025): algoId НЕТ в fills! Ищем по времени + стороне + execType
-            
+
             position_open_ts = int(position.timestamp.timestamp() * 1000)
-            
+
             for fill in fills:
                 fill_ts = int(fill.get("ts", 0))
                 fill_side = fill.get("side", "")
                 fill_px = float(fill.get("fillPx", 0))
                 exec_type = fill.get("execType", "")
-                
+
                 # Fill ПОСЛЕ открытия позиции?
                 if fill_ts <= position_open_ts:
                     continue
-                
+
                 # Fill - это ЗАКРЫТИЕ нашей позиции?
                 if position.side == PositionSide.LONG:
-                    is_closing = (fill_side == "sell")
+                    is_closing = fill_side == "sell"
                 else:
-                    is_closing = (fill_side == "buy")
-                
+                    is_closing = fill_side == "buy"
+
                 if not is_closing:
                     continue
-                
+
                 # ✅ Это закрывающий fill!
                 logger.debug(
                     f"🔍 Found closing fill for {position.symbol}: "
                     f"execType={exec_type}, fillPx={fill_px}, side={fill_side}, "
                     f"time_diff={(fill_ts - position_open_ts)/1000:.1f}s"
                 )
-                
+
                 # Определяем причину по execType
                 if exec_type == "T":
                     reason = "oco_take_profit"
@@ -239,13 +239,13 @@ class PositionManager:
                             if fill_px <= position.take_profit * 1.001
                             else "oco_stop_loss"
                         )
-                
+
                 logger.info(
                     f"💰 OCO ЗАКРЫТ НА БИРЖЕ: {position.symbol} | "
                     f"Reason: {reason} | Price: ${fill_px:.2f} | "
                     f"ExecType: {exec_type}"
                 )
-                
+
                 return (reason, fill_px)
 
             return None
