@@ -120,20 +120,12 @@ class PositionManager:
             # Обновляем цену позиции
             position.update_price(current_price)
 
-            # 1. 🔥 НОВОЕ: Проверка OCO через /trade/fills API (САМЫЙ НАДЕЖНЫЙ!)
-            if position.algo_order_id:
-                fills_result = await self._check_fills_closure(position)
-                if fills_result:
-                    reason, exit_price = fills_result
-                    # Сохраняем реальную цену закрытия для точного PnL
-                    position.exit_price = exit_price
-
-                    logger.info(
-                        f"✅ OCO закрытие подтверждено: {symbol} {reason} | "
-                        f"Exit: ${exit_price:.2f}"
-                    )
-                    to_close.append((symbol, reason))
-                    continue
+            # 1. 🔥 ОТКЛЮЧЕНО: Проверка OCO через /trade/fills API (БАГ!)
+            # Проблема: Находит СТАРЫЕ fills из истории → закрывает позиции через 7 сек
+            # Решение: Полагаемся на OCO на бирже + PH + max_holding
+            # if position.algo_order_id:
+            #     fills_result = await self._check_fills_closure(position)
+            #     ...
 
             # 2. ✨ PROFIT HARVESTING (досрочный выход с микро-профитом)
             # Обновляем PH параметры из ARM (если переключился режим)
@@ -151,9 +143,26 @@ class PositionManager:
                     to_close.append((symbol, "profit_harvesting"))
                     continue
 
-            # 3. 🔥 TIME_LIMIT УБРАН! Теперь только OCO закрывает позиции!
-            # Причина: бот закрывал позиции "вручную" MARKET ордером, но OCO висел на бирже
-            # Решение: научим бота читать реальный статус с биржи
+            # 3. ⏰ MAX HOLDING (страховка от зависших позиций)
+            if self.adaptive_regime:
+                max_holding = (
+                    self.adaptive_regime.get_current_parameters().max_holding_minutes
+                )
+                time_since_open = (
+                    datetime.utcnow() - position.timestamp
+                ).total_seconds() / 60
+
+                if time_since_open >= max_holding:
+                    logger.warning(
+                        f"⏰ MAX HOLDING EXCEEDED: {symbol} "
+                        f"{position.side.value.upper()} | "
+                        f"Time: {time_since_open:.1f} min / "
+                        f"{max_holding} min | "
+                        f"PnL: ${position.unrealized_pnl:.4f} | "
+                        f"Closing at market..."
+                    )
+                    to_close.append((symbol, "max_holding_exceeded"))
+                    continue
 
             # 4. Partial TP (если включено)
             if self.partial_tp_enabled:
