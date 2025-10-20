@@ -9,7 +9,6 @@
 - Retry логика
 """
 
-import asyncio
 from datetime import datetime
 from typing import Optional, Tuple
 
@@ -123,8 +122,8 @@ class OrderExecutor:
 
                 if not balance_check.allowed:
                     logger.warning(
-                        f"⛔ {signal.symbol} {signal.side.value} BLOCKED by Balance Checker: "
-                        f"{balance_check.reason}"
+                        f"⛔ {signal.symbol} {signal.side.value} "
+                        f"BLOCKED by Balance Checker: {balance_check.reason}"
                     )
                     return None
 
@@ -248,9 +247,8 @@ class OrderExecutor:
             logger.info(f"   Entry: ${signal.price:.2f}")
             logger.info(f"   Take Profit: ${take_profit:.2f}")
             logger.info(f"   Stop Loss: ${stop_loss:.2f}")
-            logger.info(
-                f"   Risk/Reward: 1:{abs(take_profit-signal.price)/abs(signal.price-stop_loss):.2f}"
-            )
+            rr_ratio = abs(take_profit - signal.price) / abs(signal.price - stop_loss)
+            logger.info(f"   Risk/Reward: 1:{rr_ratio:.2f}")
             logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
             # 9. Размещение OCO ордера
@@ -260,12 +258,64 @@ class OrderExecutor:
                     OrderSide.SELL if signal.side == OrderSide.BUY else OrderSide.BUY
                 )
 
+                # 🔥 НОВЫЙ ФИКС: Проверяем актуальную цену перед OCO
+                # (защита от проскальзывания между MARKET и OCO)
+                current_price = await self.client.get_current_price(signal.symbol)
+                logger.debug(
+                    f"   💹 Price check: Entry=${signal.price:.2f}, "
+                    f"Current=${current_price:.2f}"
+                )
+
+                # Корректируем TP/SL если цена сильно ушла
+                adjusted_tp = take_profit
+                adjusted_sl = stop_loss
+
+                if signal.side == OrderSide.BUY:  # LONG позиция
+                    # SL должен быть НИЖЕ текущей цены
+                    if stop_loss >= current_price:
+                        adjusted_sl = current_price * 0.995  # -0.5% от текущей
+                        logger.warning(
+                            f"⚠️ Price moved DOWN! Adjusting SL: "
+                            f"${stop_loss:.2f} → ${adjusted_sl:.2f}"
+                        )
+                    # TP должен быть ВЫШЕ текущей цены
+                    if take_profit <= current_price:
+                        adjusted_tp = current_price * 1.005  # +0.5% от текущей
+                        logger.warning(
+                            f"⚠️ Price moved UP! Adjusting TP: "
+                            f"${take_profit:.2f} → ${adjusted_tp:.2f}"
+                        )
+                else:  # SHORT позиция
+                    # SL должен быть ВЫШЕ текущей цены
+                    if stop_loss <= current_price:
+                        adjusted_sl = current_price * 1.005  # +0.5% от текущей
+                        logger.warning(
+                            f"⚠️ Price moved UP! Adjusting SL: "
+                            f"${stop_loss:.2f} → ${adjusted_sl:.2f}"
+                        )
+                    # TP должен быть НИЖЕ текущей цены
+                    if take_profit >= current_price:
+                        adjusted_tp = current_price * 0.995  # -0.5% от текущей
+                        logger.warning(
+                            f"⚠️ Price moved DOWN! Adjusting TP: "
+                            f"${take_profit:.2f} → ${adjusted_tp:.2f}"
+                        )
+
+                # Обновляем в Position если скорректировали
+                if adjusted_tp != take_profit or adjusted_sl != stop_loss:
+                    position.take_profit = adjusted_tp
+                    position.stop_loss = adjusted_sl
+                    logger.info(
+                        f"✏️ Position TP/SL updated: TP=${adjusted_tp:.2f}, "
+                        f"SL=${adjusted_sl:.2f}"
+                    )
+
                 oco_order_id = await self.client.place_oco_order(
                     symbol=signal.symbol,
                     side=close_side,
                     quantity=actual_position_size,
-                    tp_trigger_price=take_profit,
-                    sl_trigger_price=stop_loss,
+                    tp_trigger_price=adjusted_tp,
+                    sl_trigger_price=adjusted_sl,
                 )
 
                 if oco_order_id:
@@ -328,11 +378,11 @@ class OrderExecutor:
             # Расчет risk amount (1% от баланса)
             risk_amount = base_balance * (self.risk_config.risk_per_trade_percent / 100)
             logger.info(
-                f"🎯 Risk amount: ${risk_amount:.2f} ({self.risk_config.risk_per_trade_percent}%)"
+                f"🎯 Risk amount: ${risk_amount:.2f} "
+                f"({self.risk_config.risk_per_trade_percent}%)"
             )
 
             # Получаем ATR для расчета stop distance
-            from src.indicators import ATR
 
             # Предполагаем что market_data уже есть в кэше
             # TODO: передавать market_data или использовать кэш
@@ -371,8 +421,8 @@ class OrderExecutor:
             # Проверка минимума
             position_value_usd = final_position_size * price
             logger.info(
-                f"📊 Final position size: {final_position_size:.6f} = ${position_value_usd:.2f} "
-                f"(min: ${self.min_order_value_usd})"
+                f"📊 Final position size: {final_position_size:.6f} = "
+                f"${position_value_usd:.2f} (min: ${self.min_order_value_usd})"
             )
 
             if position_value_usd < self.min_order_value_usd:

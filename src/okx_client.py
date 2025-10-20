@@ -1,7 +1,6 @@
 """
 OKX Exchange API client with corrected signature
 """
-import asyncio
 import base64
 import hashlib
 import hmac
@@ -14,9 +13,8 @@ import aiohttp
 from loguru import logger
 
 from src.config import APIConfig
-from src.models import (OHLCV, Balance, MarketData, Order, OrderSide,
-                        OrderStatus, OrderType, Position, PositionSide, Tick,
-                        Trade)
+from src.models import (OHLCV, Balance, Order, OrderSide, OrderStatus,
+                        OrderType, Position, PositionSide, Tick, Trade)
 
 
 class OKXClient:
@@ -66,7 +64,7 @@ class OKXClient:
         message = f"{timestamp}{method.upper()}{request_path}{body}"
 
         # Детальное логирование для отладки
-        logger.debug(f"Signature components:")
+        logger.debug("Signature components:")
         logger.debug(f"  Timestamp: {timestamp}")
         logger.debug(f"  Method: {method.upper()}")
         logger.debug(f"  Path: {request_path}")
@@ -203,6 +201,19 @@ class OKXClient:
         params = {"instId": symbol}
         result = await self._make_request("GET", "/market/ticker", params=params)
         return result["data"][0] if result["data"] else {}
+
+    async def get_current_price(self, symbol: str) -> float:
+        """
+        Get current market price for symbol.
+
+        Args:
+            symbol: Trading pair (e.g. "BTC-USDT")
+
+        Returns:
+            float: Current last price
+        """
+        ticker = await self.get_ticker(symbol)
+        return float(ticker.get("last", 0))
 
     async def get_orderbook(self, symbol: str, depth: int = 20) -> Dict:
         """Get order book for symbol"""
@@ -779,7 +790,8 @@ class OKXClient:
                 for order in result["data"]:
                     if order.get("algoId") == algo_id:
                         logger.debug(
-                            f"✅ Found OCO {algo_id} in pending: state={order.get('state')}"
+                            f"✅ Found OCO {algo_id} in pending: "
+                            f"state={order.get('state')}"
                         )
                         return order
 
@@ -795,13 +807,13 @@ class OKXClient:
     ) -> List[Dict]:
         """
         Получить последние исполненные ордера (fills).
-        
+
         🔥 КРИТИЧНО для отслеживания OCO закрытий!
-        
+
         Args:
             symbol: Торговая пара (опционально, если None - все пары)
             limit: Максимум записей (по умолчанию 100)
-        
+
         Returns:
             List[Dict]: Список исполненных ордеров
         """
@@ -812,28 +824,28 @@ class OKXClient:
                 "instType": "SPOT",
                 "limit": str(limit),
             }
-            
+
             result = await self._make_request(
                 "GET",
                 "/trade/fills",
                 params=params,
             )
-            
+
             if result.get("data"):
                 fills = result["data"]
-                
+
                 # Фильтруем по symbol если указан
                 if symbol:
                     fills = [f for f in fills if f.get("instId") == symbol]
-                
+
                 logger.debug(
                     f"✅ Retrieved {len(fills)} fills"
                     + (f" for {symbol}" if symbol else "")
                 )
                 return fills
-            
+
             return []
-            
+
         except Exception as e:
             logger.error(f"❌ Error getting fills: {e}")
             return []
@@ -994,7 +1006,8 @@ class OKXClient:
                 candles.append(candle)
 
             # OKX возвращает свечи в обратном порядке (новые первыми)
-            # Разворачиваем, чтобы старые свечи были первыми (для правильного расчета индикаторов)
+            # Разворачиваем, чтобы старые свечи были первыми
+            # (для правильного расчета индикаторов)
             return list(reversed(candles))
 
         except Exception as e:
