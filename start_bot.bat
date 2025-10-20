@@ -29,16 +29,6 @@ if not exist "config.yaml" (
     exit /b 1
 )
 
-REM Activate virtual environment
-echo Activating virtual environment...
-call venv\Scripts\activate.bat
-
-REM Check environment variables
-if not defined OKX_API_KEY (
-    echo WARNING: Environment variables not found!
-    echo Loading from .env file...
-)
-
 REM Create logs folder if not exists
 if not exist "logs" mkdir logs
 
@@ -53,12 +43,13 @@ echo Max open positions: 3
 echo =====================================
 echo.
 
-REM Start bot in DEMO mode
+REM Start bot in DEMO mode using VENV Python explicitly
 echo Starting bot in DEMO mode...
+echo Using: venv\Scripts\python.exe
 echo Press Ctrl+C to stop
 echo.
 echo =====================================
-python run_bot.py --config config.yaml
+venv\Scripts\python.exe run_bot.py --config config.yaml
 
 REM If bot stopped
 echo.
