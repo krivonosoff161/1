@@ -21,6 +21,7 @@ import argparse
 import asyncio
 import os
 import sys
+from pathlib import Path
 from typing import NoReturn
 
 # Добавляем директорию src в путь поиска модулей
@@ -49,6 +50,26 @@ def main() -> NoReturn:
     Returns:
         NoReturn: Функция либо запускает бесконечный цикл, либо завершается
     """
+    # Проверка на уже запущенный экземпляр через lock file
+    lock_file = Path("data/cache/bot.lock")
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+    if lock_file.exists():
+        print("=" * 70)
+        print("ERROR: Bot is already running!")
+        print("=" * 70)
+        print(f"Lock file found: {lock_file}")
+        print("If bot is not running, delete the lock file:")
+        print(f"  del {lock_file}")
+        print("=" * 70)
+        sys.exit(1)
+
+    # Создаём lock file
+    try:
+        lock_file.write_text(str(os.getpid()))
+    except Exception as e:
+        print(f"WARNING: Could not create lock file: {e}")
+
     # Парсинг аргументов командной строки
     parser = argparse.ArgumentParser(
         description="OKX Trading Bot - Автоматизированный торговый бот",
@@ -113,6 +134,15 @@ def main() -> NoReturn:
 
         traceback.print_exc()
         sys.exit(1)
+    finally:
+        # Удаляем lock file при любом завершении
+        lock_file = Path("data/cache/bot.lock")
+        if lock_file.exists():
+            try:
+                lock_file.unlink()
+            except Exception as e:  # noqa: B110
+                # Игнорируем ошибки удаления lock file при завершении
+                print(f"WARNING: Could not remove lock file: {e}")
 
 
 if __name__ == "__main__":
