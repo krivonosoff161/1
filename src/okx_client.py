@@ -444,7 +444,7 @@ class OKXClient:
             "ordType": "limit" if order_type == OrderType.LIMIT else "market",
             "sz": str(quantity),
         }
-        
+
         # Добавляем POST-ONLY если указан
         if post_only and order_type == OrderType.LIMIT:
             data["postOnly"] = "true"

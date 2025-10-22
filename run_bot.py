@@ -116,30 +116,28 @@ def main() -> NoReturn:
             # Выбираем режим работы
             if args.mode == "websocket":
                 print("🔧 Creating WebSocket Orchestrator...")
-                from src.strategies.scalping.websocket_orchestrator import WebSocketScalpingOrchestrator
                 from src.okx_client import OKXClient
-                
+                from src.strategies.scalping.websocket_orchestrator import \
+                    WebSocketScalpingOrchestrator
+
                 print("🔧 Initializing OKX Client...")
                 # Инициализируем WebSocket оркестратор
                 okx_client = OKXClient(config.get_okx_config())
-                
+
                 print("🔧 Creating WebSocket Orchestrator...")
                 bot = WebSocketScalpingOrchestrator(config, okx_client)
-                
+
                 # Устанавливаем тестовый режим
                 if args.test_mode:
                     bot.test_mode = True
-                
+
                 print("🚀 Starting WebSocket Bot...")
                 # Запускаем WebSocket бота
                 await bot.start()
             else:
                 # Стандартный REST режим
-                bot = BotRunner(
-                    config=config,
-                    mode="rest"
-                )
-                
+                bot = BotRunner(config=config, mode="rest")
+
                 # Инициализируем и запускаем
                 await bot.initialize()
                 await bot.run()

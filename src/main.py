@@ -22,10 +22,10 @@ from src.okx_client import OKXClient
 # REST API режим
 from src.strategies.scalping.orchestrator import ScalpingOrchestrator
 # WebSocket режим
-from src.strategies.scalping.websocket_orchestrator import WebSocketScalpingOrchestrator
+from src.strategies.scalping.websocket_orchestrator import \
+    WebSocketScalpingOrchestrator
 # ✅ НОВОЕ: Единый полный лог с ротацией
 from src.utils.logging_setup import setup_logging
-
 
 # Создаем папку для логов если её нет
 Path("logs").mkdir(exist_ok=True)
@@ -52,11 +52,7 @@ class BotRunner:
         mode: Режим работы ('rest' или 'websocket')
     """
 
-    def __init__(
-        self,
-        config: BotConfig,
-        mode: str = "rest"
-    ) -> None:
+    def __init__(self, config: BotConfig, mode: str = "rest") -> None:
         """
         Инициализация торгового бота.
 
@@ -66,15 +62,17 @@ class BotRunner:
         """
         self.config = config
         self.mode = mode.lower()
-        self.client = OKXClient(config.api['okx'])
-        
+        self.client = OKXClient(config.api["okx"])
+
         # Выбор стратегии в зависимости от режима
         if self.mode == "websocket":
             logger.info("🚀 Initializing WebSocket mode...")
             self.strategy = WebSocketScalpingOrchestrator(config, self.client)
         else:
             logger.info("🔄 Initializing REST API mode...")
-            self.strategy = ScalpingOrchestrator(self.client, config.scalping, config.risk)
+            self.strategy = ScalpingOrchestrator(
+                self.client, config.scalping, config.risk
+            )
 
     async def initialize(self) -> None:
         """
@@ -102,7 +100,7 @@ class BotRunner:
             Exception: При критических ошибках во время торговли
         """
         logger.info(f"Running bot in {self.mode.upper()} mode...")
-        
+
         if self.mode == "websocket":
             # WebSocket режим - асинхронный запуск
             await self.strategy.start()
@@ -118,11 +116,11 @@ class BotRunner:
         Должен вызываться при остановке бота.
         """
         logger.info("Shutting down bot...")
-        
+
         if self.mode == "websocket":
             # WebSocket режим - остановка WebSocket соединения
             await self.strategy.stop()
-        
+
         await self.client.disconnect()
         logger.info("Bot shutdown complete.")
 
@@ -156,17 +154,17 @@ def main() -> None:
         default="rest",
         help="Trading mode: 'rest' for REST API or 'websocket' for real-time data",
     )
-    
+
     args = parser.parse_args()
 
     try:
         # Загружаем конфигурацию
         config = load_config(args.config)
         logger.info(f"Configuration loaded from {args.config}")
-        
+
         # Создаем runner с выбранным режимом
         runner = BotRunner(config, mode=args.mode)
-        
+
         # Запускаем асинхронный event loop
         loop = asyncio.get_event_loop()
         try:
@@ -180,7 +178,7 @@ def main() -> None:
             logger.error(f"Critical error running bot: {e}")
             loop.run_until_complete(runner.shutdown())
             sys.exit(1)
-            
+
     except Exception as e:
         logger.error(f"Failed to start bot: {e}")
         sys.exit(1)
