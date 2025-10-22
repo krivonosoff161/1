@@ -8,11 +8,12 @@ import os
 import shutil
 from pathlib import Path
 
+
 def create_directory_structure():
     """Создать структуру папок"""
-    
+
     print("\n[1/8] Создание структуры папок...")
-    
+
     directories = [
         "src/strategies/modules",
         "src/indicators/advanced",
@@ -32,18 +33,19 @@ def create_directory_structure():
         "docs/guides",
         "docs/archive",
     ]
-    
+
     for directory in directories:
         Path(directory).mkdir(parents=True, exist_ok=True)
         print(f"  [OK] {directory}")
-    
+
     print("  Создано: 18 папок\n")
+
 
 def create_init_files():
     """Создать __init__.py файлы"""
-    
+
     print("[2/8] Создание __init__.py файлов...")
-    
+
     init_files = [
         "src/strategies/modules/__init__.py",
         "src/indicators/__init__.py",
@@ -57,20 +59,21 @@ def create_init_files():
         "tests/integration/__init__.py",
         "tests/backtest/__init__.py",
     ]
-    
+
     for init_file in init_files:
         Path(init_file).touch()
         print(f"  [OK] {init_file}")
-    
+
     print(f"  Создано: {len(init_files)} файлов\n")
+
 
 def move_documentation():
     """Переместить документацию"""
-    
+
     print("[3/8] Перемещение документации...")
-    
+
     moved_count = 0
-    
+
     # Актуальная документация
     current_docs = [
         "ГЛУБОКИЙ_АНАЛИЗ_СТРАТЕГИИ.md",
@@ -85,25 +88,25 @@ def move_documentation():
         "ИНСТРУКЦИЯ_ПОСЛЕ_ИСПРАВЛЕНИЙ.md",
         "ПЛАН_РЕОРГАНИЗАЦИИ_ПРОЕКТА.md",
     ]
-    
+
     for doc in current_docs:
         if Path(doc).exists():
             shutil.move(doc, f"docs/current/{doc}")
             print(f"  [OK] {doc} -> docs/current/")
             moved_count += 1
-    
+
     # Руководства
     guides = [
         "КАК_РАБОТАТЬ_С_GITHUB.md",
         "GITHUB_DESKTOP_ИНСТРУКЦИЯ.md",
     ]
-    
+
     for guide in guides:
         if Path(guide).exists():
             shutil.move(guide, f"docs/guides/{guide}")
             print(f"  [OK] {guide} -> docs/guides/")
             moved_count += 1
-    
+
     # Архив
     archive_docs = [
         "enhanced-trading-system.md",
@@ -125,45 +128,48 @@ def move_documentation():
         "ТЕКУЩИЕ_НАСТРОЙКИ.md",
         "ТОРГОВЫЕ_СЕССИИ.txt",
     ]
-    
+
     for doc in archive_docs:
         if Path(doc).exists():
             shutil.move(doc, f"docs/archive/{doc}")
             print(f"  [OK] {doc} -> docs/archive/")
             moved_count += 1
-    
+
     print(f"  Перемещено: {moved_count} файлов\n")
+
 
 def move_config():
     """Переместить конфигурацию"""
-    
+
     print("[4/8] Перемещение конфигурации...")
-    
+
     if Path("config.yaml").exists():
         shutil.copy("config.yaml", "config/config.yaml")
         print("  [OK] config.yaml -> config/config.yaml (скопировано)")
         print("  [INFO] Оригинал оставлен для обратной совместимости")
-    
+
     print()
+
 
 def move_tests():
     """Переместить тесты"""
-    
+
     print("[5/8] Перемещение тестов...")
-    
+
     if Path("test_okx_signature.py").exists():
         shutil.move("test_okx_signature.py", "tests/integration/test_okx_signature.py")
         print("  [OK] test_okx_signature.py -> tests/integration/")
     else:
         print("  [INFO] test_okx_signature.py не найден")
-    
+
     print()
+
 
 def cleanup_junk():
     """Удалить мусорные файлы"""
-    
+
     print("[6/8] Cleanup junk files...")
-    
+
     # Дубликат репозитория (автоматически удаляем)
     if Path("1").exists() and Path("1").is_dir():
         print("  [WARN] Found folder '1/' (duplicate repository)")
@@ -173,24 +179,25 @@ def cleanup_junk():
             print("  [OK] Folder '1/' removed")
         except Exception as e:
             print(f"  [ERROR] Could not remove '1/': {e}")
-    
+
     # Мусорный файл
     junk_files = [
         "zxcvhgjfhdgsadsgdhfjklj;hgf.txt",
     ]
-    
+
     for junk_file in junk_files:
         if Path(junk_file).exists():
             Path(junk_file).unlink()
             print(f"  [OK] {junk_file} удален")
-    
+
     print()
+
 
 def create_new_configs():
     """Создать новые конфигурационные файлы"""
-    
+
     print("[7/8] Создание новых конфигураций...")
-    
+
     # features.yaml
     features_content = """# Feature Flags - управление модулями
 
@@ -218,18 +225,19 @@ grid_trading_enabled: false
 web_dashboard_enabled: false
 auto_backups_enabled: false
 """
-    
+
     with open("config/features.yaml", "w", encoding="utf-8") as f:
         f.write(features_content)
     print("  [OK] config/features.yaml создан")
-    
+
     print()
+
 
 def create_gitignore_updates():
     """Обновить .gitignore"""
-    
+
     print("[8/8] Обновление .gitignore...")
-    
+
     additions = """
 # Data
 data/cache/
@@ -255,23 +263,24 @@ Thumbs.db
 htmlcov/
 .coverage
 """
-    
+
     # Проверяем что еще не добавлено
     with open(".gitignore", "r", encoding="utf-8") as f:
         current_content = f.read()
-    
+
     if "data/cache/" not in current_content:
         with open(".gitignore", "a", encoding="utf-8") as f:
             f.write(additions)
         print("  [OK] .gitignore обновлен")
     else:
         print("  [SKIP] .gitignore уже содержит дополнения")
-    
+
     print()
+
 
 def print_summary():
     """Вывести итоговую сводку"""
-    
+
     print("=" * 70)
     print("РЕОРГАНИЗАЦИЯ ЗАВЕРШЕНА!")
     print("=" * 70)
@@ -304,9 +313,10 @@ def print_summary():
     print("Готово к разработке!")
     print("=" * 70)
 
+
 def main():
     """Главная функция"""
-    
+
     print()
     print("=" * 70)
     print("REORGANIZACIJA PROEKTA")
@@ -314,43 +324,45 @@ def main():
     print()
     print("Starting automatic project reorganization...")
     print()
-    
+
     try:
         # Шаг 1: Создание структуры
         create_directory_structure()
-        
+
         # Шаг 2: __init__.py файлы
         create_init_files()
-        
+
         # Шаг 3: Перемещение документации
         move_documentation()
-        
+
         # Шаг 4: Конфигурация
         move_config()
-        
+
         # Шаг 5: Тесты
         move_tests()
-        
+
         # Шаг 6: Новые конфиги
         create_new_configs()
-        
+
         # Шаг 7: .gitignore
         create_gitignore_updates()
-        
+
         # Шаг 8: Очистка (опционально)
         cleanup_junk()
-        
+
         # Итоговая сводка
         print_summary()
-        
+
         return 0
-        
+
     except Exception as e:
         print(f"\n[ERROR] Ошибка: {e}")
         print("Реорганизация не завершена!")
         import traceback
+
         traceback.print_exc()
         return 1
+
 
 if __name__ == "__main__":
     exit(main())

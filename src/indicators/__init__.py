@@ -13,6 +13,9 @@ from src.indicators.base import (
     VolumeIndicator,
 )
 
+# Создаем алиас для совместимости
+TechnicalIndicators = IndicatorManager
+
 __all__ = [
     "ATR",
     "MACD",
@@ -22,5 +25,6 @@ __all__ = [
     "IndicatorManager",
     "SimpleMovingAverage",
     "VolumeIndicator",
+    "TechnicalIndicators",
 ]
 

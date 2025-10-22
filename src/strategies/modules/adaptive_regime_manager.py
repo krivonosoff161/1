@@ -4,7 +4,7 @@ Adaptive Regime Manager - динамическое переключение па
 Определяет текущий режим рынка (TRENDING, RANGING, CHOPPY) и автоматически
 адаптирует параметры торговли для максимальной эффективности.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict, List, Optional
@@ -120,9 +120,45 @@ class RegimeConfig:
     min_regime_duration_minutes: int = 15  # Минимум 15 мин в одном режиме
     required_confirmations: int = 3  # Нужно 3 подтверждения для переключения
     # Параметры для каждого режима
-    trending_params: RegimeParameters = None
-    ranging_params: RegimeParameters = None
-    choppy_params: RegimeParameters = None
+    trending_params: RegimeParameters = field(default_factory=lambda: RegimeParameters(
+        min_score_threshold=3.0,
+        max_trades_per_hour=15,
+        position_size_multiplier=1.2,
+        tp_atr_multiplier=2.5,
+        sl_atr_multiplier=1.2,
+        max_holding_minutes=20,
+        cooldown_after_loss_minutes=3,
+        pivot_bonus_multiplier=1.2,
+        volume_profile_bonus_multiplier=1.1,
+        indicators={},
+        modules={}
+    ))
+    ranging_params: RegimeParameters = field(default_factory=lambda: RegimeParameters(
+        min_score_threshold=4.0,
+        max_trades_per_hour=10,
+        position_size_multiplier=1.0,
+        tp_atr_multiplier=2.0,
+        sl_atr_multiplier=1.5,
+        max_holding_minutes=15,
+        cooldown_after_loss_minutes=5,
+        pivot_bonus_multiplier=1.0,
+        volume_profile_bonus_multiplier=1.0,
+        indicators={},
+        modules={}
+    ))
+    choppy_params: RegimeParameters = field(default_factory=lambda: RegimeParameters(
+        min_score_threshold=5.0,
+        max_trades_per_hour=8,
+        position_size_multiplier=0.8,
+        tp_atr_multiplier=1.5,
+        sl_atr_multiplier=2.0,
+        max_holding_minutes=10,
+        cooldown_after_loss_minutes=8,
+        pivot_bonus_multiplier=0.8,
+        volume_profile_bonus_multiplier=0.9,
+        indicators={},
+        modules={}
+    ))
 
 
 @dataclass
@@ -393,19 +429,64 @@ class AdaptiveRegimeManager:
 
         return None
 
-    def get_current_parameters(self) -> RegimeParameters:
+    def get_current_parameters(self, balance_manager=None) -> RegimeParameters:
         """
-        Возвращает параметры для текущего режима.
+        Возвращает параметры для текущего режима с учетом адаптивного баланса.
+
+        Args:
+            balance_manager: AdaptiveBalanceManager для адаптации параметров
 
         Returns:
-            RegimeParameters с настройками для активного режима
+            RegimeParameters с настройками для активного режима (адаптированные под баланс)
         """
+        # Получаем базовые параметры режима
         if self.current_regime == RegimeType.TRENDING:
-            return self.config.trending_params
+            base_params = self.config.trending_params
         elif self.current_regime == RegimeType.RANGING:
-            return self.config.ranging_params
+            base_params = self.config.ranging_params
         else:  # CHOPPY
-            return self.config.choppy_params
+            base_params = self.config.choppy_params
+        
+        # Если есть balance_manager - применяем адаптацию
+        if balance_manager and base_params:
+            regime_type = self.current_regime.value.lower()  # "trending", "ranging", "choppy"
+            adapted_params = balance_manager.apply_to_regime_params(
+                base_params.__dict__, regime_type
+            )
+            
+            # Создаем новый RegimeParameters с адаптированными значениями
+            return RegimeParameters(
+                min_score_threshold=adapted_params.get("min_score_threshold", base_params.min_score_threshold),
+                max_trades_per_hour=adapted_params.get("max_trades_per_hour", base_params.max_trades_per_hour),
+                position_size_multiplier=adapted_params.get("position_size_multiplier", base_params.position_size_multiplier),
+                tp_atr_multiplier=adapted_params.get("tp_atr_multiplier", base_params.tp_atr_multiplier),
+                sl_atr_multiplier=adapted_params.get("sl_atr_multiplier", base_params.sl_atr_multiplier),
+                max_holding_minutes=adapted_params.get("max_holding_minutes", base_params.max_holding_minutes),
+                cooldown_after_loss_minutes=adapted_params.get("cooldown_after_loss_minutes", base_params.cooldown_after_loss_minutes),
+                pivot_bonus_multiplier=adapted_params.get("pivot_bonus_multiplier", base_params.pivot_bonus_multiplier),
+                volume_profile_bonus_multiplier=adapted_params.get("volume_profile_bonus_multiplier", base_params.volume_profile_bonus_multiplier),
+                indicators=base_params.indicators,
+                modules=base_params.modules
+            )
+        
+        # Если нет balance_manager или base_params - возвращаем базовые параметры
+        if base_params:
+            return base_params
+        else:
+            # Fallback - создаем дефолтные параметры
+            return RegimeParameters(
+                min_score_threshold=4.0,
+                max_trades_per_hour=10,
+                position_size_multiplier=1.0,
+                tp_atr_multiplier=2.0,
+                sl_atr_multiplier=1.5,
+                max_holding_minutes=15,
+                cooldown_after_loss_minutes=5,
+                pivot_bonus_multiplier=1.0,
+                volume_profile_bonus_multiplier=1.0,
+                indicators={},
+                modules={}
+            )
 
     def _log_regime_switch(
         self,

@@ -182,6 +182,7 @@ class OrderExecutor:
                 )
                 logger.info(f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}")
 
+                # MARKET ордер (0.1% комиссия) - стабильный режим
                 order = await self.client.place_order(
                     symbol=signal.symbol,
                     side=signal.side,
@@ -195,6 +196,7 @@ class OrderExecutor:
                 )
                 logger.info(f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}")
 
+                # MARKET ордер (0.1% комиссия) - стабильный режим
                 order = await self.client.place_order(
                     symbol=signal.symbol,
                     side=signal.side,

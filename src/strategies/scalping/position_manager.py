@@ -66,10 +66,12 @@ class PositionManager:
 
         # Если ARM есть - берем параметры из текущего режима
         if self.adaptive_regime:
+            # Получаем параметры текущего режима (без balance_manager для инициализации)
             regime_params = self.adaptive_regime.get_current_parameters()
-            self.profit_harvesting_enabled = regime_params.ph_enabled
-            self.quick_profit_threshold = regime_params.ph_threshold
-            self.quick_profit_time_limit = regime_params.ph_time_limit
+            if regime_params:
+                self.profit_harvesting_enabled = regime_params.ph_enabled
+                self.quick_profit_threshold = regime_params.ph_threshold
+                self.quick_profit_time_limit = regime_params.ph_time_limit
 
             logger.info(
                 "✅ PositionManager initialized | "
@@ -546,12 +548,13 @@ class PositionManager:
             # Gross PnL
             gross_pnl = position.unrealized_pnl
 
-            # Комиссии (0.1% на вход + 0.1% на выход)
-            commission_rate = 0.001
+            # Комиссии OKX (POST-ONLY 0.08% + MARKET 0.1%)
+            open_commission_rate = 0.0008  # POST-ONLY entry (MAKER)
+            close_commission_rate = 0.001  # MARKET exit (TAKER)
             open_value = position.size * position.entry_price
             close_value = position.size * current_price
-            open_commission = open_value * commission_rate
-            close_commission = close_value * commission_rate
+            open_commission = open_value * open_commission_rate
+            close_commission = close_value * close_commission_rate
             total_commission = open_commission + close_commission
 
             # NET PnL

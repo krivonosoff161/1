@@ -2,17 +2,14 @@
 Unit tests for Adaptive Regime Manager module
 """
 
-import pytest
 from datetime import datetime, timedelta
 
-from src.strategies.modules.adaptive_regime_manager import (
-    AdaptiveRegimeManager,
-    RegimeConfig,
-    RegimeParameters,
-    RegimeType,
-    RegimeDetectionResult,
-)
+import pytest
+
 from src.models import OHLCV
+from src.strategies.modules.adaptive_regime_manager import (
+    AdaptiveRegimeManager, RegimeConfig, RegimeDetectionResult,
+    RegimeParameters, RegimeType)
 
 
 class TestRegimeType:
@@ -30,15 +27,49 @@ class TestRegimeParameters:
 
     def test_trending_parameters(self):
         """Тест параметров для трендового режима"""
+        from src.strategies.modules.adaptive_regime_manager import (
+            IndicatorParameters, ModuleParameters)
+
         params = RegimeParameters(
             min_score_threshold=6,
             max_trades_per_hour=20,
             position_size_multiplier=1.2,
             tp_atr_multiplier=2.0,
             sl_atr_multiplier=2.0,
+            max_holding_minutes=60,
             cooldown_after_loss_minutes=2,
             pivot_bonus_multiplier=1.0,
             volume_profile_bonus_multiplier=1.0,
+            indicators=IndicatorParameters(
+                rsi_overbought=70.0,
+                rsi_oversold=30.0,
+                volume_threshold=1.1,
+                sma_fast=8,
+                sma_slow=25,
+                ema_fast=8,
+                ema_slow=25,
+                atr_period=14,
+                min_volatility_atr=0.5,
+            ),
+            modules=ModuleParameters(
+                mtf_block_opposite=False,
+                mtf_score_bonus=1,
+                mtf_confirmation_timeframe="15m",
+                correlation_threshold=0.8,
+                max_correlated_positions=3,
+                block_same_direction_only=False,
+                prefer_overlaps=True,
+                avoid_low_liquidity_hours=True,
+                pivot_level_tolerance_percent=0.2,
+                pivot_score_bonus_near_level=1,
+                pivot_use_last_n_days=1,
+                vp_score_bonus_in_value_area=1,
+                vp_score_bonus_near_poc=2,
+                vp_poc_tolerance_percent=0.5,
+                vp_lookback_candles=20,
+                adx_threshold=25.0,
+                adx_di_difference=5.0,
+            ),
         )
         assert params.min_score_threshold == 6
         assert params.max_trades_per_hour == 20
@@ -133,43 +164,145 @@ class TestAdaptiveRegimeManager:
     @pytest.fixture
     def trending_params(self):
         """Параметры для трендового режима"""
+        from src.strategies.modules.adaptive_regime_manager import (
+            IndicatorParameters, ModuleParameters)
+
         return RegimeParameters(
             min_score_threshold=6,
             max_trades_per_hour=20,
             position_size_multiplier=1.2,
             tp_atr_multiplier=2.0,
             sl_atr_multiplier=2.0,
+            max_holding_minutes=60,
             cooldown_after_loss_minutes=2,
             pivot_bonus_multiplier=1.0,
             volume_profile_bonus_multiplier=1.0,
+            indicators=IndicatorParameters(
+                rsi_overbought=70.0,
+                rsi_oversold=30.0,
+                volume_threshold=1.1,
+                sma_fast=8,
+                sma_slow=25,
+                ema_fast=8,
+                ema_slow=25,
+                atr_period=14,
+                min_volatility_atr=0.5,
+            ),
+            modules=ModuleParameters(
+                mtf_block_opposite=False,
+                mtf_score_bonus=1,
+                mtf_confirmation_timeframe="15m",
+                correlation_threshold=0.8,
+                max_correlated_positions=3,
+                block_same_direction_only=False,
+                prefer_overlaps=True,
+                avoid_low_liquidity_hours=True,
+                pivot_level_tolerance_percent=0.2,
+                pivot_score_bonus_near_level=1,
+                pivot_use_last_n_days=1,
+                vp_score_bonus_in_value_area=1,
+                vp_score_bonus_near_poc=2,
+                vp_poc_tolerance_percent=0.5,
+                vp_lookback_candles=20,
+                adx_threshold=25.0,
+                adx_di_difference=5.0,
+            ),
         )
 
     @pytest.fixture
     def ranging_params(self):
         """Параметры для бокового режима"""
+        from src.strategies.modules.adaptive_regime_manager import (
+            IndicatorParameters, ModuleParameters)
+
         return RegimeParameters(
             min_score_threshold=8,
             max_trades_per_hour=10,
             position_size_multiplier=1.0,
             tp_atr_multiplier=1.5,
             sl_atr_multiplier=2.5,
+            max_holding_minutes=30,
             cooldown_after_loss_minutes=5,
             pivot_bonus_multiplier=1.5,
             volume_profile_bonus_multiplier=1.5,
+            indicators=IndicatorParameters(
+                rsi_overbought=70.0,
+                rsi_oversold=30.0,
+                volume_threshold=1.1,
+                sma_fast=10,
+                sma_slow=30,
+                ema_fast=10,
+                ema_slow=30,
+                atr_period=14,
+                min_volatility_atr=0.5,
+            ),
+            modules=ModuleParameters(
+                mtf_block_opposite=True,
+                mtf_score_bonus=2,
+                mtf_confirmation_timeframe="15m",
+                correlation_threshold=0.7,
+                max_correlated_positions=2,
+                block_same_direction_only=False,
+                prefer_overlaps=True,
+                avoid_low_liquidity_hours=True,
+                pivot_level_tolerance_percent=0.2,
+                pivot_score_bonus_near_level=1,
+                pivot_use_last_n_days=1,
+                vp_score_bonus_in_value_area=1,
+                vp_score_bonus_near_poc=2,
+                vp_poc_tolerance_percent=0.5,
+                vp_lookback_candles=20,
+                adx_threshold=20.0,
+                adx_di_difference=1.5,
+            ),
         )
 
     @pytest.fixture
     def choppy_params(self):
         """Параметры для хаотичного режима"""
+        from src.strategies.modules.adaptive_regime_manager import (
+            IndicatorParameters, ModuleParameters)
+
         return RegimeParameters(
             min_score_threshold=10,
             max_trades_per_hour=4,
             position_size_multiplier=0.5,
             tp_atr_multiplier=1.0,
             sl_atr_multiplier=3.5,
+            max_holding_minutes=15,
             cooldown_after_loss_minutes=15,
             pivot_bonus_multiplier=2.0,
             volume_profile_bonus_multiplier=2.0,
+            indicators=IndicatorParameters(
+                rsi_overbought=70.0,
+                rsi_oversold=30.0,
+                volume_threshold=1.1,
+                sma_fast=12,
+                sma_slow=35,
+                ema_fast=12,
+                ema_slow=35,
+                atr_period=14,
+                min_volatility_atr=0.5,
+            ),
+            modules=ModuleParameters(
+                mtf_block_opposite=True,
+                mtf_score_bonus=3,
+                mtf_confirmation_timeframe="15m",
+                correlation_threshold=0.6,
+                max_correlated_positions=1,
+                block_same_direction_only=False,
+                prefer_overlaps=True,
+                avoid_low_liquidity_hours=True,
+                pivot_level_tolerance_percent=0.2,
+                pivot_score_bonus_near_level=1,
+                pivot_use_last_n_days=1,
+                vp_score_bonus_in_value_area=1,
+                vp_score_bonus_near_poc=2,
+                vp_poc_tolerance_percent=0.5,
+                vp_lookback_candles=20,
+                adx_threshold=15.0,
+                adx_di_difference=1.0,
+            ),
         )
 
     @pytest.fixture
@@ -296,4 +429,3 @@ class TestAdaptiveRegimeManager:
         assert "total_switches" in stats
         assert "time_distribution" in stats
         assert stats["current_regime"] == "ranging"
-

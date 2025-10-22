@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 >nul
 title OKX Trading Bot - Stop
 color 0C
@@ -7,29 +8,41 @@ echo   STOP OKX Trading Bot
 echo =====================================
 echo.
 
-REM Kill only bot processes (python.exe with run_bot.py)
 echo Searching for bot processes...
 
-REM Get all python.exe PIDs running run_bot.py
-for /f "tokens=2" %%i in ('wmic process where "name='python.exe' and commandline like '%%run_bot.py%%'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
-    echo Found bot process: PID %%i
-    taskkill /PID %%i /F 2>nul
+REM Method 1: Use tasklist to find python.exe processes
+set "found=0"
+for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV ^| findstr /I "python.exe"') do (
+    set "pid=%%i"
+    set "pid=!pid:"=!"
+    
+    REM Check if this process is running run_bot.py
+    wmic process where "processid=!pid!" get commandline 2>nul | findstr /I "run_bot.py" >nul
     if !ERRORLEVEL! EQU 0 (
-        echo SUCCESS: Stopped PID %%i
-    ) else (
-        echo WARNING: Could not stop PID %%i
+        echo Found bot process: PID !pid!
+        taskkill /PID !pid! /F >nul 2>&1
+        if !ERRORLEVEL! EQU 0 (
+            echo SUCCESS: Stopped PID !pid!
+        ) else (
+            echo WARNING: Could not stop PID !pid!
+        )
+        set "found=1"
     )
 )
 
-REM Fallback: если не нашли специфичные процессы, убиваем все python.exe
-wmic process where "name='python.exe' and commandline like '%%run_bot.py%%'" get processid 2>nul | findstr /r "[0-9]" >nul
-if %ERRORLEVEL% NEQ 0 (
+REM Method 2: Fallback - kill all python.exe if no specific processes found
+if !found! EQU 0 (
     echo.
-    echo No bot processes found, checking for any python.exe...
-    tasklist /FI "IMAGENAME eq python.exe" | find /I "python.exe" >nul
-    if %ERRORLEVEL% EQU 0 (
+    echo No specific bot processes found, checking for any python.exe...
+    tasklist /FI "IMAGENAME eq python.exe" 2>nul | find /I "python.exe" >nul
+    if !ERRORLEVEL! EQU 0 (
         echo Found Python processes, stopping all...
-        taskkill /IM python.exe /F 2>nul
+        taskkill /IM python.exe /F >nul 2>&1
+        if !ERRORLEVEL! EQU 0 (
+            echo SUCCESS: All Python processes stopped
+        ) else (
+            echo WARNING: Could not stop some Python processes
+        )
     ) else (
         echo No Python processes running
     )

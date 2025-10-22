@@ -418,6 +418,7 @@ class OKXClient:
         order_type: OrderType,
         quantity: float,
         price: Optional[float] = None,
+        post_only: bool = False,
     ) -> Order:
         """
         Place a new order (simple SPOT trading).
@@ -443,6 +444,10 @@ class OKXClient:
             "ordType": "limit" if order_type == OrderType.LIMIT else "market",
             "sz": str(quantity),
         }
+        
+        # Добавляем POST-ONLY если указан
+        if post_only and order_type == OrderType.LIMIT:
+            data["postOnly"] = "true"
 
         # 🔧 КРИТИЧНО! tgtCcy для BUY MARKET ордеров
         # quantity > 10 = открытие LONG (сумма в USDT) → tgtCcy='quote_ccy'

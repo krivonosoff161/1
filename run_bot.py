@@ -81,6 +81,17 @@ def main() -> NoReturn:
         default="config.yaml",
         help="Путь к файлу конфигурации (default: config.yaml)",
     )
+    parser.add_argument(
+        "--mode",
+        choices=["websocket", "rest"],
+        default="rest",
+        help="Режим работы бота: websocket (real-time) или rest (polling)",
+    )
+    parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        help="Запуск в тестовом режиме с дополнительным логированием",
+    )
     args = parser.parse_args()
 
     # Информационное сообщение о режиме работы
@@ -89,6 +100,9 @@ def main() -> NoReturn:
     print("=" * 70)
     print("MODE: DEMO (OKX Sandbox)")
     print(f"Config: {args.config}")
+    print(f"Mode: {args.mode.upper()}")
+    if args.test_mode:
+        print("TEST MODE: ENABLED")
     print("=" * 70)
     print()
 
@@ -99,16 +113,36 @@ def main() -> NoReturn:
             # Загружаем конфигурацию из YAML файла
             config = load_config(args.config)
 
-            # Инициализируем бота с конфигурациями
-            bot = BotRunner(
-                config=config.get_okx_config(),
-                risk_config=config.risk,
-                strategy_config=config.scalping,
-            )
-
-            # Инициализируем и запускаем
-            await bot.initialize()
-            await bot.run()
+            # Выбираем режим работы
+            if args.mode == "websocket":
+                print("🔧 Creating WebSocket Orchestrator...")
+                from src.strategies.scalping.websocket_orchestrator import WebSocketScalpingOrchestrator
+                from src.okx_client import OKXClient
+                
+                print("🔧 Initializing OKX Client...")
+                # Инициализируем WebSocket оркестратор
+                okx_client = OKXClient(config.get_okx_config())
+                
+                print("🔧 Creating WebSocket Orchestrator...")
+                bot = WebSocketScalpingOrchestrator(config, okx_client)
+                
+                # Устанавливаем тестовый режим
+                if args.test_mode:
+                    bot.test_mode = True
+                
+                print("🚀 Starting WebSocket Bot...")
+                # Запускаем WebSocket бота
+                await bot.start()
+            else:
+                # Стандартный REST режим
+                bot = BotRunner(
+                    config=config,
+                    mode="rest"
+                )
+                
+                # Инициализируем и запускаем
+                await bot.initialize()
+                await bot.run()
 
         finally:
             # Всегда закрываем соединения

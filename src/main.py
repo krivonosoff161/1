@@ -3,6 +3,10 @@
 
 Этот модуль содержит класс BotRunner, который координирует работу
 всех компонентов торгового бота: клиента биржи, стратегий и риск-менеджмента.
+
+Поддерживает два режима работы:
+- REST API (традиционный polling)
+- WebSocket (real-time данные)
 """
 
 import asyncio
@@ -13,15 +17,14 @@ from typing import Optional
 
 from loguru import logger
 
-from src.config import APIConfig, RiskConfig, ScalpingConfig
+from src.config import BotConfig, load_config
 from src.okx_client import OKXClient
-# 🆕 НОВАЯ МОДУЛЬНАЯ АРХИТЕКТУРА
-from src.strategies.scalping import ScalpingOrchestrator
+# REST API режим
+from src.strategies.scalping.orchestrator import ScalpingOrchestrator
+# WebSocket режим
+from src.strategies.scalping.websocket_orchestrator import WebSocketScalpingOrchestrator
 # ✅ НОВОЕ: Единый полный лог с ротацией
 from src.utils.logging_setup import setup_logging
-
-# Для совместимости (если нужно переключиться обратно)
-# from src.strategies.scalping_old import ScalpingStrategy
 
 
 # Создаем папку для логов если её нет
@@ -38,30 +41,40 @@ class BotRunner:
     Координирует работу клиента биржи и торговых стратегий,
     обеспечивает правильную инициализацию и запуск всех компонентов.
 
+    Поддерживает два режима работы:
+    - REST API (традиционный polling)
+    - WebSocket (real-time данные)
+
     Attributes:
-        config: Конфигурация API биржи
+        config: Полная конфигурация бота
         client: Клиент для взаимодействия с биржей OKX
-        strategy: Активная торговая стратегия
+        strategy: Активная торговая стратегия (REST или WebSocket)
+        mode: Режим работы ('rest' или 'websocket')
     """
 
     def __init__(
         self,
-        config: APIConfig,
-        risk_config: Optional[RiskConfig] = None,
-        strategy_config: Optional[ScalpingConfig] = None,
+        config: BotConfig,
+        mode: str = "rest"
     ) -> None:
         """
         Инициализация торгового бота.
 
         Args:
-            config: Конфигурация API для подключения к бирже
-            risk_config: Конфигурация управления рисками (опционально)
-            strategy_config: Конфигурация торговой стратегии (опционально)
+            config: Полная конфигурация бота
+            mode: Режим работы ('rest' или 'websocket')
         """
         self.config = config
-        self.client = OKXClient(config)
-        # 🆕 НОВАЯ АРХИТЕКТУРА: ScalpingOrchestrator
-        self.strategy = ScalpingOrchestrator(self.client, strategy_config, risk_config)
+        self.mode = mode.lower()
+        self.client = OKXClient(config.api['okx'])
+        
+        # Выбор стратегии в зависимости от режима
+        if self.mode == "websocket":
+            logger.info("🚀 Initializing WebSocket mode...")
+            self.strategy = WebSocketScalpingOrchestrator(config, self.client)
+        else:
+            logger.info("🔄 Initializing REST API mode...")
+            self.strategy = ScalpingOrchestrator(self.client, config.scalping, config.risk)
 
     async def initialize(self) -> None:
         """
@@ -74,10 +87,8 @@ class BotRunner:
             ConnectionError: Если не удалось подключиться к бирже
             Exception: При ошибках инициализации компонентов
         """
-        logger.info("Initializing bot...")
+        logger.info(f"Initializing bot in {self.mode.upper()} mode...")
         await self.client.connect()
-        # await self.strategy.initialize()
-        # Метод может отсутствовать, закомментировано
         logger.info("Bot initialized.")
 
     async def run(self) -> None:
@@ -90,8 +101,14 @@ class BotRunner:
         Raises:
             Exception: При критических ошибках во время торговли
         """
-        logger.info("Running bot...")
-        await self.strategy.run()
+        logger.info(f"Running bot in {self.mode.upper()} mode...")
+        
+        if self.mode == "websocket":
+            # WebSocket режим - асинхронный запуск
+            await self.strategy.start()
+        else:
+            # REST режим - обычный запуск
+            await self.strategy.run()
 
     async def shutdown(self) -> None:
         """
@@ -101,6 +118,11 @@ class BotRunner:
         Должен вызываться при остановке бота.
         """
         logger.info("Shutting down bot...")
+        
+        if self.mode == "websocket":
+            # WebSocket режим - остановка WebSocket соединения
+            await self.strategy.stop()
+        
         await self.client.disconnect()
         logger.info("Bot shutdown complete.")
 
@@ -110,10 +132,11 @@ def main() -> None:
     Точка входа для запуска торгового бота из командной строки.
 
     Парсит аргументы командной строки, загружает конфигурацию и
-    запускает бота в режиме демо-торговли на бирже OKX.
+    запускает бота в выбранном режиме (REST или WebSocket).
 
     Command-line Args:
         --config: Путь к файлу конфигурации (default: config.yaml)
+        --mode: Режим работы ('rest' или 'websocket', default: 'rest')
 
     Raises:
         SystemExit: При критических ошибках с кодом 1
@@ -127,26 +150,39 @@ def main() -> None:
         default="config.yaml",
         help="Path to configuration file",
     )
-    parser.parse_args()  # Парсим для валидации, но пока не используем
+    parser.add_argument(
+        "--mode",
+        choices=["rest", "websocket"],
+        default="rest",
+        help="Trading mode: 'rest' for REST API or 'websocket' for real-time data",
+    )
+    
+    args = parser.parse_args()
 
-    # Загружаем конфигурацию (метод load нужно будет реализовать)
-    config = APIConfig()
-    # config.load(args.config)  # Закомментировано до реализации
-    # Выставляем демо-режим для тестирования на демо-счёте OKX
-    config.sandbox = True
-
-    runner = BotRunner(config)
-
-    # Запускаем асинхронный event loop
-    loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(runner.initialize())
-        loop.run_until_complete(runner.run())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user (Ctrl+C)")
-        sys.exit(0)
+        # Загружаем конфигурацию
+        config = load_config(args.config)
+        logger.info(f"Configuration loaded from {args.config}")
+        
+        # Создаем runner с выбранным режимом
+        runner = BotRunner(config, mode=args.mode)
+        
+        # Запускаем асинхронный event loop
+        loop = asyncio.get_event_loop()
+        try:
+            loop.run_until_complete(runner.initialize())
+            loop.run_until_complete(runner.run())
+        except KeyboardInterrupt:
+            logger.info("Bot stopped by user (Ctrl+C)")
+            loop.run_until_complete(runner.shutdown())
+            sys.exit(0)
+        except Exception as e:
+            logger.error(f"Critical error running bot: {e}")
+            loop.run_until_complete(runner.shutdown())
+            sys.exit(1)
+            
     except Exception as e:
-        logger.error(f"Critical error running bot: {e}")
+        logger.error(f"Failed to start bot: {e}")
         sys.exit(1)
 
 
