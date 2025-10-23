@@ -14,7 +14,9 @@ from typing import Optional, Tuple
 
 from loguru import logger
 
-from src.models import OrderSide, OrderType, Position, PositionSide, Signal
+from src.models import (Order, OrderSide, OrderType, Position, PositionSide,
+                        Signal)
+from src.websocket_order_executor import WebSocketOrderExecutor
 
 
 class OrderExecutor:
@@ -41,12 +43,116 @@ class OrderExecutor:
         self.balance_checker = balance_checker
         self.adaptive_regime = adaptive_regime
 
+        # Market Data WebSocket для быстрых цен
+        self.market_ws = None
+        self.ws_connected = False
+
         # Минимальные размеры ордеров
         self.min_order_value_usd = (
             60.0  # 🔥 СНИЖЕНО: $35 → $60 (баланс для частых сделок!)
         )
         self.MIN_LONG_OCO = 60.0  # Для LONG OCO (синхронизировано!)
         self.MIN_SHORT_OCO = 60.0  # Для SHORT OCO (синхронизировано!)
+
+    async def initialize_websocket(self):
+        """Инициализация Market Data WebSocket для быстрых цен"""
+        try:
+            from src.market_data_websocket import MarketDataWebSocket
+
+            self.market_ws = MarketDataWebSocket()
+            self.ws_connected = await self.market_ws.connect()
+
+            if self.ws_connected:
+                logger.info("✅ Market Data WebSocket подключен для быстрых цен")
+
+                # Подписываемся на цены торговых символов
+                # Получаем символы из основного конфига
+                from src.config import load_config
+
+                main_config = load_config()
+                for symbol in main_config.trading.symbols:
+                    await self.market_ws.subscribe_ticker(symbol, self._on_price_update)
+            else:
+                logger.warning("⚠️ Market Data WebSocket не подключен, используем REST")
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка инициализации Market WebSocket: {e}")
+            self.ws_connected = False
+
+    async def _on_price_update(self, price: float, ticker_data: dict):
+        """Обработка обновления цены через WebSocket"""
+        symbol = ticker_data.get("instId")
+        logger.debug(f"📊 {symbol}: {price} (WebSocket)")
+
+        # Здесь можно добавить логику быстрого анализа
+        # Например, проверка на быстрые сигналы
+
+    async def cleanup_websocket(self):
+        """Очистка WebSocket соединения"""
+        if self.market_ws:
+            await self.market_ws.disconnect()
+            self.ws_connected = False
+            logger.info("🔌 Market Data WebSocket отключен")
+
+    async def _try_maker_order(
+        self,
+        signal,
+        position_value: float,
+        position_size: float,
+        take_profit: float,
+        stop_loss: float,
+    ) -> Optional[Order]:
+        """
+        Попытка размещения POST-ONLY (Maker) ордера для экономии комиссий
+
+        Args:
+            signal: Торговый сигнал
+            position_value: Размер позиции в USDT (для BUY)
+            position_size: Размер позиции в монетах (для SELL)
+            take_profit: Цена Take Profit
+            stop_loss: Цена Stop Loss
+
+        Returns:
+            Order или None если POST-ONLY не сработал
+        """
+        try:
+            # Получаем актуальную цену для POST-ONLY
+            current_price = await self.client.get_current_price(signal.symbol)
+
+            # Рассчитываем цену для POST-ONLY (более консервативно для Maker комиссий)
+            if signal.side == OrderSide.BUY:
+                # Для BUY: цена ниже рыночной для гарантированного Maker статуса
+                maker_price = current_price * 0.9995  # -0.05% (безопасная дистанция)
+                maker_quantity = position_value / maker_price
+            else:
+                # Для SELL: цена выше рыночной для гарантированного Maker статуса
+                maker_price = current_price * 1.0005  # +0.05% (безопасная дистанция)
+                maker_quantity = position_size
+
+            logger.info(f"🎯 POST-ONLY attempt: {signal.symbol} {signal.side.value}")
+            logger.info(f"   Market: ${current_price:.4f} → Maker: ${maker_price:.4f}")
+            logger.info(f"   Quantity: {maker_quantity:.8f}")
+
+            # Размещаем POST-ONLY ордер
+            order = await self.client.place_order(
+                symbol=signal.symbol,
+                side=signal.side,
+                order_type=OrderType.LIMIT,
+                quantity=maker_quantity,
+                price=maker_price,
+                post_only=True,  # Ключевой параметр для Maker
+            )
+
+            if order:
+                logger.info(f"✅ POST-ONLY успешен: {order.id} (Maker fee: 0.08%)")
+                return order
+            else:
+                logger.warning("⚠️ POST-ONLY не сработал, fallback на MARKET")
+                return None
+
+        except Exception as e:
+            logger.warning(f"⚠️ POST-ONLY error: {e}, fallback на MARKET")
+            return None
 
         logger.info("✅ OrderExecutor initialized")
 
@@ -174,35 +280,104 @@ class OrderExecutor:
                 )
                 position_value = new_value
 
-            # 6. Размещение entry ордера
-            if signal.side == OrderSide.BUY:
-                logger.info(
-                    f"📤 Placing LONG order: BUY ${position_value:.2f} USDT "
-                    f"{signal.symbol} @ ${signal.price:.2f}"
-                )
-                logger.info(f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}")
+            # 6. Размещение entry ордера (WebSocket или REST)
+            order = None
 
-                # MARKET ордер (0.1% комиссия) - стабильный режим
-                order = await self.client.place_order(
-                    symbol=signal.symbol,
-                    side=signal.side,
-                    order_type=OrderType.MARKET,
-                    quantity=position_value,  # Сумма в USDT
-                )
-            else:
-                logger.info(
-                    f"📤 Placing SHORT order: SELL {position_size} "
-                    f"{signal.symbol} @ ${signal.price:.2f}"
-                )
-                logger.info(f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}")
+            # Попытка WebSocket (быстрый вход)
+            if False:  # WebSocket торговля отключена, используем только REST
+                try:
+                    # Проверяем, что WebSocket все еще подключен
+                    if not self.ws_executor.connected or self.ws_executor.ws.closed:
+                        logger.warning(
+                            "⚠️ WebSocket disconnected, attempting reconnection..."
+                        )
+                        # Попытка переподключения
+                        if await self.ws_executor.reconnect():
+                            logger.info(
+                                "✅ WebSocket переподключен, продолжаем с WebSocket"
+                            )
+                        else:
+                            logger.warning(
+                                "⚠️ WebSocket переподключение не удалось, falling back to REST"
+                            )
+                            order = None  # Переходим к REST
 
-                # MARKET ордер (0.1% комиссия) - стабильный режим
-                order = await self.client.place_order(
-                    symbol=signal.symbol,
-                    side=signal.side,
-                    order_type=OrderType.MARKET,
-                    quantity=position_size,  # Количество монет
+                    # Если WebSocket подключен, пробуем разместить ордер
+                    if self.ws_executor.connected and not self.ws_executor.ws.closed:
+                        logger.info(
+                            f"🚀 WebSocket entry attempt: {signal.symbol} {signal.side.value}"
+                        )
+
+                        if signal.side == OrderSide.BUY:
+                            # Для BUY передаем сумму в USDT
+                            order = await self.ws_executor.place_market_order(
+                                symbol=signal.symbol,
+                                side=signal.side,
+                                quantity=position_value,  # Сумма в USDT
+                                price=signal.price,
+                            )
+                        else:
+                            # Для SELL передаем количество монет
+                            order = await self.ws_executor.place_market_order(
+                                symbol=signal.symbol,
+                                side=signal.side,
+                                quantity=position_size,  # Количество монет
+                                price=signal.price,
+                            )
+
+                        if order:
+                            logger.info(f"✅ WebSocket entry successful: {order.id}")
+                        else:
+                            logger.warning(
+                                "⚠️ WebSocket entry failed, falling back to REST"
+                            )
+                            order = None
+
+                except Exception as e:
+                    logger.error(f"❌ WebSocket entry error: {e}")
+                    logger.info("🔄 Falling back to REST API")
+
+            # Fallback на REST API с Maker-First Strategy
+            if not order:
+                # Попытка POST-ONLY (Maker) для экономии комиссий
+                order = await self._try_maker_order(
+                    signal, position_value, position_size, take_profit, stop_loss
                 )
+
+                # Если POST-ONLY не сработал - используем MARKET
+                if not order:
+                    if signal.side == OrderSide.BUY:
+                        logger.info(
+                            f"📤 REST MARKET LONG order: BUY ${position_value:.2f} USDT "
+                            f"{signal.symbol} @ ${signal.price:.2f}"
+                        )
+                        logger.info(
+                            f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}"
+                        )
+
+                        # REST MARKET ордер (0.1% комиссия)
+                        order = await self.client.place_order(
+                            symbol=signal.symbol,
+                            side=signal.side,
+                            order_type=OrderType.MARKET,
+                            quantity=position_value,  # Сумма в USDT
+                        )
+                    else:
+                        logger.info(
+                            f"📤 REST MARKET SHORT order: SELL {position_size} "
+                            f"{signal.symbol} @ ${signal.price:.2f}"
+                        )
+                        logger.info(
+                            f"   📊 TP/SL: TP=${take_profit:.2f}, SL=${stop_loss:.2f}"
+                        )
+
+                        # REST MARKET ордер (0.1% комиссия)
+                        order = await self.client.place_order(
+                            symbol=signal.symbol,
+                            side=signal.side,
+                            order_type=OrderType.MARKET,
+                            quantity=position_size,  # Количество монет
+                        )
 
             if not order:
                 logger.error(f"❌ Order placement FAILED: {signal.symbol}")

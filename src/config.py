@@ -51,6 +51,17 @@ class ScalpingExitConfig(BaseModel):
     max_holding_minutes: int = Field(default=15, ge=1, le=60)
 
 
+class BalanceProfile(BaseModel):
+    threshold_usd: int = Field(..., description="Минимальный баланс для профиля")
+    base_position_usd: int = Field(..., description="Базовый размер позиции")
+    max_open_positions: int = Field(..., description="Максимум открытых позиций")
+    max_position_percent: int = Field(..., description="Максимальный % от баланса")
+    tp_atr_multiplier_boost: float = Field(..., description="Буст для TP")
+    sl_atr_multiplier_boost: float = Field(..., description="Буст для SL")
+    ph_threshold_multiplier: float = Field(..., description="Множитель PH")
+    min_score_boost: int = Field(..., description="Буст для минимального скора")
+
+
 class ScalpingConfig(BaseModel):
     enabled: bool = Field(default=True)
     symbols: List[str] = Field(default=["BTC-USDT", "ETH-USDT"])
@@ -60,14 +71,17 @@ class ScalpingConfig(BaseModel):
     exit: ScalpingExitConfig = Field(default_factory=ScalpingExitConfig)
     max_trades_per_hour: int = Field(default=10, ge=1, le=50)
     cooldown_after_loss_minutes: int = Field(default=5, ge=1, le=30)
-    
+
+    # Balance Profiles - адаптивные параметры по размеру баланса
+    balance_profiles: Dict[str, BalanceProfile] = Field(default_factory=dict)
+
     # PHASE 1 Modules (flexible dict для хранения настроек модулей)
     multi_timeframe_enabled: bool = Field(default=False)
     multi_timeframe: Dict = Field(default_factory=dict)
     correlation_filter_enabled: bool = Field(default=False)
     correlation_filter: Dict = Field(default_factory=dict)
     adx_filter_enabled: bool = Field(default=False)  # 🆕 ADX Filter
-    adx_filter: Dict = Field(default_factory=dict)   # 🆕 ADX параметры
+    adx_filter: Dict = Field(default_factory=dict)  # 🆕 ADX параметры
     time_filter_enabled: bool = Field(default=False)
     time_filter: Dict = Field(default_factory=dict)
     volatility_modes_enabled: bool = Field(default=False)

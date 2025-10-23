@@ -1,4 +1,4 @@
-# Trading Bot Configuration
+# Trading Bot Configuration - MANUAL POOL ALLOCATION
 api:
   okx:
     # Set these in environment variables or .env file
@@ -13,22 +13,35 @@ trading:
     - "ETH-USDT"   # ✅ Ethereum - вторая по капитализации
   base_currency: "USDT"
   
-# Risk Management
+# Manual Pool Allocation (Fixed Coin Amounts)
+manual_pools:
+  eth_pool:
+    fixed_amount: 0.083  # ETH (≈ $300)
+    max_open_positions: 3
+    priority: 1  # Highest priority for trending
+  btc_pool:
+    fixed_amount: 0.0025  # BTC (≈ $250) 
+    max_open_positions: 3
+    priority: 2
+  usdt_pool:
+    fixed_amount: 450.0  # USDT (≈ $450)
+    max_open_positions: 1
+    priority: 3  # Lowest priority for choppy markets
+
+# Risk Management (Simplified for Manual Pools)
 risk:
-  max_position_size_percent: 5.0  # Max 5% of balance per position
   max_daily_loss_percent: 10.0    # Stop trading if daily loss exceeds 10%
   risk_per_trade_percent: 1.0     # Risk 1% per trade
-  max_open_positions: 3           # Maximum concurrent positions
 
 # Adaptive Balance Management
 balance_profiles:
   small:
     threshold: 1000.0
-    base_position_size: 65.0
-    min_position_size: 40.0
-    max_position_size: 120.0
-    max_open_positions: 2
-    max_position_percent: 10.0
+    base_position_size: 55.0              # 🔥 AI КОНСЕНСУС: 65→55 (оптимальный размер)
+    min_position_size: 25.0               # 🔥 AI КОНСЕНСУС: 40→25 (меньше минимум)
+    max_position_size: 100.0              # 🔥 AI КОНСЕНСУС: 120→100 (разумный максимум)
+    max_open_positions: 3                 # 🔥 AI КОНСЕНСУС: 2→3 (больше возможностей)
+    max_position_percent: 8.0             # 🔥 AI КОНСЕНСУС: 10→8 (безопаснее)
     trending_boost:
       tp_multiplier: 1.2
       sl_multiplier: 0.9
@@ -50,11 +63,11 @@ balance_profiles:
   
   medium:
     threshold: 2500.0
-    base_position_size: 100.0
-    min_position_size: 70.0
-    max_position_size: 200.0
-    max_open_positions: 3
-    max_position_percent: 8.0
+    base_position_size: 100.0             # Оптимальный размер
+    min_position_size: 50.0              # 🔥 AI КОНСЕНСУС: 70→50 (меньше минимум)
+    max_position_size: 200.0             # Разумный максимум
+    max_open_positions: 3                # Стандартно
+    max_position_percent: 6.0             # 🔥 AI КОНСЕНСУС: 8→6 (безопаснее)
     trending_boost:
       tp_multiplier: 1.3
       sl_multiplier: 0.8
@@ -76,11 +89,11 @@ balance_profiles:
   
   large:
     threshold: 3500.0
-    base_position_size: 150.0
-    min_position_size: 100.0
-    max_position_size: 300.0
-    max_open_positions: 5
-    max_position_percent: 6.0
+    base_position_size: 200.0             # 🔥 AI КОНСЕНСУС: 150→200 (больше размер)
+    min_position_size: 80.0              # 🔥 AI КОНСЕНСУС: 100→80 (меньше минимум)
+    max_position_size: 400.0            # 🔥 AI КОНСЕНСУС: 300→400 (больше максимум)
+    max_open_positions: 5                # Стандартно
+    max_position_percent: 4.0             # 🔥 AI КОНСЕНСУС: 6→4 (безопаснее)
     trending_boost:
       tp_multiplier: 1.5
       sl_multiplier: 0.7
@@ -229,37 +242,114 @@ scalping:
     min_asset_balance_usd: 50.0   # Минимум $50 (оптимально для SOL/AVAX/DOGE)
     min_usdt_balance: 15.0        # 🔥 СКАЛЬПИНГ: $15 резерв (для малых балансов)
     log_all_checks: false         # Логировать каждую проверку (для отладки)
+
+  # Balance Profiles - адаптивные параметры по размеру баланса
+  balance_profiles:
+    small:
+      threshold_usd: 1000
+      base_position_usd: 60
+      max_open_positions: 3
+      max_position_percent: 20
+      tp_atr_multiplier_boost: 1.2
+      sl_atr_multiplier_boost: 1.1
+      ph_threshold_multiplier: 0.7
+      min_score_boost: 1
+    medium:
+      threshold_usd: 5000
+      base_position_usd: 120
+      max_open_positions: 4
+      max_position_percent: 15
+      tp_atr_multiplier_boost: 1.0
+      sl_atr_multiplier_boost: 1.0
+      ph_threshold_multiplier: 0.8
+      min_score_boost: 0
+    large:
+      threshold_usd: 10000
+      base_position_usd: 200
+      max_open_positions: 5
+      max_position_percent: 10
+      tp_atr_multiplier_boost: 0.9
+      sl_atr_multiplier_boost: 0.9
+      ph_threshold_multiplier: 0.9
+      min_score_boost: -1
   
   # PHASE 1.5: Adaptive Regime Manager - автоматическое переключение режимов
   adaptive_regime_enabled: true   # ✅ Конфигурация исправлена!
-  adaptive_regime:
-    # Параметры детекции режимов
-    trending_adx_threshold: 20.0        # ADX >20 = тренд (было 25)
-    ranging_adx_threshold: 15.0         # ADX <15 = боковик (было 20)
-    high_volatility_threshold: 0.03     # >3% = высокая волатильность (было 5%)
-    low_volatility_threshold: 0.01      # <1% = низкая волатильность (было 2%)
-    trend_strength_percent: 1.0         # Отклонение от SMA >1% = тренд (было 2%)
-    # Защита от частых переключений
-    min_regime_duration_minutes: 5      # Минимум 5 минут в режиме (было 15)
-    required_confirmations: 2           # 2 подтверждения для переключения (было 3)
+  # Manual Pool Strategy - AGGRESSIVE SCALPING PARAMETERS
+  manual_pool_strategy:
+    # TRENDING - АГРЕССИВНЫЙ СКАЛЬПИНГ (24-30 сделок/час)
+    trending:
+      # ETH Pool (0.083 ETH ≈ $300)
+      eth:
+        score_threshold: 2           # 2/4 (50%) - агрессивный вход
+        tp_percent: 0.30             # 0.30% - быстрая фиксация
+        sl_percent: 0.20             # 0.20% - близкий стоп
+        time_limit_seconds: 180      # 3 минуты максимум
+        ph_threshold: 0.20           # $0.20 - быстрая фиксация
+        quantity_per_trade: 0.008    # 0.008 ETH (≈ $32)
+        max_open_positions: 3        # Используем ВСЁ ETH
+        
+      # BTC Pool (0.0025 BTC ≈ $250)
+      btc:
+        score_threshold: 2           # 2/4 (50%) - агрессивный вход
+        tp_percent: 0.25             # 0.25% - быстрая фиксация
+        sl_percent: 0.15             # 0.15% - близкий стоп
+        time_limit_seconds: 180      # 3 минуты максимум
+        ph_threshold: 0.20           # $0.20 - быстрая фиксация
+        quantity_per_trade: 0.0009   # 0.0009 BTC (≈ $100)
+        max_open_positions: 3        # Используем ВСЁ BTC
+        
+    # RANGING - СДЕРЖАННЫЙ (10-15 сделок/час)
+    ranging:
+      # ETH Pool (0.083 ETH ≈ $300)
+      eth:
+        score_threshold: 3           # 3/12 (25%) - средний уровень
+        tp_percent: 0.20             # 0.20% - умеренная цель
+        sl_percent: 0.18             # 0.18% - защита от ложных пробоев
+        time_limit_seconds: 300      # 5 минут допустимо
+        ph_threshold: 0.15           # $0.15 - умеренная фиксация
+        quantity_per_trade: 0.001    # 0.001 ETH (≈ $4)
+        max_open_positions: 2        # Контроль риска
+        
+      # BTC Pool (0.0025 BTC ≈ $250)
+      btc:
+        score_threshold: 3           # 3/12 (25%) - средний уровень
+        tp_percent: 0.18             # 0.18% - умеренная цель
+        sl_percent: 0.15             # 0.15% - защита от ложных пробоев
+        time_limit_seconds: 300      # 5 минут допустимо
+        ph_threshold: 0.15           # $0.15 - умеренная фиксация
+        quantity_per_trade: 0.0005   # 0.0005 BTC (≈ $56)
+        max_open_positions: 2        # Контроль риска
+        
+    # CHOPPY - КОНСЕРВАТИВНЫЙ (5-8 сделок/час)
+    choppy:
+      # USDT Pool ($450) - Свободный пул
+      usdt:
+        score_threshold: 5           # 5/12 (42%) - высокий порог
+        tp_percent: 0.30             # 0.30% - консервативная цель
+        sl_percent: 0.25             # 0.25% - широкий стоп
+        time_limit_seconds: 360      # 6 минут допустимо в хаосе
+        ph_threshold: 0.25           # $0.25 - консервативная фиксация
+        quantity_per_trade: 60.0     # $60 (≈ 0.0005 BTC)
+        max_open_positions: 1        # Минимальное использование
     
     # РЕЖИМ 1: TRENDING (агрессивная торговля - берем объемом)
     trending:
-      # Основные пороги
-      min_score_threshold: 5            # 🔥 ОПТИМИЗИРОВАНО: 6→5 (42% - больше сигналов в тренде!)
+      # Основные пороги - КОНСЕНСУС AI
+      min_score_threshold: 4            # 🔥 AI КОНСЕНСУС: 5→4 (33% - больше сигналов!)
       max_trades_per_hour: 20           # Много сделок
       position_size_multiplier: 1.2     # Крупнее позиции (+20%)
-      tp_atr_multiplier: 1.2            # 🔥 ОПТИМИЗИРОВАНО: 1.4→1.2 (баланс скорость/размер)
-      sl_atr_multiplier: 0.9            # 🔥 ОПТИМИЗИРОВАНО: 1.2→0.9 (ближе SL, меньше убытки)
-      max_holding_minutes: 60           # 🔥 СТРАХОВКА: 8→60 мин (аварийный выход)
+      tp_atr_multiplier: 0.7            # 🔥 AI КОНСЕНСУС: 1.2→0.7 (быстрее TP!)
+      sl_atr_multiplier: 0.45           # 🔥 AI КОНСЕНСУС: 0.9→0.45 (ближе SL!)
+      max_holding_minutes: 8            # 🔥 AI КОНСЕНСУС: 60→8 мин (реальный скальпинг!)
       cooldown_after_loss_minutes: 2    # Быстро возвращаемся
       pivot_bonus_multiplier: 1.5       # Усиленные бонусы (уровни работают в тренде)
       volume_profile_bonus_multiplier: 1.0
       
-      # ✨ PROFIT HARVESTING (адаптивный - TRENDING)
+      # ✨ PROFIT HARVESTING (адаптивный - TRENDING) - AI КОНСЕНСУС
       ph_enabled: true                  # Включен
-      ph_threshold: 0.35                # 🔥 КРИТИЧНО! $0.10→$0.35 (ВЫШЕ комиссии $0.14!)
-      ph_time_limit: 300                # 🔥 ИСПРАВЛЕНО: 60→300 сек (5 минут реально для 5m таймфрейма!)
+      ph_threshold: 0.40                # 🔥 AI КОНСЕНСУС: 0.35→0.40 (40% от TP!)
+      ph_time_limit: 300                # 5 минут для тренда
     
       # Параметры индикаторов для трендового рынка
       indicators:
@@ -305,23 +395,23 @@ scalping:
           adx_threshold: 22.0           # 🔥 ОПТИМИЗИРОВАНО: 25→22 (раньше ловим тренды)
           adx_di_difference: 4.0        # 🔥 ОПТИМИЗИРОВАНО: 7.0→4.0 (баланс качество/частота)
   
-    # РЕЖИМ 2: RANGING (умеренная торговля - берем качеством)
+    # РЕЖИМ 2: RANGING (умеренная торговля - берем качеством) - AI КОНСЕНСУС
     ranging:
-      # Основные пороги
-      min_score_threshold: 4            # 🔥 ОПТИМИЗИРОВАНО: 2→4 (33% - фильтрация шума!)
+      # Основные пороги - AI КОНСЕНСУС
+      min_score_threshold: 3            # 🔥 AI КОНСЕНСУС: 4→3 (25% - больше сигналов!)
       max_trades_per_hour: 10           # Средне
       position_size_multiplier: 1.0     # Стандартный размер
-      tp_atr_multiplier: 0.9            # 🔥 ОПТИМИЗИРОВАНО: 1.2→0.9 (ближе TP в боковике)
-      sl_atr_multiplier: 0.7            # 🔥 ОПТИМИЗИРОВАНО: 1.0→0.7 (ближе SL, меньше просадка)
-      max_holding_minutes: 60           # 🔥 СТРАХОВКА: 8→60 мин (аварийный выход)
+      tp_atr_multiplier: 0.5            # 🔥 AI КОНСЕНСУС: 0.9→0.5 (быстрее TP!)
+      sl_atr_multiplier: 0.35           # 🔥 AI КОНСЕНСУС: 0.7→0.35 (ближе SL!)
+      max_holding_minutes: 5            # 🔥 AI КОНСЕНСУС: 60→5 мин (реальный скальпинг!)
       cooldown_after_loss_minutes: 5    # Стандартная пауза
       pivot_bonus_multiplier: 1.5       # Усиление бонусов за уровни!
       volume_profile_bonus_multiplier: 1.5
       
-      # ✨ PROFIT HARVESTING (адаптивный - RANGING)
+      # ✨ PROFIT HARVESTING (адаптивный - RANGING) - AI КОНСЕНСУС
       ph_enabled: true                  # Включен
-      ph_threshold: 0.28                # 🔥 КРИТИЧНО! $0.12→$0.28 (покрываем комиссии $0.14!)
-      ph_time_limit: 300                # 🔥 ИСПРАВЛЕНО: 120→300 сек (5 минут для бокового рынка)
+      ph_threshold: 0.50                # 🔥 AI КОНСЕНСУС: 0.28→0.50 (50% от TP!)
+      ph_time_limit: 300                # 5 минут для ranging
     
       # Параметры индикаторов для бокового рынка
       indicators:
@@ -367,23 +457,23 @@ scalping:
           adx_threshold: 15.0           # Слабый тренд OK (боковик = слабые тренды)
           adx_di_difference: 1.5        # 🔥 СНИЖЕНО: 3.0→1.5 (мягкий фильтр для бокового!)
   
-    # РЕЖИМ 3: CHOPPY (консервативная торговля - только проверенное)
+    # РЕЖИМ 3: CHOPPY (консервативная торговля - только проверенное) - AI КОНСЕНСУС
     choppy:
-      # Основные пороги
-      min_score_threshold: 7            # 🔥 ОПТИМИЗИРОВАНО: 5→7 (58% - строгая фильтрация в хаосе!)
+      # Основные пороги - AI КОНСЕНСУС
+      min_score_threshold: 5            # 🔥 AI КОНСЕНСУС: 7→5 (42% - больше сигналов!)
       max_trades_per_hour: 4            # Мало сделок
-      position_size_multiplier: 0.8     # 🔥 ОПТИМИЗИРОВАНО: 0.6→0.8 (умеренная защита)
-      tp_atr_multiplier: 0.7            # 🔥 ОПТИМИЗИРОВАНО: 1.5→0.7 (быстрая фиксация в хаосе)
-      sl_atr_multiplier: 0.5            # 🔥 ОПТИМИЗИРОВАНО: 1.2→0.5 (жесткий SL для защиты)
-      max_holding_minutes: 30           # 🔥 СТРАХОВКА: 10→30 мин (аварийный выход)
+      position_size_multiplier: 0.8     # Умеренная защита
+      tp_atr_multiplier: 0.6            # 🔥 AI КОНСЕНСУС: 0.7→0.6 (быстрее TP!)
+      sl_atr_multiplier: 0.45           # 🔥 AI КОНСЕНСУС: 0.5→0.45 (ближе SL!)
+      max_holding_minutes: 6            # 🔥 AI КОНСЕНСУС: 30→6 мин (реальный скальпинг!)
       cooldown_after_loss_minutes: 10   # 🔥 ОПТИМИЗИРОВАНО: 15→10 мин (баланс)
       pivot_bonus_multiplier: 2.0       # Максимальное усиление!
       volume_profile_bonus_multiplier: 2.0
       
-      # ✨ PROFIT HARVESTING (адаптивный - CHOPPY)
+      # ✨ PROFIT HARVESTING (адаптивный - CHOPPY) - AI КОНСЕНСУС
       ph_enabled: true                  # Включен
-      ph_threshold: 0.35                # 🔥 КРИТИЧНО! $0.15→$0.35 (покрываем комиссии!)
-      ph_time_limit: 150                # 🔥 ОПТИМИЗИРОВАНО: 180→150 сек (2.5 минуты для хаоса)
+      ph_threshold: 0.45                # 🔥 AI КОНСЕНСУС: 0.35→0.45 (45% от TP!)
+      ph_time_limit: 150                # 2.5 минуты для choppy
     
       # Параметры индикаторов для хаотичного рынка
       indicators:

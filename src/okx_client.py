@@ -53,6 +53,97 @@ class OKXClient:
             self.session = None
         logger.info("OKX client disconnected")
 
+    async def get_websocket_latency(self) -> float:
+        """Получение латентности WebSocket (для сравнения с REST)"""
+        try:
+            from src.websocket_order_executor import WebSocketOrderExecutor
+
+            ws_executor = WebSocketOrderExecutor(self.config)
+            if await ws_executor.connect():
+                latency = await ws_executor.get_latency()
+                await ws_executor.disconnect()
+                return latency
+            return float("inf")
+        except Exception as e:
+            logger.error(f"Ошибка измерения WebSocket латентности: {e}")
+            return float("inf")
+
+    async def batch_amend_orders(
+        self, orders_data: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Batch amend orders - обновление до 20 ордеров за один API call
+
+        Args:
+            orders_data: Список данных для обновления ордеров
+            [
+                {
+                    "instId": "BTC-USDT",
+                    "ordId": "123456789",
+                    "newSz": "0.001",
+                    "newPx": "50000.0"
+                },
+                ...
+            ]
+
+        Returns:
+            Результат batch операции
+        """
+        if not orders_data:
+            return {"code": "0", "msg": "No orders to amend", "data": []}
+
+        if len(orders_data) > 20:
+            logger.warning(
+                f"⚠️ Batch amend: {len(orders_data)} orders > 20 limit, splitting..."
+            )
+            # Разбиваем на части по 20
+            results = []
+            for i in range(0, len(orders_data), 20):
+                batch = orders_data[i : i + 20]
+                result = await self._batch_amend_single(batch)
+                results.append(result)
+            return {"code": "0", "msg": "Batch completed", "data": results}
+
+        return await self._batch_amend_single(orders_data)
+
+    async def _batch_amend_single(
+        self, orders_data: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Выполнение batch amend для одной группы ордеров (≤20)"""
+        try:
+            timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            request_path = "/api/v5/trade/amend-batch-orders"
+            body = json.dumps(orders_data)
+
+            # Генерируем подпись
+            signature = self._generate_signature(timestamp, "POST", request_path, body)
+
+            headers = {
+                "OK-ACCESS-KEY": self.api_key,
+                "OK-ACCESS-SIGN": signature,
+                "OK-ACCESS-TIMESTAMP": timestamp,
+                "OK-ACCESS-PASSPHRASE": self.passphrase,
+                "Content-Type": "application/json",
+            }
+
+            url = f"{self.base_url}{request_path}"
+
+            async with self.session.post(url, headers=headers, data=body) as response:
+                result = await response.json()
+
+                if result.get("code") == "0":
+                    logger.info(f"✅ Batch amend successful: {len(orders_data)} orders")
+                else:
+                    logger.error(
+                        f"❌ Batch amend failed: {result.get('msg', 'Unknown error')}"
+                    )
+
+                return result
+
+        except Exception as e:
+            logger.error(f"❌ Batch amend error: {e}")
+            return {"code": "1", "msg": str(e), "data": []}
+
     def _generate_signature(
         self, timestamp: str, method: str, request_path: str, body: str = ""
     ) -> str:

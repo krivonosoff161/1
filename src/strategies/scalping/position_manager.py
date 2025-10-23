@@ -13,11 +13,12 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
 from src.models import OrderSide, OrderType, Position, PositionSide
+from src.strategies.scalping.batch_order_manager import BatchOrderManager
 
 
 @dataclass
@@ -54,6 +55,9 @@ class PositionManager:
         self.client = client
         self.config = config
         self.adaptive_regime = adaptive_regime
+
+        # Batch Order Manager для группировки обновлений TP/SL
+        self.batch_manager = BatchOrderManager(client)
 
         # Параметры
         self.min_close_value_usd = 15.0
@@ -548,8 +552,19 @@ class PositionManager:
             # Gross PnL
             gross_pnl = position.unrealized_pnl
 
-            # Комиссии OKX (POST-ONLY 0.08% + MARKET 0.1%)
-            open_commission_rate = 0.0008  # POST-ONLY entry (MAKER)
+            # Комиссии OKX (адаптивные под тип ордера)
+            # Определяем тип entry ордера по цене исполнения
+            price_diff_pct = (
+                abs(current_price - position.entry_price) / position.entry_price
+            )
+
+            if price_diff_pct < 0.001:  # < 0.1% разница = POST-ONLY (Maker)
+                open_commission_rate = 0.0008  # POST-ONLY entry (MAKER)
+                logger.debug(f"💰 Entry: POST-ONLY (Maker) - 0.08% комиссия")
+            else:
+                open_commission_rate = 0.001  # MARKET entry (TAKER)
+                logger.debug(f"💰 Entry: MARKET (Taker) - 0.10% комиссия")
+
             close_commission_rate = 0.001  # MARKET exit (TAKER)
             open_value = position.size * position.entry_price
             close_value = position.size * current_price
@@ -609,3 +624,77 @@ class PositionManager:
             current_price = current_prices.get(symbol)
             if current_price:
                 position.update_price(current_price)
+
+    async def batch_update_tp_sl(
+        self,
+        symbol: str,
+        tp_ord_id: str,
+        sl_ord_id: str,
+        new_tp_price: float,
+        new_sl_price: float,
+        new_tp_trigger: Optional[float] = None,
+        new_sl_trigger: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Batch обновление TP/SL ордеров
+
+        Args:
+            symbol: Торговая пара
+            tp_ord_id: ID Take Profit ордера
+            sl_ord_id: ID Stop Loss ордера
+            new_tp_price: Новая цена TP
+            new_sl_price: Новая цена SL
+            new_tp_trigger: Новый trigger для TP (опционально)
+            new_sl_trigger: Новый trigger для SL (опционально)
+        """
+        try:
+            logger.info(f"🔄 Batch updating TP/SL for {symbol}")
+            logger.info(f"   TP: ${new_tp_price:.4f} (trigger: {new_tp_trigger})")
+            logger.info(f"   SL: ${new_sl_price:.4f} (trigger: {new_sl_trigger})")
+
+            # Используем Batch Order Manager
+            result = await self.batch_manager.update_tp_sl_batch(
+                inst_id=symbol,
+                tp_ord_id=tp_ord_id,
+                sl_ord_id=sl_ord_id,
+                new_tp_price=f"{new_tp_price:.8f}",
+                new_sl_price=f"{new_sl_price:.8f}",
+                new_tp_trigger=f"{new_tp_trigger:.8f}" if new_tp_trigger else None,
+                new_sl_trigger=f"{new_sl_trigger:.8f}" if new_sl_trigger else None,
+            )
+
+            if result.get("code") == "0":
+                logger.info(f"✅ Batch TP/SL update successful for {symbol}")
+            else:
+                logger.error(
+                    f"❌ Batch TP/SL update failed: {result.get('msg', 'Unknown error')}"
+                )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Batch TP/SL update error: {e}")
+            return {"code": "1", "msg": str(e), "data": []}
+
+    async def flush_pending_updates(self) -> Dict[str, Any]:
+        """Принудительный flush всех накопленных batch обновлений"""
+        try:
+            logger.info("🔄 Flushing pending batch updates...")
+            result = await self.batch_manager.force_flush()
+
+            if result.get("code") == "0":
+                logger.info("✅ Batch updates flushed successfully")
+            else:
+                logger.error(
+                    f"❌ Batch flush failed: {result.get('msg', 'Unknown error')}"
+                )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Batch flush error: {e}")
+            return {"code": "1", "msg": str(e), "data": []}
+
+    def get_batch_stats(self) -> Dict[str, Any]:
+        """Получить статистику batch операций"""
+        return self.batch_manager.get_stats()

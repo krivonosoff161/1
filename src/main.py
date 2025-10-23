@@ -87,6 +87,16 @@ class BotRunner:
         """
         logger.info(f"Initializing bot in {self.mode.upper()} mode...")
         await self.client.connect()
+
+        # Инициализация WebSocket для быстрых входов (только для REST режима)
+        if self.mode == "rest" and hasattr(self.strategy, "initialize_websocket"):
+            try:
+                await self.strategy.initialize_websocket()
+                logger.info("✅ WebSocket Order Executor initialized for fast entries")
+            except Exception as e:
+                logger.warning(f"⚠️ WebSocket initialization failed: {e}")
+                logger.info("🔄 Will use REST API for order placement")
+
         logger.info("Bot initialized.")
 
     async def run(self) -> None:
@@ -120,6 +130,10 @@ class BotRunner:
         if self.mode == "websocket":
             # WebSocket режим - остановка WebSocket соединения
             await self.strategy.stop()
+        else:
+            # REST режим - очистка WebSocket Order Executor
+            if hasattr(self.strategy, "cleanup_websocket"):
+                await self.strategy.cleanup_websocket()
 
         await self.client.disconnect()
         logger.info("Bot shutdown complete.")

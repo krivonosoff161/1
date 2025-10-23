@@ -104,6 +104,9 @@ class ScalpingOrchestrator:
             adaptive_regime=self.modules.get("arm"),
         )
 
+        # Инициализация WebSocket для быстрых входов
+        self.ws_initialized = False
+
         self.position_manager = PositionManager(
             client, config, adaptive_regime=self.modules.get("arm")
         )
@@ -120,6 +123,28 @@ class ScalpingOrchestrator:
         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         logger.info("✅ SCALPING ORCHESTRATOR READY")
         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    async def initialize_websocket(self):
+        """Инициализация WebSocket для быстрых входов"""
+        try:
+            logger.info("🚀 Initializing WebSocket Order Executor...")
+            await self.order_executor.initialize_websocket()
+            self.ws_initialized = True
+            logger.info("✅ WebSocket Order Executor ready for fast entries")
+        except Exception as e:
+            logger.error(f"❌ WebSocket initialization failed: {e}")
+            logger.warning("⚠️ Will use REST API for order placement")
+            self.ws_initialized = False
+
+    async def cleanup_websocket(self):
+        """Очистка WebSocket соединения"""
+        if self.ws_initialized:
+            try:
+                await self.order_executor.cleanup_websocket()
+                self.ws_initialized = False
+                logger.info("🔌 WebSocket Order Executor disconnected")
+            except Exception as e:
+                logger.error(f"❌ WebSocket cleanup error: {e}")
 
     def _setup_indicators(self) -> IndicatorManager:
         """Настройка индикаторов"""
