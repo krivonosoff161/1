@@ -28,6 +28,7 @@ class OKXClient:
         self.sandbox = config.sandbox
 
         # API endpoints - OKX использует один URL для всех режимов
+        # НО для sandbox нужен специальный заголовок x-simulated-trading
         self.base_url = "https://www.okx.com"
         self.session: Optional[aiohttp.ClientSession] = None
 
@@ -111,11 +112,22 @@ class OKXClient:
     ) -> Dict[str, Any]:
         """Выполнение batch amend для одной группы ордеров (≤20)"""
         try:
-            timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-            request_path = "/api/v5/trade/amend-batch-orders"
-            body = json.dumps(orders_data)
+            timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+            request_path = "/trade/amend-batch-orders"  # ✅ БЕЗ /api/v5 в подписи!
 
-            # Генерируем подпись
+            # Логируем параметры для отладки
+            logger.debug(f"Batch amend request: {request_path}")
+            logger.debug(f"Orders data: {orders_data}")
+
+            # Проверяем формат данных для batch amend
+            # OKX batch amend принимает массив ордеров напрямую
+            if not isinstance(orders_data, list):
+                orders_data = [orders_data]
+
+            # 🔥 КРИТИЧНО: OKX batch amend требует обертку "data"!
+            body = json.dumps({"data": orders_data})
+
+            # ✅ ИСПРАВЛЕНО: Используем правильный путь для подписи
             signature = self._generate_signature(timestamp, "POST", request_path, body)
 
             headers = {
@@ -126,7 +138,12 @@ class OKXClient:
                 "Content-Type": "application/json",
             }
 
-            url = f"{self.base_url}{request_path}"
+            # ✅ ИСПРАВЛЕНО: Добавляем sandbox заголовок СРАЗУ
+            if self.sandbox:
+                headers["x-simulated-trading"] = "1"
+
+            # ✅ ИСПРАВЛЕНО: Используем полный URL для запроса
+            url = f"{self.base_url}/api/v5{request_path}"
 
             async with self.session.post(url, headers=headers, data=body) as response:
                 result = await response.json()
@@ -246,6 +263,10 @@ class OKXClient:
 
         # ✅ Передаём полный путь с query string в подпись
         headers = self._get_headers(method, full_path, body)
+
+        # КРИТИЧНО: Добавляем sandbox заголовок для ВСЕХ запросов
+        if self.sandbox:
+            headers["x-simulated-trading"] = "1"
 
         # Debug logging (только для отладки)
         logger.debug(f"Request: {method} {endpoint}")
@@ -439,6 +460,44 @@ class OKXClient:
             logger.error(f"Error getting account config: {e}")
             return {}
 
+    async def set_trading_mode(self, mode: str = "spot") -> bool:
+        """
+        Установить режим торговли на SPOT.
+
+        Args:
+            mode: "spot" для SPOT режима
+
+        Returns:
+            True если успешно установлен
+        """
+        try:
+            # 🔧 КРИТИЧНО: Для sandbox НЕ МОЖЕМ изменить режим торговли!
+            # Sandbox всегда в SPOT режиме
+            if self.sandbox:
+                logger.info("🔧 Sandbox режим - SPOT по умолчанию")
+                return True
+
+            # Устанавливаем режим торговли (только для live)
+            data = {
+                "acctLv": "1",  # Simple mode (SPOT only)
+                "posMode": "net_mode" if mode == "spot" else "long_short_mode",
+            }
+
+            result = await self._make_request(
+                "POST", "/account/set-position-mode", data=data
+            )
+
+            if result.get("code") == "0":
+                logger.info(f"✅ Trading mode set to {mode.upper()}")
+                return True
+            else:
+                logger.error(f"❌ Failed to set trading mode: {result.get('msg')}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error setting trading mode: {e}")
+            return False
+
     async def get_borrowed_balance(self, currency: str) -> float:
         """
         Get borrowed (margin) balance for a specific currency.
@@ -536,18 +595,21 @@ class OKXClient:
             "sz": str(quantity),
         }
 
+        # 🔧 КРИТИЧНО: Для sandbox нужен специальный режим!
+        if self.sandbox:
+            data["tdMode"] = "cash"  # SPOT для sandbox
+
         # Добавляем POST-ONLY если указан
         if post_only and order_type == OrderType.LIMIT:
             data["postOnly"] = "true"
 
-        # 🔧 КРИТИЧНО! tgtCcy для BUY MARKET ордеров
-        # quantity > 10 = открытие LONG (сумма в USDT) → tgtCcy='quote_ccy'
-        # quantity < 1 = закрытие SHORT (количество BTC/ETH) → tgtCcy='base_ccy'
+        # 🔥 КРИТИЧНО! tgtCcy для BUY MARKET ордеров - ИСПРАВЛЕНО!
+        # Для SPOT торговли ВСЕГДА используем base_ccy (количество монет)
+        # НЕ используем quote_ccy - это может вызвать займы!
         if order_type == OrderType.MARKET and side == OrderSide.BUY:
-            if quantity > 10:  # Открытие LONG (сумма в USDT)
-                data["tgtCcy"] = "quote_ccy"
-            else:  # Закрытие SHORT (количество монет)
-                data["tgtCcy"] = "base_ccy"
+            # ВСЕГДА используем base_ccy для SPOT торговли
+            data["tgtCcy"] = "base_ccy"
+            logger.info(f"🔧 BUY MARKET: tgtCcy=base_ccy (quantity={quantity})")
 
         if price is not None:
             data["px"] = str(price)
@@ -685,6 +747,10 @@ class OKXClient:
             "tpOrdPx": "-1",  # Market при триггере
         }
 
+        # 🔧 КРИТИЧНО: Для sandbox нужен специальный режим!
+        if self.sandbox:
+            data["tdMode"] = "cash"  # SPOT для sandbox
+
         try:
             result = await self._make_request("POST", "/trade/order-algo", data=data)
 
@@ -733,6 +799,10 @@ class OKXClient:
             "slOrdPx": "-1",
         }
 
+        # 🔧 КРИТИЧНО: Для sandbox нужен специальный режим!
+        if self.sandbox:
+            data["tdMode"] = "cash"  # SPOT для sandbox
+
         try:
             result = await self._make_request("POST", "/trade/order-algo", data=data)
 
@@ -771,6 +841,52 @@ class OKXClient:
         Returns:
             algo order ID или None
         """
+        # 🔥 КРИТИЧНО: Проверяем баланс ПЕРЕД размещением OCO!
+        try:
+            base_asset = symbol.split("-")[0]
+            quote_asset = symbol.split("-")[1]
+
+            # Проверяем займы
+            borrowed_base = await self.get_borrowed_balance(base_asset)
+            borrowed_quote = await self.get_borrowed_balance(quote_asset)
+
+            if borrowed_base > 0 or borrowed_quote > 0:
+                logger.error(
+                    f"🚨 OCO BLOCKED: BORROWED FUNDS DETECTED! "
+                    f"{base_asset}: {borrowed_base:.6f} | "
+                    f"{quote_asset}: {borrowed_quote:.6f}"
+                )
+                logger.error("🚫 OCO ORDER BLOCKED - НЕ ТОРГУЕМ С ЗАЙМАМИ!")
+                return None
+
+            # Проверяем баланс для OCO
+            if side == OrderSide.SELL:  # LONG закрытие - нужен ETH/BTC
+                asset_balance = await self.get_balance(base_asset)
+                if asset_balance < quantity:
+                    logger.error(
+                        f"🚨 OCO BLOCKED: НЕДОСТАТОЧНО {base_asset}! "
+                        f"Есть: {asset_balance:.8f}, Нужно: {quantity:.8f}"
+                    )
+                    logger.error("🚫 OCO ORDER BLOCKED - НЕ БЕРЕМ ЗАЙМЫ!")
+                    return None
+            else:  # BUY - SHORT закрытие - нужен USDT
+                quote_balance = await self.get_balance(quote_asset)
+                required_quote = (
+                    quantity * tp_trigger_price
+                )  # Максимальная сумма для TP
+                if quote_balance < required_quote:
+                    logger.error(
+                        f"🚨 OCO BLOCKED: НЕДОСТАТОЧНО {quote_asset}! "
+                        f"Есть: {quote_balance:.2f}, Нужно: {required_quote:.2f}"
+                    )
+                    logger.error("🚫 OCO ORDER BLOCKED - НЕ БЕРЕМ ЗАЙМЫ!")
+                    return None
+
+        except Exception as e:
+            logger.error(f"❌ Failed to check balance for OCO: {e}")
+            logger.error("🚫 OCO ORDER BLOCKED - Ошибка проверки баланса!")
+            return None
+
         # Форматируем trigger prices с фиксированными 6 знаками
         formatted_tp = f"{tp_trigger_price:.6f}"
         formatted_sl = f"{sl_trigger_price:.6f}"
@@ -786,6 +902,10 @@ class OKXClient:
             "slTriggerPx": formatted_sl,
             "slOrdPx": "-1",  # Market при триггере SL
         }
+
+        # 🔧 КРИТИЧНО: Для sandbox нужен специальный режим!
+        if self.sandbox:
+            data["tdMode"] = "cash"  # SPOT для sandbox
 
         # КРИТИЧНО! tgtCcy нужен ТОЛЬКО для BUY (SHORT закрытие)
         # Для SELL (LONG закрытие) sz в базовой валюте по умолчанию
@@ -822,18 +942,51 @@ class OKXClient:
         Returns:
             Список algo orders
         """
+        # 🔧 КРИТИЧНО: Добавляем ВСЕ возможные параметры!
         params = {
             "instType": "SPOT",
-            "ordType": algo_type,
+            "state": "live",  # Только активные ордера
         }
+
+        # 🔧 КРИТИЧНО: Для OCO ордеров нужен специальный параметр!
+        if algo_type == "oco":
+            params["ordType"] = "oco"
+        elif algo_type == "conditional":
+            params["ordType"] = "conditional"
+        elif algo_type == "trigger":
+            params["ordType"] = "trigger"
+
         if symbol:
             params["instId"] = symbol
 
         try:
-            result = await self._make_request(
-                "GET", "/trade/orders-algo-pending", params=params
+            # Для GET запросов с параметрами нужно правильно формировать query string
+            query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+            request_path = (
+                f"/trade/orders-algo-pending?{query_string}"  # ✅ БЕЗ /api/v5 в подписи!
             )
-            return result.get("data", [])
+
+            # Генерируем подпись для GET запроса с параметрами
+            timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+            signature = self._generate_signature(timestamp, "GET", request_path, "")
+
+            headers = {
+                "OK-ACCESS-KEY": self.api_key,
+                "OK-ACCESS-SIGN": signature,
+                "OK-ACCESS-TIMESTAMP": timestamp,
+                "OK-ACCESS-PASSPHRASE": self.passphrase,
+                "Content-Type": "application/json",
+            }
+
+            if self.sandbox:
+                headers["x-simulated-trading"] = "1"
+
+            url = f"{self.base_url}/api/v5{request_path}"  # ✅ ПОЛНЫЙ URL для запроса
+
+            async with self.session.get(url, headers=headers) as response:
+                result = await response.json()
+                return result.get("data", [])
+
         except Exception as e:
             logger.error(f"Error getting algo orders: {e}")
             return []

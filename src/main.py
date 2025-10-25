@@ -71,7 +71,7 @@ class BotRunner:
         else:
             logger.info("🔄 Initializing REST API mode...")
             self.strategy = ScalpingOrchestrator(
-                self.client, config.scalping, config.risk
+                self.client, config.scalping, config.risk, config
             )
 
     async def initialize(self) -> None:

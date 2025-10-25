@@ -31,14 +31,21 @@ async def test_full_trading_cycle():
 
         print("✅ Бот инициализирован")
 
+        # Установка SPOT режима
+        print("🔧 Установка SPOT режима...")
+        if await bot.client.set_trading_mode("spot"):
+            print("✅ SPOT режим установлен")
+        else:
+            print("⚠️ Не удалось установить SPOT режим (продолжаем тест)")
+
         # Получаем текущую цену
-        current_price = await bot.client.get_current_price("BTC-USDT")
-        print(f"📊 Текущая цена BTC: ${current_price:.2f}")
+        current_price = await bot.client.get_current_price("ETH-USDT")
+        print(f"📊 Текущая цена ETH: ${current_price:.2f}")
 
         # Создаем тестовый сигнал
         test_signal = Signal(
             timestamp=datetime.utcnow(),
-            symbol="BTC-USDT",
+            symbol="ETH-USDT",
             side=OrderSide.BUY,
             price=current_price,
             confidence=10.0,
@@ -53,23 +60,41 @@ async def test_full_trading_cycle():
         # Открываем позицию
         position = await bot.strategy.order_executor.execute_signal(test_signal, {})
 
+        # 🔥 КРИТИЧНО: Добавляем позицию в orchestrator для правильного трекинга!
+        if position:
+            bot.strategy.positions["ETH-USDT"] = position
+            print("✅ Позиция добавлена в orchestrator tracking")
+
         if position:
             print(f"✅ Позиция открыта: {position.id}")
             print(f"   Entry Price: ${position.entry_price:.2f}")
-            print(f"   Size: {position.size:.8f} BTC")
+            print(f"   Size: {position.size:.8f} ETH")
             print(f"   OCO Order ID: {position.algo_order_id}")
 
-            # Проверяем OCO ордера
+            # Проверяем OCO ордера (с задержкой)
             print(f"\n🔄 ТЕСТ 2: ПРОВЕРКА OCO ОРДЕРОВ")
             print("-" * 50)
 
+            # Добавляем задержку для создания OCO ордера
+            print("   Ожидание создания OCO ордера...")
+            await asyncio.sleep(2)  # 2 секунды задержки
+
             # Проверяем алгоритмические ордера (OCO находятся там)
-            algo_orders = await bot.client.get_algo_orders()
+            # Ищем OCO ордера с правильными параметрами
+            algo_orders = await bot.client.get_algo_orders(
+                symbol="ETH-USDT", algo_type="oco"
+            )
             oco_found = False
 
-            if algo_orders and "data" in algo_orders:
-                for order in algo_orders["data"]:
-                    if order["algoId"] == position.algo_order_id:
+            print(f"   Ищем OCO ордер ID: {position.algo_order_id}")
+            print(f"   Найдено алгоритмических ордеров: {len(algo_orders)}")
+
+            if algo_orders and len(algo_orders) > 0:
+                for order in algo_orders:
+                    print(
+                        f"   Проверяем ордер: {order.get('algoId')} (тип: {order.get('ordType')})"
+                    )
+                    if order.get("algoId") == position.algo_order_id:
                         oco_found = True
                         print(
                             f"✅ OCO Order найден: {order.get('tpTriggerPx', 'N/A')} @ {order.get('sz', 'N/A')} ({order.get('ordType', 'N/A')})"
@@ -80,6 +105,16 @@ async def test_full_trading_cycle():
                 print("✅ OCO ордер размещен корректно")
             else:
                 print("❌ OCO ордер не найден")
+                # Дополнительная проверка через алгоритмические ордера
+                try:
+                    algo_orders = await bot.client.get_algo_orders()
+                    print(f"   Алгоритмических ордеров: {len(algo_orders)}")
+                    for algo_order in algo_orders:
+                        print(
+                            f"   Algo ID: {algo_order.get('algoId')}, Type: {algo_order.get('ordType')}"
+                        )
+                except Exception as e:
+                    print(f"   Ошибка проверки алгоритмических ордеров: {e}")
 
             # Тест Profit Harvesting
             print(f"\n💰 ТЕСТ 3: PROFIT HARVESTING")
@@ -110,7 +145,7 @@ async def test_full_trading_cycle():
             print(f"   Обновляем SL: ${position.stop_loss:.2f} → ${new_sl_price:.2f}")
 
             batch_result = await bot.strategy.position_manager.batch_update_tp_sl(
-                symbol="BTC-USDT",
+                symbol="ETH-USDT",
                 tp_ord_id=position.algo_order_id,  # OCO ордер содержит и TP и SL
                 sl_ord_id=position.algo_order_id,  # OCO ордер содержит и TP и SL
                 new_tp_price=new_tp_price,
@@ -134,14 +169,19 @@ async def test_full_trading_cycle():
             print(f"   Закрываем по цене: ${close_price:.2f}")
 
             trade_result = await bot.strategy.position_manager.close_position(
-                "BTC-USDT", position, close_price, "test_close"
+                "ETH-USDT", position, close_price, "test_close"
             )
 
             if trade_result:
                 print("✅ Позиция закрыта успешно")
                 print(f"   PnL: ${trade_result.net_pnl:.4f}")
                 print(f"   Commission: ${trade_result.commission:.4f}")
-                print(f"   Duration: {trade_result.duration_seconds:.1f} сек")
+                print(f"   Duration: {trade_result.duration_sec:.1f} сек")
+
+                # 🔥 КРИТИЧНО: Удаляем позицию из orchestrator после закрытия!
+                if "ETH-USDT" in bot.strategy.positions:
+                    del bot.strategy.positions["ETH-USDT"]
+                    print("✅ Позиция удалена из orchestrator tracking")
             else:
                 print("❌ Ошибка закрытия позиции")
 
@@ -150,9 +190,21 @@ async def test_full_trading_cycle():
             print("-" * 50)
 
             # Проверяем, что позиция закрыта
-            final_orders = await bot.client.get_open_orders(symbol="BTC-USDT")
+            final_orders = await bot.client.get_open_orders(symbol="ETH-USDT")
+
+            # Обрабатываем разные форматы ответа
+            if isinstance(final_orders, dict) and "data" in final_orders:
+                orders_data = final_orders["data"]
+            elif isinstance(final_orders, list):
+                orders_data = final_orders
+            else:
+                orders_data = []
+
             remaining_orders = [
-                o for o in final_orders["data"] if o["ordId"] == position.algo_order_id
+                o
+                for o in orders_data
+                if (o.get("ordId") if isinstance(o, dict) else o.id)
+                == position.algo_order_id
             ]
 
             if not remaining_orders:
@@ -160,12 +212,25 @@ async def test_full_trading_cycle():
             else:
                 print(f"⚠️ Остались открытые ордера: {len(remaining_orders)}")
 
+            # Дополнительная проверка алгоритмических ордеров
+            algo_orders = await bot.client.get_algo_orders()
+            if algo_orders:
+                print(f"📊 Алгоритмических ордеров: {len(algo_orders)}")
+                for order in algo_orders:
+                    if order.get("algoId") == position.algo_order_id:
+                        print(
+                            f"   ✅ OCO найден: {order.get('ordType')} - {order.get('state')}"
+                        )
+            else:
+                print("📊 Алгоритмических ордеров: 0")
+
             # Статистика Batch Manager
             batch_stats = bot.strategy.position_manager.get_batch_stats()
             print(f"📊 Batch статистика:")
-            print(f"   Обработано: {batch_stats['total_amends_processed']}")
-            print(f"   Отправлено батчей: {batch_stats['total_batches_sent']}")
             print(f"   В очереди: {batch_stats['pending_updates']}")
+            print(f"   Макс размер батча: {batch_stats['max_batch_size']}")
+            print(f"   Авто-flush порог: {batch_stats['auto_flush_threshold']}")
+            print(f"   Готов к flush: {batch_stats['ready_for_flush']}")
 
         else:
             print("❌ Не удалось открыть позицию")
@@ -223,13 +288,13 @@ async def test_maker_strategy():
         bot = BotRunner(config, mode="rest")
         await bot.initialize()
 
-        current_price = await bot.client.get_current_price("BTC-USDT")
+        current_price = await bot.client.get_current_price("ETH-USDT")
         print(f"📊 Текущая цена: ${current_price:.2f}")
 
         # Тест POST-ONLY ордера
         test_signal = Signal(
             timestamp=datetime.utcnow(),
-            symbol="BTC-USDT",
+            symbol="ETH-USDT",
             side=OrderSide.BUY,
             price=current_price,
             confidence=10.0,
@@ -243,13 +308,17 @@ async def test_maker_strategy():
         # Пытаемся разместить POST-ONLY
         position = await bot.strategy.order_executor.execute_signal(test_signal, {})
 
+        # 🔥 КРИТИЧНО: Добавляем позицию в orchestrator для правильного трекинга!
+        if position:
+            bot.strategy.positions["ETH-USDT"] = position
+
         if position:
             print("✅ Ордер размещен")
 
             # Проверяем тип комиссии
             close_price = position.entry_price * 1.0001
             trade_result = await bot.strategy.position_manager.close_position(
-                "BTC-USDT", position, close_price, "maker_test"
+                "ETH-USDT", position, close_price, "maker_test"
             )
 
             if trade_result:
@@ -265,8 +334,12 @@ async def test_maker_strategy():
 
             # Закрываем тестовую позицию
             await bot.strategy.position_manager.close_position(
-                "BTC-USDT", position, close_price, "cleanup"
+                "ETH-USDT", position, close_price, "cleanup"
             )
+
+            # 🔥 КРИТИЧНО: Удаляем позицию из orchestrator после закрытия!
+            if "ETH-USDT" in bot.strategy.positions:
+                del bot.strategy.positions["ETH-USDT"]
         else:
             print("❌ POST-ONLY ордер не размещен")
 

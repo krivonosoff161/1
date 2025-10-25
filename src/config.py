@@ -106,6 +106,7 @@ class BotConfig(BaseModel):
     trading: TradingConfig
     risk: RiskConfig
     scalping: ScalpingConfig
+    manual_pools: Optional[Dict] = Field(default_factory=dict)
 
     @classmethod
     def load_from_file(cls, config_path: str = "config.yaml") -> "BotConfig":

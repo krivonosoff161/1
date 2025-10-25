@@ -5,28 +5,94 @@ api:
     api_key: "${OKX_API_KEY}"
     api_secret: "${OKX_API_SECRET}"
     passphrase: "${OKX_PASSPHRASE}"
-    sandbox: true  # Демо-режим OKX
+    sandbox: true  # Демо-режим OKX (убедитесь, что API ключ для sandbox)
     
 trading:
   symbols: 
     - "BTC-USDT"   # ✅ Bitcoin - лучшая ликвидность
     - "ETH-USDT"   # ✅ Ethereum - вторая по капитализации
   base_currency: "USDT"
+  trading_mode: "spot"  # 🔥 КРИТИЧНО: SPOT режим (не margin!)
   
-# Manual Pool Allocation (Fixed Coin Amounts)
+# Manual Pool Allocation Strategy - НОВАЯ СИСТЕМА
 manual_pools:
   eth_pool:
-    fixed_amount: 0.083  # ETH (≈ $300)
+    fixed_amount: 400.0
     max_open_positions: 3
-    priority: 1  # Highest priority for trending
+    priority: 1
+    trending:
+      quantity_per_trade: 0.008
+      score_threshold: 4
+      tp_percent: 0.7
+      sl_percent: 0.45
+      time_limit_seconds: 480
+      ph_threshold: 0.40
+    ranging:
+      quantity_per_trade: 0.005
+      score_threshold: 3
+      tp_percent: 0.5
+      sl_percent: 0.35
+      time_limit_seconds: 300
+      ph_threshold: 0.50
+    choppy:
+      quantity_per_trade: 0.006
+      score_threshold: 5
+      tp_percent: 0.6
+      sl_percent: 0.45
+      time_limit_seconds: 360
+      ph_threshold: 0.45
+
   btc_pool:
-    fixed_amount: 0.0025  # BTC (≈ $250) 
-    max_open_positions: 3
+    fixed_amount: 300.0
+    max_open_positions: 2
     priority: 2
+    trending:
+      quantity_per_trade: 0.0009
+      score_threshold: 4
+      tp_percent: 0.7
+      sl_percent: 0.45
+      time_limit_seconds: 480
+      ph_threshold: 0.40
+    ranging:
+      quantity_per_trade: 0.0005
+      score_threshold: 3
+      tp_percent: 0.5
+      sl_percent: 0.35
+      time_limit_seconds: 300
+      ph_threshold: 0.50
+    choppy:
+      quantity_per_trade: 0.0007
+      score_threshold: 5
+      tp_percent: 0.6
+      sl_percent: 0.45
+      time_limit_seconds: 360
+      ph_threshold: 0.45
+
   usdt_pool:
-    fixed_amount: 450.0  # USDT (≈ $450)
-    max_open_positions: 1
-    priority: 3  # Lowest priority for choppy markets
+    fixed_amount: 300.0
+    max_open_positions: 2
+    priority: 3
+    trending:
+      quantity_per_trade: 0.1
+      score_threshold: 4
+      tp_percent: 0.7
+      sl_percent: 0.45
+      time_limit_seconds: 480
+      ph_threshold: 0.40
+    ranging:
+      quantity_per_trade: 0.05
+      score_threshold: 3
+      tp_percent: 0.5
+      sl_percent: 0.35
+      time_limit_seconds: 300
+      ph_threshold: 0.50
+    choppy:
+      quantity_per_trade: 0.08
+      score_threshold: 5
+      tp_percent: 0.6
+      sl_percent: 0.45
+      time_limit_seconds: 360
+      ph_threshold: 0.45
 
 # Risk Management (Simplified for Manual Pools)
 risk:
@@ -242,6 +308,7 @@ scalping:
     min_asset_balance_usd: 50.0   # Минимум $50 (оптимально для SOL/AVAX/DOGE)
     min_usdt_balance: 15.0        # 🔥 СКАЛЬПИНГ: $15 резерв (для малых балансов)
     log_all_checks: false         # Логировать каждую проверку (для отладки)
+
 
   # Balance Profiles - адаптивные параметры по размеру баланса
   balance_profiles:

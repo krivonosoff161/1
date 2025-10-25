@@ -16,7 +16,7 @@ from typing import Dict, Optional
 
 from loguru import logger
 
-from src.config import RiskConfig, ScalpingConfig
+from src.config import BotConfig, RiskConfig, ScalpingConfig
 # Phase 1 модули
 from src.filters.time_session_manager import (TimeFilterConfig,
                                               TimeSessionManager)
@@ -53,7 +53,11 @@ class ScalpingOrchestrator:
     """
 
     def __init__(
-        self, client: OKXClient, config: ScalpingConfig, risk_config: RiskConfig
+        self,
+        client: OKXClient,
+        config: ScalpingConfig,
+        risk_config: RiskConfig,
+        full_config: BotConfig,
     ):
         """
         Инициализация оркестратора.
@@ -62,10 +66,12 @@ class ScalpingOrchestrator:
             client: OKX клиент
             config: Scalping конфигурация
             risk_config: Risk конфигурация
+            full_config: Полный конфиг бота (для доступа к manual_pools)
         """
         self.client = client
         self.config = config
         self.risk_config = risk_config
+        self.full_config = full_config
         self.strategy_id = "scalping_modular_v2"
 
         # Состояние
@@ -856,6 +862,11 @@ class ScalpingOrchestrator:
             for close_symbol, reason in to_close:
                 logger.debug(f"   ⚠ Closing position: {reason}")
                 await self._close_position(close_symbol, current_price, reason)
+
+                # 🔥 КРИТИЧНО: Удаляем позицию после закрытия!
+                if close_symbol in self.positions:
+                    del self.positions[close_symbol]
+                    logger.info(f"✅ Position removed from tracking: {close_symbol}")
 
             return  # Если есть позиция - не открываем новую
 
