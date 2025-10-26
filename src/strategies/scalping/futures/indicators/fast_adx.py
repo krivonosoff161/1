@@ -135,7 +135,7 @@ class FastADX:
     def get_current_di_minus(self) -> float:
         """Получение текущего значения -DI."""
         if len(self.di_minus_history) == 0:
-        return 0.0
+            return 0.0
         return self.di_minus_history[-1]
     
     def is_trend_strong(self) -> bool:

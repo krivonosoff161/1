@@ -4,7 +4,6 @@ Futures-специфичные индикаторы для скальпинг с
 
 from .fast_adx import FastADX
 from .funding_rate_monitor import FundingRateMonitor
-from .futures_volume_profile import FuturesVolumeProfile
 from .micro_pivot_calculator import MicroPivotCalculator
 from .order_flow_indicator import OrderFlowIndicator
 from .trailing_stop_loss import TrailingStopLoss
@@ -15,5 +14,4 @@ __all__ = [
     "FundingRateMonitor",
     "FastADX",
     "TrailingStopLoss",
-    "FuturesVolumeProfile",
 ]
