@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from src.indicators.advanced.pivot_calculator import PivotCalculator, PivotLevels
 from src.models import OHLCV
-from src.okx_client import OKXClient
+from src.clients.spot_client import OKXClient
 
 
 class PivotPointsConfig(BaseModel):

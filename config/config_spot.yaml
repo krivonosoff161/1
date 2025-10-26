@@ -1,0 +1,199 @@
+# Конфигурация для Spot торговли
+# Основные параметры торгового бота
+
+# API настройки
+api:
+  key: "your_api_key_here"
+  secret: "your_secret_key_here"
+  passphrase: "your_passphrase_here"
+  sandbox: true  # true для тестирования, false для реальной торговли
+
+# Общие настройки
+general:
+  log_level: "INFO"
+  check_interval: 5.0  # Интервал проверки в секундах
+  max_concurrent_positions: 3  # Максимальное количество одновременных позиций
+
+# Spot торговля
+spot:
+  enabled: true
+  symbols:
+    - "BTC-USDT"
+    - "ETH-USDT"
+    - "SOL-USDT"
+  
+  # Параметры скальпинга
+  scalping:
+    min_signal_strength: 0.3  # Минимальная сила сигнала (0.0-1.0)
+    max_concurrent_signals: 5  # Максимальное количество одновременных сигналов
+    base_risk_percentage: 0.02  # Базовый процент риска (2%)
+    min_position_size: 0.001  # Минимальный размер позиции
+    
+    # Take Profit и Stop Loss
+    tp_percent: 0.5  # Take Profit в процентах
+    sl_percent: 0.3  # Stop Loss в процентах
+    
+    # Адаптивные параметры
+    adaptive_tp_sl: true  # Адаптивные TP/SL на основе волатильности
+    volatility_multiplier: 1.5  # Множитель волатильности
+    
+    # Фильтры
+    enable_rsi_filter: true
+    enable_macd_filter: true
+    enable_bollinger_filter: true
+    enable_ma_filter: true
+    
+    # RSI параметры
+    rsi_period: 14
+    rsi_oversold: 30
+    rsi_overbought: 70
+    
+    # MACD параметры
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    
+    # Bollinger Bands параметры
+    bb_period: 20
+    bb_std_dev: 2.0
+    
+    # Moving Average параметры
+    ma_fast: 12
+    ma_slow: 26
+
+# Риск-менеджмент
+risk:
+  max_daily_loss: 100.0  # Максимальная дневная потеря в USDT
+  max_position_size: 1000.0  # Максимальный размер позиции в USDT
+  max_drawdown: 0.1  # Максимальная просадка (10%)
+  
+  # Адаптивное управление риском
+  adaptive_risk: true
+  balance_threshold: 0.8  # Порог для снижения риска (80% от начального баланса)
+  risk_reduction_factor: 0.5  # Коэффициент снижения риска
+
+# Модули фильтрации
+filters:
+  # Временные фильтры
+  time_session:
+    enabled: true
+    trading_hours: "00:00-23:59"  # Часы торговли
+    avoid_news: true  # Избегать торговли во время новостей
+    
+  # Корреляционные фильтры
+  correlation:
+    enabled: true
+    max_correlation: 0.7  # Максимальная корреляция между парами
+    correlation_period: 24  # Период расчета корреляции в часах
+    
+  # Мультитаймфрейм фильтры
+  multi_timeframe:
+    enabled: true
+    timeframes: ["1m", "5m", "15m"]  # Используемые таймфреймы
+    trend_confirmation: true  # Подтверждение тренда на старших таймфреймах
+    
+  # Pivot Points фильтры
+  pivot_points:
+    enabled: true
+    calculation_method: "standard"  # standard, fibonacci, woodie
+    support_resistance_levels: 3  # Количество уровней поддержки/сопротивления
+    
+  # Volume Profile фильтры
+  volume_profile:
+    enabled: true
+    profile_period: 24  # Период профиля в часах
+    volume_threshold: 0.1  # Минимальный объем для торговли
+
+# Адаптивный режим рынка
+adaptive_regime:
+  enabled: true
+  regime_detection:
+    volatility_threshold: 0.02  # Порог волатильности
+    trend_strength_threshold: 0.6  # Порог силы тренда
+    volume_threshold: 1.2  # Порог объема
+    
+  # Параметры для разных режимов
+  regimes:
+    trending:
+      tp_multiplier: 1.5  # Увеличение TP в трендовом режиме
+      sl_multiplier: 0.8  # Уменьшение SL в трендовом режиме
+      
+    ranging:
+      tp_multiplier: 0.8  # Уменьшение TP в боковом режиме
+      sl_multiplier: 1.2  # Увеличение SL в боковом режиме
+      
+    volatile:
+      tp_multiplier: 2.0  # Увеличение TP в волатильном режиме
+      sl_multiplier: 0.6  # Уменьшение SL в волатильном режиме
+
+# Баланс и управление капиталом
+balance:
+  # Адаптивное управление балансом
+  adaptive_balance:
+    enabled: true
+    balance_profiles:
+      conservative:
+        risk_percentage: 0.01  # 1% риска
+        max_positions: 2
+        
+      moderate:
+        risk_percentage: 0.02  # 2% риска
+        max_positions: 3
+        
+      aggressive:
+        risk_percentage: 0.03  # 3% риска
+        max_positions: 5
+    
+    # Переключение профилей на основе баланса
+    profile_switching:
+      enabled: true
+      balance_thresholds:
+        conservative: 0.9  # Переход к консервативному при 90% баланса
+        moderate: 0.7      # Переход к умеренному при 70% баланса
+        aggressive: 0.5    # Переход к агрессивному при 50% баланса
+
+# Логирование
+logging:
+  level: "INFO"
+  file_rotation: true
+  max_file_size: "10MB"
+  backup_count: 7
+  log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Раздельные логи для разных компонентов
+  components:
+    spot: "logs/spot/spot_trading.log"
+    signals: "logs/spot/signals.log"
+    orders: "logs/spot/orders.log"
+    positions: "logs/spot/positions.log"
+    performance: "logs/spot/performance.log"
+
+# Уведомления
+notifications:
+  enabled: false
+  telegram:
+    bot_token: ""
+    chat_id: ""
+  
+  email:
+    smtp_server: ""
+    smtp_port: 587
+    username: ""
+    password: ""
+    to_email: ""
+
+# Мониторинг и метрики
+monitoring:
+  enabled: true
+  metrics_interval: 60  # Интервал сбора метрик в секундах
+  
+  # Ключевые метрики
+  metrics:
+    - "balance"
+    - "pnl"
+    - "positions_count"
+    - "signals_generated"
+    - "orders_executed"
+    - "success_rate"
+    - "drawdown"
+    - "sharpe_ratio"

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from src.filters.correlation_manager import (CorrelationConfig,
                                              CorrelationManager)
 from src.models import Position, PositionSide
-from src.okx_client import OKXClient
+from src.clients.spot_client import OKXClient
 
 
 class CorrelationFilterConfig(BaseModel):

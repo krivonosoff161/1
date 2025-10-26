@@ -22,7 +22,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from src.models import OHLCV
-from src.okx_client import OKXClient
+from src.clients.spot_client import OKXClient
 
 
 class MTFConfig(BaseModel):

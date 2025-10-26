@@ -1,0 +1,260 @@
+# Конфигурация для Futures торговли
+# Основные параметры торгового бота для Futures
+
+# API настройки
+api:
+  key: "your_api_key_here"
+  secret: "your_secret_key_here"
+  passphrase: "your_passphrase_here"
+  sandbox: true  # true для тестирования, false для реальной торговли
+
+# Общие настройки
+general:
+  log_level: "INFO"
+  check_interval: 3.0  # Интервал проверки в секундах (быстрее для Futures)
+  max_concurrent_positions: 2  # Максимальное количество одновременных позиций
+
+# Futures торговля
+futures:
+  enabled: true
+  symbols:
+    - "BTC-USDT"
+    - "ETH-USDT"
+    - "SOL-USDT"
+  
+  # Параметры левериджа и маржи
+  leverage: 3  # Стандартное плечо (3x)
+  margin_mode: "isolated"  # Изолированная маржа
+  
+  # Параметры маржи
+  maintenance_margin_ratio: 0.01  # Поддерживающая маржа (1%)
+  initial_margin_ratio: 0.1  # Начальная маржа (10%)
+  
+  # Пороги безопасности маржи
+  warning_threshold: 1.8  # Предупреждение при 180% маржи
+  danger_threshold: 1.3   # Опасность при 130% маржи
+  critical_threshold: 1.1 # Критично при 110% маржи
+  auto_close_threshold: 1.05  # Автозакрытие при 105% маржи
+  
+  # Параметры проскальзывания
+  max_slippage_percent: 0.1  # Максимальное проскальзывание (0.1%)
+  max_spread_percent: 0.05   # Максимальный спред (0.05%)
+  order_timeout: 30.0        # Таймаут ордера в секундах
+  
+  # Параметры скальпинга для Futures
+  scalping:
+    min_signal_strength: 0.4  # Минимальная сила сигнала (выше для Futures)
+    max_concurrent_signals: 3  # Меньше сигналов для Futures
+    base_risk_percentage: 0.015  # Базовый процент риска (1.5% - консервативнее)
+    min_position_size: 0.001  # Минимальный размер позиции
+    
+    # Take Profit и Stop Loss для Futures
+    tp_percent: 0.3  # Take Profit в процентах (меньше для Futures)
+    sl_percent: 0.2  # Stop Loss в процентах (меньше для Futures)
+    
+    # Адаптивные параметры
+    adaptive_tp_sl: true  # Адаптивные TP/SL на основе волатильности
+    volatility_multiplier: 1.2  # Множитель волатильности (консервативнее)
+    
+    # Фильтры для Futures
+    enable_rsi_filter: true
+    enable_macd_filter: true
+    enable_bollinger_filter: true
+    enable_ma_filter: true
+    
+    # RSI параметры (адаптированы для Futures)
+    rsi_period: 14
+    rsi_oversold: 25  # Более строгие уровни
+    rsi_overbought: 75
+    
+    # MACD параметры
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    
+    # Bollinger Bands параметры
+    bb_period: 20
+    bb_std_dev: 1.8  # Более узкие полосы для Futures
+    
+    # Moving Average параметры
+    ma_fast: 10  # Более быстрые MA для Futures
+    ma_slow: 21
+
+# Риск-менеджмент для Futures
+risk:
+  max_daily_loss: 50.0  # Максимальная дневная потеря в USDT (меньше для Futures)
+  max_position_size: 500.0  # Максимальный размер позиции в USDT
+  max_drawdown: 0.05  # Максимальная просадка (5% - строже для Futures)
+  
+  # Адаптивное управление риском
+  adaptive_risk: true
+  balance_threshold: 0.9  # Порог для снижения риска (90% от начального баланса)
+  risk_reduction_factor: 0.3  # Более агрессивное снижение риска
+  
+  # Futures-специфичные риски
+  liquidation_protection: true  # Защита от ликвидации
+  margin_call_protection: true  # Защита от маржин-колла
+  position_sizing: "conservative"  # Консервативное определение размера позиции
+
+# Модули безопасности для Futures
+safety_modules:
+  # Margin Calculator
+  margin_calculator:
+    enabled: true
+    check_interval: 5.0  # Проверка маржи каждые 5 секунд
+    safety_multiplier: 1.5  # Множитель безопасности
+    
+  # Liquidation Guard
+  liquidation_guard:
+    enabled: true
+    monitoring_interval: 3.0  # Мониторинг каждые 3 секунды
+    auto_close_enabled: true  # Автоматическое закрытие позиций
+    warning_cooldown: 300  # Пауза между предупреждениями (5 минут)
+    
+  # Slippage Guard
+  slippage_guard:
+    enabled: true
+    monitoring_interval: 2.0  # Мониторинг каждые 2 секунды
+    auto_cancel_enabled: true  # Автоматическая отмена проблемных ордеров
+
+# Модули фильтрации (адаптированы для Futures)
+filters:
+  # Временные фильтры
+  time_session:
+    enabled: true
+    trading_hours: "00:00-23:59"  # Часы торговли
+    avoid_news: true  # Избегать торговли во время новостей
+    avoid_high_volatility: true  # Избегать периодов высокой волатильности
+    
+  # Корреляционные фильтры
+  correlation:
+    enabled: true
+    max_correlation: 0.6  # Более строгая корреляция для Futures
+    correlation_period: 12  # Более короткий период для Futures
+    
+  # Мультитаймфрейм фильтры
+  multi_timeframe:
+    enabled: true
+    timeframes: ["1m", "3m", "5m"]  # Более короткие таймфреймы для Futures
+    trend_confirmation: true  # Подтверждение тренда на старших таймфреймах
+    
+  # Pivot Points фильтры
+  pivot_points:
+    enabled: true
+    calculation_method: "standard"
+    support_resistance_levels: 2  # Меньше уровней для Futures
+    
+  # Volume Profile фильтры
+  volume_profile:
+    enabled: true
+    profile_period: 12  # Более короткий период для Futures
+    volume_threshold: 0.15  # Более высокий порог объема
+
+# Адаптивный режим рынка для Futures
+adaptive_regime:
+  enabled: true
+  regime_detection:
+    volatility_threshold: 0.015  # Более низкий порог волатильности
+    trend_strength_threshold: 0.7  # Более высокий порог силы тренда
+    volume_threshold: 1.5  # Более высокий порог объема
+    
+  # Параметры для разных режимов (адаптированы для Futures)
+  regimes:
+    trending:
+      tp_multiplier: 1.2  # Более консервативные множители
+      sl_multiplier: 0.9
+      leverage_multiplier: 1.0  # Стандартное плечо
+      
+    ranging:
+      tp_multiplier: 0.7  # Более консервативные множители
+      sl_multiplier: 1.3
+      leverage_multiplier: 0.8  # Снижение плеча
+      
+    volatile:
+      tp_multiplier: 1.5  # Более консервативные множители
+      sl_multiplier: 0.7
+      leverage_multiplier: 0.6  # Значительное снижение плеча
+
+# Баланс и управление капиталом для Futures
+balance:
+  # Адаптивное управление балансом
+  adaptive_balance:
+    enabled: true
+    balance_profiles:
+      conservative:
+        risk_percentage: 0.005  # 0.5% риска
+        max_positions: 1
+        leverage: 2
+        
+      moderate:
+        risk_percentage: 0.01   # 1% риска
+        max_positions: 2
+        leverage: 3
+        
+      aggressive:
+        risk_percentage: 0.015  # 1.5% риска
+        max_positions: 3
+        leverage: 3
+    
+    # Переключение профилей на основе баланса
+    profile_switching:
+      enabled: true
+      balance_thresholds:
+        conservative: 0.95  # Переход к консервативному при 95% баланса
+        moderate: 0.8       # Переход к умеренному при 80% баланса
+        aggressive: 0.6    # Переход к агрессивному при 60% баланса
+
+# Логирование для Futures
+logging:
+  level: "INFO"
+  file_rotation: true
+  max_file_size: "10MB"
+  backup_count: 7
+  log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Раздельные логи для разных компонентов
+  components:
+    futures: "logs/futures/futures_trading.log"
+    signals: "logs/futures/signals.log"
+    orders: "logs/futures/orders.log"
+    positions: "logs/futures/positions.log"
+    margin: "logs/futures/margin.log"
+    liquidation: "logs/futures/liquidation.log"
+    slippage: "logs/futures/slippage.log"
+    performance: "logs/futures/performance.log"
+
+# Уведомления
+notifications:
+  enabled: false
+  telegram:
+    bot_token: ""
+    chat_id: ""
+  
+  email:
+    smtp_server: ""
+    smtp_port: 587
+    username: ""
+    password: ""
+    to_email: ""
+
+# Мониторинг и метрики для Futures
+monitoring:
+  enabled: true
+  metrics_interval: 30  # Более частый сбор метрик для Futures
+  
+  # Ключевые метрики для Futures
+  metrics:
+    - "balance"
+    - "pnl"
+    - "positions_count"
+    - "margin_ratio"
+    - "liquidation_risk"
+    - "leverage_used"
+    - "signals_generated"
+    - "orders_executed"
+    - "success_rate"
+    - "drawdown"
+    - "sharpe_ratio"
+    - "max_drawdown"
+    - "slippage_average"
+    - "margin_efficiency"

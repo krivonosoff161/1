@@ -2,11 +2,9 @@
 Модульная скальпинг стратегия.
 
 Архитектура:
-- orchestrator.py - главный координатор
-- signal_generator.py - генерация сигналов + scoring
-- order_executor.py - исполнение ордеров
-- position_manager.py - управление позициями
-- performance_tracker.py - статистика и экспорт
+- spot/ - Spot торговля
+- futures/ - Futures торговля
+- modules/ - общие модули безопасности
 
 Внешние зависимости:
 - src.risk.risk_controller - риск-менеджмент (в общей папке risk/)
@@ -14,18 +12,26 @@
 
 from src.risk.risk_controller import RiskController
 
-from .orchestrator import ScalpingOrchestrator
-from .order_executor import OrderExecutor
-from .performance_tracker import PerformanceTracker
-from .position_manager import PositionManager, TradeResult
-from .signal_generator import SignalGenerator
+# Spot модули
+from .spot.orchestrator import ScalpingOrchestrator
+from .spot.order_executor import OrderExecutor
+from .spot.performance_tracker import PerformanceTracker
+from .spot.position_manager import PositionManager, TradeResult
+from .spot.signal_generator import SignalGenerator
+
+# Futures модули
+from .futures.orchestrator import FuturesScalpingOrchestrator
 
 __all__ = [
+    # Spot
     "ScalpingOrchestrator",
     "SignalGenerator",
     "OrderExecutor",
     "PositionManager",
     "TradeResult",
-    "RiskController",
     "PerformanceTracker",
+    # Futures
+    "FuturesScalpingOrchestrator",
+    # Общие
+    "RiskController",
 ]

@@ -18,11 +18,11 @@ from typing import Optional
 from loguru import logger
 
 from src.config import BotConfig, load_config
-from src.okx_client import OKXClient
+from src.clients.spot_client import OKXClient
 # REST API режим
-from src.strategies.scalping.orchestrator import ScalpingOrchestrator
+from src.strategies.scalping.spot.orchestrator import ScalpingOrchestrator
 # WebSocket режим
-from src.strategies.scalping.websocket_orchestrator import \
+from src.strategies.scalping.spot.websocket_orchestrator import \
     WebSocketScalpingOrchestrator
 # ✅ НОВОЕ: Единый полный лог с ротацией
 from src.utils.logging_setup import setup_logging

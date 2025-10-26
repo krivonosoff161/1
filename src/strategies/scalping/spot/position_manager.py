@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
 
 from src.models import OrderSide, OrderType, Position, PositionSide
-from src.strategies.scalping.batch_order_manager import BatchOrderManager
+from .batch_order_manager import BatchOrderManager
 
 
 @dataclass

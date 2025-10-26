@@ -17,7 +17,7 @@ from src.indicators.advanced.volume_profile import (
     VolumeProfileCalculator,
     VolumeProfileData,
 )
-from src.okx_client import OKXClient
+from src.clients.spot_client import OKXClient
 
 
 class VolumeProfileConfig(BaseModel):

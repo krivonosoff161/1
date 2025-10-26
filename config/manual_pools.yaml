@@ -1,0 +1,251 @@
+# Manual Pools Configuration
+# Динамические параметры для различных рыночных режимов и торговых пар
+
+# Пул для Spot торговли
+spot_pools:
+  # Консервативный режим
+  conservative:
+    description: "Консервативная торговля с минимальными рисками"
+    risk_percentage: 0.01  # 1% риска
+    max_positions: 2
+    tp_percent: 0.4
+    sl_percent: 0.25
+    min_signal_strength: 0.4
+    symbols:
+      - "BTC-USDT"
+      - "ETH-USDT"
+    
+  # Умеренный режим
+  moderate:
+    description: "Умеренная торговля с балансом риска и доходности"
+    risk_percentage: 0.02  # 2% риска
+    max_positions: 3
+    tp_percent: 0.5
+    sl_percent: 0.3
+    min_signal_strength: 0.3
+    symbols:
+      - "BTC-USDT"
+      - "ETH-USDT"
+      - "SOL-USDT"
+    
+  # Агрессивный режим
+  aggressive:
+    description: "Агрессивная торговля с высокими рисками"
+    risk_percentage: 0.03  # 3% риска
+    max_positions: 5
+    tp_percent: 0.6
+    sl_percent: 0.35
+    min_signal_strength: 0.25
+    symbols:
+      - "BTC-USDT"
+      - "ETH-USDT"
+      - "SOL-USDT"
+      - "ADA-USDT"
+      - "DOT-USDT"
+
+# Пул для Futures торговли
+futures_pools:
+  # Консервативный режим для Futures
+  conservative:
+    description: "Консервативная Futures торговля с минимальными рисками"
+    risk_percentage: 0.005  # 0.5% риска
+    max_positions: 1
+    leverage: 2
+    tp_percent: 0.25
+    sl_percent: 0.15
+    min_signal_strength: 0.5
+    symbols:
+      - "BTC-USDT"
+    
+  # Умеренный режим для Futures
+  moderate:
+    description: "Умеренная Futures торговля с балансом риска и доходности"
+    risk_percentage: 0.01   # 1% риска
+    max_positions: 2
+    leverage: 3
+    tp_percent: 0.3
+    sl_percent: 0.2
+    min_signal_strength: 0.4
+    symbols:
+      - "BTC-USDT"
+      - "ETH-USDT"
+    
+  # Агрессивный режим для Futures
+  aggressive:
+    description: "Агрессивная Futures торговля с высокими рисками"
+    risk_percentage: 0.015  # 1.5% риска
+    max_positions: 3
+    leverage: 3
+    tp_percent: 0.35
+    sl_percent: 0.25
+    min_signal_strength: 0.35
+    symbols:
+      - "BTC-USDT"
+      - "ETH-USDT"
+      - "SOL-USDT"
+
+# Адаптивные пулы на основе рыночных условий
+adaptive_pools:
+  # Трендовый рынок
+  trending:
+    description: "Параметры для трендового рынка"
+    spot:
+      tp_multiplier: 1.5
+      sl_multiplier: 0.8
+      risk_multiplier: 1.2
+    futures:
+      tp_multiplier: 1.2
+      sl_multiplier: 0.9
+      risk_multiplier: 1.1
+      leverage_multiplier: 1.0
+    
+  # Боковой рынок
+  ranging:
+    description: "Параметры для бокового рынка"
+    spot:
+      tp_multiplier: 0.8
+      sl_multiplier: 1.2
+      risk_multiplier: 0.8
+    futures:
+      tp_multiplier: 0.7
+      sl_multiplier: 1.3
+      risk_multiplier: 0.7
+      leverage_multiplier: 0.8
+    
+  # Волатильный рынок
+  volatile:
+    description: "Параметры для волатильного рынка"
+    spot:
+      tp_multiplier: 2.0
+      sl_multiplier: 0.6
+      risk_multiplier: 0.6
+    futures:
+      tp_multiplier: 1.5
+      sl_multiplier: 0.7
+      risk_multiplier: 0.5
+      leverage_multiplier: 0.6
+
+# Специальные пулы для конкретных торговых пар
+symbol_specific_pools:
+  # BTC-USDT специфичные параметры
+  BTC-USDT:
+    spot:
+      volatility_adjustment: 1.0
+      correlation_weight: 1.0
+      volume_threshold: 1.0
+    futures:
+      volatility_adjustment: 0.9
+      correlation_weight: 1.0
+      volume_threshold: 1.2
+      margin_safety: 1.5
+  
+  # ETH-USDT специфичные параметры
+  ETH-USDT:
+    spot:
+      volatility_adjustment: 1.1
+      correlation_weight: 0.9
+      volume_threshold: 0.8
+    futures:
+      volatility_adjustment: 1.0
+      correlation_weight: 0.9
+      volume_threshold: 1.0
+      margin_safety: 1.3
+  
+  # SOL-USDT специфичные параметры
+  SOL-USDT:
+    spot:
+      volatility_adjustment: 1.3
+      correlation_weight: 0.8
+      volume_threshold: 0.7
+    futures:
+      volatility_adjustment: 1.2
+      correlation_weight: 0.8
+      volume_threshold: 0.9
+      margin_safety: 1.2
+
+# Временные пулы для разных периодов
+time_based_pools:
+  # Азиатская сессия
+  asian_session:
+    description: "Параметры для азиатской торговой сессии"
+    time_range: "00:00-08:00"
+    spot:
+      risk_multiplier: 0.8
+      tp_multiplier: 0.9
+    futures:
+      risk_multiplier: 0.7
+      tp_multiplier: 0.8
+      leverage_multiplier: 0.9
+  
+  # Европейская сессия
+  european_session:
+    description: "Параметры для европейской торговой сессии"
+    time_range: "08:00-16:00"
+    spot:
+      risk_multiplier: 1.0
+      tp_multiplier: 1.0
+    futures:
+      risk_multiplier: 1.0
+      tp_multiplier: 1.0
+      leverage_multiplier: 1.0
+  
+  # Американская сессия
+  american_session:
+    description: "Параметры для американской торговой сессии"
+    time_range: "16:00-00:00"
+    spot:
+      risk_multiplier: 1.2
+      tp_multiplier: 1.1
+    futures:
+      risk_multiplier: 1.1
+      tp_multiplier: 1.1
+      leverage_multiplier: 1.0
+
+# Пул для экстренных ситуаций
+emergency_pools:
+  # Критическая просадка
+  critical_drawdown:
+    description: "Параметры при критической просадке"
+    spot:
+      risk_percentage: 0.005  # 0.5% риска
+      max_positions: 1
+      tp_percent: 0.2
+      sl_percent: 0.1
+    futures:
+      risk_percentage: 0.003  # 0.3% риска
+      max_positions: 1
+      leverage: 1
+      tp_percent: 0.15
+      sl_percent: 0.08
+  
+  # Высокая волатильность
+  high_volatility:
+    description: "Параметры при высокой волатильности"
+    spot:
+      risk_percentage: 0.01
+      max_positions: 2
+      tp_percent: 0.8
+      sl_percent: 0.4
+    futures:
+      risk_percentage: 0.008
+      max_positions: 1
+      leverage: 2
+      tp_percent: 0.6
+      sl_percent: 0.3
+
+# Пул для тестирования
+testing_pools:
+  # Sandbox режим
+  sandbox:
+    description: "Параметры для тестирования в sandbox"
+    spot:
+      risk_percentage: 0.05  # 5% риска для тестирования
+      max_positions: 5
+      tp_percent: 1.0
+      sl_percent: 0.5
+    futures:
+      risk_percentage: 0.03  # 3% риска для тестирования
+      max_positions: 3
+      leverage: 3
+      tp_percent: 0.8
+      sl_percent: 0.4

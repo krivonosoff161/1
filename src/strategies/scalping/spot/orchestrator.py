@@ -22,7 +22,7 @@ from src.filters.time_session_manager import (TimeFilterConfig,
                                               TimeSessionManager)
 from src.indicators import IndicatorManager
 from src.models import MarketData, Position
-from src.okx_client import OKXClient
+from src.clients.spot_client import OKXClient
 from src.risk.risk_controller import RiskController
 from src.strategies.modules.adaptive_regime_manager import (
     AdaptiveRegimeManager, IndicatorParameters, ModuleParameters, RegimeConfig,
