@@ -16,13 +16,13 @@ from typing import Dict, Optional
 
 from loguru import logger
 
+from src.clients.spot_client import OKXClient
 from src.config import BotConfig, RiskConfig, ScalpingConfig
 # Phase 1 модули
 from src.filters.time_session_manager import (TimeFilterConfig,
                                               TimeSessionManager)
 from src.indicators import IndicatorManager
 from src.models import MarketData, Position
-from src.clients.spot_client import OKXClient
 from src.risk.risk_controller import RiskController
 from src.strategies.modules.adaptive_regime_manager import (
     AdaptiveRegimeManager, IndicatorParameters, ModuleParameters, RegimeConfig,

@@ -16,8 +16,8 @@ import numpy as np
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from src.models import OHLCV
 from src.clients.spot_client import OKXClient
+from src.models import OHLCV
 
 
 class CorrelationConfig(BaseModel):
@@ -26,9 +26,7 @@ class CorrelationConfig(BaseModel):
     lookback_candles: int = Field(
         default=100, ge=20, le=500, description="Количество свечей для расчета"
     )
-    timeframe: str = Field(
-        default="5m", description="Таймфрейм для расчета корреляции"
-    )
+    timeframe: str = Field(default="5m", description="Таймфрейм для расчета корреляции")
     cache_ttl_seconds: int = Field(
         default=300, ge=60, le=3600, description="Время жизни кэша (секунды)"
     )
@@ -47,7 +45,9 @@ class CorrelationData(BaseModel):
     pair2: str
     correlation: float = Field(description="Коэффициент корреляции Пирсона (-1 to 1)")
     calculated_at: float = Field(description="Timestamp расчета")
-    candles_count: int = Field(description="Количество свечей использованных для расчета")
+    candles_count: int = Field(
+        description="Количество свечей использованных для расчета"
+    )
 
     @property
     def is_strong(self) -> bool:
@@ -137,9 +137,7 @@ class CorrelationManager:
             candles2 = await self._get_candles(pair2)
 
             if not candles1 or not candles2:
-                logger.warning(
-                    f"Correlation: No candles for {pair1} or {pair2}"
-                )
+                logger.warning(f"Correlation: No candles for {pair1} or {pair2}")
                 return None
 
             # Проверяем достаточно ли данных
@@ -182,7 +180,9 @@ class CorrelationManager:
             return corr_data
 
         except Exception as e:
-            logger.error(f"Error calculating correlation {pair1}/{pair2}: {e}", exc_info=True)
+            logger.error(
+                f"Error calculating correlation {pair1}/{pair2}: {e}", exc_info=True
+            )
             return None
 
     async def get_all_correlations(
@@ -345,9 +345,7 @@ class CorrelationManager:
 
             # Очистка корреляций связанных с этим символом
             keys_to_remove = [
-                key
-                for key in self._correlation_cache.keys()
-                if symbol in key
+                key for key in self._correlation_cache.keys() if symbol in key
             ]
             for key in keys_to_remove:
                 del self._correlation_cache[key]
@@ -371,4 +369,3 @@ class CorrelationManager:
             "candles_cached": len(self._candles_cache),
             "cache_ttl_seconds": self.config.cache_ttl_seconds,
         }
-

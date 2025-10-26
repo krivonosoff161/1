@@ -13,9 +13,9 @@ from typing import Any, Dict, List, Optional
 
 from src.balance import (AdaptiveBalanceManager, BalanceProfileConfig,
                          BalanceUpdateEvent)
+from src.clients.spot_client import OKXClient
 from src.config import BotConfig
 from src.indicators import TechnicalIndicators
-from src.clients.spot_client import OKXClient
 from src.risk.risk_controller import RiskController
 from src.strategies.modules.adaptive_regime_manager import \
     AdaptiveRegimeManager
@@ -25,13 +25,14 @@ from src.strategies.modules.correlation_filter import CorrelationFilter
 from src.strategies.modules.multi_timeframe import MultiTimeframeFilter
 from src.strategies.modules.pivot_points import PivotPointsFilter
 from src.strategies.modules.volume_profile_filter import VolumeProfileFilter
+from src.websocket_manager import (PriceData, WebSocketConfig,
+                                   WebSocketPriceManager, get_latency_monitor,
+                                   get_websocket_manager, initialize_websocket)
+
 from .order_executor import OrderExecutor
 from .performance_tracker import PerformanceTracker
 from .position_manager import PositionManager
 from .signal_generator import SignalGenerator
-from src.websocket_manager import (PriceData, WebSocketConfig,
-                                   WebSocketPriceManager, get_latency_monitor,
-                                   get_websocket_manager, initialize_websocket)
 
 logger = logging.getLogger(__name__)
 
@@ -227,15 +228,13 @@ class WebSocketScalpingOrchestrator:
         # Торговые модули - создаем с правильными конфигурациями
         from src.risk.risk_controller import RiskController
         from src.risk.risk_controller_config import RiskControllerConfig
+
         from .order_executor import OrderExecutor
-        from .order_executor_config import \
-            OrderExecutorConfig
+        from .order_executor_config import OrderExecutorConfig
         from .position_manager import PositionManager
-        from .position_manager_config import \
-            PositionManagerConfig
+        from .position_manager_config import PositionManagerConfig
         from .signal_generator import SignalGenerator
-        from .signal_generator_config import \
-            SignalGeneratorConfig
+        from .signal_generator_config import SignalGeneratorConfig
 
         # Создаем модули для SignalGenerator
         modules = {

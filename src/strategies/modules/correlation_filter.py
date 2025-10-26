@@ -12,10 +12,10 @@ from typing import Dict, List, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from src.clients.spot_client import OKXClient
 from src.filters.correlation_manager import (CorrelationConfig,
                                              CorrelationManager)
 from src.models import Position, PositionSide
-from src.clients.spot_client import OKXClient
 
 
 class CorrelationFilterConfig(BaseModel):

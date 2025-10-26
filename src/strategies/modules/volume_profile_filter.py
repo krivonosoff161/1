@@ -13,11 +13,9 @@ from typing import Dict, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from src.indicators.advanced.volume_profile import (
-    VolumeProfileCalculator,
-    VolumeProfileData,
-)
 from src.clients.spot_client import OKXClient
+from src.indicators.advanced.volume_profile import (VolumeProfileCalculator,
+                                                    VolumeProfileData)
 
 
 class VolumeProfileConfig(BaseModel):
@@ -205,9 +203,7 @@ class VolumeProfileFilter:
                 reason=f"Error: {str(e)}",
             )
 
-    async def _get_volume_profile(
-        self, symbol: str
-    ) -> Optional[VolumeProfileData]:
+    async def _get_volume_profile(self, symbol: str) -> Optional[VolumeProfileData]:
         """
         Получить Volume Profile с кэшированием.
 
@@ -242,9 +238,7 @@ class VolumeProfileFilter:
                 return None
 
             # Рассчитываем профиль
-            profile = self.calculator.calculate(
-                candles, self.config.value_area_percent
-            )
+            profile = self.calculator.calculate(candles, self.config.value_area_percent)
 
             if profile:
                 # Кэшируем
@@ -275,4 +269,3 @@ class VolumeProfileFilter:
             "lookback_candles": self.config.lookback_candles,
             "price_buckets": self.config.price_buckets,
         }
-

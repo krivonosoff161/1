@@ -17,8 +17,8 @@ from typing import Optional
 
 from loguru import logger
 
-from src.config import BotConfig, load_config
 from src.clients.spot_client import OKXClient
+from src.config import BotConfig, load_config
 # REST API режим
 from src.strategies.scalping.spot.orchestrator import ScalpingOrchestrator
 # WebSocket режим

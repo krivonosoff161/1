@@ -49,7 +49,7 @@ class SignalGenerator:
         # Phase 1 модули
         # Сохраняем ссылку на все модули
         self.modules = modules
-        
+
         # Извлекаем конкретные модули для удобства
         self.mtf_filter = modules.get("mtf")
         self.correlation_filter = modules.get("correlation")
@@ -384,22 +384,20 @@ class SignalGenerator:
         if self.modules.get("adx") and signal_direction and market_data:
             # Получаем свечи для ADX (используем основной таймфрейм)
             candles = market_data.ohlcv_data[-50:]  # Последние 50 свечей
-            
+
             # Определяем side для проверки
             side = OrderSide.BUY if signal_direction == "LONG" else OrderSide.SELL
-            
+
             # Проверяем ADX
-            adx_result = self.modules["adx"].check_trend_strength(
-                symbol, side, candles
-            )
-            
+            adx_result = self.modules["adx"].check_trend_strength(symbol, side, candles)
+
             if not adx_result.allowed:
                 logger.warning(
                     f"🚫 ADX BLOCKED: {symbol} {signal_direction} | "
                     f"Reason: {adx_result.reason}"
                 )
                 return None
-            
+
             logger.info(
                 f"✅ ADX CONFIRMED: {symbol} {signal_direction} | "
                 f"{adx_result.reason}"
@@ -701,7 +699,7 @@ class SignalGenerator:
         # 3. 🆕 ADX Filter
         if self.modules.get("adx"):
             from src.strategies.modules.adx_filter import ADXFilterConfig
-            
+
             adx_config = ADXFilterConfig(
                 enabled=True,
                 adx_threshold=module_params.adx_threshold,

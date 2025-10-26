@@ -21,8 +21,8 @@ import numpy as np
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from src.models import OHLCV
 from src.clients.spot_client import OKXClient
+from src.models import OHLCV
 
 
 class MTFConfig(BaseModel):
