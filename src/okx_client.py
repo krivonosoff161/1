@@ -10,7 +10,10 @@ from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import aiohttp
+from asyncio_throttle import Throttler
 from loguru import logger
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_exponential)
 
 from src.config import APIConfig
 from src.models import (OHLCV, Balance, Order, OrderSide, OrderStatus,
@@ -31,6 +34,9 @@ class OKXClient:
         # НО для sandbox нужен специальный заголовок x-simulated-trading
         self.base_url = "https://www.okx.com"
         self.session: Optional[aiohttp.ClientSession] = None
+
+        # 🔥 КРИТИЧНО: Rate limiting для предотвращения бана API ключей
+        self.throttler = Throttler(rate_limit=10, period=1)  # 10 запросов в секунду
 
     async def __aenter__(self):
         """Async context manager entry"""
@@ -230,6 +236,12 @@ class OKXClient:
         ]
         return any(endpoint.startswith(ep) for ep in private_endpoints)
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((aiohttp.ClientError, Exception)),
+        reraise=True,
+    )
     async def _make_request(
         self, method: str, endpoint: str, params: Dict = None, data: Dict = None
     ) -> Dict:
@@ -274,20 +286,24 @@ class OKXClient:
         logger.debug(f"Headers: {headers}")
 
         try:
-            async with self.session.request(
-                method=method,
-                url=url,
-                headers=headers,
-                params=params,
-                data=body,
-            ) as response:
-                result = await response.json()
+            # 🔥 КРИТИЧНО: Rate limiting для предотвращения бана API ключей
+            async with self.throttler:
+                async with self.session.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    params=params,
+                    data=body,
+                ) as response:
+                    result = await response.json()
 
-                if result.get("code") != "0":
-                    logger.error(f"OKX API error: {result}")
-                    raise Exception(f"API Error: {result.get('msg', 'Unknown error')}")
+                    if result.get("code") != "0":
+                        logger.error(f"OKX API error: {result}")
+                        raise Exception(
+                            f"API Error: {result.get('msg', 'Unknown error')}"
+                        )
 
-                return result
+                    return result
 
         except Exception as e:
             logger.error(f"Request failed: {e}")
@@ -593,6 +609,7 @@ class OKXClient:
             "side": "buy" if side == OrderSide.BUY else "sell",
             "ordType": "limit" if order_type == OrderType.LIMIT else "market",
             "sz": str(quantity),
+            "autoBorrow": "false",  # 🔥 КРИТИЧНО: Запрещаем займы!
         }
 
         # 🔧 КРИТИЧНО: Для sandbox нужен специальный режим!
@@ -742,6 +759,8 @@ class OKXClient:
             "side": "buy" if side == OrderSide.BUY else "sell",
             "ordType": order_type,
             "sz": str(quantity),
+            "autoBorrow": "false",  # 🔥 КРИТИЧНО: Запрещаем займы!
+            "reduceOnly": "true",  # 🔥 КРИТИЧНО: Только закрытие позиций!
             # Примечание: tgtCcy НЕ поддерживается для algo orders!
             "tpTriggerPx": formatted_trigger,  # Для TP
             "tpOrdPx": "-1",  # Market при триггере
@@ -897,6 +916,8 @@ class OKXClient:
             "side": "buy" if side == OrderSide.BUY else "sell",
             "ordType": "oco",
             "sz": str(quantity),
+            "autoBorrow": "false",  # 🔥 КРИТИЧНО: Запрещаем займы!
+            "reduceOnly": "true",  # 🔥 КРИТИЧНО: Только закрытие позиций!
             "tpTriggerPx": formatted_tp,
             "tpOrdPx": "-1",  # Market при триггере TP
             "slTriggerPx": formatted_sl,

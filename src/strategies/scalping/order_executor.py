@@ -122,11 +122,11 @@ class OrderExecutor:
             # Рассчитываем цену для POST-ONLY (более консервативно для Maker комиссий)
             if signal.side == OrderSide.BUY:
                 # Для BUY: цена ниже рыночной для гарантированного Maker статуса
-                maker_price = current_price * 0.9985  # -0.15% (увеличенная дистанция)
+                maker_price = current_price * 0.9975  # -0.25% (увеличенная дистанция)
                 maker_quantity = position_value / maker_price
             else:
                 # Для SELL: цена выше рыночной для гарантированного Maker статуса
-                maker_price = current_price * 1.0015  # +0.15% (увеличенная дистанция)
+                maker_price = current_price * 1.0025  # +0.25% (увеличенная дистанция)
                 maker_quantity = position_size
 
             logger.info(f"🎯 POST-ONLY attempt: {signal.symbol} {signal.side.value}")
@@ -405,17 +405,24 @@ class OrderExecutor:
                 logger.error(f"❌ Order placement FAILED: {signal.symbol}")
                 return None
 
-            # 7. Определение фактического размера
+            # 7. Определение фактического размера с учетом комиссий
+            # Получаем реальные данные из ордера
+            filled_sz = float(order.size) if hasattr(order, "size") else position_size
+            fee = float(order.fee) if hasattr(order, "fee") else 0.0
+            slippage_buffer = 0.0002  # 0.02% буфер
+
+            # Рассчитываем размер с учетом комиссий и буфера
             if signal.side == OrderSide.BUY:
-                actual_position_size = position_value / signal.price
+                actual_position_size = filled_sz * (1 - fee - slippage_buffer)
                 logger.info(
-                    f"📊 BUY completed: position size {actual_position_size:.8f} "
-                    f"(${position_value:.2f} @ ${signal.price:.2f})"
+                    f"📊 BUY completed: filled={filled_sz:.8f}, fee={fee:.6f}, "
+                    f"final_size={actual_position_size:.8f}"
                 )
             else:
-                actual_position_size = position_size
+                actual_position_size = filled_sz * (1 - fee - slippage_buffer)
                 logger.info(
-                    f"📊 SELL completed: position size {actual_position_size:.8f}"
+                    f"📊 SELL completed: filled={filled_sz:.8f}, fee={fee:.6f}, "
+                    f"final_size={actual_position_size:.8f}"
                 )
 
             # 8. Создание Position объекта
