@@ -10,6 +10,23 @@ from typing import Any, Dict, Optional
 
 import aiohttp
 from loguru import logger
+import math
+
+
+def round_to_step(value: float, step: float) -> float:
+    """
+    Округление до указанного шага (для OKX size_step).
+    
+    Args:
+        value: Значение для округления
+        step: Шаг округления
+        
+    Returns:
+        Округленное значение
+    """
+    if step == 0:
+        return value
+    return round(value / step) * step
 
 
 class OKXFuturesClient:
@@ -127,11 +144,28 @@ class OKXFuturesClient:
         order_type: str = "market",
     ) -> dict:
         """Рыночный или лимитный ордер"""
+        # Определяем size_step для инструмента
+        if "BTC" in symbol:
+            size_step = 0.001  # 0.001 BTC для BTC
+        elif "ETH" in symbol:
+            size_step = 0.01  # 0.01 ETH для ETH
+        else:
+            size_step = 0.001  # По умолчанию
+        
+        # Округляем размер до OKX size_step
+        rounded_size = round_to_step(size, size_step)
+        
+        if rounded_size != size:
+            logger.info(
+                f"Размер округлен с {size:.6f} до {rounded_size:.6f} "
+                f"(step={size_step})"
+            )
+        
         payload = {
             "instId": f"{symbol}-SWAP",
             "tdMode": "isolated",
             "side": side,
-            "sz": str(size),
+            "sz": str(rounded_size),
             "ordType": order_type,
             "lever": str(self.leverage),
         }
@@ -144,11 +178,28 @@ class OKXFuturesClient:
         self, symbol: str, side: str, size: float, tp_price: float, sl_price: float
     ) -> dict:
         """OCO для фьючей (min distance 0,01 % = 10 bips)"""
+        # Определяем size_step для инструмента
+        if "BTC" in symbol:
+            size_step = 0.001  # 0.001 BTC для BTC
+        elif "ETH" in symbol:
+            size_step = 0.01  # 0.01 ETH для ETH
+        else:
+            size_step = 0.001  # По умолчанию
+        
+        # Округляем размер до OKX size_step
+        rounded_size = round_to_step(size, size_step)
+        
+        if rounded_size != size:
+            logger.info(
+                f"Размер OCO округлен с {size:.6f} до {rounded_size:.6f} "
+                f"(step={size_step})"
+            )
+        
         payload = {
             "instId": f"{symbol}-SWAP",
             "tdMode": "isolated",
             "side": side,
-            "sz": str(size),
+            "sz": str(rounded_size),
             "ordType": "oco",
             "tpTriggerPx": str(tp_price),
             "tpOrdPx": "-1",  # рыночный TP

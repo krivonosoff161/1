@@ -5,6 +5,7 @@ Order Flow Indicator для Futures торговли.
 силы покупателей и продавцов на рынке.
 """
 
+import math
 from collections import deque
 from typing import Deque, Dict, Optional
 
@@ -14,27 +15,34 @@ from loguru import logger
 class OrderFlowIndicator:
     """
     Индикатор потока ордеров для Futures.
-
+    
     Анализирует соотношение bid/ask объемов для определения:
     - Силы покупателей (delta > 0)
     - Силы продавцов (delta < 0)
     - Нейтрального рынка (delta ≈ 0)
-
+    
     Attributes:
         window: Размер окна для анализа
+        long_threshold: Порог для благоприятности лонга
+        short_threshold: Порог для благоприятности шорта
         bid_volumes: История bid объемов
         ask_volumes: История ask объемов
         deltas: История delta значений
     """
-
-    def __init__(self, window: int = 100):
+    
+    def __init__(self, window: int = 100, long_threshold: float = 0.1,
+                 short_threshold: float = -0.1):
         """
         Инициализация индикатора.
-
+        
         Args:
             window: Размер окна для анализа (по умолчанию 100)
+            long_threshold: Порог для благоприятности лонга (по умолчанию 0.1)
+            short_threshold: Порог для благоприятности шорта (по умолчанию -0.1)
         """
         self.window = window
+        self.long_threshold = long_threshold
+        self.short_threshold = short_threshold
         self.bid_volumes: Deque[float] = deque(maxlen=window)
         self.ask_volumes: Deque[float] = deque(maxlen=window)
         self.deltas: Deque[float] = deque(maxlen=window)
@@ -139,30 +147,32 @@ class OrderFlowIndicator:
         else:
             return "neutral"
 
-    def is_long_favorable(self, threshold: float = 0.1) -> bool:
+    def is_long_favorable(self, threshold: Optional[float] = None) -> bool:
         """
         Проверка, благоприятен ли вход в лонг.
-
+        
         Args:
-            threshold: Минимальный порог delta для лонга
-
+            threshold: Минимальный порог delta для лонга (если None, используется self.long_threshold)
+            
         Returns:
             True если delta > threshold (больше покупателей)
         """
         delta = self.get_delta()
+        threshold = threshold if threshold is not None else self.long_threshold
         return delta > threshold
-
-    def is_short_favorable(self, threshold: float = -0.1) -> bool:
+    
+    def is_short_favorable(self, threshold: Optional[float] = None) -> bool:
         """
         Проверка, благоприятен ли вход в шорт.
-
+        
         Args:
-            threshold: Максимальный порог delta для шорта
-
+            threshold: Максимальный порог delta для шорта (если None, используется self.short_threshold)
+            
         Returns:
             True если delta < threshold (больше продавцов)
         """
         delta = self.get_delta()
+        threshold = threshold if threshold is not None else self.short_threshold
         return delta < threshold
 
     def get_market_pressure(self) -> Dict[str, float]:
@@ -188,8 +198,8 @@ class OrderFlowIndicator:
             "avg_delta": avg_delta,
             "trend": trend,
             "strength": strength,
-            "favor_long": current_delta > 0.1,
-            "favor_short": current_delta < -0.1,
+            "favor_long": current_delta > self.long_threshold,
+            "favor_short": current_delta < self.short_threshold,
         }
 
     def reset(self) -> None:

@@ -103,12 +103,23 @@ class TradingConfig(BaseModel):
     base_currency: str = Field(default="USDT")
 
 
+class FuturesModulesConfig(BaseModel):
+    """Конфигурация Futures-специфичных модулей"""
+    slippage_guard: Optional[Dict] = Field(default_factory=dict)
+    order_flow: Optional[Dict] = Field(default_factory=dict)
+    micro_pivot: Optional[Dict] = Field(default_factory=dict)
+    trailing_sl: Optional[Dict] = Field(default_factory=dict)
+    funding_monitor: Optional[Dict] = Field(default_factory=dict)
+    max_size_limiter: Optional[Dict] = Field(default_factory=dict)
+
+
 class BotConfig(BaseModel):
     api: Dict[str, APIConfig]
     trading: TradingConfig
     risk: RiskConfig
     scalping: ScalpingConfig
     manual_pools: Optional[Dict] = Field(default_factory=dict)
+    futures_modules: Optional[FuturesModulesConfig] = Field(default=None)
 
     @classmethod
     def load_from_file(cls, config_path: str = "config.yaml") -> "BotConfig":
