@@ -419,9 +419,7 @@ class FuturesScalpingOrchestrator:
         """Получение статуса системы"""
         try:
             balance = await self.client.get_balance()
-            margin_status = await self.liquidation_guard.get_margin_status(
-                self.client
-            )
+            margin_status = await self.liquidation_guard.get_margin_status(self.client)
             slippage_stats = self.slippage_guard.get_slippage_statistics()
 
             return {
