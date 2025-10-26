@@ -525,7 +525,21 @@ class PositionManager:
                     )
                     return None
 
-            # 4. Размещение ордера закрытия
+            # 4. Отменяем OCO ордер перед закрытием позиции
+            if hasattr(position, "algo_order_id") and position.algo_order_id:
+                try:
+                    logger.info(
+                        f"🔄 Cancelling OCO order {position.algo_order_id} before closing position"
+                    )
+                    await self.client.cancel_algo_order(position.algo_order_id, symbol)
+                    logger.info(f"✅ OCO order {position.algo_order_id} cancelled")
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ Failed to cancel OCO order {position.algo_order_id}: {e}"
+                    )
+                    # Продолжаем закрытие позиции даже если OCO не отменился
+
+            # 5. Размещение ордера закрытия
             order_side = (
                 OrderSide.SELL if position.side == PositionSide.LONG else OrderSide.BUY
             )
@@ -546,7 +560,7 @@ class PositionManager:
                 logger.error(f"❌ Failed to close position {symbol}")
                 return None
 
-            # 5. Расчет PnL с учетом комиссий
+            # 6. Расчет PnL с учетом комиссий
             duration_sec = (datetime.utcnow() - position.timestamp).total_seconds()
 
             # Gross PnL

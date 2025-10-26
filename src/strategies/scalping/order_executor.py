@@ -411,6 +411,24 @@ class OrderExecutor:
             fee = float(order.fee) if hasattr(order, "fee") else 0.0
             slippage_buffer = 0.0002  # 0.02% буфер
 
+            # 🔧 КРИТИЧНО: Проверяем заполнение POST-ONLY ордера
+            expected_size = (
+                position_size
+                if signal.side == OrderSide.SELL
+                else position_value / signal.price
+            )
+
+            # Если заполнено менее 95% - это проблема
+            if filled_sz < expected_size * 0.95:
+                logger.warning(
+                    f"⚠️ POST-ONLY частично заполнен: {filled_sz:.8f}/{expected_size:.8f} "
+                    f"({(filled_sz/expected_size)*100:.1f}%)"
+                )
+                logger.warning(
+                    f"   Возможные причины: недостаточная ликвидность, "
+                    f"слишком близко к рынку, или быстрые изменения цены"
+                )
+
             # Рассчитываем размер с учетом комиссий и буфера
             if signal.side == OrderSide.BUY:
                 actual_position_size = filled_sz * (1 - fee - slippage_buffer)
@@ -513,19 +531,31 @@ class OrderExecutor:
                     # Определяем текущий режим рынка
                     current_regime = await self._get_current_regime()
 
-                    # Получаем параметры TP/SL из manual_pools
-                    if current_regime == "TRENDING":
-                        tp_percent = manual_pools["eth_pool"]["trending"]["tp_percent"]
-                        sl_percent = manual_pools["eth_pool"]["trending"]["sl_percent"]
-                    elif current_regime == "RANGING":
-                        tp_percent = manual_pools["eth_pool"]["ranging"]["tp_percent"]
-                        sl_percent = manual_pools["eth_pool"]["ranging"]["sl_percent"]
-                    elif current_regime == "CHOPPY":
-                        tp_percent = manual_pools["eth_pool"]["choppy"]["tp_percent"]
-                        sl_percent = manual_pools["eth_pool"]["choppy"]["sl_percent"]
+                    # Получаем параметры TP/SL из manual_pools для правильной пары
+                    base_symbol = signal.symbol.split("-")[0].lower()
+                    pool_key = f"{base_symbol}_pool"
+
+                    if pool_key in manual_pools:
+                        if current_regime == "TRENDING":
+                            tp_percent = manual_pools[pool_key]["trending"][
+                                "tp_percent"
+                            ]
+                            sl_percent = manual_pools[pool_key]["trending"][
+                                "sl_percent"
+                            ]
+                        elif current_regime == "RANGING":
+                            tp_percent = manual_pools[pool_key]["ranging"]["tp_percent"]
+                            sl_percent = manual_pools[pool_key]["ranging"]["sl_percent"]
+                        elif current_regime == "CHOPPY":
+                            tp_percent = manual_pools[pool_key]["choppy"]["tp_percent"]
+                            sl_percent = manual_pools[pool_key]["choppy"]["sl_percent"]
+                        else:
+                            tp_percent = 0.5  # Fallback
+                            sl_percent = 0.35  # Fallback
                     else:
-                        tp_percent = 0.5  # Fallback
-                        sl_percent = 0.35  # Fallback
+                        # Fallback для неизвестных пар
+                        tp_percent = 0.5
+                        sl_percent = 0.35
 
                     logger.info(f"🎯 Manual pools TP/SL: {tp_percent}%/{sl_percent}%")
 
@@ -534,44 +564,72 @@ class OrderExecutor:
                     tp_percent = 0.5  # Fallback
                     sl_percent = 0.35  # Fallback
 
-                if signal.side == OrderSide.BUY:  # LONG позиция
-                    # SL должен быть НИЖЕ текущей цены
-                    if stop_loss >= current_price:
-                        adjusted_sl = current_price * (
-                            1 - sl_percent / 100
-                        )  # Используем manual_pools!
-                        logger.warning(
-                            f"⚠️ Price moved DOWN! Adjusting SL: "
-                            f"${stop_loss:.2f} → ${adjusted_sl:.2f} ({sl_percent}%)"
+                # 🔧 КРИТИЧНО: Для BTC нужны большие отступы TP/SL
+                if signal.symbol == "BTC-USDT":
+                    tp_percent = max(tp_percent, 1.0)  # Минимум 1% для BTC TP
+                    sl_percent = max(sl_percent, 0.8)  # Минимум 0.8% для BTC SL
+                    logger.info(f"🎯 BTC Adjusted TP/SL: {tp_percent}%/{sl_percent}%")
+
+                    # 🔧 КРИТИЧНО: Для BTC пересчитываем TP/SL с новыми процентами
+                    if signal.side == OrderSide.BUY:  # LONG позиция
+                        adjusted_tp = current_price * (1 + tp_percent / 100)
+                        adjusted_sl = current_price * (1 - sl_percent / 100)
+                        logger.info(
+                            f"🎯 BTC Recalculated TP/SL: TP=${adjusted_tp:.2f}, SL=${adjusted_sl:.2f}"
                         )
-                    # TP должен быть ВЫШЕ текущей цены
-                    if take_profit <= current_price:
-                        adjusted_tp = current_price * (
-                            1 + tp_percent / 100
-                        )  # Используем manual_pools!
-                        logger.warning(
-                            f"⚠️ Price moved UP! Adjusting TP: "
-                            f"${take_profit:.2f} → ${adjusted_tp:.2f} ({tp_percent}%)"
+                    else:  # SHORT позиция
+                        adjusted_tp = current_price * (1 - tp_percent / 100)
+                        adjusted_sl = current_price * (1 + sl_percent / 100)
+                        logger.info(
+                            f"🎯 BTC Recalculated TP/SL: TP=${adjusted_tp:.2f}, SL=${adjusted_sl:.2f}"
                         )
-                else:  # SHORT позиция
-                    # SL должен быть ВЫШЕ текущей цены
-                    if stop_loss <= current_price:
-                        adjusted_sl = current_price * (
-                            1 + sl_percent / 100
-                        )  # Используем manual_pools!
+
+                    # Обновляем позицию с новыми TP/SL
+                    position.tp_price = adjusted_tp
+                    position.sl_price = adjusted_sl
+                    logger.info(
+                        f"✏️ Position TP/SL updated: TP=${adjusted_tp:.2f}, SL=${adjusted_sl:.2f}"
+                    )
+                else:
+                    # Для других пар используем стандартную логику
+                    if signal.side == OrderSide.BUY:  # LONG позиция
+                        # SL должен быть НИЖЕ текущей цены
+                        if stop_loss >= current_price:
+                            adjusted_sl = current_price * (
+                                1 - sl_percent / 100
+                            )  # Используем manual_pools!
+                            logger.warning(
+                                f"⚠️ Price moved DOWN! Adjusting SL: "
+                                f"${stop_loss:.2f} → ${adjusted_sl:.2f} ({sl_percent}%)"
+                            )
+                        # TP должен быть ВЫШЕ текущей цены
+                        if take_profit <= current_price:
+                            adjusted_tp = current_price * (
+                                1 + tp_percent / 100
+                            )  # Используем manual_pools!
+                            logger.warning(
+                                f"⚠️ Price moved UP! Adjusting TP: "
+                                f"${take_profit:.2f} → ${adjusted_tp:.2f} ({tp_percent}%)"
+                            )
+                    else:  # SHORT позиция
+                        # SL должен быть ВЫШЕ текущей цены
+                        if stop_loss <= current_price:
+                            adjusted_sl = current_price * (
+                                1 + sl_percent / 100
+                            )  # Используем manual_pools!
                         logger.warning(
                             f"⚠️ Price moved UP! Adjusting SL: "
                             f"${stop_loss:.2f} → ${adjusted_sl:.2f} ({sl_percent}%)"
                         )
-                    # TP должен быть НИЖЕ текущей цены
-                    if take_profit >= current_price:
-                        adjusted_tp = current_price * (
-                            1 - tp_percent / 100
-                        )  # Используем manual_pools!
-                        logger.warning(
-                            f"⚠️ Price moved DOWN! Adjusting TP: "
-                            f"${take_profit:.2f} → ${adjusted_tp:.2f} ({tp_percent}%)"
-                        )
+                        # TP должен быть НИЖЕ текущей цены
+                        if take_profit >= current_price:
+                            adjusted_tp = current_price * (
+                                1 - tp_percent / 100
+                            )  # Используем manual_pools!
+                            logger.warning(
+                                f"⚠️ Price moved DOWN! Adjusting TP: "
+                                f"${take_profit:.2f} → ${adjusted_tp:.2f} ({tp_percent}%)"
+                            )
 
                 # Обновляем в Position если скорректировали
                 if adjusted_tp != take_profit or adjusted_sl != stop_loss:

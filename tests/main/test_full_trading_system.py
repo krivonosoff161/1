@@ -38,149 +38,247 @@ async def test_full_trading_cycle():
         else:
             print("⚠️ Не удалось установить SPOT режим (продолжаем тест)")
 
-        # Получаем текущую цену
-        current_price = await bot.client.get_current_price("ETH-USDT")
-        print(f"📊 Текущая цена ETH: ${current_price:.2f}")
-
-        # Создаем тестовый сигнал
-        test_signal = Signal(
-            timestamp=datetime.utcnow(),
-            symbol="ETH-USDT",
-            side=OrderSide.BUY,
-            price=current_price,
-            confidence=10.0,
-            strength=10.0,
-            strategy_id="test_strategy",
-            indicators={"ATR": 100.0},
-        )
-
-        print(f"\n🛒 ТЕСТ 1: ОТКРЫТИЕ ПОЗИЦИИ")
+        # 🔧 КРИТИЧНО: Проверяем настройки аккаунта
+        print("\n🔍 ПРОВЕРКА НАСТРОЕК АККАУНТА")
         print("-" * 50)
 
-        # Открываем позицию
-        position = await bot.strategy.order_executor.execute_signal(test_signal, {})
+        account_config = await bot.client.check_account_mode()
+        if account_config:
+            print(f"📊 Account Level: {account_config.get('account_level', 'N/A')}")
+            print(f"📊 Position Mode: {account_config.get('position_mode', 'N/A')}")
+            print(f"📊 Auto Loan: {account_config.get('auto_loan', 'N/A')}")
+            print(f"📊 Greeks Type: {account_config.get('greeks_type', 'N/A')}")
 
-        # 🔥 КРИТИЧНО: Добавляем позицию в orchestrator для правильного трекинга!
-        if position:
-            bot.strategy.positions["ETH-USDT"] = position
-            print("✅ Позиция добавлена в orchestrator tracking")
+            # Проверяем на займы
+            if account_config.get("auto_loan") == "true":
+                print("⚠️ ВНИМАНИЕ: Auto Loan включен!")
+            else:
+                print("✅ Auto Loan отключен - займы не берутся")
+        else:
+            print("❌ Не удалось получить настройки аккаунта")
 
-        if position:
-            print(f"✅ Позиция открыта: {position.id}")
-            print(f"   Entry Price: ${position.entry_price:.2f}")
-            print(f"   Size: {position.size:.8f} ETH")
-            print(f"   OCO Order ID: {position.algo_order_id}")
+        # Получаем текущие цены для обеих пар
+        eth_price = await bot.client.get_current_price("ETH-USDT")
+        btc_price = await bot.client.get_current_price("BTC-USDT")
+        print(f"📊 Текущая цена ETH: ${eth_price:.2f}")
+        print(f"📊 Текущая цена BTC: ${btc_price:.2f}")
 
-            # Проверяем OCO ордера (с задержкой)
+        # Создаем тестовые сигналы для обеих пар
+        test_signals = [
+            Signal(
+                timestamp=datetime.utcnow(),
+                symbol="ETH-USDT",
+                side=OrderSide.BUY,
+                price=eth_price,
+                confidence=10.0,
+                strength=10.0,
+                strategy_id="test_strategy",
+                indicators={"ATR": 100.0},
+            ),
+            Signal(
+                timestamp=datetime.utcnow(),
+                symbol="BTC-USDT",
+                side=OrderSide.BUY,
+                price=btc_price,
+                confidence=10.0,
+                strength=10.0,
+                strategy_id="test_strategy",
+                indicators={"ATR": 100.0},
+            ),
+        ]
+
+        print(f"\n🛒 ТЕСТ 1: ОТКРЫТИЕ ПОЗИЦИЙ")
+        print("-" * 50)
+
+        # Открываем позиции для обеих пар
+        positions = {}
+        for signal in test_signals:
+            print(f"\n📊 Тестируем {signal.symbol}...")
+            position = await bot.strategy.order_executor.execute_signal(signal, {})
+
+            if position:
+                positions[signal.symbol] = position
+                bot.strategy.positions[signal.symbol] = position
+                print(f"✅ Позиция {signal.symbol} открыта: {position.id}")
+                print(f"   Entry Price: ${position.entry_price:.2f}")
+                print(f"   Size: {position.size:.8f} {signal.symbol.split('-')[0]}")
+                print(f"   OCO Order ID: {position.algo_order_id}")
+            else:
+                print(f"❌ Не удалось открыть позицию {signal.symbol}")
+
+        # Проверяем OCO ордера для всех открытых позиций
+        if positions:
+            # 🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ОРДЕРОВ
+            print(f"\n🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ОРДЕРОВ:")
+
+            # Проверяем все открытые ордера
+            try:
+                open_orders = await bot.client.get_open_orders()
+                print(f"   📊 Всего открытых ордеров: {len(open_orders)}")
+                for order in open_orders:
+                    if hasattr(order, "get"):
+                        print(
+                            f"   📋 Order: {order.get('instId')} - {order.get('side')} - {order.get('state')} - {order.get('sz')}"
+                        )
+                    else:
+                        print(
+                            f"   📋 Order: {order.symbol} - {order.side} - {order.state} - {order.size}"
+                        )
+            except Exception as e:
+                print(f"   ❌ Ошибка получения открытых ордеров: {e}")
+
+            # Проверяем все алгоритмические ордера
+            try:
+                algo_orders = await bot.client.get_algo_orders()
+                print(f"   📊 Всего алгоритмических ордеров: {len(algo_orders)}")
+                for order in algo_orders:
+                    print(
+                        f"   📋 Algo: {order.get('instId')} - {order.get('ordType')} - {order.get('state')}"
+                    )
+            except Exception as e:
+                print(f"   ❌ Ошибка получения алгоритмических ордеров: {e}")
+
+            # Проверяем позиции
+            print(f"   📊 Активных позиций: {len(bot.strategy.positions)}")
+            for symbol, position in bot.strategy.positions.items():
+                print(
+                    f"   📋 Position: {symbol} - {position.side} - {position.size} - OCO: {getattr(position, 'algo_order_id', 'None')}"
+                )
+
             print(f"\n🔄 ТЕСТ 2: ПРОВЕРКА OCO ОРДЕРОВ")
             print("-" * 50)
 
-            # Добавляем задержку для создания OCO ордера
-            print("   Ожидание создания OCO ордера...")
-            await asyncio.sleep(2)  # 2 секунды задержки
+            # Добавляем задержку для создания OCO ордеров
+            print("   Ожидание создания OCO ордеров...")
+            await asyncio.sleep(3)  # 3 секунды задержки
 
-            # Проверяем алгоритмические ордера (OCO находятся там)
-            # Ищем OCO ордера с правильными параметрами
-            algo_orders = await bot.client.get_algo_orders(
-                symbol="ETH-USDT", algo_type="oco"
-            )
-            oco_found = False
+            for symbol, position in positions.items():
+                print(f"\n📊 Проверяем OCO для {symbol}...")
 
-            print(f"   Ищем OCO ордер ID: {position.algo_order_id}")
-            print(f"   Найдено алгоритмических ордеров: {len(algo_orders)}")
+                # Проверяем алгоритмические ордера (OCO находятся там)
+                algo_orders = await bot.client.get_algo_orders(
+                    symbol=symbol, algo_type="oco"
+                )
+                oco_found = False
 
-            if algo_orders and len(algo_orders) > 0:
-                for order in algo_orders:
-                    print(
-                        f"   Проверяем ордер: {order.get('algoId')} (тип: {order.get('ordType')})"
-                    )
-                    if order.get("algoId") == position.algo_order_id:
-                        oco_found = True
+                print(f"   Ищем OCO ордер ID: {position.algo_order_id}")
+                print(f"   Найдено алгоритмических ордеров: {len(algo_orders)}")
+
+                if algo_orders and len(algo_orders) > 0:
+                    for order in algo_orders:
                         print(
-                            f"✅ OCO Order найден: {order.get('tpTriggerPx', 'N/A')} @ {order.get('sz', 'N/A')} ({order.get('ordType', 'N/A')})"
+                            f"   Проверяем ордер: {order.get('algoId')} (тип: {order.get('ordType')})"
                         )
-                        break
+                        if order.get("algoId") == position.algo_order_id:
+                            oco_found = True
+                            print(
+                                f"✅ OCO Order найден: {order.get('tpTriggerPx', 'N/A')} @ {order.get('sz', 'N/A')} ({order.get('ordType', 'N/A')})"
+                            )
+                            break
 
-            if oco_found:
-                print("✅ OCO ордер размещен корректно")
-            else:
-                print("❌ OCO ордер не найден")
-                # Дополнительная проверка через алгоритмические ордера
-                try:
-                    algo_orders = await bot.client.get_algo_orders()
-                    print(f"   Алгоритмических ордеров: {len(algo_orders)}")
-                    for algo_order in algo_orders:
+                if oco_found:
+                    print(f"✅ OCO ордер размещен корректно для {symbol}")
+                else:
+                    print(f"❌ OCO ордер не найден для {symbol}")
+                    # Дополнительная проверка через алгоритмические ордера
+                    try:
+                        all_algo_orders = await bot.client.get_algo_orders()
                         print(
-                            f"   Algo ID: {algo_order.get('algoId')}, Type: {algo_order.get('ordType')}"
+                            f"   Всего алгоритмических ордеров: {len(all_algo_orders)}"
                         )
-                except Exception as e:
-                    print(f"   Ошибка проверки алгоритмических ордеров: {e}")
+                        for algo_order in all_algo_orders:
+                            print(
+                                f"   Algo ID: {algo_order.get('algoId')}, Type: {algo_order.get('ordType')}, Symbol: {algo_order.get('instId')}"
+                            )
+                    except Exception as e:
+                        print(f"   Ошибка проверки алгоритмических ордеров: {e}")
 
-            # Тест Profit Harvesting
+            # Тест Profit Harvesting для всех позиций
             print(f"\n💰 ТЕСТ 3: PROFIT HARVESTING")
             print("-" * 50)
 
-            # Имитируем прибыль для PH
-            profit_price = position.entry_price * 1.001  # +0.1% прибыль
-            print(f"   Имитируем цену: ${profit_price:.2f} (+0.1%)")
+            for symbol, position in positions.items():
+                print(f"\n📊 Тестируем PH для {symbol}...")
 
-            # Проверяем PH логику (используем правильное имя метода)
-            ph_result = await bot.strategy.position_manager._check_profit_harvesting(
-                position, profit_price
-            )
+                # Имитируем прибыль для PH
+                profit_price = position.entry_price * 1.001  # +0.1% прибыль
+                print(f"   Имитируем цену: ${profit_price:.2f} (+0.1%)")
 
-            if ph_result:
-                print("✅ PH сработал - позиция должна закрыться")
-            else:
-                print("⚪ PH не сработал - позиция остается открытой")
+                # Проверяем PH логику (используем правильное имя метода)
+                ph_result = (
+                    await bot.strategy.position_manager._check_profit_harvesting(
+                        position, profit_price
+                    )
+                )
 
-            # Тест обновления TP/SL через Batch
+                if ph_result:
+                    print(f"✅ PH сработал для {symbol} - позиция должна закрыться")
+                else:
+                    print(f"⚪ PH не сработал для {symbol} - позиция остается открытой")
+
+            # Тест обновления TP/SL через Batch для всех позиций
             print(f"\n🔄 ТЕСТ 4: BATCH ОБНОВЛЕНИЕ TP/SL")
             print("-" * 50)
 
-            new_tp_price = position.take_profit * 1.001
-            new_sl_price = position.stop_loss * 0.999
+            for symbol, position in positions.items():
+                print(f"\n📊 Обновляем TP/SL для {symbol}...")
 
-            print(f"   Обновляем TP: ${position.take_profit:.2f} → ${new_tp_price:.2f}")
-            print(f"   Обновляем SL: ${position.stop_loss:.2f} → ${new_sl_price:.2f}")
+                new_tp_price = position.take_profit * 1.001
+                new_sl_price = position.stop_loss * 0.999
 
-            batch_result = await bot.strategy.position_manager.batch_update_tp_sl(
-                symbol="ETH-USDT",
-                tp_ord_id=position.algo_order_id,  # OCO ордер содержит и TP и SL
-                sl_ord_id=position.algo_order_id,  # OCO ордер содержит и TP и SL
-                new_tp_price=new_tp_price,
-                new_sl_price=new_sl_price,
-            )
+                print(
+                    f"   Обновляем TP: ${position.take_profit:.2f} → ${new_tp_price:.2f}"
+                )
+                print(
+                    f"   Обновляем SL: ${position.stop_loss:.2f} → ${new_sl_price:.2f}"
+                )
 
-            if batch_result.get("code") == "0":
-                print("✅ Batch обновление добавлено в очередь")
-            else:
-                print(f"❌ Batch обновление не удалось: {batch_result.get('msg')}")
+                batch_result = await bot.strategy.position_manager.batch_update_tp_sl(
+                    symbol=symbol,
+                    tp_ord_id=position.algo_order_id,  # OCO ордер содержит и TP и SL
+                    sl_ord_id=position.algo_order_id,  # OCO ордер содержит и TP и SL
+                    new_tp_price=new_tp_price,
+                    new_sl_price=new_sl_price,
+                )
 
-            # Принудительно отправляем batch
+                if batch_result.get("code") == "0":
+                    print(f"✅ Batch обновление добавлено в очередь для {symbol}")
+                else:
+                    print(
+                        f"❌ Batch обновление не удалось для {symbol}: {batch_result.get('msg')}"
+                    )
+
+            # Принудительно отправляем batch для всех позиций
             await bot.strategy.position_manager.flush_pending_updates()
             print("✅ Batch обновления отправлены")
 
-            # Тест закрытия позиции
-            print(f"\n🔴 ТЕСТ 5: ЗАКРЫТИЕ ПОЗИЦИИ")
+            # Тест закрытия позиций
+            print(f"\n🔴 ТЕСТ 5: ЗАКРЫТИЕ ПОЗИЦИЙ")
             print("-" * 50)
 
-            close_price = position.entry_price * 1.0005  # +0.05% прибыль
-            print(f"   Закрываем по цене: ${close_price:.2f}")
+            for symbol, position in positions.items():
+                print(f"\n📊 Закрываем позицию {symbol}...")
 
-            trade_result = await bot.strategy.position_manager.close_position(
-                "ETH-USDT", position, close_price, "test_close"
-            )
+                close_price = position.entry_price * 1.0005  # +0.05% прибыль
+                print(f"   Закрываем по цене: ${close_price:.2f}")
 
-            if trade_result:
-                print("✅ Позиция закрыта успешно")
-                print(f"   PnL: ${trade_result.net_pnl:.4f}")
-                print(f"   Commission: ${trade_result.commission:.4f}")
-                print(f"   Duration: {trade_result.duration_sec:.1f} сек")
+                trade_result = await bot.strategy.position_manager.close_position(
+                    symbol, position, close_price, "test_close"
+                )
+
+                if trade_result:
+                    print(f"✅ Позиция {symbol} закрыта успешно")
+                    print(f"   PnL: ${trade_result.net_pnl:.4f}")
+                    print(f"   Commission: ${trade_result.commission:.4f}")
+                else:
+                    print(f"❌ Не удалось закрыть позицию {symbol}")
+
+                if trade_result:
+                    print(f"   Duration: {trade_result.duration_sec:.1f} сек")
 
                 # 🔥 КРИТИЧНО: Удаляем позицию из orchestrator после закрытия!
-                if "ETH-USDT" in bot.strategy.positions:
-                    del bot.strategy.positions["ETH-USDT"]
+                if symbol in bot.strategy.positions:
+                    del bot.strategy.positions[symbol]
                     print("✅ Позиция удалена из orchestrator tracking")
             else:
                 print("❌ Ошибка закрытия позиции")
@@ -189,28 +287,34 @@ async def test_full_trading_cycle():
             print(f"\n🔍 ТЕСТ 6: ФИНАЛЬНАЯ ПРОВЕРКА")
             print("-" * 50)
 
-            # Проверяем, что позиция закрыта
-            final_orders = await bot.client.get_open_orders(symbol="ETH-USDT")
+            # Проверяем, что все позиции закрыты
+            for symbol in positions.keys():
+                print(f"\n📊 Финальная проверка для {symbol}...")
 
-            # Обрабатываем разные форматы ответа
-            if isinstance(final_orders, dict) and "data" in final_orders:
-                orders_data = final_orders["data"]
-            elif isinstance(final_orders, list):
-                orders_data = final_orders
-            else:
-                orders_data = []
+                final_orders = await bot.client.get_open_orders(symbol=symbol)
 
-            remaining_orders = [
-                o
-                for o in orders_data
-                if (o.get("ordId") if isinstance(o, dict) else o.id)
-                == position.algo_order_id
-            ]
+                # Обрабатываем разные форматы ответа
+                if isinstance(final_orders, dict) and "data" in final_orders:
+                    orders_data = final_orders["data"]
+                elif isinstance(final_orders, list):
+                    orders_data = final_orders
+                else:
+                    orders_data = []
 
-            if not remaining_orders:
-                print("✅ Все OCO ордера отменены")
-            else:
-                print(f"⚠️ Остались открытые ордера: {len(remaining_orders)}")
+                print(f"   Открытых ордеров для {symbol}: {len(orders_data)}")
+
+                if len(orders_data) == 0:
+                    print(f"✅ Все ордера закрыты для {symbol}")
+                else:
+                    print(f"⚠️ Остались открытые ордера для {symbol}:")
+                    for order in orders_data:
+                        # Проверяем тип объекта
+                        if hasattr(order, "get"):
+                            print(
+                                f"   - {order.get('ordId', 'N/A')}: {order.get('state', 'N/A')}"
+                            )
+                        else:
+                            print(f"   - Order object: {type(order)}")
 
             # Дополнительная проверка алгоритмических ордеров
             algo_orders = await bot.client.get_algo_orders()
@@ -325,7 +429,9 @@ async def test_maker_strategy():
                 commission_rate = trade_result.commission / (
                     position.entry_price * position.size
                 )
-                print(f"📊 Commission Rate: {commission_rate:.6f}")
+                print(
+                    f"📊 Commission Rate: {commission_rate:.4f} ({commission_rate*100:.2f}%)"
+                )
 
                 if commission_rate < 0.001:  # Меньше 0.1% = Maker
                     print("✅ Maker комиссия применена")

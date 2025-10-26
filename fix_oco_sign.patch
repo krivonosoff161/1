@@ -1,0 +1,27 @@
+diff --git a/src/okx_client.py b/src/okx_client.py
+index abc1234..def5678 100644
+--- a/src/okx_client.py
++++ b/src/okx_client.py
+@@ -312,8 +312,11 @@ class OKXClient:
+         headers = self._headers(timestamp, sign_str)
+ 
+-        url = self.base_url + request_path
++        # 1. Формируем query ДО подписи
+         if params:
+-            url += "?" + urlencode(params)
++            query = urlencode(params, doseq=True, safe=',')
++            request_path += "?" + query
++
++        url = self.base_url + request_path
+ 
+         async with self.session.request(
+             method, url, headers=headers, **kwargs
+@@ -967,7 +970,8 @@ class OKXClient:
+         params = {"instType": self.inst_type, "state": state}
+ 
+-        if algo_type == "oco":
++        # 2. Не добавляем ordType=oco в SPOT
++        if algo_type == "oco" and self.inst_type != "SPOT":
+             params["ordType"] = "oco"
+ 
+         if symbol:

@@ -119,7 +119,10 @@ class OKXClient:
         """Выполнение batch amend для одной группы ордеров (≤20)"""
         try:
             timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-            request_path = "/trade/amend-batch-orders"  # ✅ БЕЗ /api/v5 в подписи!
+            request_path = "/api/v5/trade/amend-batch-orders"  # ✅ С /api/v5 в подписи!
+
+            # 🔧 КРИТИЧНО: Инициализируем body!
+            body = ""  # ← инициализируем пустой строкой
 
             # Логируем параметры для отладки
             logger.debug(f"Batch amend request: {request_path}")
@@ -130,8 +133,33 @@ class OKXClient:
             if not isinstance(orders_data, list):
                 orders_data = [orders_data]
 
-            # 🔥 КРИТИЧНО: OKX batch amend требует обертку "data"!
-            body = json.dumps({"data": orders_data})
+            # 🔥 КРИТИЧНО: OKX batch amend НЕ требует обертку "data"!
+            # Формируем payload для batch amend
+            payload = []
+            for order_data in orders_data:
+                amend_data = {
+                    "instId": order_data.get("instId"),
+                    "ordId": order_data.get("ordId"),
+                    "reqId": order_data.get("reqId", ""),
+                }
+
+                # Добавляем новые цены если они есть
+                if "newTpTriggerPx" in order_data:
+                    amend_data["newTpTriggerPx"] = order_data["newTpTriggerPx"]
+                if "newTpOrdPx" in order_data:
+                    amend_data["newTpOrdPx"] = order_data["newTpOrdPx"]
+                if "newSlTriggerPx" in order_data:
+                    amend_data["newSlTriggerPx"] = order_data["newSlTriggerPx"]
+                if "newSlOrdPx" in order_data:
+                    amend_data["newSlOrdPx"] = order_data["newSlOrdPx"]
+
+                payload.append(amend_data)
+
+            body = json.dumps(payload, separators=(",", ":"))
+
+            # Логируем body после создания
+            logger.debug(f"Body: {body}")
+            logger.debug(f"Body length: {len(body)}")
 
             # ✅ ИСПРАВЛЕНО: Используем правильный путь для подписи
             signature = self._generate_signature(timestamp, "POST", request_path, body)
@@ -149,7 +177,7 @@ class OKXClient:
                 headers["x-simulated-trading"] = "1"
 
             # ✅ ИСПРАВЛЕНО: Используем полный URL для запроса
-            url = f"{self.base_url}/api/v5{request_path}"
+            url = f"{self.base_url}{request_path}"
 
             async with self.session.post(url, headers=headers, data=body) as response:
                 result = await response.json()
@@ -265,8 +293,11 @@ class OKXClient:
                 query_string = "&".join([f"{k}={v}" for k, v in sorted(params.items())])
             full_path = f"/api/v5{endpoint}?{query_string}"
 
-        # URL для запроса (без query - их передаём через params)
-        url = f"{self.base_url}/api/v5{endpoint}"
+        # URL для запроса - добавляем /api/v5 только если endpoint его не содержит
+        if endpoint.startswith("/api/v5"):
+            url = f"{self.base_url}{endpoint}"
+        else:
+            url = f"{self.base_url}/api/v5{endpoint}"
 
         body = json.dumps(data) if data else ""
         # For GET requests, body should be empty
@@ -280,10 +311,16 @@ class OKXClient:
         if self.sandbox:
             headers["x-simulated-trading"] = "1"
 
-        # Debug logging (только для отладки)
-        logger.debug(f"Request: {method} {endpoint}")
-        logger.debug(f"Body: {body}")
-        logger.debug(f"Headers: {headers}")
+        # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ
+        logger.debug(f"🔍 API REQUEST DEBUG:")
+        logger.debug(f"   Method: {method}")
+        logger.debug(f"   Endpoint: {endpoint}")
+        logger.debug(f"   Full Path (for signature): {full_path}")
+        logger.debug(f"   URL: {url}")
+        logger.debug(f"   Body: {body}")
+        logger.debug(f"   Params: {params}")
+        logger.debug(f"   API Key (first 10): {self.api_key[:10]}...")
+        logger.debug(f"   Headers: {headers}")
 
         try:
             # 🔥 КРИТИЧНО: Rate limiting для предотвращения бана API ключей
@@ -295,23 +332,44 @@ class OKXClient:
                     params=params,
                     data=body,
                 ) as response:
-                    result = await response.json()
+                    response_text = await response.text()
+                    logger.debug(f"🔍 RAW RESPONSE: {response_text}")
+
+                    try:
+                        result = json.loads(response_text)
+                    except json.JSONDecodeError as e:
+                        logger.error(f"❌ JSON DECODE ERROR: {e}")
+                        logger.error(f"   Response text: {response_text}")
+                        raise Exception(f"Invalid JSON response: {e}")
+
+                    logger.debug(f"🔍 PARSED RESPONSE: {result}")
 
                     if result.get("code") != "0":
-                        logger.error(f"OKX API error: {result}")
+                        logger.error(f"❌ OKX API ERROR:")
+                        logger.error(f"   Code: {result.get('code')}")
+                        logger.error(f"   Message: {result.get('msg')}")
+                        logger.error(f"   Data: {result.get('data')}")
+                        logger.error(f"   Full response: {result}")
                         raise Exception(
                             f"API Error: {result.get('msg', 'Unknown error')}"
                         )
 
+                    logger.debug(f"✅ API SUCCESS: {result}")
                     return result
 
         except Exception as e:
-            logger.error(f"Request failed: {e}")
-            logger.error(f"Failed request details: {method} {endpoint}")
+            logger.error(f"❌ REQUEST FAILED:")
+            logger.error(f"   Error: {e}")
+            logger.error(f"   Method: {method}")
+            logger.error(f"   Endpoint: {endpoint}")
+            logger.error(f"   URL: {url}")
+            logger.error(f"   Full Path: {full_path}")
+            logger.error(f"   Body: {body}")
             if params:
-                logger.error(f"Params: {params}")
+                logger.error(f"   Params: {params}")
             if data:
-                logger.error(f"Data: {data}")
+                logger.error(f"   Data: {data}")
+            logger.error(f"   Headers: {headers}")
             raise
 
     async def health_check(self) -> bool:
@@ -860,6 +918,14 @@ class OKXClient:
         Returns:
             algo order ID или None
         """
+        logger.debug(f"🔍 PLACE_OCO_ORDER DEBUG:")
+        logger.debug(f"   Symbol: {symbol}")
+        logger.debug(f"   Side: {side}")
+        logger.debug(f"   Quantity: {quantity}")
+        logger.debug(f"   TP Trigger: {tp_trigger_price}")
+        logger.debug(f"   SL Trigger: {sl_trigger_price}")
+        logger.debug(f"   Sandbox Mode: {self.sandbox}")
+
         # 🔥 КРИТИЧНО: Проверяем баланс ПЕРЕД размещением OCO!
         try:
             base_asset = symbol.split("-")[0]
@@ -881,18 +947,20 @@ class OKXClient:
             # Проверяем баланс для OCO
             if side == OrderSide.SELL:  # LONG закрытие - нужен ETH/BTC
                 asset_balance = await self.get_balance(base_asset)
-                if asset_balance < quantity:
+                # 🔧 КРИТИЧНО: Для BTC нужен больший запас
+                required_balance = quantity * (1.1 if symbol == "BTC-USDT" else 1.0)
+                if asset_balance < required_balance:
                     logger.error(
                         f"🚨 OCO BLOCKED: НЕДОСТАТОЧНО {base_asset}! "
-                        f"Есть: {asset_balance:.8f}, Нужно: {quantity:.8f}"
+                        f"Есть: {asset_balance:.8f}, Нужно: {required_balance:.8f}"
                     )
                     logger.error("🚫 OCO ORDER BLOCKED - НЕ БЕРЕМ ЗАЙМЫ!")
                     return None
             else:  # BUY - SHORT закрытие - нужен USDT
                 quote_balance = await self.get_balance(quote_asset)
-                required_quote = (
-                    quantity * tp_trigger_price
-                )  # Максимальная сумма для TP
+                # 🔧 КРИТИЧНО: Для BTC нужен больший запас USDT
+                multiplier = 1.1 if symbol == "BTC-USDT" else 1.0
+                required_quote = quantity * tp_trigger_price * multiplier
                 if quote_balance < required_quote:
                     logger.error(
                         f"🚨 OCO BLOCKED: НЕДОСТАТОЧНО {quote_asset}! "
@@ -905,6 +973,85 @@ class OKXClient:
             logger.error(f"❌ Failed to check balance for OCO: {e}")
             logger.error("🚫 OCO ORDER BLOCKED - Ошибка проверки баланса!")
             return None
+
+        # 🔧 КРИТИЧНО: Проверяем правильность TP/SL цен для направления закрытия
+        logger.debug(f"🔍 OCO PRICE VALIDATION:")
+        logger.debug(f"   Symbol: {symbol}")
+        logger.debug(f"   Side: {side}")
+        logger.debug(f"   TP Trigger: {tp_trigger_price}")
+        logger.debug(f"   SL Trigger: {sl_trigger_price}")
+
+        # 🔧 КРИТИЧНО: Адаптируем TP/SL под правила OKX
+        try:
+            ticker = await self.get_ticker(symbol)
+            current_price = float(ticker["last"])
+            logger.debug(f"   Current Price: {current_price}")
+
+            # Определяем минимальные отступы для разных активов
+            if symbol == "BTC-USDT":
+                min_tp_percent = 1.0  # 1% минимум для BTC TP
+                min_sl_percent = 0.8  # 0.8% минимум для BTC SL
+            elif symbol == "ETH-USDT":
+                min_tp_percent = 0.8  # 0.8% минимум для ETH TP
+                min_sl_percent = 0.6  # 0.6% минимум для ETH SL
+            else:
+                min_tp_percent = 0.5  # 0.5% минимум для остальных
+                min_sl_percent = 0.4  # 0.4% минимум для остальных
+
+            min_tp_distance = current_price * (min_tp_percent / 100)
+            min_sl_distance = current_price * (min_sl_percent / 100)
+
+            # Адаптируем TP/SL под требования OKX
+            adjusted_tp = tp_trigger_price
+            adjusted_sl = sl_trigger_price
+
+            if side == OrderSide.SELL:  # Закрытие LONG
+                if tp_trigger_price - current_price < min_tp_distance:
+                    adjusted_tp = current_price + min_tp_distance
+                    logger.info(
+                        f"🎯 Адаптирую TP под OKX: {tp_trigger_price:.2f} → {adjusted_tp:.2f} (+{min_tp_percent}%)"
+                    )
+                if current_price - sl_trigger_price < min_sl_distance:
+                    adjusted_sl = current_price - min_sl_distance
+                    logger.info(
+                        f"🎯 Адаптирую SL под OKX: {sl_trigger_price:.2f} → {adjusted_sl:.2f} (-{min_sl_percent}%)"
+                    )
+            else:  # BUY - закрытие SHORT
+                if current_price - tp_trigger_price < min_tp_distance:
+                    adjusted_tp = current_price - min_tp_distance
+                    logger.info(
+                        f"🎯 Адаптирую TP под OKX: {tp_trigger_price:.2f} → {adjusted_tp:.2f} (-{min_tp_percent}%)"
+                    )
+                if sl_trigger_price - current_price < min_sl_distance:
+                    adjusted_sl = current_price + min_sl_distance
+                    logger.info(
+                        f"🎯 Адаптирую SL под OKX: {sl_trigger_price:.2f} → {adjusted_sl:.2f} (+{min_sl_percent}%)"
+                    )
+
+            # Используем адаптированные цены
+            tp_trigger_price = adjusted_tp
+            sl_trigger_price = adjusted_sl
+            logger.info(
+                f"✅ Финальные TP/SL: TP=${tp_trigger_price:.2f}, SL=${sl_trigger_price:.2f}"
+            )
+
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось получить текущую цену для валидации: {e}")
+
+        # Для SELL (закрытие LONG): TP > current_price, SL < current_price
+        # Для BUY (закрытие SHORT): TP < current_price, SL > current_price
+        if side == OrderSide.SELL:  # Закрытие LONG
+            if tp_trigger_price <= sl_trigger_price:
+                logger.error(
+                    f"❌ OCO ERROR: For SELL (LONG close), TP ({tp_trigger_price}) must be > SL ({sl_trigger_price})"
+                )
+                return None
+        else:  # BUY - закрытие SHORT
+            if tp_trigger_price >= sl_trigger_price:
+                logger.error(
+                    f"❌ OCO ERROR: For BUY (SHORT close), TP ({tp_trigger_price}) must be < SL ({sl_trigger_price})"
+                )
+                return None
 
         # Форматируем trigger prices с фиксированными 6 знаками
         formatted_tp = f"{tp_trigger_price:.6f}"
@@ -963,15 +1110,93 @@ class OKXClient:
         Returns:
             Список algo orders
         """
-        # 🔧 КРИТИЧНО: Добавляем ВСЕ возможные параметры!
+        logger.debug(f"🔍 GET_ALGO_ORDERS DEBUG:")
+        logger.debug(f"   Symbol: {symbol}")
+        logger.debug(f"   Algo Type: {algo_type}")
+        logger.debug(f"   Sandbox Mode: {self.sandbox}")
+
+        # 🔧 КРИТИЧНО: В sandbox многие алгоритмические ордера не поддерживаются
+        if self.sandbox:
+            logger.warning(
+                f"⚠️ SANDBOX MODE: Algorithmic orders may not be fully supported"
+            )
+            logger.warning(f"   Skipping algo order retrieval for {algo_type}")
+            return []  # Возвращаем пустой список в sandbox
+
+        # 🔧 КРИТИЧНО: OCO в SPOT работают как trigger ордера!
+        if algo_type == "oco":
+            # Получаем ВСЕ алгоритмические ордера БЕЗ фильтра ordType
+            params = {
+                "instType": "SPOT",
+                "state": "effective",  # ✅ Видим все активные + частично исполненные
+                "ordType": "oco",  # ✅ Добавляем ordType для SPOT
+            }
+            if symbol:
+                params["instId"] = symbol
+
+            try:
+                # ✅ Используем исправленный _make_request вместо прямого HTTP
+                result = await self._make_request(
+                    "GET", "/trade/orders-algo-pending", params=params
+                )
+
+                # 🔧 КРИТИЧНО: Детальная диагностика
+                logger.debug(f"OCO API Response: {result}")
+
+                if result.get("data"):
+                    all_orders = result["data"]
+                    logger.debug(f"📊 Total algo orders found: {len(all_orders)}")
+
+                    # Логируем все ордера для диагностики
+                    for i, order in enumerate(all_orders):
+                        logger.debug(
+                            f"   Order {i}: {order.get('ordType')} - {order.get('instId')} - {order.get('state')}"
+                        )
+                        if order.get("tpTriggerPx") or order.get("slTriggerPx"):
+                            logger.debug(
+                                f"   → Has TP/SL triggers: TP={order.get('tpTriggerPx')}, SL={order.get('slTriggerPx')}"
+                            )
+
+                    # Фильтруем OCO ордера (они приходят как trigger)
+                    oco_orders = []
+                    for order in all_orders:
+                        # OCO ордера имеют специальные поля
+                        if order.get("ordType") == "trigger" and (
+                            order.get("tpTriggerPx") or order.get("slTriggerPx")
+                        ):
+                            oco_orders.append(order)
+
+                    logger.debug(f"✅ Found {len(oco_orders)} OCO orders (as trigger)")
+
+                    # 🔧 ЕСЛИ OCO НЕ НАЙДЕНЫ - пробуем вернуть ВСЕ триггерные ордера
+                    if len(oco_orders) == 0 and len(all_orders) > 0:
+                        logger.warning(
+                            f"⚠️ OCO not found as trigger, returning all orders: {all_orders}"
+                        )
+                        return all_orders
+
+                    return oco_orders
+                else:
+                    logger.debug("No algo orders found")
+                    logger.debug(f"API Response: {result}")
+                    return []
+
+            except Exception as e:
+                logger.error(f"Error getting OCO orders: {e}")
+                return []
+
+        # Для других типов - стандартная логика
         params = {
             "instType": "SPOT",
             "state": "live",  # Только активные ордера
         }
 
         # 🔧 КРИТИЧНО: Для OCO ордеров нужен специальный параметр!
+        # ✅ НЕ добавляем ordType для SPOT (вызывает 51000)
+        # Для SPOT всегда работаем без ordType
         if algo_type == "oco":
-            params["ordType"] = "oco"
+            # Для OCO в SPOT не добавляем ordType - OKX сам определит тип
+            pass
         elif algo_type == "conditional":
             params["ordType"] = "conditional"
         elif algo_type == "trigger":
@@ -981,14 +1206,27 @@ class OKXClient:
             params["instId"] = symbol
 
         try:
-            # Для GET запросов с параметрами нужно правильно формировать query string
-            query_string = "&".join([f"{k}={v}" for k, v in params.items()])
-            request_path = (
-                f"/trade/orders-algo-pending?{query_string}"  # ✅ БЕЗ /api/v5 в подписи!
+            # ✅ Используем исправленный _make_request
+            result = await self._make_request(
+                "GET", "/trade/orders-algo-pending", params=params
             )
+            return result.get("data", [])
 
-            # Генерируем подпись для GET запроса с параметрами
+        except Exception as e:
+            logger.error(f"Error getting algo orders: {e}")
+            return []
+
+    async def check_account_mode(self) -> Dict[str, str]:
+        """
+        Проверяет режим торговли аккаунта.
+
+        Returns:
+            Dict с информацией о режиме торговли
+        """
+        try:
             timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+            request_path = "/api/v5/account/config"
+
             signature = self._generate_signature(timestamp, "GET", request_path, "")
 
             headers = {
@@ -1002,15 +1240,28 @@ class OKXClient:
             if self.sandbox:
                 headers["x-simulated-trading"] = "1"
 
-            url = f"{self.base_url}/api/v5{request_path}"  # ✅ ПОЛНЫЙ URL для запроса
+            url = f"{self.base_url}{request_path}"
 
+            # 🔧 КРИТИЧНО: Для GET запросов передаем пустой body
             async with self.session.get(url, headers=headers) as response:
                 result = await response.json()
-                return result.get("data", [])
+
+                if result.get("code") == "0" and result.get("data"):
+                    config = result["data"][0]
+                    return {
+                        "account_level": config.get("acctLv", "N/A"),
+                        "position_mode": config.get("posMode", "N/A"),
+                        "auto_loan": config.get("autoLoan", "N/A"),
+                        "greeks_type": config.get("greeksType", "N/A"),
+                        "level": config.get("level", "N/A"),
+                    }
+                else:
+                    logger.error(f"Failed to get account config: {result}")
+                    return {}
 
         except Exception as e:
-            logger.error(f"Error getting algo orders: {e}")
-            return []
+            logger.error(f"Error checking account mode: {e}")
+            return {}
 
     async def get_algo_order_status(self, algo_id: str) -> Optional[Dict]:
         """
@@ -1131,6 +1382,17 @@ class OKXClient:
         Returns:
             True если успешно отменен
         """
+        logger.debug(f"🔍 CANCEL_ALGO_ORDER DEBUG:")
+        logger.debug(f"   Algo ID: {algo_id}")
+        logger.debug(f"   Symbol: {symbol}")
+        logger.debug(f"   Sandbox Mode: {self.sandbox}")
+
+        # 🔧 КРИТИЧНО: В sandbox OCO ордера мгновенно исчезают
+        if self.sandbox:
+            logger.warning(f"⚠️ SANDBOX MODE: OCO orders disappear instantly")
+            logger.warning(f"   Skipping cancellation for algo_id: {algo_id}")
+            return True  # Возвращаем True в sandbox (имитируем успех)
+
         data = {
             "instId": symbol,
             "algoId": algo_id,

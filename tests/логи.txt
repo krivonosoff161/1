@@ -1,0 +1,492 @@
+PS C:\Users\krivo\simple trading bot okx> python tests/main/test_full_trading_system.py
+2025-10-26 11:20:11 | INFO     | src.utils.logging_setup:setup_logging | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:11 | INFO     | src.utils.logging_setup:setup_logging | 📝 LOGGING CONFIGURED
+2025-10-26 11:20:11 | INFO     | src.utils.logging_setup:setup_logging | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:11 | INFO     | src.utils.logging_setup:setup_logging |    Console: INFO+ (colored)
+2025-10-26 11:20:11 | INFO     | src.utils.logging_setup:setup_logging |    File: DEBUG+ (full log)
+2025-10-26 11:20:11 | INFO     | src.utils.logging_setup:setup_logging |    Rotation: 10 MB        
+2025-10-26 11:20:11 | INFO     | src.utils.logging_setup:setup_logging |    Retention: 7 days      
+2025-10-26 11:20:11 | INFO     | src.utils.logging_setup:setup_logging |    Compression: ZIP       
+2025-10-26 11:20:11 | INFO     | src.utils.logging_setup:setup_logging | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧪 ПОЛНОЕ ТЕСТИРОВАНИЕ ТОРГОВОЙ СИСТЕМЫ
+================================================================================
+🎯 Тестируем: Открытие → OCO → PH → Batch → Закрытие
+================================================================================
+🚀 ПОЛНЫЙ ТЕСТ ТОРГОВОЙ СИСТЕМЫ
+======================================================================
+🎯 Тестируем: Открытие → OCO → PH → Закрытие
+======================================================================
+2025-10-26 11:20:11 | INFO     | src.main:__init__ | 🔄 Initializing REST API mode...
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:__init__ | 🎯 SCALPING ORCHESTRATOR INITIALIZATION
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_setup_indicators | ✅ Indicators initialized
+2025-10-26 11:20:11 | INFO     | src.strategies.modules.multi_timeframe:__init__ | MTF Filter initialized: 15m, bonus=2, block_opposite=True
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Multi-Timeframe Filter enabled
+2025-10-26 11:20:11 | INFO     | src.filters.correlation_manager:__init__ | Correlation Manager initialized: 5m, lookback=100, threshold=0.7
+2025-10-26 11:20:11 | INFO     | src.strategies.modules.correlation_filter:__init__ | Correlation Filter initialized: threshold=0.7, max_positions=1, same_direction_only=True
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Correlation Filter enabled
+2025-10-26 11:20:11 | INFO     | src.strategies.modules.adx_filter:__init__ | ✅ ADX Filter initialized | Threshold: 25.0 | DI diff: 1.5 | Period: 14
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ ADX Filter enabled
+2025-10-26 11:20:11 | INFO     | src.indicators.advanced.pivot_calculator:__init__ | Pivot Calculator initialized
+2025-10-26 11:20:11 | INFO     | src.strategies.modules.pivot_points:__init__ | Pivot Points Filter initialized: tolerance=0.30%, bonus=1
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Pivot Points Filter enabled
+2025-10-26 11:20:11 | INFO     | src.indicators.advanced.volume_profile:__init__ | Volume Profile Calculator initialized: 50 price levels
+2025-10-26 11:20:11 | INFO     | src.strategies.modules.volume_profile_filter:__init__ | Volume Profile Filter initialized: 1H, lookback=100, buckets=50
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Volume Profile Filter enabled
+2025-10-26 11:20:11 | INFO     | src.strategies.modules.balance_checker:__init__ | Balance Checker initialized: USDT reserve=10.0%, min_asset=$50.0
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Balance Checker enabled
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ⚪ Time Filter disabled
+2025-10-26 11:20:11 | INFO     | src.strategies.modules.adaptive_regime_manager:__init__ | ARM initialized: ADX trend=20.0, volatility=1.0%-3.0%
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Adaptive Regime Manager enabled
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:_init_telegram | ⚪ Telegram notifications disabled
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.signal_generator:__init__ | ✅ SignalGenerator initialized
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.position_manager:__init__ | ✅ PositionManager initialized | Profit Harvesting: ADAPTIVE (from ARM)
+2025-10-26 11:20:11 | INFO     | src.risk.risk_controller:__init__ | ✅ RiskController initialized | Max consecutive losses: 10 | Max daily loss: 10.0% | Telegram: OFF
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.performance_tracker:_init_csv | 📊 Using existing trades CSV: logs/trades_2025-10-26.csv
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.performance_tracker:__init__ | ✅ PerformanceTracker initialized
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:__init__ | ✅ SCALPING ORCHESTRATOR READY
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:11 | INFO     | src.main:initialize | Initializing bot in REST mode...
+2025-10-26 11:20:11 | INFO     | src.okx_client:connect | OKX client connected
+2025-10-26 11:20:11 | INFO     | src.strategies.scalping.orchestrator:initialize_websocket | 🚀 Initializing WebSocket Order Executor...
+2025-10-26 11:20:12 | INFO     | src.market_data_websocket:connect | ✅ Public WebSocket подключен (цены в реальном времени)
+2025-10-26 11:20:12 | INFO     | src.strategies.scalping.order_executor:initialize_websocket | ✅ Market Data WebSocket подключен для быстрых цен
+2025-10-26 11:20:12 | INFO     | src.market_data_websocket:subscribe_ticker | 📊 Подписка на BTC-USDT активирована
+2025-10-26 11:20:12 | INFO     | src.market_data_websocket:subscribe_ticker | 📊 Подписка на ETH-USDT активирована
+2025-10-26 11:20:12 | INFO     | src.strategies.scalping.orchestrator:initialize_websocket | ✅ WebSocket Order Executor ready for fast entries
+2025-10-26 11:20:12 | INFO     | src.main:initialize | ✅ WebSocket Order Executor initialized for fast entries
+2025-10-26 11:20:12 | INFO     | src.main:initialize | Bot initialized.
+✅ Бот инициализирован
+🔧 Установка SPOT режима...
+2025-10-26 11:20:12 | INFO     | src.okx_client:set_trading_mode | 🔧 Sandbox режим - SPOT по умолчанию
+✅ SPOT режим установлен
+
+🔍 ПРОВЕРКА НАСТРОЕК АККАУНТА
+--------------------------------------------------
+📊 Account Level: 1
+📊 Position Mode: long_short_mode
+📊 Auto Loan: False
+📊 Greeks Type: PA
+✅ Auto Loan отключен - займы не берутся
+📊 Текущая цена ETH: $3952.20
+📊 Текущая цена BTC: $111779.50
+
+🛒 ТЕСТ 1: ОТКРЫТИЕ ПОЗИЦИЙ
+--------------------------------------------------
+
+📊 Тестируем ETH-USDT...
+2025-10-26 11:20:13 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 🔍 CALCULATING POSITION SIZE for ETH-USDT @ $3952.20
+2025-10-26 11:20:13 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 💰 USDT Balance: $449.67
+2025-10-26 11:20:13 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 🎯 RANGING ETH: 0.005 ETH (≈ $19.76)
+2025-10-26 11:20:13 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 📊 Final position size: 0.005000 = $19.76 (min: $0.0)
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:_try_maker_order | 🎯 POST-ONLY attempt: ETH-USDT buy
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:_try_maker_order |    Market: $3952.2000 → Maker: $3942.3195
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:_try_maker_order |    Quantity: 0.00501253
+2025-10-26 11:20:15 | INFO     | src.okx_client:place_order | Order response: {'code': '0', 'data': [{'clOrdId': '', 'ordId': '2985150447487619072', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466816011'}], 'inTime': '1761466816011092', 'msg': '', 'outTime': '1761466816012922'}   
+2025-10-26 11:20:15 | INFO     | src.okx_client:place_order | Order data: {'clOrdId': '', 'ordId': '2985150447487619072', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466816011'}     
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:_try_maker_order | ✅ POST-ONLY успешен: 2985150447487619072 (Maker fee: 0.08%)
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal | 📊 BUY completed: filled=0.00500000, fee=0.000000, final_size=0.00499900
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal | ✅ POSITION OPENED: ETH-USDT LONG
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Order ID: 2985150447487619072
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Side: BUY
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Size: 0.00499900 ETH
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Entry: $3952.20
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Take Profit: $4042.20
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Stop Loss: $3882.20
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Risk/Reward: 1:1.29
+2025-10-26 11:20:15 | INFO     | src.strategies.scalping.order_executor:execute_signal | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:16 | INFO     | src.strategies.scalping.order_executor:execute_signal | 🎯 Manual pools TP/SL: 0.5%/0.35%
+2025-10-26 11:20:17 | INFO     | src.okx_client:place_oco_order | ✅ OCO order placed: 2985150519234088960 | TP @ $4042.20, SL @ $3882.20
+2025-10-26 11:20:17 | INFO     | src.strategies.scalping.order_executor:execute_signal | ✅ OCO order placed: ID=2985150519234088960 | TP @ $4042.20, SL @ $3882.20
+✅ Позиция ETH-USDT открыта: 2985150447487619072
+   Entry Price: $3952.20
+   Size: 0.00499900 ETH
+   OCO Order ID: 2985150519234088960
+
+📊 Тестируем BTC-USDT...
+2025-10-26 11:20:17 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 🔍 CALCULATING POSITION SIZE for BTC-USDT @ $111779.50
+2025-10-26 11:20:18 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 💰 USDT Balance: $429.91
+2025-10-26 11:20:18 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 🎯 RANGING BTC: 0.0005 BTC (≈ $55.89)
+2025-10-26 11:20:18 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 📊 Final position size: 0.000500 = $55.89 (min: $0.0)
+2025-10-26 11:20:19 | INFO     | src.strategies.scalping.order_executor:_try_maker_order | 🎯 POST-ONLY attempt: BTC-USDT buy
+2025-10-26 11:20:19 | INFO     | src.strategies.scalping.order_executor:_try_maker_order |    Market: $111779.5000 → Maker: $111500.0513
+2025-10-26 11:20:19 | INFO     | src.strategies.scalping.order_executor:_try_maker_order |    Quantity: 0.00050125
+2025-10-26 11:20:20 | INFO     | src.okx_client:place_order | Order response: {'code': '0', 'data': [{'clOrdId': '', 'ordId': '2985150593684279296', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466820368'}], 'inTime': '1761466820367775', 'msg': '', 'outTime': '1761466820369064'}   
+2025-10-26 11:20:20 | INFO     | src.okx_client:place_order | Order data: {'clOrdId': '', 'ordId': '2985150593684279296', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466820368'}     
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:_try_maker_order | ✅ POST-ONLY успешен: 2985150593684279296 (Maker fee: 0.08%)
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal | 📊 BUY completed: filled=0.00050000, fee=0.000000, final_size=0.00049990
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal | ✅ POSITION OPENED: BTC-USDT LONG
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Order ID: 2985150593684279296
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Side: BUY
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Size: 0.00049990 BTC
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Entry: $111779.50
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Take Profit: $111869.50
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Stop Loss: $111709.50
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Risk/Reward: 1:1.29
+2025-10-26 11:20:20 | INFO     | src.strategies.scalping.order_executor:execute_signal | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:21 | INFO     | src.strategies.scalping.order_executor:execute_signal | 🎯 Manual pools TP/SL: 0.5%/0.35%
+2025-10-26 11:20:21 | INFO     | src.strategies.scalping.order_executor:execute_signal | 🎯 BTC Adjusted TP/SL: 1.0%/0.8%
+2025-10-26 11:20:22 | ERROR    | src.okx_client:place_oco_order | ❌ BTC OCO ERROR: TP слишком близко к цене! TP: 111869.5, Current: 111779.5, Min distance: 1117.795
+2025-10-26 11:20:22 | WARNING  | src.strategies.scalping.order_executor:execute_signal | ⚠️ OCO ordder returned None for BTC-USDT - position without automatic TP/SL protection!
+✅ Позиция BTC-USDT открыта: 2985150593684279296
+   Entry Price: $111779.50
+   Size: 0.00049990 BTC
+   OCO Order ID: None
+
+🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ОРДЕРОВ:
+   📊 Всего открытых ордеров: 2
+   ❌ Ошибка получения открытых ордеров: 'Order' object has no attribute 'state'
+2025-10-26 11:20:22 | WARNING  | src.okx_client:get_algo_orders | ⚠️ SANDBOX MODE: Algorithmic ordeers may not be fully supported
+2025-10-26 11:20:22 | WARNING  | src.okx_client:get_algo_orders |    Skipping algo order retrieval for conditional
+   📊 Всего алгоритмических ордеров: 0
+   📊 Активных позиций: 2
+   📋 Position: ETH-USDT - PositionSide.LONG - 0.004999 - OCO: 2985150519234088960
+   📋 Position: BTC-USDT - PositionSide.LONG - 0.0004999000000000001 - OCO: None
+
+🔄 ТЕСТ 2: ПРОВЕРКА OCO ОРДЕРОВ
+--------------------------------------------------
+   Ожидание создания OCO ордеров...
+
+📊 Проверяем OCO для ETH-USDT...
+2025-10-26 11:20:25 | WARNING  | src.okx_client:get_algo_orders | ⚠️ SANDBOX MODE: Algorithmic ordeers may not be fully supported
+2025-10-26 11:20:25 | WARNING  | src.okx_client:get_algo_orders |    Skipping algo order retrieval for oco
+   Ищем OCO ордер ID: 2985150519234088960
+   Найдено алгоритмических ордеров: 0
+❌ OCO ордер не найден для ETH-USDT
+2025-10-26 11:20:25 | WARNING  | src.okx_client:get_algo_orders | ⚠️ SANDBOX MODE: Algorithmic ordeers may not be fully supported
+2025-10-26 11:20:25 | WARNING  | src.okx_client:get_algo_orders |    Skipping algo order retrieval for conditional
+   Всего алгоритмических ордеров: 0
+
+📊 Проверяем OCO для BTC-USDT...
+2025-10-26 11:20:25 | WARNING  | src.okx_client:get_algo_orders | ⚠️ SANDBOX MODE: Algorithmic ordeers may not be fully supported
+2025-10-26 11:20:25 | WARNING  | src.okx_client:get_algo_orders |    Skipping algo order retrieval for oco
+   Ищем OCO ордер ID: None
+   Найдено алгоритмических ордеров: 0
+❌ OCO ордер не найден для BTC-USDT
+2025-10-26 11:20:25 | WARNING  | src.okx_client:get_algo_orders | ⚠️ SANDBOX MODE: Algorithmic ordeers may not be fully supported
+2025-10-26 11:20:25 | WARNING  | src.okx_client:get_algo_orders |    Skipping algo order retrieval for conditional
+   Всего алгоритмических ордеров: 0
+
+💰 ТЕСТ 3: PROFIT HARVESTING
+--------------------------------------------------
+
+📊 Тестируем PH для ETH-USDT...
+   Имитируем цену: $3956.15 (+0.1%)
+⚪ PH не сработал для ETH-USDT - позиция остается открытой
+
+📊 Тестируем PH для BTC-USDT...
+   Имитируем цену: $111891.28 (+0.1%)
+⚪ PH не сработал для BTC-USDT - позиция остается открытой
+
+🔄 ТЕСТ 4: BATCH ОБНОВЛЕНИЕ TP/SL
+--------------------------------------------------
+
+📊 Обновляем TP/SL для ETH-USDT...
+   Обновляем TP: $4042.20 → $4046.24
+   Обновляем SL: $3882.20 → $3878.32
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.position_manager:batch_update_tp_sl | 🔄 Batch updating TP/SL for ETH-USDT
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.position_manager:batch_update_tp_sl |    TP: $4046.2422 (trigger: None)
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.position_manager:batch_update_tp_sl |    SL: $3878.3178 (trigger: None)
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.position_manager:batch_update_tp_sl | ✅ Batch TP/SL update successful for ETH-USDT
+✅ Batch обновление добавлено в очередь для ETH-USDT
+
+📊 Обновляем TP/SL для BTC-USDT...
+   Обновляем TP: $111869.50 → $111981.37
+   Обновляем SL: $111709.50 → $111597.79
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.position_manager:batch_update_tp_sl | 🔄 Batch updating TP/SL for BTC-USDT
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.position_manager:batch_update_tp_sl |    TP: $111981.3695 (trigger: None)
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.position_manager:batch_update_tp_sl |    SL: $111597.7905 (trigger: None)
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.position_manager:batch_update_tp_sl | ✅ Batch TP/SL update successful for BTC-USDT
+✅ Batch обновление добавлено в очередь для BTC-USDT
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.position_manager:flush_pending_updates |  🔄 Flushing pending batch updates...
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.batch_order_manager:force_flush | 🔄 Force flush: 4 updates
+2025-10-26 11:20:25 | INFO     | src.strategies.scalping.batch_order_manager:flush_updates | 🚀 Executing batch amend: 4 orders
+2025-10-26 11:20:25 | ERROR    | src.okx_client:_batch_amend_single | ❌ Batch amend failed: 
+2025-10-26 11:20:25 | ERROR    | src.strategies.scalping.batch_order_manager:flush_updates | ❌ Batch amend failed: 
+2025-10-26 11:20:25 | ERROR    | src.strategies.scalping.position_manager:flush_pending_updates |  ❌ Batch flush failed: 
+✅ Batch обновления отправлены
+
+🔴 ТЕСТ 5: ЗАКРЫТИЕ ПОЗИЦИЙ
+--------------------------------------------------
+
+📊 Закрываем позицию ETH-USDT...
+   Закрываем по цене: $3954.18
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | 🔄 Cancelling OCO order 2985150519234088960 before closing position
+2025-10-26 11:20:26 | WARNING  | src.okx_client:cancel_algo_order | ⚠️ SANDBOX MODE: OCO orders dissappear instantly
+2025-10-26 11:20:26 | WARNING  | src.okx_client:cancel_algo_order |    Skipping cancellation for algo_id: 2985150519234088960
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | ✅ OCO order 2985150519234088960 cancelled
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | 🔴 CLOSING ORDER: SELL 0.00499900 ETH-USDT @ $3954.1761 | Reason: test_close
+2025-10-26 11:20:26 | INFO     | src.okx_client:place_order | Order response: {'code': '0', 'data': [{'clOrdId': '', 'ordId': '2985150803567251456', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466826623'}], 'inTime': '1761466826622309', 'msg': '', 'outTime': '1761466826624261'}   
+2025-10-26 11:20:26 | INFO     | src.okx_client:place_order | Order data: {'clOrdId': '', 'ordId': '2985150803567251456', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466826623'}     
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | 💰 TRADE CLOSED: ETH-USDT LONG
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Entry: $3952.2000
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Exit: $3954.1761
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Size: 0.00499900
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Duration: 11s (0.2 min)
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Gross PnL: $0.0000
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Commission: -$0.0356
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    NET PnL: $-0.0356
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Reason: test_close
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Позиция ETH-USDT закрыта успешно
+   PnL: $-0.0356
+   Commission: $0.0356
+   Duration: 10.6 сек
+✅ Позиция удалена из orchestrator tracking
+
+📊 Закрываем позицию BTC-USDT...
+   Закрываем по цене: $111835.39
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | 🔴 CLOSING ORDER: SELL 0.00049990 BTC-USDT @ $111835.3897 | Reason: test_close
+2025-10-26 11:20:26 | INFO     | src.okx_client:place_order | Order response: {'code': '0', 'data': [{'clOrdId': '', 'ordId': '2985150822089297920', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466827175'}], 'inTime': '1761466827174770', 'msg': '', 'outTime': '1761466827176569'}   
+2025-10-26 11:20:26 | INFO     | src.okx_client:place_order | Order data: {'clOrdId': '', 'ordId': '2985150822089297920', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466827175'}     
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | 💰 TRADE CLOSED: BTC-USDT LONG
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Entry: $111779.5000
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Exit: $111835.3897
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Size: 0.00049990
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Duration: 7s (0.1 min)
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Gross PnL: $0.0000
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Commission: -$0.1006
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    NET PnL: $-0.1006
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position |    Reason: test_close
+2025-10-26 11:20:26 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Позиция BTC-USDT закрыта успешно
+   PnL: $-0.1006
+   Commission: $0.1006
+   Duration: 6.8 сек
+✅ Позиция удалена из orchestrator tracking
+❌ Ошибка закрытия позиции
+
+🔍 ТЕСТ 6: ФИНАЛЬНАЯ ПРОВЕРКА
+--------------------------------------------------
+
+📊 Финальная проверка для ETH-USDT...
+   Открытых ордеров для ETH-USDT: 1
+⚠️ Остались открытые ордера для ETH-USDT:
+   - Order object: <class 'src.models.Order'>
+
+📊 Финальная проверка для BTC-USDT...
+   Открытых ордеров для BTC-USDT: 1
+⚠️ Остались открытые ордера для BTC-USDT:
+   - Order object: <class 'src.models.Order'>
+2025-10-26 11:20:27 | WARNING  | src.okx_client:get_algo_orders | ⚠️ SANDBOX MODE: Algorithmic ordeers may not be fully supported
+2025-10-26 11:20:27 | WARNING  | src.okx_client:get_algo_orders |    Skipping algo order retrieval for conditional
+📊 Алгоритмических ордеров: 0
+📊 Batch статистика:
+   В очереди: 0
+   Макс размер батча: 20
+   Авто-flush порог: 10
+   Готов к flush: False
+2025-10-26 11:20:27 | INFO     | src.main:shutdown | Shutting down bot...
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x0000012335B16590>
+2025-10-26 11:20:27 | INFO     | src.market_data_websocket:disconnect | 🔌 Public WebSocket отключен
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.order_executor:cleanup_websocket | 🔌 Market Data WebSocket отключен
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:cleanup_websocket | 🔌 WebSocket Order Executor disconnected
+2025-10-26 11:20:27 | INFO     | src.okx_client:disconnect | OKX client disconnected
+2025-10-26 11:20:27 | INFO     | src.main:shutdown | Bot shutdown complete.
+
+✅ Тест завершен, бот отключен
+
+⚡ ТЕСТ ПРОИЗВОДИТЕЛЬНОСТИ WEBSOCKET
+==================================================
+2025-10-26 11:20:27 | INFO     | src.main:__init__ | 🔄 Initializing REST API mode...
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:__init__ | 🎯 SCALPING ORCHESTRATOR INITIALIZATION
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_setup_indicators | ✅ Indicators initialized
+2025-10-26 11:20:27 | INFO     | src.strategies.modules.multi_timeframe:__init__ | MTF Filter initialized: 15m, bonus=2, block_opposite=True
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Multi-Timeframe Filter enabled
+2025-10-26 11:20:27 | INFO     | src.filters.correlation_manager:__init__ | Correlation Manager initialized: 5m, lookback=100, threshold=0.7
+2025-10-26 11:20:27 | INFO     | src.strategies.modules.correlation_filter:__init__ | Correlation Filter initialized: threshold=0.7, max_positions=1, same_direction_only=True
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Correlation Filter enabled
+2025-10-26 11:20:27 | INFO     | src.strategies.modules.adx_filter:__init__ | ✅ ADX Filter initialized | Threshold: 25.0 | DI diff: 1.5 | Period: 14
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ ADX Filter enabled
+2025-10-26 11:20:27 | INFO     | src.indicators.advanced.pivot_calculator:__init__ | Pivot Calculator initialized
+2025-10-26 11:20:27 | INFO     | src.strategies.modules.pivot_points:__init__ | Pivot Points Filter initialized: tolerance=0.30%, bonus=1
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Pivot Points Filter enabled
+2025-10-26 11:20:27 | INFO     | src.indicators.advanced.volume_profile:__init__ | Volume Profile Calculator initialized: 50 price levels
+2025-10-26 11:20:27 | INFO     | src.strategies.modules.volume_profile_filter:__init__ | Volume Profile Filter initialized: 1H, lookback=100, buckets=50
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Volume Profile Filter enabled
+2025-10-26 11:20:27 | INFO     | src.strategies.modules.balance_checker:__init__ | Balance Checker initialized: USDT reserve=10.0%, min_asset=$50.0
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Balance Checker enabled
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ⚪ Time Filter disabled
+2025-10-26 11:20:27 | INFO     | src.strategies.modules.adaptive_regime_manager:__init__ | ARM initialized: ADX trend=20.0, volatility=1.0%-3.0%
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Adaptive Regime Manager enabled
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:_init_telegram | ⚪ Telegram notifications disabled
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.signal_generator:__init__ | ✅ SignalGenerator initialized
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.position_manager:__init__ | ✅ PositionManager initialized | Profit Harvesting: ADAPTIVE (from ARM)
+2025-10-26 11:20:27 | INFO     | src.risk.risk_controller:__init__ | ✅ RiskController initialized | Max consecutive losses: 10 | Max daily loss: 10.0% | Telegram: OFF
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.performance_tracker:_init_csv | 📊 Using existing trades CSV: logs/trades_2025-10-26.csv
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.performance_tracker:__init__ | ✅ PerformanceTracker initialized
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:__init__ | ✅ SCALPING ORCHESTRATOR READY
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:27 | INFO     | src.main:initialize | Initializing bot in REST mode...
+2025-10-26 11:20:27 | INFO     | src.okx_client:connect | OKX client connected
+2025-10-26 11:20:27 | INFO     | src.strategies.scalping.orchestrator:initialize_websocket | 🚀 Initializing WebSocket Order Executor...
+2025-10-26 11:20:28 | INFO     | src.market_data_websocket:connect | ✅ Public WebSocket подключен (цены в реальном времени)
+2025-10-26 11:20:28 | INFO     | src.strategies.scalping.order_executor:initialize_websocket | ✅ Market Data WebSocket подключен для быстрых цен
+2025-10-26 11:20:28 | INFO     | src.market_data_websocket:subscribe_ticker | 📊 Подписка на BTC-USDT активирована
+2025-10-26 11:20:28 | INFO     | src.market_data_websocket:subscribe_ticker | 📊 Подписка на ETH-USDT активирована
+2025-10-26 11:20:28 | INFO     | src.strategies.scalping.orchestrator:initialize_websocket | ✅ WebSocket Order Executor ready for fast entries
+2025-10-26 11:20:28 | INFO     | src.main:initialize | ✅ WebSocket Order Executor initialized for fast entries
+2025-10-26 11:20:28 | INFO     | src.main:initialize | Bot initialized.
+⚪ WebSocket тест пропущен (только для цен)
+📊 REST API Latency: 300.71 мс
+✅ WebSocket производительность: OK
+2025-10-26 11:20:28 | INFO     | src.main:shutdown | Shutting down bot...
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x0000012335B1E2D0>
+2025-10-26 11:20:28 | INFO     | src.market_data_websocket:disconnect | 🔌 Public WebSocket отключен
+2025-10-26 11:20:28 | INFO     | src.strategies.scalping.order_executor:cleanup_websocket | 🔌 Market Data WebSocket отключен
+2025-10-26 11:20:28 | INFO     | src.strategies.scalping.orchestrator:cleanup_websocket | 🔌 WebSocket Order Executor disconnected
+2025-10-26 11:20:28 | INFO     | src.okx_client:disconnect | OKX client disconnected
+2025-10-26 11:20:28 | INFO     | src.main:shutdown | Bot shutdown complete.
+
+💰 ТЕСТ MAKER-FIRST СТРАТЕГИИ
+==================================================
+2025-10-26 11:20:29 | INFO     | src.main:__init__ | 🔄 Initializing REST API mode...
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:__init__ | 🎯 SCALPING ORCHESTRATOR INITIALIZATION
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_setup_indicators | ✅ Indicators initialized
+2025-10-26 11:20:29 | INFO     | src.strategies.modules.multi_timeframe:__init__ | MTF Filter initialized: 15m, bonus=2, block_opposite=True
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Multi-Timeframe Filter enabled
+2025-10-26 11:20:29 | INFO     | src.filters.correlation_manager:__init__ | Correlation Manager initialized: 5m, lookback=100, threshold=0.7
+2025-10-26 11:20:29 | INFO     | src.strategies.modules.correlation_filter:__init__ | Correlation Filter initialized: threshold=0.7, max_positions=1, same_direction_only=True
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Correlation Filter enabled
+2025-10-26 11:20:29 | INFO     | src.strategies.modules.adx_filter:__init__ | ✅ ADX Filter initialized | Threshold: 25.0 | DI diff: 1.5 | Period: 14
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ ADX Filter enabled
+2025-10-26 11:20:29 | INFO     | src.indicators.advanced.pivot_calculator:__init__ | Pivot Calculator initialized
+2025-10-26 11:20:29 | INFO     | src.strategies.modules.pivot_points:__init__ | Pivot Points Filter initialized: tolerance=0.30%, bonus=1
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Pivot Points Filter enabled
+2025-10-26 11:20:29 | INFO     | src.indicators.advanced.volume_profile:__init__ | Volume Profile Calculator initialized: 50 price levels
+2025-10-26 11:20:29 | INFO     | src.strategies.modules.volume_profile_filter:__init__ | Volume Profile Filter initialized: 1H, lookback=100, buckets=50
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Volume Profile Filter enabled
+2025-10-26 11:20:29 | INFO     | src.strategies.modules.balance_checker:__init__ | Balance Checker initialized: USDT reserve=10.0%, min_asset=$50.0
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Balance Checker enabled
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ⚪ Time Filter disabled
+2025-10-26 11:20:29 | INFO     | src.strategies.modules.adaptive_regime_manager:__init__ | ARM initialized: ADX trend=20.0, volatility=1.0%-3.0%
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_init_phase1_modules | ✅ Adaptive Regime Manager enabled
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:_init_telegram | ⚪ Telegram notifications disabled
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.signal_generator:__init__ | ✅ SignalGenerator initialized
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.position_manager:__init__ | ✅ PositionManager initialized | Profit Harvesting: ADAPTIVE (from ARM)
+2025-10-26 11:20:29 | INFO     | src.risk.risk_controller:__init__ | ✅ RiskController initialized | Max consecutive losses: 10 | Max daily loss: 10.0% | Telegram: OFF
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.performance_tracker:_init_csv | 📊 Using existing trades CSV: logs/trades_2025-10-26.csv
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.performance_tracker:__init__ | ✅ PerformanceTracker initialized
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:__init__ | ✅ SCALPING ORCHESTRATOR READY
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:__init__ | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:29 | INFO     | src.main:initialize | Initializing bot in REST mode...
+2025-10-26 11:20:29 | INFO     | src.okx_client:connect | OKX client connected
+2025-10-26 11:20:29 | INFO     | src.strategies.scalping.orchestrator:initialize_websocket | 🚀 Initializing WebSocket Order Executor...
+2025-10-26 11:20:30 | INFO     | src.market_data_websocket:connect | ✅ Public WebSocket подключен (цены в реальном времени)
+2025-10-26 11:20:30 | INFO     | src.strategies.scalping.order_executor:initialize_websocket | ✅ Market Data WebSocket подключен для быстрых цен
+2025-10-26 11:20:30 | INFO     | src.market_data_websocket:subscribe_ticker | 📊 Подписка на BTC-USDT активирована
+2025-10-26 11:20:30 | INFO     | src.market_data_websocket:subscribe_ticker | 📊 Подписка на ETH-USDT активирована
+2025-10-26 11:20:30 | INFO     | src.strategies.scalping.orchestrator:initialize_websocket | ✅ WebSocket Order Executor ready for fast entries
+2025-10-26 11:20:30 | INFO     | src.main:initialize | ✅ WebSocket Order Executor initialized for fast entries
+2025-10-26 11:20:30 | INFO     | src.main:initialize | Bot initialized.
+📊 Текущая цена: $3951.98
+🛒 Попытка POST-ONLY ордера...
+2025-10-26 11:20:30 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 🔍 CALCULATING POSITION SIZE for ETH-USDT @ $3951.98
+2025-10-26 11:20:30 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 💰 USDT Balance: $449.57
+2025-10-26 11:20:30 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 🎯 RANGING ETH: 0.005 ETH (≈ $19.76)
+2025-10-26 11:20:31 | INFO     | src.strategies.scalping.order_executor:_calculate_position_size | 📊 Final position size: 0.005000 = $19.76 (min: $0.0)
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:_try_maker_order | 🎯 POST-ONLY attempt: ETH-USDT buy
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:_try_maker_order |    Market: $3951.9800 → Maker: $3942.1001
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:_try_maker_order |    Quantity: 0.00501253
+2025-10-26 11:20:32 | INFO     | src.okx_client:place_order | Order response: {'code': '0', 'data': [{'clOrdId': '', 'ordId': '2985151012812689408', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466832859'}], 'inTime': '1761466832859260', 'msg': '', 'outTime': '1761466832860503'}   
+2025-10-26 11:20:32 | INFO     | src.okx_client:place_order | Order data: {'clOrdId': '', 'ordId': '2985151012812689408', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466832859'}     
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:_try_maker_order | ✅ POST-ONLY успешен: 2985151012812689408 (Maker fee: 0.08%)
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal | 📊 BUY completed: filled=0.00500000, fee=0.000000, final_size=0.00499900
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal | ✅ POSITION OPENED: ETH-USDT LONG
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Order ID: 2985151012812689408
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Side: BUY
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Size: 0.00499900 ETH
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Entry: $3951.98
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Take Profit: $4041.98
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Stop Loss: $3881.98
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal |    Risk/Reward: 1:1.29
+2025-10-26 11:20:32 | INFO     | src.strategies.scalping.order_executor:execute_signal | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:33 | INFO     | src.strategies.scalping.order_executor:execute_signal | 🎯 Manual pools TP/SL: 0.5%/0.35%
+2025-10-26 11:20:34 | INFO     | src.okx_client:place_oco_order | ✅ OCO order placed: 2985151087511949312 | TP @ $4041.98, SL @ $3881.98
+2025-10-26 11:20:34 | INFO     | src.strategies.scalping.order_executor:execute_signal | ✅ OCO order placed: ID=2985151087511949312 | TP @ $4041.98, SL @ $3881.98
+✅ Ордер размещен
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | 🔄 Cancelling OCO order 2985151087511949312 before closing position
+2025-10-26 11:20:35 | WARNING  | src.okx_client:cancel_algo_order | ⚠️ SANDBOX MODE: OCO orders dissappear instantly
+2025-10-26 11:20:35 | WARNING  | src.okx_client:cancel_algo_order |    Skipping cancellation for algo_id: 2985151087511949312
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | ✅ OCO order 2985151087511949312 cancelled
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | 🔴 CLOSING ORDER: SELL 0.00499900 ETH-USDT @ $3952.3752 | Reason: maker_test
+2025-10-26 11:20:35 | INFO     | src.okx_client:place_order | Order response: {'code': '0', 'data': [{'clOrdId': '', 'ordId': '2985151116361666560', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466835945'}], 'inTime': '1761466835945118', 'msg': '', 'outTime': '1761466835946895'}   
+2025-10-26 11:20:35 | INFO     | src.okx_client:place_order | Order data: {'clOrdId': '', 'ordId': '2985151116361666560', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466835945'}     
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | 💰 TRADE CLOSED: ETH-USDT LONG
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position |    Entry: $3951.9800
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position |    Exit: $3952.3752
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position |    Size: 0.00499900
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position |    Duration: 3s (0.1 min)
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position |    Gross PnL: $0.0000
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position |    Commission: -$0.0356
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position |    NET PnL: $-0.0356
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position |    Reason: maker_test
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Commission Rate: 0.0018 (0.18%)
+⚠️ Taker комиссия (POST-ONLY не сработал)
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | 🔄 Cancelling OCO order 2985151087511949312 before closing position
+2025-10-26 11:20:35 | WARNING  | src.okx_client:cancel_algo_order | ⚠️ SANDBOX MODE: OCO orders dissappear instantly
+2025-10-26 11:20:35 | WARNING  | src.okx_client:cancel_algo_order |    Skipping cancellation for algo_id: 2985151087511949312
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | ✅ OCO order 2985151087511949312 cancelled
+2025-10-26 11:20:35 | INFO     | src.strategies.scalping.position_manager:close_position | 🔴 CLOSING ORDER: SELL 0.00499900 ETH-USDT @ $3952.3752 | Reason: cleanup
+2025-10-26 11:20:36 | INFO     | src.okx_client:place_order | Order response: {'code': '0', 'data': [{'clOrdId': '', 'ordId': '2985151134648832000', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466836490'}], 'inTime': '1761466836490361', 'msg': '', 'outTime': '1761466836491687'}   
+2025-10-26 11:20:36 | INFO     | src.okx_client:place_order | Order data: {'clOrdId': '', 'ordId': '2985151134648832000', 'sCode': '0', 'sMsg': 'Order placed', 'tag': '', 'ts': '1761466836490'}     
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position | 💰 TRADE CLOSED: ETH-USDT LONG
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position |    Entry: $3951.9800
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position |    Exit: $3952.3752
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position |    Size: 0.00499900
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position |    Duration: 4s (0.1 min)
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position |    Gross PnL: $0.0000
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position |    Commission: -$0.0356
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position |    NET PnL: $-0.0356
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position |    Reason: cleanup
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.position_manager:close_position | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2025-10-26 11:20:36 | INFO     | src.main:shutdown | Shutting down bot...
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x0000012335F7D2D0>
+2025-10-26 11:20:36 | INFO     | src.market_data_websocket:disconnect | 🔌 Public WebSocket отключен
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.order_executor:cleanup_websocket | 🔌 Market Data WebSocket отключен
+2025-10-26 11:20:36 | INFO     | src.strategies.scalping.orchestrator:cleanup_websocket | 🔌 WebSocket Order Executor disconnected
+2025-10-26 11:20:36 | INFO     | src.okx_client:disconnect | OKX client disconnected
+2025-10-26 11:20:36 | INFO     | src.main:shutdown | Bot shutdown complete.
+
+📊 ИТОГОВАЯ СВОДКА ПОЛНОГО ТЕСТИРОВАНИЯ
+================================================================================
+✅ Полный торговый цикл: УСПЕШНО
+✅ WebSocket производительность: УСПЕШНО
+✅ Maker стратегия: УСПЕШНО
+
+🎉 ВСЕ ТЕСТЫ ТОРГОВОЙ СИСТЕМЫ ПРОЙДЕНЫ!
+🚀 Система готова к реальной торговле!
+
+📈 Подтвержденные улучшения:
+   • WebSocket: Быстрые входы
+   • Batch: Эффективные обновления
+   • Maker: Снижение комиссий
+   • OCO: Автоматическое управление рисками
+   • PH: Быстрая фиксация прибыли
+

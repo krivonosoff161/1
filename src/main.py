@@ -136,6 +136,12 @@ class BotRunner:
                 await self.strategy.cleanup_websocket()
 
         await self.client.disconnect()
+
+        # 🔧 КРИТИЧНО: Закрываем HTTP сессию
+        if hasattr(self.client, "session") and self.client.session:
+            await self.client.session.close()
+            logger.info("✅ HTTP session closed")
+
         logger.info("Bot shutdown complete.")
 
 
