@@ -277,7 +277,9 @@ class LiquidationGuard:
                 symbol=symbol, side=close_side, size=abs(size), order_type="market"
             )
 
-            if result.get("code") == "0":
+            # Проверяем результат (может быть dict или awaitable в тестах)
+            code = result.get("code") if isinstance(result, dict) else None
+            if code == "0":
                 logger.critical(
                     f"✅ Позиция {symbol} {side} успешно закрыта автоматически"
                 )

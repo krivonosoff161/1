@@ -341,37 +341,99 @@ class FuturesOrderExecutor:
     async def _calculate_tp_sl_prices(
         self, signal: Dict[str, Any], size: float
     ) -> Tuple[float, float]:
-        """Расчет цен Take Profit и Stop Loss"""
+        """
+        🎯 РАСЧЕТ ПЛАВАЮЩИХ TP/SL
+
+        Адаптивные TP/SL на основе:
+        - Режима рынка (trending/ranging/choppy)
+        - Волатильности (ATR)
+        - Силы сигнала
+        """
         try:
             symbol = signal.get("symbol")
             side = signal.get("side")
-            entry_price = signal.get("price", 50000.0)  # Заглушка
+            entry_price = signal.get("price", 50000.0)
 
-            # Получение параметров TP/SL из конфигурации
-            tp_percent = self.scalping_config.tp_percent
-            sl_percent = self.scalping_config.sl_percent
+            # Получаем ATR для текущей волатильности
+            atr = await self._get_current_atr(symbol, entry_price)
+
+            # Получаем режим рынка (если доступен)
+            regime = signal.get("regime", "ranging")
+            regime_params = self._get_regime_params(regime)
+
+            # 🎯 АДАПТИВНЫЕ МУЛЬТИПЛИКАТОРЫ
+            if regime_params:
+                tp_multiplier = regime_params.get("tp_atr_multiplier", 0.6)
+                sl_multiplier = regime_params.get("sl_atr_multiplier", 0.4)
+            else:
+                # Fallback на конфигурацию
+                tp_multiplier = float(self.scalping_config.get("tp_percent", 0.3))
+                sl_multiplier = float(self.scalping_config.get("sl_percent", 0.2))
 
             # Адаптация под силу сигнала
             strength = signal.get("strength", 0.5)
-            tp_percent *= strength
-            sl_percent *= strength
+            tp_multiplier *= 0.5 + strength  # 0.5x-1.5x range
+            sl_multiplier *= 0.5 + strength
+
+            # 🎯 РАСЧЕТ ОТ ATR (ПЛАВАЮЩИЙ!)
+            tp_distance = atr * tp_multiplier
+            sl_distance = atr * sl_multiplier
 
             if side.lower() == "buy":
-                # Для лонга: TP выше входа, SL ниже входа
-                tp_price = entry_price * (1 + tp_percent / 100)
-                sl_price = entry_price * (1 - sl_percent / 100)
+                tp_price = entry_price + tp_distance
+                sl_price = entry_price - sl_distance
             else:  # sell
-                # Для шорта: TP ниже входа, SL выше входа
-                tp_price = entry_price * (1 - tp_percent / 100)
-                sl_price = entry_price * (1 + sl_percent / 100)
+                tp_price = entry_price - tp_distance
+                sl_price = entry_price + sl_distance
+
+            logger.debug(
+                f"🎯 Aдаптивные TP/SL для {symbol}: "
+                f"regime={regime}, ATR={atr:.2f}, "
+                f"TP={tp_distance/entry_price*100:.2f}%, "
+                f"SL={sl_distance/entry_price*100:.2f}%"
+            )
 
             return tp_price, sl_price
 
         except Exception as e:
             logger.error(f"Ошибка расчета TP/SL цен: {e}")
-            # Возвращаем безопасные значения
+            # Fallback на фиксированные %
             entry_price = signal.get("price", 50000.0)
-            return entry_price * 1.01, entry_price * 0.99
+            tp_pct = self.scalping_config.tp_percent
+            sl_pct = self.scalping_config.sl_percent
+
+            side = signal.get("side", "buy")
+            if side.lower() == "buy":
+                return entry_price * (1 + tp_pct / 100), entry_price * (
+                    1 - sl_pct / 100
+                )
+            else:
+                return entry_price * (1 - tp_pct / 100), entry_price * (
+                    1 + sl_pct / 100
+                )
+
+    async def _get_current_atr(self, symbol: str, price: float) -> float:
+        """Получает текущий ATR для инструмента"""
+        try:
+            # Здесь можно получить реальный ATR из индикаторов
+            # Пока заглушка: 1% волатильность
+            return price * 0.01
+        except Exception as e:
+            logger.warning(f"Ошибка получения ATR: {e}")
+            return price * 0.01  # 1% по умолчанию
+
+    def _get_regime_params(self, regime: str) -> dict:
+        """Получает параметры режима из ARM"""
+        try:
+            # Если есть доступ к оркестратору
+            if hasattr(self, "orchestrator"):
+                return self.orchestrator._get_regime_params(regime)
+            # Иначе из конфига
+            adaptive_regime = self.config.get("adaptive_regime", {})
+            return adaptive_regime.get(regime, {})
+        except Exception as e:
+            logger.warning(f"Ошибка получения параметров режима: {e}")
+            return {}
 
     async def cancel_order(self, order_id: str, symbol: str) -> Dict[str, Any]:
         """Отмена ордера"""

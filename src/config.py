@@ -54,14 +54,30 @@ class ScalpingExitConfig(BaseModel):
 
 
 class BalanceProfile(BaseModel):
-    threshold_usd: int = Field(..., description="Минимальный баланс для профиля")
-    base_position_usd: int = Field(..., description="Базовый размер позиции")
-    max_open_positions: int = Field(..., description="Максимум открытых позиций")
-    max_position_percent: int = Field(..., description="Максимальный % от баланса")
-    tp_atr_multiplier_boost: float = Field(..., description="Буст для TP")
-    sl_atr_multiplier_boost: float = Field(..., description="Буст для SL")
-    ph_threshold_multiplier: float = Field(..., description="Множитель PH")
-    min_score_boost: int = Field(..., description="Буст для минимального скора")
+    # Основные поля (обязательные для всех режимов)
+    threshold: float = Field(default=1000.0, description="Порог баланса для профиля")
+    threshold_usd: float = Field(
+        default=None, description="Альтернативное название для Spot"
+    )
+    base_position_usd: float = Field(default=50.0, description="Базовый размер позиции")
+    max_open_positions: int = Field(default=2, description="Максимум открытых позиций")
+    max_position_percent: float = Field(
+        default=5.0, description="Максимальный % от баланса"
+    )
+
+    # Опциональные поля для разных режимов
+    min_position_usd: float = Field(
+        default=10.0, description="Минимальный размер позиции"
+    )
+
+    # Spot-специфичные поля (опциональные для Futures)
+    tp_atr_multiplier_boost: float = Field(default=1.0, description="Буст для TP")
+    sl_atr_multiplier_boost: float = Field(default=1.0, description="Буст для SL")
+    ph_threshold_multiplier: float = Field(default=1.0, description="Множитель PH")
+    min_score_boost: int = Field(default=0, description="Буст для минимального скора")
+
+    class Config:
+        extra = "allow"  # Разрешаем дополнительные поля из YAML
 
 
 class ScalpingConfig(BaseModel):
@@ -73,6 +89,20 @@ class ScalpingConfig(BaseModel):
     exit: ScalpingExitConfig = Field(default_factory=ScalpingExitConfig)
     max_trades_per_hour: int = Field(default=10, ge=1, le=50)
     cooldown_after_loss_minutes: int = Field(default=5, ge=1, le=30)
+    min_signal_strength: float = Field(default=0.3, ge=0.0, le=1.0)
+    check_interval: float = Field(default=5.0, ge=0.5, le=60.0)
+    max_concurrent_signals: int = Field(default=5, ge=1, le=20)
+
+    # Futures-specific parameters
+    tp_percent: Optional[float] = Field(
+        default=None, ge=0.1, le=10.0, description="Take Profit %"
+    )
+    sl_percent: Optional[float] = Field(
+        default=None, ge=0.1, le=10.0, description="Stop Loss %"
+    )
+
+    class Config:
+        extra = "allow"  # Разрешаем дополнительные поля из YAML
 
     # Balance Profiles - адаптивные параметры по размеру баланса
     balance_profiles: Dict[str, BalanceProfile] = Field(default_factory=dict)
@@ -105,6 +135,7 @@ class TradingConfig(BaseModel):
 
 class FuturesModulesConfig(BaseModel):
     """Конфигурация Futures-специфичных модулей"""
+
     slippage_guard: Optional[Dict] = Field(default_factory=dict)
     order_flow: Optional[Dict] = Field(default_factory=dict)
     micro_pivot: Optional[Dict] = Field(default_factory=dict)
