@@ -760,7 +760,7 @@ class OKXClient:
             "ordType": order_type,
             "sz": str(quantity),
             "autoBorrow": "false",  # 🔥 КРИТИЧНО: Запрещаем займы!
-            "reduceOnly": "true",  # 🔥 КРИТИЧНО: Только закрытие позиций!
+            # "reduceOnly": "true",  # ❌ УБРАНО: Не поддерживается в SPOT режиме
             # Примечание: tgtCcy НЕ поддерживается для algo orders!
             "tpTriggerPx": formatted_trigger,  # Для TP
             "tpOrdPx": "-1",  # Market при триггере
@@ -917,7 +917,7 @@ class OKXClient:
             "ordType": "oco",
             "sz": str(quantity),
             "autoBorrow": "false",  # 🔥 КРИТИЧНО: Запрещаем займы!
-            "reduceOnly": "true",  # 🔥 КРИТИЧНО: Только закрытие позиций!
+            # "reduceOnly": "true",  # ❌ УБРАНО: Не поддерживается в SPOT режиме
             "tpTriggerPx": formatted_tp,
             "tpOrdPx": "-1",  # Market при триггере TP
             "slTriggerPx": formatted_sl,
