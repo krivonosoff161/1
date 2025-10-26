@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import aiohttp
+from datetime import datetime
 from loguru import logger
 import math
 
@@ -64,11 +65,30 @@ class OKXFuturesClient:
     ) -> Dict[str, Any]:
         """Unified request with OKX signing (same as your spot client)"""
         url = self.base_url + endpoint
-        timestamp = str(time.time())
+        # OKX requires timestamp in ISO 8601 format with milliseconds
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
         # Build sign string
-        body = json.dumps(data) if data else ""
-        sign_str = timestamp + method.upper() + endpoint + body
+        body = json.dumps(data, separators=(",", ":")) if data else ""
+        
+        # Для GET запросов с параметрами нужно включить их в подпись
+        if method.upper() == "GET" and params:
+            from urllib.parse import urlencode
+            query_string = "?" + urlencode(params, doseq=True)
+            request_path = endpoint + query_string
+        else:
+            request_path = endpoint
+        
+        sign_str = timestamp + method.upper() + request_path + body
+        
+        # Логируем компоненты подписи для отладки
+        logger.debug(f"Signature components:")
+        logger.debug(f"  Timestamp: {timestamp}")
+        logger.debug(f"  Method: {method.upper()}")
+        logger.debug(f"  Endpoint: {endpoint}")
+        logger.debug(f"  Body: '{body}'")
+        logger.debug(f"  Full message: '{sign_str}'")
+        
         signature = base64.b64encode(
             hmac.new(
                 self.secret_key.encode(), sign_str.encode(), hashlib.sha256
