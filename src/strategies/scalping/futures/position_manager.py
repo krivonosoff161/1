@@ -306,15 +306,51 @@ class FuturesPositionManager:
             logger.error(f"Ошибка обновления статистики закрытия: {e}")
 
     async def close_position_manually(self, symbol: str) -> Dict[str, Any]:
-        """Ручное закрытие позиции"""
+        """
+        ✅ РУЧНОЕ ЗАКРЫТИЕ ПОЗИЦИИ (для TrailingSL)
+
+        Закрывает позицию через API без конфликтов с OCO
+        """
         try:
-            if symbol not in self.active_positions:
-                return {"success": False, "error": f"Позиция {symbol} не найдена"}
+            # Получаем информацию о позиции с биржи
+            positions = await self.client.get_positions(symbol)
 
-            position = self.active_positions[symbol]
-            await self._close_position_by_reason(position, "manual")
+            # Проверяем, что positions это dict с ключом "data"
+            if not isinstance(positions, dict) or not positions.get("data"):
+                logger.warning(f"Позиция {symbol} не найдена на бирже")
+                return {"success": False, "error": "Позиция не найдена"}
 
-            return {"success": True, "symbol": symbol}
+            for pos_data in positions["data"]:
+                inst_id = pos_data.get("instId", "").replace("-SWAP", "")
+                if inst_id != symbol:
+                    continue
+
+                size = float(pos_data.get("pos", "0"))
+                if size == 0:
+                    logger.warning(f"Размер позиции {symbol} = 0")
+                    continue
+
+                side = pos_data.get("posSide", "long")
+
+                logger.info(f"🔄 Закрытие позиции {symbol} {side} размер={size}")
+
+                # Определение стороны закрытия
+                close_side = "sell" if side.lower() == "long" else "buy"
+
+                # ✅ Размещаем рыночный ордер на закрытие
+                result = await self.client.place_futures_order(
+                    symbol=symbol, side=close_side, size=abs(size), order_type="market"
+                )
+
+                if result.get("code") == "0":
+                    logger.info(f"✅ Позиция {symbol} закрыта через API")
+                    return {"success": True, "symbol": symbol}
+                else:
+                    error_msg = result.get("msg", "Неизвестная ошибка")
+                    logger.error(f"❌ Ошибка закрытия {symbol}: {error_msg}")
+                    return {"success": False, "error": error_msg}
+
+            return {"success": False, "error": "Позиция не найдена"}
 
         except Exception as e:
             logger.error(f"Ошибка ручного закрытия позиции: {e}")

@@ -196,8 +196,8 @@ class TestFuturesIntegration:
         # Создаем позицию для закрытия
         position = {"instId": "BTC-USDT-SWAP", "pos": "0.06", "posSide": "long"}
 
-        # Вызываем экстренное закрытие
-        await self.liquidation_guard._emergency_close_position(
+        # Вызываем автозакрытие
+        await self.liquidation_guard._auto_close_position(
             "BTC-USDT", "long", mock_client
         )
 

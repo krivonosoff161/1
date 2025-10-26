@@ -4,29 +4,32 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 import aiohttp
-from datetime import datetime
 from loguru import logger
-import math
 
 
 def round_to_step(value: float, step: float) -> float:
     """
     Округление до указанного шага (для OKX size_step).
-    
+
     Args:
         value: Значение для округления
         step: Шаг округления
-        
+
     Returns:
         Округленное значение
     """
     if step == 0:
         return value
+    # Округляем к ближайшему кратному step
+    if value % step == 0:
+        return value
+    # Используем round вместо ceil для более корректного округления
     return round(value / step) * step
 
 
@@ -54,6 +57,7 @@ class OKXFuturesClient:
         self.sandbox = sandbox
         self.leverage = leverage
         self.session = None
+        self._lot_sizes_cache: dict = {}  # Кэш для lot sizes
 
     # ---------- HTTP internals ----------
     async def _make_request(
@@ -70,17 +74,18 @@ class OKXFuturesClient:
 
         # Build sign string
         body = json.dumps(data, separators=(",", ":")) if data else ""
-        
+
         # Для GET запросов с параметрами нужно включить их в подпись
         if method.upper() == "GET" and params:
             from urllib.parse import urlencode
+
             query_string = "?" + urlencode(params, doseq=True)
             request_path = endpoint + query_string
         else:
             request_path = endpoint
-        
+
         sign_str = timestamp + method.upper() + request_path + body
-        
+
         # Логируем компоненты подписи для отладки
         logger.debug(f"Signature components:")
         logger.debug(f"  Timestamp: {timestamp}")
@@ -88,7 +93,7 @@ class OKXFuturesClient:
         logger.debug(f"  Endpoint: {endpoint}")
         logger.debug(f"  Body: '{body}'")
         logger.debug(f"  Full message: '{sign_str}'")
-        
+
         signature = base64.b64encode(
             hmac.new(
                 self.secret_key.encode(), sign_str.encode(), hashlib.sha256
@@ -117,11 +122,63 @@ class OKXFuturesClient:
             return resp_data
 
     # ---------- Account & Margin ----------
+    async def get_instrument_info(self, inst_type: str = "SWAP") -> dict:
+        """Получает информацию об инструментах (lot size, min size и т.д.)"""
+        data = await self._make_request(
+            "GET", "/api/v5/public/instruments", params={"instType": inst_type}
+        )
+        return data
+
+    async def get_lot_size(self, symbol: str) -> float:
+        """Получает минимальный lot size для символа"""
+        # Проверяем кэш
+        if symbol in self._lot_sizes_cache:
+            return self._lot_sizes_cache[symbol]
+
+        try:
+            inst_id = f"{symbol}-SWAP"
+            instruments = await self.get_instrument_info()
+
+            for inst in instruments.get("data", []):
+                if inst.get("instId") == inst_id:
+                    lot_sz = inst.get("lotSz")
+                    if lot_sz:
+                        lot_size = float(lot_sz)
+                        self._lot_sizes_cache[symbol] = lot_size
+                        logger.info(
+                            f"📏 Получен lot size из API для {symbol}: {lot_size}"
+                        )
+                        return lot_size
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось получить lot size из API для {symbol}: {e}")
+
+        # Fallback на значения по умолчанию
+        if "BTC" in symbol:
+            default = 0.001
+        elif "ETH" in symbol:
+            default = 0.01
+        else:
+            default = 0.001
+
+        self._lot_sizes_cache[symbol] = default
+        logger.warning(f"⚠️ Используем fallback lot size для {symbol}: {default}")
+        return default
+
     async def get_balance(self) -> float:
         """Возвращает USDT equity (единый для spot и фьючей)"""
         data = await self._make_request("GET", "/api/v5/account/balance")
-        for detail in data["data"][0]["details"]:
-            if detail["ccy"] == "USDT":
+
+        # Проверка наличия data в ответе - если нет, это ошибка
+        if "data" not in data:
+            logger.error("Нет данных о балансе в ответе API")
+            raise RuntimeError(f"Invalid response: {data}")
+
+        if not data["data"]:
+            logger.error("Пустой ответ от API")
+            raise RuntimeError(f"Empty response: {data}")
+
+        for detail in data["data"][0].get("details", []):
+            if detail.get("ccy") == "USDT":
                 return float(detail["eq"])
         return 0.0
 
@@ -151,6 +208,7 @@ class OKXFuturesClient:
                 "instId": f"{symbol}-SWAP",
                 "lever": str(leverage),
                 "mgnMode": "isolated",
+                "posSide": "net",  # Используем net позицию
             },
         )
 
@@ -164,31 +222,44 @@ class OKXFuturesClient:
         order_type: str = "market",
     ) -> dict:
         """Рыночный или лимитный ордер"""
-        # Определяем size_step для инструмента
-        if "BTC" in symbol:
-            size_step = 0.001  # 0.001 BTC для BTC
-        elif "ETH" in symbol:
-            size_step = 0.01  # 0.01 ETH для ETH
-        else:
-            size_step = 0.001  # По умолчанию
-        
+        # Получаем реальный lot size из API
+        size_step = await self.get_lot_size(symbol)
+
         # Округляем размер до OKX size_step
         rounded_size = round_to_step(size, size_step)
-        
+
+        # Форматируем до нужного количества знаков
+        if size_step == 0.0001:
+            formatted_size = f"{rounded_size:.4f}"  # 4 знака после запятой
+        elif size_step == 0.001:
+            formatted_size = f"{rounded_size:.3f}"  # 3 знака после запятой
+        elif size_step == 0.01:
+            formatted_size = f"{rounded_size:.2f}"  # 2 знака после запятой
+        else:
+            formatted_size = f"{rounded_size:.6f}"
+
         if rounded_size != size:
             logger.info(
-                f"Размер округлен с {size:.6f} до {rounded_size:.6f} "
+                f"Размер округлен с {size:.6f} до {formatted_size} "
                 f"(step={size_step})"
             )
-        
+
         payload = {
             "instId": f"{symbol}-SWAP",
             "tdMode": "isolated",
             "side": side,
-            "sz": str(rounded_size),
+            "sz": formatted_size,
             "ordType": order_type,
-            "lever": str(self.leverage),
         }
+
+        # Добавляем posSide только для SWAP
+        if "SWAP" in f"{symbol}-SWAP":
+            # Определяем posSide на основе side
+            if side.lower() == "buy":
+                payload["posSide"] = "long"
+            elif side.lower() == "sell":
+                payload["posSide"] = "short"
+
         if price:
             payload["px"] = str(price)
 
@@ -198,23 +269,23 @@ class OKXFuturesClient:
         self, symbol: str, side: str, size: float, tp_price: float, sl_price: float
     ) -> dict:
         """OCO для фьючей (min distance 0,01 % = 10 bips)"""
-        # Определяем size_step для инструмента
+        # Определяем size_step для инструмента (ПРАВИЛЬНЫЕ минимальные lot sizes для OKX SWAP!)
         if "BTC" in symbol:
-            size_step = 0.001  # 0.001 BTC для BTC
+            size_step = 0.001  # ✅ 0.001 BTC минимум для BTC-USDT-SWAP (можно отправить 0.0001, но принимается только 0.001+)
         elif "ETH" in symbol:
-            size_step = 0.01  # 0.01 ETH для ETH
+            size_step = 0.01  # ✅ 0.01 ETH минимум для ETH-USDT-SWAP (проверим)
         else:
             size_step = 0.001  # По умолчанию
-        
+
         # Округляем размер до OKX size_step
         rounded_size = round_to_step(size, size_step)
-        
+
         if rounded_size != size:
             logger.info(
                 f"Размер OCO округлен с {size:.6f} до {rounded_size:.6f} "
                 f"(step={size_step})"
             )
-        
+
         payload = {
             "instId": f"{symbol}-SWAP",
             "tdMode": "isolated",
@@ -225,7 +296,6 @@ class OKXFuturesClient:
             "tpOrdPx": "-1",  # рыночный TP
             "slTriggerPx": str(sl_price),
             "slOrdPx": "-1",  # рыночный SL
-            "lever": str(self.leverage),
         }
         return await self._make_request(
             "POST", "/api/v5/trade/order-algo", data=payload
@@ -246,6 +316,16 @@ class OKXFuturesClient:
             "GET", "/api/v5/account/positions", params=params
         )
         return data["data"]
+
+    async def get_active_orders(self, symbol: Optional[str] = None) -> list:
+        """Получение активных ордеров"""
+        params = {"instType": "SWAP"}
+        if symbol:
+            params["instId"] = f"{symbol}-SWAP"
+        data = await self._make_request(
+            "GET", "/api/v5/trade/orders-pending", params=params
+        )
+        return data.get("data", [])
 
     # ---------- Batch ----------
     async def batch_amend_orders(self, amend_list: list) -> dict:

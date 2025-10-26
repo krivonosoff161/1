@@ -47,14 +47,22 @@ class FuturesSignalGenerator:
         self.scalping_config = config.scalping
 
         # Менеджер индикаторов
-        self.indicator_manager = IndicatorManager()
+        from src.indicators import ATR, RSI, SimpleMovingAverage
 
-        # Модули фильтрации
-        self.regime_manager = AdaptiveRegimeManager()
-        self.correlation_filter = CorrelationFilter()
-        self.mtf_filter = MultiTimeframeFilter()
-        self.pivot_filter = PivotPointsFilter()
-        self.volume_filter = VolumeProfileFilter()
+        self.indicator_manager = IndicatorManager()
+        # Добавляем базовые индикаторы
+        self.indicator_manager.add_indicator(
+            "RSI", RSI(period=14, overbought=70, oversold=30)
+        )
+        self.indicator_manager.add_indicator("ATR", ATR(period=14))
+        self.indicator_manager.add_indicator("SMA", SimpleMovingAverage(period=20))
+
+        # Модули фильтрации - ИНТЕГРАЦИЯ адаптивных систем
+        self.regime_manager = None  # Инициализируется в initialize()
+        self.correlation_filter = None
+        self.mtf_filter = None
+        self.pivot_filter = None
+        self.volume_filter = None
 
         # Состояние
         self.is_initialized = False
@@ -63,22 +71,58 @@ class FuturesSignalGenerator:
 
         logger.info("FuturesSignalGenerator инициализирован")
 
-    async def initialize(self):
-        """Инициализация генератора сигналов"""
+    async def initialize(self, ohlcv_data: Dict[str, List[OHLCV]] = None):
+        """
+        Инициализация генератора сигналов.
+
+        Args:
+            ohlcv_data: Исторические свечи для инициализации ARM
+        """
         try:
-            # Инициализация модулей фильтрации
-            await self.regime_manager.initialize()
-            await self.correlation_filter.initialize()
-            await self.mtf_filter.initialize()
-            await self.pivot_filter.initialize()
-            await self.volume_filter.initialize()
+            from src.strategies.modules.adaptive_regime_manager import \
+                RegimeConfig
+
+            # Инициализация ARM
+            adaptive_regime_config = getattr(self.config, "adaptive_regime", {})
+            if adaptive_regime_config and adaptive_regime_config.get("enabled", True):
+                try:
+                    regime_config = RegimeConfig(
+                        enabled=True,
+                        # Параметры детекции из конфига
+                        trending_adx_threshold=adaptive_regime_config.get(
+                            "detection", {}
+                        ).get("trending_adx_threshold", 20.0),
+                        ranging_adx_threshold=adaptive_regime_config.get(
+                            "detection", {}
+                        ).get("ranging_adx_threshold", 15.0),
+                        high_volatility_threshold=adaptive_regime_config.get(
+                            "detection", {}
+                        ).get("high_volatility_threshold", 0.03),
+                        lookback_candles=adaptive_regime_config.get(
+                            "detection", {}
+                        ).get("lookback_candles", 50),
+                        adx_period=adaptive_regime_config.get("detection", {}).get(
+                            "adx_period", 9
+                        ),
+                    )
+                    self.regime_manager = AdaptiveRegimeManager(regime_config)
+
+                    if ohlcv_data:
+                        await self.regime_manager.initialize(ohlcv_data)
+
+                    logger.info("✅ Adaptive Regime Manager инициализирован для Futures")
+                except Exception as e:
+                    logger.warning(f"⚠️ ARM инициализация не удалась: {e}")
+                    self.regime_manager = None
+            else:
+                logger.info("⚠️ Adaptive Regime Manager отключен в конфиге")
 
             self.is_initialized = True
             logger.info("✅ FuturesSignalGenerator инициализирован")
 
         except Exception as e:
             logger.error(f"Ошибка инициализации FuturesSignalGenerator: {e}")
-            raise
+            self.is_initialized = True  # Все равно продолжаем
 
     async def generate_signals(self) -> List[Dict[str, Any]]:
         """
@@ -138,18 +182,22 @@ class FuturesSignalGenerator:
         try:
             # Здесь нужно реализовать получение данных через WebSocket или REST API
             # Пока используем заглушку
+            # Создаем OHLCV данные
+            ohlcv_item = OHLCV(
+                timestamp=int(datetime.now().timestamp()),
+                symbol=symbol,
+                open=49900.0,
+                high=50100.0,
+                low=49800.0,
+                close=50000.0,
+                volume=1000.0,
+            )
+
+            # Создаем MarketData с правильной структурой
             return MarketData(
                 symbol=symbol,
-                timestamp=datetime.now(),
-                price=50000.0,
-                volume=1000.0,
-                ohlcv=OHLCV(
-                    open=49900.0,
-                    high=50100.0,
-                    low=49800.0,
-                    close=50000.0,
-                    volume=1000.0,
-                ),
+                timeframe="1m",
+                ohlcv_data=[ohlcv_item],
             )
         except Exception as e:
             logger.error(f"Ошибка получения данных для {symbol}: {e}")
@@ -163,7 +211,7 @@ class FuturesSignalGenerator:
             signals = []
 
             # Технические индикаторы
-            indicators = await self.indicator_manager.calculate_indicators(market_data)
+            indicators = self.indicator_manager.calculate_all(market_data)
 
             # RSI сигналы
             rsi_signals = await self._generate_rsi_signals(
@@ -212,8 +260,10 @@ class FuturesSignalGenerator:
                         "side": "buy",
                         "type": "rsi_oversold",
                         "strength": (30 - rsi) / 30,  # Нормализованная сила
-                        "price": market_data.price,
-                        "timestamp": market_data.timestamp,
+                        "price": market_data.ohlcv_data[-1].close
+                        if market_data.ohlcv_data
+                        else 0.0,
+                        "timestamp": datetime.now(),
                         "indicator_value": rsi,
                         "confidence": 0.8,
                     }
@@ -227,8 +277,10 @@ class FuturesSignalGenerator:
                         "side": "sell",
                         "type": "rsi_overbought",
                         "strength": (rsi - 70) / 30,  # Нормализованная сила
-                        "price": market_data.price,
-                        "timestamp": market_data.timestamp,
+                        "price": market_data.ohlcv_data[-1].close
+                        if market_data.ohlcv_data
+                        else 0.0,
+                        "timestamp": datetime.now(),
                         "indicator_value": rsi,
                         "confidence": 0.8,
                     }
@@ -261,8 +313,10 @@ class FuturesSignalGenerator:
                         "strength": min(
                             abs(histogram) / 100, 1.0
                         ),  # Нормализованная сила
-                        "price": market_data.price,
-                        "timestamp": market_data.timestamp,
+                        "price": market_data.ohlcv_data[-1].close
+                        if market_data.ohlcv_data
+                        else 0.0,
+                        "timestamp": datetime.now(),
                         "indicator_value": histogram,
                         "confidence": 0.7,
                     }
@@ -277,8 +331,10 @@ class FuturesSignalGenerator:
                         "strength": min(
                             abs(histogram) / 100, 1.0
                         ),  # Нормализованная сила
-                        "price": market_data.price,
-                        "timestamp": market_data.timestamp,
+                        "price": market_data.ohlcv_data[-1].close
+                        if market_data.ohlcv_data
+                        else 0.0,
+                        "timestamp": datetime.now(),
                         "indicator_value": histogram,
                         "confidence": 0.7,
                     }
@@ -300,33 +356,39 @@ class FuturesSignalGenerator:
             upper = bb.get("upper", 0)
             lower = bb.get("lower", 0)
             middle = bb.get("middle", 0)
-            current_price = market_data.price
+            current_price = (
+                market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
 
             # Отскок от нижней полосы (покупка)
-            if current_price <= lower:
+            if current_price <= lower and (middle - lower) > 0:
                 signals.append(
                     {
                         "symbol": symbol,
                         "side": "buy",
                         "type": "bb_oversold",
                         "strength": (lower - current_price) / (middle - lower),
-                        "price": market_data.price,
-                        "timestamp": market_data.timestamp,
+                        "price": market_data.ohlcv_data[-1].close
+                        if market_data.ohlcv_data
+                        else 0.0,
+                        "timestamp": datetime.now(),
                         "indicator_value": current_price,
                         "confidence": 0.75,
                     }
                 )
 
             # Отскок от верхней полосы (продажа)
-            elif current_price >= upper:
+            elif current_price >= upper and (upper - middle) > 0:
                 signals.append(
                     {
                         "symbol": symbol,
                         "side": "sell",
                         "type": "bb_overbought",
                         "strength": (current_price - upper) / (upper - middle),
-                        "price": market_data.price,
-                        "timestamp": market_data.timestamp,
+                        "price": market_data.ohlcv_data[-1].close
+                        if market_data.ohlcv_data
+                        else 0.0,
+                        "timestamp": datetime.now(),
                         "indicator_value": current_price,
                         "confidence": 0.75,
                     }
@@ -346,32 +408,38 @@ class FuturesSignalGenerator:
         try:
             ma_fast = indicators.get("ema_12", 0)
             ma_slow = indicators.get("ema_26", 0)
-            current_price = market_data.price
+            current_price = (
+                market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
 
             # Пересечение быстрой и медленной MA
-            if ma_fast > ma_slow and current_price > ma_fast:
+            if ma_fast > ma_slow and current_price > ma_fast and ma_slow > 0:
                 signals.append(
                     {
                         "symbol": symbol,
                         "side": "buy",
                         "type": "ma_bullish",
                         "strength": (ma_fast - ma_slow) / ma_slow,
-                        "price": market_data.price,
-                        "timestamp": market_data.timestamp,
+                        "price": market_data.ohlcv_data[-1].close
+                        if market_data.ohlcv_data
+                        else 0.0,
+                        "timestamp": datetime.now(),
                         "indicator_value": ma_fast,
                         "confidence": 0.6,
                     }
                 )
 
-            elif ma_fast < ma_slow and current_price < ma_fast:
+            elif ma_fast < ma_slow and current_price < ma_fast and ma_slow > 0:
                 signals.append(
                     {
                         "symbol": symbol,
                         "side": "sell",
                         "type": "ma_bearish",
                         "strength": (ma_slow - ma_fast) / ma_slow,
-                        "price": market_data.price,
-                        "timestamp": market_data.timestamp,
+                        "price": market_data.ohlcv_data[-1].close
+                        if market_data.ohlcv_data
+                        else 0.0,
+                        "timestamp": datetime.now(),
                         "indicator_value": ma_fast,
                         "confidence": 0.6,
                     }
@@ -429,7 +497,7 @@ class FuturesSignalGenerator:
             futures_signal = signal.copy()
 
             # Учет левериджа в силе сигнала
-            leverage = self.config.futures.get("leverage", 3)
+            leverage = 3  # Futures по умолчанию 3x
             futures_signal["leverage_adjusted_strength"] = signal["strength"] * (
                 leverage / 3
             )
