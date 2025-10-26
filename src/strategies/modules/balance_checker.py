@@ -6,7 +6,7 @@ Balance Checker Module - проверка баланса перед открыт
 """
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 from loguru import logger
 
@@ -21,11 +21,38 @@ class BalanceCheckConfig:
     # Минимальный резерв USDT (процент от баланса, который не используется)
     usdt_reserve_percent: float = 10.0
     # Минимальный баланс актива для открытия SHORT (в USD эквиваленте)
-    min_asset_balance_usd: float = 30.0
+    min_asset_balance_usd: float = 10.0
     # Минимальный баланс USDT для открытия LONG
-    min_usdt_balance: float = 30.0
+    min_usdt_balance: float = 10.0
     # Логировать каждую проверку (полезно для отладки)
     log_all_checks: bool = False
+    # Адаптивные минимумы (из конфигурации)
+    adaptive_minimums: Optional[Dict] = None
+
+    @classmethod
+    def from_bot_config(cls, bot_config) -> "BalanceCheckConfig":
+        """
+        Создает BalanceCheckConfig из BotConfig.
+
+        Args:
+            bot_config: Конфигурация бота
+
+        Returns:
+            BalanceCheckConfig: Конфигурация для BalanceChecker
+        """
+        # Получаем адаптивные минимумы из risk секции
+        adaptive_minimums = None
+        if hasattr(bot_config.risk, "adaptive_minimums"):
+            adaptive_minimums = bot_config.risk.adaptive_minimums
+
+        return cls(
+            enabled=True,
+            usdt_reserve_percent=10.0,
+            min_asset_balance_usd=10.0,
+            min_usdt_balance=10.0,
+            log_all_checks=False,
+            adaptive_minimums=adaptive_minimums,
+        )
 
 
 @dataclass
@@ -61,6 +88,34 @@ class BalanceChecker:
             f"USDT reserve={config.usdt_reserve_percent}%, "
             f"min_asset=${config.min_asset_balance_usd}"
         )
+
+    def _get_adaptive_minimum(self, total_balance_usd: float) -> float:
+        """
+        Возвращает адаптивный минимум на основе общего баланса из конфигурации.
+
+        Args:
+            total_balance_usd: Общий баланс в USDT
+
+        Returns:
+            Адаптивный минимум для сделки
+        """
+        if not self.config.adaptive_minimums:
+            # Fallback к правильным режимам баланса
+            if total_balance_usd < 1500:  # Малый баланс $100-$1500
+                return 10.0  # Минимум OKX = $10
+            elif total_balance_usd < 2300:  # Средний баланс $1500-$2300
+                return 15.0  # Немного больше для среднего баланса
+            else:  # Большой баланс $2300+
+                return 20.0  # Больше для большого баланса
+
+        # Используем конфигурацию из YAML
+        for level_name, level_config in self.config.adaptive_minimums.items():
+            if total_balance_usd <= level_config["balance_threshold"]:
+                return level_config["minimum_order_usd"]
+
+        # Если баланс больше всех порогов, используем последний уровень
+        last_level = list(self.config.adaptive_minimums.values())[-1]
+        return last_level["minimum_order_usd"]
 
     def check_balance(
         self,
@@ -119,10 +174,15 @@ class BalanceChecker:
         )
 
         # Рассчитываем доступный баланс с учетом резерва
-        # min_usdt_balance - это резерв, который должен ОСТАТЬСЯ на счету
+        # Используем адаптивный минимум на основе общего баланса
+        total_balance_usd = sum(
+            b.total for b in balances if b.currency in ["USDT", "BTC", "ETH"]
+        )
+        adaptive_minimum = self._get_adaptive_minimum(total_balance_usd)
+
         reserve_amount = max(
             usdt_balance.free * (self.config.usdt_reserve_percent / 100.0),
-            self.config.min_usdt_balance,  # Минимальный резерв в абсолютных единицах
+            adaptive_minimum,  # Адаптивный минимум вместо жесткого
         )
         available_usdt = usdt_balance.free - reserve_amount
 
@@ -187,10 +247,13 @@ class BalanceChecker:
         available_amount = asset_balance.free
         available_usd = available_amount * current_price
 
-        if (
-            available_amount >= required_amount
-            and available_usd >= self.config.min_asset_balance_usd
-        ):
+        # Используем адаптивный минимум
+        total_balance_usd = sum(
+            b.total for b in balances if b.currency in ["USDT", "BTC", "ETH"]
+        )
+        adaptive_minimum = self._get_adaptive_minimum(total_balance_usd)
+
+        if available_amount >= required_amount and available_usd >= adaptive_minimum:
             if self.config.log_all_checks:
                 logger.debug(
                     f"✅ {symbol} SHORT: Balance OK "
@@ -215,7 +278,7 @@ class BalanceChecker:
             else:
                 reason = (
                     f"{asset} balance too small "
-                    f"(${available_usd:.2f} < ${self.config.min_asset_balance_usd})"
+                    f"(${available_usd:.2f} < ${adaptive_minimum})"
                 )
 
             logger.warning(f"⚠️ {symbol} SHORT BLOCKED: {reason}")

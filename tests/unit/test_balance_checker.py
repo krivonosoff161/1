@@ -31,9 +31,10 @@ class TestBalanceCheckConfig:
         config = BalanceCheckConfig()
         assert config.enabled is True
         assert config.usdt_reserve_percent == 10.0
-        assert config.min_asset_balance_usd == 30.0
-        assert config.min_usdt_balance == 30.0
+        assert config.min_asset_balance_usd == 10.0
+        assert config.min_usdt_balance == 10.0
         assert config.log_all_checks is False
+        assert config.adaptive_minimums is None
 
     def test_custom_config(self):
         """Тест кастомной конфигурации"""
@@ -193,19 +194,19 @@ class TestBalanceChecker:
     def test_check_asset_balance_too_small_usd(self, checker):
         """Тест SHORT: актива слишком мало в USD эквиваленте"""
         balances = [
-            Balance(currency="SOL", free=0.1, used=0.0, total=0.1),
+            Balance(currency="ETH", free=0.001, used=0.0, total=0.001),
         ]
 
         result = checker.check_balance(
-            symbol="SOL-USDT",
+            symbol="ETH-USDT",
             side=OrderSide.SELL,
-            required_amount=0.05,
-            current_price=100.0,  # 0.05 SOL * $100 = $5 < $30 минимум
+            required_amount=0.0005,
+            current_price=2000.0,  # 0.0005 ETH * $2000 = $1 < $5 минимум (для малого баланса)
             balances=balances,
         )
 
         assert result.allowed is False
-        assert result.currency == "SOL"
+        assert result.currency == "ETH"
         assert "balance too small" in result.reason
         assert checker.total_checks == 1
         assert checker.total_blocked == 1
@@ -290,19 +291,52 @@ class TestBalanceChecker:
         assert result.allowed is True
         assert result.currency == "ETH"
 
-    def test_sol_long_edge_case(self, checker):
-        """Тест LONG SOL: граничный случай (чуть больше минимума)"""
+    def test_adaptive_minimum_small_balance(self, checker):
+        """Тест адаптивного минимума для малого баланса ($100-$1500)"""
+        # Добавляем конфигурацию с правильными режимами баланса
+        checker.config.adaptive_minimums = {
+            "small": {"balance_threshold": 1500.0, "minimum_order_usd": 10.0},
+            "medium": {"balance_threshold": 2300.0, "minimum_order_usd": 15.0},
+            "large": {"balance_threshold": 999999.0, "minimum_order_usd": 20.0},
+        }
+
         balances = [
-            Balance(currency="USDT", free=34.0, used=0.0, total=34.0),
+            Balance(currency="USDT", free=800.0, used=0.0, total=800.0),
         ]
 
-        # Доступно: 34.0 - 10% = 30.6 USDT (чуть больше минимума $30)
+        # При балансе $800 (малый режим), минимум должен быть $10
         result = checker.check_balance(
-            symbol="SOL-USDT",
+            symbol="ETH-USDT",
             side=OrderSide.BUY,
-            required_amount=0.15,
-            current_price=200.0,  # $30 required
+            required_amount=0.1,
+            current_price=100.0,  # $10 required
             balances=balances,
         )
 
         assert result.allowed is True
+        assert result.available_balance >= 10.0  # Доступно больше минимума
+
+    def test_adaptive_minimum_large_balance(self, checker):
+        """Тест адаптивного минимума для большого баланса ($2300+)"""
+        # Добавляем конфигурацию с правильными режимами баланса
+        checker.config.adaptive_minimums = {
+            "small": {"balance_threshold": 1500.0, "minimum_order_usd": 10.0},
+            "medium": {"balance_threshold": 2300.0, "minimum_order_usd": 15.0},
+            "large": {"balance_threshold": 999999.0, "minimum_order_usd": 20.0},
+        }
+
+        balances = [
+            Balance(currency="USDT", free=3000.0, used=0.0, total=3000.0),
+        ]
+
+        # При балансе $3000 (большой режим), минимум должен быть $20
+        result = checker.check_balance(
+            symbol="BTC-USDT",
+            side=OrderSide.BUY,
+            required_amount=0.001,
+            current_price=20000.0,  # $20 required
+            balances=balances,
+        )
+
+        assert result.allowed is True
+        assert result.available_balance >= 20.0  # Доступно больше минимума

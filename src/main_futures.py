@@ -35,20 +35,17 @@ async def main():
             return
 
         # Создаем конфигурацию
-        config = BotConfig.from_yaml(str(config_path))
+        config = BotConfig.load_from_file(str(config_path))
 
         # Проверяем конфигурацию
-        if not config.api.key or config.api.key == "your_api_key_here":
+        if (
+            not config.get_okx_config().api_key
+            or config.get_okx_config().api_key == "your_api_key_here"
+        ):
             logger.error("❌ API ключ не настроен в конфигурации")
             logger.info(
                 "💡 Отредактируйте config/config_futures.yaml и укажите ваши API ключи"
             )
-            return
-
-        # Проверяем Futures-специфичные настройки
-        if not hasattr(config, "futures") or not config.futures:
-            logger.error("❌ Futures конфигурация не найдена")
-            logger.info("💡 Убедитесь, что в config_futures.yaml есть секция 'futures'")
             return
 
         # Предупреждение о рисках Futures торговли

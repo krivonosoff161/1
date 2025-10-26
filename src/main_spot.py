@@ -32,10 +32,13 @@ async def main():
             return
 
         # Создаем конфигурацию
-        config = BotConfig.from_yaml(str(config_path))
+        config = BotConfig.load_from_file(str(config_path))
 
         # Проверяем конфигурацию
-        if not config.api.key or config.api.key == "your_api_key_here":
+        if (
+            not config.get_okx_config().api_key
+            or config.get_okx_config().api_key == "your_api_key_here"
+        ):
             logger.error("❌ API ключ не настроен в конфигурации")
             logger.info(
                 "💡 Отредактируйте config/config_spot.yaml и укажите ваши API ключи"

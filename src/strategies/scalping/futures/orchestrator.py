@@ -3,7 +3,7 @@ Futures Orchestrator для скальпинг стратегии.
 
 Координирует все модули для Futures торговли:
 - FuturesSignalGenerator
-- FuturesOrderExecutor  
+- FuturesOrderExecutor
 - FuturesPositionManager
 - MarginCalculator
 - LiquidationGuard
@@ -13,13 +13,13 @@ Futures Orchestrator для скальпинг стратегии.
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
-from src.config import BotConfig, RiskConfig, ScalpingConfig
-from src.models import MarketData, Position
+from src.config import BotConfig
+# Futures-специфичные модули безопасности
 from src.strategies.modules.liquidation_guard import LiquidationGuard
 from src.strategies.modules.margin_calculator import MarginCalculator
 from src.strategies.modules.slippage_guard import SlippageGuard
@@ -52,13 +52,16 @@ class FuturesScalpingOrchestrator:
         self.scalping_config = config.scalping
         self.risk_config = config.risk
 
+        # Получение API конфигурации
+        okx_config = config.get_okx_config()
+
         # Клиент
         self.client = OKXFuturesClient(
-            api_key=config.api_key,
-            secret_key=config.secret_key,
-            passphrase=config.passphrase,
-            sandbox=config.sandbox,
-            leverage=config.futures.get("leverage", 3),
+            api_key=okx_config.api_key,
+            secret_key=okx_config.api_secret,
+            passphrase=okx_config.passphrase,
+            sandbox=okx_config.sandbox,
+            leverage=3,  # Futures по умолчанию 3x
         )
 
         # Модули безопасности
@@ -416,7 +419,9 @@ class FuturesScalpingOrchestrator:
         """Получение статуса системы"""
         try:
             balance = await self.client.get_balance()
-            margin_status = await self.liquidation_guard.get_margin_status(self.client)
+            margin_status = await self.liquidation_guard.get_margin_status(
+                self.client
+            )
             slippage_stats = self.slippage_guard.get_slippage_statistics()
 
             return {
@@ -431,31 +436,3 @@ class FuturesScalpingOrchestrator:
         except Exception as e:
             logger.error(f"Ошибка получения статуса: {e}")
             return {"error": str(e), "timestamp": datetime.now().isoformat()}
-
-
-# Пример использования
-if __name__ == "__main__":
-    # Создаем конфигурацию
-    config = BotConfig(
-        api_key="test_key",
-        secret_key="test_secret",
-        passphrase="test_passphrase",
-        sandbox=True,
-        futures={
-            "leverage": 3,
-            "maintenance_margin_ratio": 0.01,
-            "initial_margin_ratio": 0.1,
-            "warning_threshold": 1.8,
-            "danger_threshold": 1.3,
-            "critical_threshold": 1.1,
-            "auto_close_threshold": 1.05,
-            "max_slippage_percent": 0.1,
-            "max_spread_percent": 0.05,
-            "order_timeout": 30.0,
-        },
-    )
-
-    # Создаем оркестратор
-    orchestrator = FuturesScalpingOrchestrator(config)
-
-    print("FuturesScalpingOrchestrator готов к работе")

@@ -25,6 +25,8 @@ class RiskConfig(BaseModel):
     max_daily_loss_percent: float = Field(default=10.0, ge=1.0, le=50.0)
     risk_per_trade_percent: float = Field(default=1.0, ge=0.1, le=10.0)
     max_open_positions: int = Field(default=3, ge=1, le=10)
+    # Адаптивные минимумы для разных размеров баланса
+    adaptive_minimums: Optional[Dict] = Field(default=None)
 
 
 class IndicatorConfig(BaseModel):
