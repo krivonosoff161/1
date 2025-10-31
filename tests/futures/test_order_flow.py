@@ -4,8 +4,14 @@
 
 import pytest
 
+<<<<<<< HEAD
 from src.strategies.scalping.futures.indicators.order_flow_indicator import \
     OrderFlowIndicator
+=======
+from src.strategies.scalping.futures.indicators.order_flow_indicator import (
+    OrderFlowIndicator,
+)
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
 
 
 class TestOrderFlowIndicator:
@@ -26,7 +32,11 @@ class TestOrderFlowIndicator:
     def test_update_normal(self):
         """Тест обновления с нормальными значениями"""
         self.order_flow.update(bid_volume=1000.0, ask_volume=800.0)
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         assert len(self.order_flow.bid_volumes) == 1
         assert len(self.order_flow.ask_volumes) == 1
         assert len(self.order_flow.deltas) == 1
@@ -34,9 +44,15 @@ class TestOrderFlowIndicator:
     def test_get_delta(self):
         """Тест получения delta"""
         self.order_flow.update(bid_volume=1000.0, ask_volume=800.0)
+<<<<<<< HEAD
 
         delta = self.order_flow.get_delta()
 
+=======
+        
+        delta = self.order_flow.get_delta()
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         expected = (1000.0 - 800.0) / 1800.0  # (bid - ask) / total
         assert abs(delta - expected) < 0.0001
 
@@ -45,9 +61,15 @@ class TestOrderFlowIndicator:
         # Добавляем несколько значений
         for i in range(10):
             self.order_flow.update(bid_volume=1000.0 + i, ask_volume=800.0 + i)
+<<<<<<< HEAD
 
         avg_delta = self.order_flow.get_avg_delta(periods=10)
 
+=======
+        
+        avg_delta = self.order_flow.get_avg_delta(periods=10)
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         assert avg_delta != 0
         assert -1.0 <= avg_delta <= 1.0
 
@@ -57,9 +79,15 @@ class TestOrderFlowIndicator:
         deltas = [0.01, 0.02, 0.03, 0.04, 0.05]
         for delta in deltas:
             self.order_flow.deltas.append(delta)
+<<<<<<< HEAD
 
         trend = self.order_flow.get_delta_trend()
 
+=======
+        
+        trend = self.order_flow.get_delta_trend()
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         assert trend == "long"
 
     def test_get_delta_trend_decreasing(self):
@@ -68,35 +96,59 @@ class TestOrderFlowIndicator:
         deltas = [0.05, 0.04, 0.03, 0.02, 0.01]
         for delta in deltas:
             self.order_flow.deltas.append(delta)
+<<<<<<< HEAD
 
         trend = self.order_flow.get_delta_trend()
 
+=======
+        
+        trend = self.order_flow.get_delta_trend()
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         assert trend == "short"
 
     def test_is_long_favorable(self):
         """Тест проверки благоприятности лонга"""
         self.order_flow.update(bid_volume=1000.0, ask_volume=800.0)
+<<<<<<< HEAD
 
         is_favorable = self.order_flow.is_long_favorable()
 
+=======
+        
+        is_favorable = self.order_flow.is_long_favorable()
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         # bid > ask → delta > 0 → должен быть благоприятным
         assert is_favorable is True
 
     def test_is_short_favorable(self):
         """Тест проверки благоприятности шорта"""
         self.order_flow.update(bid_volume=800.0, ask_volume=1000.0)
+<<<<<<< HEAD
 
         is_favorable = self.order_flow.is_short_favorable()
 
+=======
+        
+        is_favorable = self.order_flow.is_short_favorable()
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         # bid < ask → delta < 0 → должен быть благоприятным
         assert is_favorable is True
 
     def test_get_market_pressure(self):
         """Тест получения рыночного давления"""
         self.order_flow.update(bid_volume=1000.0, ask_volume=800.0)
+<<<<<<< HEAD
 
         pressure = self.order_flow.get_market_pressure()
 
+=======
+        
+        pressure = self.order_flow.get_market_pressure()
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         assert "current_delta" in pressure
         assert "avg_delta" in pressure
         assert "trend" in pressure
@@ -111,12 +163,20 @@ class TestOrderFlowIndicator:
         self.order_flow.update(bid_volume=1000.0, ask_volume=1000.0)
         delta = self.order_flow.get_delta()
         assert delta == 0.0
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         # Очень большой bid
         self.order_flow.update(bid_volume=10000.0, ask_volume=100.0)
         delta = self.order_flow.get_delta()
         assert delta > 0.9  # Очень близко к 1.0
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         # Очень большой ask
         self.order_flow.update(bid_volume=100.0, ask_volume=10000.0)
         delta = self.order_flow.get_delta()
@@ -125,9 +185,15 @@ class TestOrderFlowIndicator:
     def test_reset(self):
         """Тест сброса индикатора"""
         self.order_flow.update(bid_volume=1000.0, ask_volume=800.0)
+<<<<<<< HEAD
 
         self.order_flow.reset()
 
+=======
+        
+        self.order_flow.reset()
+        
+>>>>>>> 815de750043a85ff7eea3870ec2571987b582866
         assert len(self.order_flow.bid_volumes) == 0
         assert len(self.order_flow.ask_volumes) == 0
         assert len(self.order_flow.deltas) == 0
