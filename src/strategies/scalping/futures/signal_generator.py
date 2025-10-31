@@ -36,26 +36,48 @@ class FuturesSignalGenerator:
     - Оптимизация для скальпинга
     """
 
-    def __init__(self, config: BotConfig):
+    def __init__(self, config: BotConfig, client=None):
         """
         Инициализация Futures Signal Generator
 
         Args:
             config: Конфигурация бота
+            client: OKX клиент (опционально, для фильтров)
         """
         self.config = config
         self.scalping_config = config.scalping
+        self.client = client  # ✅ Сохраняем клиент для фильтров
 
         # Менеджер индикаторов
-        from src.indicators import ATR, RSI, SimpleMovingAverage
+        from src.indicators import (ATR, MACD, RSI, BollingerBands,
+                                    ExponentialMovingAverage,
+                                    SimpleMovingAverage)
 
         self.indicator_manager = IndicatorManager()
-        # Добавляем базовые индикаторы
+        # ✅ Добавляем ВСЕ необходимые индикаторы для генерации сигналов
         self.indicator_manager.add_indicator(
             "RSI", RSI(period=14, overbought=70, oversold=30)
         )
         self.indicator_manager.add_indicator("ATR", ATR(period=14))
         self.indicator_manager.add_indicator("SMA", SimpleMovingAverage(period=20))
+        # ✅ Добавляем индикаторы, которые используются в генерации сигналов
+        self.indicator_manager.add_indicator(
+            "MACD", MACD(fast_period=12, slow_period=26, signal_period=9)
+        )
+        # ✅ ИСПРАВЛЕНИЕ: BollingerBands использует std_multiplier, а не std_dev
+        self.indicator_manager.add_indicator(
+            "BollingerBands", BollingerBands(period=20, std_multiplier=2.0)
+        )
+        self.indicator_manager.add_indicator(
+            "EMA_12", ExponentialMovingAverage(period=12)
+        )
+        self.indicator_manager.add_indicator(
+            "EMA_26", ExponentialMovingAverage(period=26)
+        )
+
+        logger.debug(
+            "📊 Инициализированы индикаторы: RSI, ATR, SMA, MACD, BollingerBands, EMA_12, EMA_26"
+        )
 
         # Модули фильтрации - ИНТЕГРАЦИЯ адаптивных систем
         self.regime_manager = None  # Инициализируется в initialize()
@@ -83,27 +105,56 @@ class FuturesSignalGenerator:
                 RegimeConfig
 
             # Инициализация ARM
-            adaptive_regime_config = getattr(self.config, "adaptive_regime", {})
-            if adaptive_regime_config and adaptive_regime_config.get("enabled", True):
+            # ⚠️ ИСПРАВЛЕНИЕ: adaptive_regime находится в config.scalping, а не в config
+            scalping_config = getattr(self.config, "scalping", None)
+            adaptive_regime_config = None
+            if scalping_config:
+                if hasattr(scalping_config, "adaptive_regime"):
+                    adaptive_regime_config = getattr(
+                        scalping_config, "adaptive_regime", None
+                    )
+                elif isinstance(scalping_config, dict):
+                    adaptive_regime_config = scalping_config.get("adaptive_regime", {})
+
+            # Если adaptive_regime_config - это Pydantic модель, проверяем enabled
+            enabled = False
+            if adaptive_regime_config:
+                if hasattr(adaptive_regime_config, "enabled"):
+                    enabled = getattr(adaptive_regime_config, "enabled", False)
+                elif isinstance(adaptive_regime_config, dict):
+                    enabled = adaptive_regime_config.get("enabled", False)
+
+            if adaptive_regime_config and enabled:
                 try:
+                    # Получаем detection секцию (может быть dict или атрибут)
+                    detection = None
+                    if isinstance(adaptive_regime_config, dict):
+                        detection = adaptive_regime_config.get("detection", {})
+                    elif hasattr(adaptive_regime_config, "detection"):
+                        detection = getattr(adaptive_regime_config, "detection", {})
+
+                    if isinstance(detection, dict):
+                        detection_dict = detection
+                    elif hasattr(detection, "__dict__"):
+                        detection_dict = (
+                            detection.__dict__ if hasattr(detection, "__dict__") else {}
+                        )
+                    else:
+                        detection_dict = {}
+
                     regime_config = RegimeConfig(
                         enabled=True,
                         # Параметры детекции из конфига
-                        trending_adx_threshold=adaptive_regime_config.get(
-                            "detection", {}
-                        ).get("trending_adx_threshold", 20.0),
-                        ranging_adx_threshold=adaptive_regime_config.get(
-                            "detection", {}
-                        ).get("ranging_adx_threshold", 15.0),
-                        high_volatility_threshold=adaptive_regime_config.get(
-                            "detection", {}
-                        ).get("high_volatility_threshold", 0.03),
-                        lookback_candles=adaptive_regime_config.get(
-                            "detection", {}
-                        ).get("lookback_candles", 50),
-                        adx_period=adaptive_regime_config.get("detection", {}).get(
-                            "adx_period", 9
+                        trending_adx_threshold=detection_dict.get(
+                            "trending_adx_threshold", 20.0
                         ),
+                        ranging_adx_threshold=detection_dict.get(
+                            "ranging_adx_threshold", 15.0
+                        ),
+                        high_volatility_threshold=detection_dict.get(
+                            "high_volatility_threshold", 0.03
+                        ),
+                        # lookback_candles и adx_period используются внутри, но не передаются в RegimeConfig
                     )
                     self.regime_manager = AdaptiveRegimeManager(regime_config)
 
@@ -178,29 +229,61 @@ class FuturesSignalGenerator:
             return []
 
     async def _get_market_data(self, symbol: str) -> Optional[MarketData]:
-        """Получение рыночных данных"""
+        """Получение рыночных данных - исторические свечи для индикаторов"""
         try:
-            # Здесь нужно реализовать получение данных через WebSocket или REST API
-            # Пока используем заглушку
-            # Создаем OHLCV данные
-            ohlcv_item = OHLCV(
-                timestamp=int(datetime.now().timestamp()),
-                symbol=symbol,
-                open=49900.0,
-                high=50100.0,
-                low=49800.0,
-                close=50000.0,
-                volume=1000.0,
-            )
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем ИСТОРИЧЕСКИЕ СВЕЧИ через REST API
+            # Индикаторы (RSI, MACD и т.д.) требуют минимум 14-20 свечей для расчета!
+            import time
 
-            # Создаем MarketData с правильной структурой
-            return MarketData(
-                symbol=symbol,
-                timeframe="1m",
-                ohlcv_data=[ohlcv_item],
-            )
+            import aiohttp
+
+            # Получаем последние 50 свечей 1m для расчета индикаторов
+            inst_id = f"{symbol}-SWAP"
+            url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar=1m&limit=50"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("code") == "0" and data.get("data"):
+                            candles = data["data"]
+
+                            # Конвертируем свечи из формата OKX в OHLCV
+                            # OKX формат: [timestamp, open, high, low, close, volume, volumeCcy]
+                            ohlcv_data = []
+                            for candle in candles:
+                                if len(candle) >= 6:
+                                    ohlcv_item = OHLCV(
+                                        timestamp=int(candle[0])
+                                        // 1000,  # OKX возвращает в миллисекундах
+                                        symbol=symbol,
+                                        open=float(candle[1]),
+                                        high=float(candle[2]),
+                                        low=float(candle[3]),
+                                        close=float(candle[4]),
+                                        volume=float(candle[5]),
+                                    )
+                                    ohlcv_data.append(ohlcv_item)
+
+                            if ohlcv_data:
+                                # Сортируем по timestamp (старые -> новые)
+                                ohlcv_data.sort(key=lambda x: x.timestamp)
+
+                                logger.debug(
+                                    f"📊 Получено {len(ohlcv_data)} свечей для {symbol}"
+                                )
+
+                                # Создаем MarketData с историческими свечами
+                                return MarketData(
+                                    symbol=symbol,
+                                    timeframe="1m",
+                                    ohlcv_data=ohlcv_data,
+                                )
+            logger.warning(f"⚠️ Не удалось получить исторические свечи для {symbol}")
+            return None
+
         except Exception as e:
-            logger.error(f"Ошибка получения данных для {symbol}: {e}")
+            logger.error(f"Ошибка получения данных для {symbol}: {e}", exc_info=True)
             return None
 
     async def _generate_base_signals(
@@ -211,7 +294,53 @@ class FuturesSignalGenerator:
             signals = []
 
             # Технические индикаторы
-            indicators = self.indicator_manager.calculate_all(market_data)
+            indicator_results = self.indicator_manager.calculate_all(market_data)
+
+            # ✅ ИСПРАВЛЕНИЕ: Конвертируем IndicatorResult в простой dict с значениями
+            # indicator_results содержит объекты IndicatorResult, нужно извлечь значения
+            indicators = {}
+            for name, result in indicator_results.items():
+                if hasattr(result, "value") and hasattr(result, "metadata"):
+                    # Если это IndicatorResult, извлекаем данные правильно
+                    if name.lower() == "macd":
+                        # MACD: value = macd_line, metadata содержит macd_line, signal_line
+                        metadata = result.metadata or {}
+                        indicators["macd"] = {
+                            "macd": metadata.get("macd_line", result.value),
+                            "signal": metadata.get("signal_line", result.value),
+                            "histogram": metadata.get("macd_line", result.value)
+                            - metadata.get("signal_line", result.value),
+                        }
+                    elif name.lower() == "bollingerbands":
+                        # BollingerBands: value = sma (middle), metadata содержит upper_band, lower_band
+                        metadata = result.metadata or {}
+                        indicators["bollinger_bands"] = {
+                            "upper": metadata.get("upper_band", result.value),
+                            "lower": metadata.get("lower_band", result.value),
+                            "middle": result.value,  # middle = SMA
+                        }
+                    elif isinstance(result.value, dict):
+                        # Для других сложных индикаторов value может быть dict
+                        indicators[name.lower()] = result.value
+                    else:
+                        # Для простых индикаторов (RSI, ATR, SMA, EMA) - просто число
+                        indicators[name.lower()] = result.value
+                elif isinstance(result, dict):
+                    # Если уже dict
+                    indicators[name.lower()] = result
+                else:
+                    # Fallback
+                    indicators[name.lower()] = result
+
+            rsi_val = indicators.get("rsi", "N/A")
+            macd_val = indicators.get("macd", {})
+            if isinstance(macd_val, dict):
+                macd_str = f"macd={macd_val.get('macd', 'N/A')}, signal={macd_val.get('signal', 'N/A')}"
+            else:
+                macd_str = str(macd_val)
+            logger.debug(
+                f"📊 Индикаторы для {symbol}: RSI={rsi_val}, MACD={{{macd_str}}}"
+            )
 
             # RSI сигналы
             rsi_signals = await self._generate_rsi_signals(
@@ -458,27 +587,75 @@ class FuturesSignalGenerator:
             filtered_signals = []
 
             for signal in signals:
-                # Проверка режима рынка
-                if not await self.regime_manager.is_signal_valid(signal, market_data):
-                    continue
+                # ✅ ИСПРАВЛЕНИЕ: Проверяем что фильтры инициализированы перед вызовом
+                # Проверка режима рынка (если ARM включен)
+                if self.regime_manager:
+                    try:
+                        if not await self.regime_manager.is_signal_valid(
+                            signal, market_data
+                        ):
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован ARM")
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки ARM для {symbol}: {e}, пропускаем фильтр"
+                        )
 
-                # Проверка корреляции
-                if not await self.correlation_filter.is_signal_valid(
-                    signal, market_data
-                ):
-                    continue
+                # Проверка корреляции (если фильтр инициализирован)
+                if self.correlation_filter:
+                    try:
+                        if not await self.correlation_filter.is_signal_valid(
+                            signal, market_data
+                        ):
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован CorrelationFilter"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки CorrelationFilter для {symbol}: {e}, пропускаем фильтр"
+                        )
 
-                # Проверка мультитаймфрейма
-                if not await self.mtf_filter.is_signal_valid(signal, market_data):
-                    continue
+                # Проверка мультитаймфрейма (если фильтр инициализирован)
+                if self.mtf_filter:
+                    try:
+                        if not await self.mtf_filter.is_signal_valid(
+                            signal, market_data
+                        ):
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован MTF")
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки MTF для {symbol}: {e}, пропускаем фильтр"
+                        )
 
-                # Проверка pivot points
-                if not await self.pivot_filter.is_signal_valid(signal, market_data):
-                    continue
+                # Проверка pivot points (если фильтр инициализирован)
+                if self.pivot_filter:
+                    try:
+                        if not await self.pivot_filter.is_signal_valid(
+                            signal, market_data
+                        ):
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован PivotPoints")
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки PivotPoints для {symbol}: {e}, пропускаем фильтр"
+                        )
 
-                # Проверка volume profile
-                if not await self.volume_filter.is_signal_valid(signal, market_data):
-                    continue
+                # Проверка volume profile (если фильтр инициализирован)
+                if self.volume_filter:
+                    try:
+                        if not await self.volume_filter.is_signal_valid(
+                            signal, market_data
+                        ):
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован VolumeProfile"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки VolumeProfile для {symbol}: {e}, пропускаем фильтр"
+                        )
 
                 # Адаптация под Futures специфику
                 futures_signal = await self._adapt_signal_for_futures(signal)
@@ -487,7 +664,8 @@ class FuturesSignalGenerator:
             return filtered_signals
 
         except Exception as e:
-            logger.error(f"Ошибка применения фильтров: {e}")
+            logger.error(f"Ошибка применения фильтров: {e}", exc_info=True)
+            # В случае ошибки возвращаем сигналы без фильтрации
             return signals
 
     async def _adapt_signal_for_futures(self, signal: Dict[str, Any]) -> Dict[str, Any]:
@@ -522,8 +700,12 @@ class FuturesSignalGenerator:
     def _calculate_liquidation_risk(self, signal: Dict[str, Any]) -> float:
         """Расчет риска ликвидации"""
         try:
-            # Упрощенный расчет риска ликвидации
-            leverage = self.config.futures.get("leverage", 3)
+            # ✅ ИСПРАВЛЕНИЕ: Получаем leverage из scalping_config или используем значение по умолчанию
+            leverage = getattr(self.scalping_config, "leverage", 3)
+            # Если leverage не в scalping_config, используем дефолт 3x для Futures
+            if leverage is None:
+                leverage = 3
+
             strength = signal.get("strength", 0.5)
 
             # Чем выше леверидж и ниже сила сигнала, тем выше риск

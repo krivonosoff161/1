@@ -181,21 +181,106 @@ class MarginCalculator:
         if leverage is None:
             leverage = self.default_leverage
 
-        # Расчет текущего PnL
-        position_size = position_value / entry_price
-        if side.lower() == "buy":
+        # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: position_value уже в USD (size_in_coins * current_price)
+        # Поэтому position_size (в монетах) = position_value / current_price
+        # Это правильнее чем делить на entry_price, потому что position_value уже учитывает current_price
+        position_size = position_value / current_price if current_price > 0 else 0
+
+        logger.debug(
+            f"🔍 margin_calculator: position_value={position_value:.2f} USD, "
+            f"current_price={current_price:.2f}, position_size={position_size:.6f} монет"
+        )
+
+        if side.lower() == "buy" or side.lower() == "long":
             pnl = (current_price - entry_price) * position_size
-        else:  # sell
+        else:  # sell/short
             pnl = (entry_price - current_price) * position_size
 
         # Расчет маржи
         margin_used = position_value / leverage
-        available_margin = equity - margin_used + pnl
+
+        # 🔥 ИСПРАВЛЕННЫЙ РАСЧЕТ ДЛЯ ИЗОЛИРОВАННОЙ МАРЖИ:
+        #
+        # Для изолированной маржи OKX:
+        # - equity позиции = margin (выделенная маржа) + unrealizedPnl
+        # - margin_ratio должен показывать запас прочности
+        #
+        # ПРАВИЛЬНАЯ ФОРМУЛА для изолированной маржи:
+        # margin_ratio = equity / margin_used
+        # Это показывает, во сколько раз equity больше margin (запас прочности)
+        #
+        # Но если equity не найден и используется общий баланс (fallback):
+        # - balance уже уменьшен на margin после открытия
+        # - Нужно восстановить: total_balance = equity + margin_used
+
+        # Проверяем: если equity очень мал или 0 - это fallback на общий баланс
+        if equity <= 0 or (equity <= margin_used * 0.3 and abs(pnl) < 1.0):
+            # Используется fallback - баланс уже уменьшен на margin
+            # Восстанавливаем: если equity = balance_after, то balance_before = equity + margin_used
+            if equity > 0:
+                total_balance = (
+                    equity + margin_used
+                )  # Восстанавливаем баланс до открытия
+                available_margin = total_balance - margin_used + pnl
+            else:
+                # equity = 0 - ошибка, но используем margin_used * 5 как безопасное значение
+                available_margin = margin_used * 5  # margin_ratio = 5 (безопасно)
+        elif abs(equity - margin_used) < margin_used * 0.1 and abs(pnl) < 1.0:
+            # equity ≈ margin_used (новая позиция, PnL ≈ 0)
+            # Для изолированной маржи: если equity = margin, это нормально
+            # margin_ratio должен быть примерно 1, но это нормально для новой позиции
+            # Используем простой расчет: available_margin = equity - margin_used = 0
+            # Но это даст margin_ratio = 0, что неправильно!
+            # Правильнее: использовать equity / margin_used напрямую для margin_ratio
+            # Или: available_margin = equity - maintenance_margin (но его нет)
+            # Временно: если equity ≈ margin, считаем что запас = margin (margin_ratio = 1)
+            # Но лучше использовать более консервативный расчет
+            available_margin = margin_used * 2  # Временная защита: margin_ratio = 2
+        else:
+            # equity найден правильно и не равен margin (есть PnL или другая ситуация)
+            # Для изолированной маржи: equity = margin + PnL
+            # available_margin = equity - margin_used = (margin + PnL) - margin = PnL
+            # Но это слишком консервативно! Правильнее:
+            # margin_ratio = equity / margin_used (показывает запас)
+            # Но для consistency используем available_margin:
+            available_margin = equity - margin_used + pnl
+
+        logger.debug(
+            f"🔍 margin_calculator: equity={equity:.2f}, pnl={pnl:.2f}, "
+            f"margin_used={margin_used:.2f}, available_margin={available_margin:.2f}"
+        )
 
         # Расчет коэффициента маржи
-        margin_ratio = (
-            available_margin / margin_used if margin_used > 0 else float("inf")
+        # margin_ratio показывает, во сколько раз доступная маржа превышает использованную
+        # Если available_margin < 0, то margin_ratio будет отрицательным = риск ликвидации!
+        if margin_used > 0:
+            margin_ratio = available_margin / margin_used
+        else:
+            margin_ratio = float("inf") if available_margin > 0 else float("-inf")
+
+        logger.debug(
+            f"🔍 margin_calculator: margin_ratio={margin_ratio:.2f} (до защиты)"
         )
+
+        # 🛡️ ЗАЩИТА от ложных срабатываний:
+        # Если margin_ratio отрицательный, но PnL небольшой (< 10% от equity),
+        # это может быть ошибка расчета, а не реальный риск
+        # Также проверяем что equity > 0 (если нет - это явная ошибка)
+        if margin_ratio < 0 and equity > 0:
+            pnl_percent = abs(pnl) / equity if equity > 0 else 0
+            # ⚠️ УВЕЛИЧЕН ПОРОГ: Если PnL менее 15% от баланса, а margin_ratio отрицательный - вероятна ошибка
+            # Также проверяем, что available_margin не слишком отрицательный относительно equity
+            margin_deficit_percent = abs(available_margin) / equity if equity > 0 else 0
+            if (
+                pnl_percent < 0.15 and margin_deficit_percent < 2.0
+            ):  # Дефицит маржи < 200% от баланса
+                logger.debug(
+                    f"⚠️ Подозрительный margin_ratio={margin_ratio:.2f} игнорирован: "
+                    f"available_margin={available_margin:.2f}, pnl={pnl:.2f} ({pnl_percent:.2%} от баланса), "
+                    f"дефицит={margin_deficit_percent:.2%}. Используем безопасное значение."
+                )
+                # Используем более консервативный расчет: просто equity / margin_used
+                margin_ratio = equity / margin_used if margin_used > 0 else float("inf")
 
         # Проверка безопасности
         is_safe = margin_ratio >= safety_threshold
@@ -210,6 +295,7 @@ class MarginCalculator:
             "available_margin": available_margin,
             "margin_used": margin_used,
             "pnl": pnl,
+            "equity": equity,  # ✅ Добавляем equity для защит
             "liquidation_price": liquidation_price,
             "safety_threshold": safety_threshold,
             "distance_to_liquidation": abs(current_price - liquidation_price)

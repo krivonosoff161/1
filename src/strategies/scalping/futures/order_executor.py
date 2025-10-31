@@ -201,19 +201,40 @@ class FuturesOrderExecutor:
     async def _calculate_limit_price(self, symbol: str, side: str) -> float:
         """Расчет цены для лимитного ордера"""
         try:
-            # Получение текущих цен
-            # Здесь нужно интегрироваться с WebSocket или REST API
-            current_price = 50000.0  # Заглушка
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем РЕАЛЬНУЮ текущую цену через API
+            import aiohttp
 
-            # Расчет цены с учетом спреда
-            if side.lower() == "buy":
-                # Для покупки - немного ниже текущей цены
-                limit_price = current_price * 0.999
-            else:  # sell
-                # Для продажи - немного выше текущей цены
-                limit_price = current_price * 1.001
+            # Получаем текущую цену через публичный API OKX
+            inst_id = f"{symbol}-SWAP"
+            url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
 
-            return limit_price
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("code") == "0" and data.get("data"):
+                            ticker = data["data"][0]
+                            current_price = float(ticker.get("last", "0"))
+
+                            if current_price > 0:
+                                # Расчет цены с учетом спреда
+                                if side.lower() == "buy":
+                                    # Для покупки - немного ниже текущей цены (чтобы быть Maker)
+                                    limit_price = current_price * 0.9995  # 0.05% ниже
+                                else:  # sell
+                                    # Для продажи - немного выше текущей цены (чтобы быть Maker)
+                                    limit_price = current_price * 1.0005  # 0.05% выше
+
+                                logger.debug(
+                                    f"💰 Лимитная цена для {symbol} {side}: {limit_price:.2f} (текущая: {current_price:.2f})"
+                                )
+                                return limit_price
+
+            # Fallback - если не получили цену
+            logger.warning(
+                f"⚠️ Не удалось получить текущую цену для {symbol}, возвращаем 0"
+            )
+            return 0.0
 
         except Exception as e:
             logger.error(f"Ошибка расчета лимитной цены: {e}")
@@ -352,7 +373,35 @@ class FuturesOrderExecutor:
         try:
             symbol = signal.get("symbol")
             side = signal.get("side")
-            entry_price = signal.get("price", 50000.0)
+            entry_price = signal.get("price", 0.0)
+
+            # ✅ ИСПРАВЛЕНИЕ: Если цена не указана, получаем текущую цену
+            if entry_price == 0.0:
+                try:
+                    import aiohttp
+
+                    inst_id = f"{symbol}-SWAP"
+                    url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                if data.get("code") == "0" and data.get("data"):
+                                    ticker = data["data"][0]
+                                    entry_price = float(ticker.get("last", "0"))
+                except Exception as e:
+                    logger.error(f"❌ Не удалось получить цену для {symbol}: {e}")
+                    # Fallback
+                    if "BTC" in symbol:
+                        entry_price = 110000.0
+                    elif "ETH" in symbol:
+                        entry_price = 3900.0
+                    else:
+                        entry_price = 50000.0
+
+            if entry_price == 0.0:
+                logger.error(f"❌ Цена для {symbol} = 0, невозможно рассчитать TP/SL")
+                return entry_price * 1.003, entry_price * 0.998  # Fallback
 
             # Получаем ATR для текущей волатильности
             atr = await self._get_current_atr(symbol, entry_price)
@@ -398,7 +447,30 @@ class FuturesOrderExecutor:
         except Exception as e:
             logger.error(f"Ошибка расчета TP/SL цен: {e}")
             # Fallback на фиксированные %
-            entry_price = signal.get("price", 50000.0)
+            entry_price = signal.get("price", 0.0)
+            if entry_price == 0.0:
+                # Если цена не указана, используем текущую цену
+                try:
+                    import aiohttp
+
+                    inst_id = f"{symbol}-SWAP"
+                    url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                if data.get("code") == "0" and data.get("data"):
+                                    ticker = data["data"][0]
+                                    entry_price = float(ticker.get("last", "0"))
+                except Exception:
+                    logger.error(f"❌ Fallback: не удалось получить цену для {symbol}")
+                    # Последний fallback - используем разумное значение на основе символа
+                    if "BTC" in symbol:
+                        entry_price = 110000.0
+                    elif "ETH" in symbol:
+                        entry_price = 3900.0
+                    else:
+                        entry_price = 50000.0
             tp_pct = self.scalping_config.tp_percent
             sl_pct = self.scalping_config.sl_percent
 
@@ -415,9 +487,55 @@ class FuturesOrderExecutor:
     async def _get_current_atr(self, symbol: str, price: float) -> float:
         """Получает текущий ATR для инструмента"""
         try:
-            # Здесь можно получить реальный ATR из индикаторов
-            # Пока заглушка: 1% волатильность
-            return price * 0.01
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем РЕАЛЬНЫЙ ATR из исторических данных
+            # Рассчитываем ATR на основе последних свечей
+            import aiohttp
+
+            # Получаем последние 14 свечей (для расчета ATR period=14)
+            inst_id = f"{symbol}-SWAP"
+            url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar=1m&limit=20"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("code") == "0" and data.get("data"):
+                            candles = data["data"]
+
+                            if (
+                                len(candles) >= 15
+                            ):  # Нужно минимум 15 свечей для ATR(14)
+                                # OKX формат: [timestamp, open, high, low, close, volume, volumeCcy]
+                                true_ranges = []
+                                for i in range(
+                                    1, min(15, len(candles))
+                                ):  # Используем последние 14
+                                    high = float(candles[i][2])
+                                    low = float(candles[i][3])
+                                    prev_close = float(candles[i - 1][4])
+
+                                    tr = max(
+                                        high - low,
+                                        abs(high - prev_close),
+                                        abs(low - prev_close),
+                                    )
+                                    true_ranges.append(tr)
+
+                                # ATR = среднее значение True Range за период
+                                if true_ranges:
+                                    atr = sum(true_ranges) / len(true_ranges)
+                                    logger.debug(
+                                        f"📊 ATR для {symbol}: {atr:.2f} (на основе {len(true_ranges)} свечей)"
+                                    )
+                                    return atr
+
+            # Fallback: используем приблизительный ATR как 1% от цены
+            fallback_atr = price * 0.01
+            logger.warning(
+                f"⚠️ Не удалось рассчитать ATR для {symbol}, используем fallback: {fallback_atr:.2f}"
+            )
+            return fallback_atr
+
         except Exception as e:
             logger.warning(f"Ошибка получения ATR: {e}")
             return price * 0.01  # 1% по умолчанию

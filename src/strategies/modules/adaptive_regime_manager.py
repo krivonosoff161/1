@@ -409,6 +409,17 @@ class AdaptiveRegimeManager:
 
         return None
 
+    def get_current_regime(self) -> Optional[str]:
+        """
+        Получить текущий режим рынка в виде строки.
+
+        Returns:
+            Строка с текущим режимом: "trending", "ranging", "choppy" или None
+        """
+        if not hasattr(self, "current_regime") or self.current_regime is None:
+            return None
+        return self.current_regime.value.lower() if self.current_regime else None
+
     def _should_switch_regime(
         self, detection: RegimeDetectionResult
     ) -> Optional[RegimeType]:

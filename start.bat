@@ -1,6 +1,10 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 >nul
 title Trading Bot Launcher
+
+REM Переход в корневую директорию скрипта
+cd /d "%~dp0"
 
 echo.
 echo ╔══════════════════════════════════════════════════════════════╗
@@ -22,10 +26,10 @@ if errorlevel 1 (
 )
 
 REM Проверка наличия виртуального окружения
-if exist "venv\Scripts\activate.bat" (
+set PYTHON_EXE=python
+if exist "venv\Scripts\python.exe" (
     echo ✅ Виртуальное окружение найдено
-    echo 🔄 Активация виртуального окружения...
-    call venv\Scripts\activate.bat
+    set PYTHON_EXE=venv\Scripts\python.exe
 ) else (
     echo ⚠️  Виртуальное окружение не найдено
     echo 💡 Рекомендуется создать виртуальное окружение:
@@ -33,9 +37,8 @@ if exist "venv\Scripts\activate.bat" (
     echo    venv\Scripts\activate
     echo    pip install -r requirements.txt
     echo.
-    echo Продолжить без виртуального окружения? (y/n)
-    set /p choice=
-    if /i "%choice%" neq "y" (
+    set /p venv_choice="Продолжить без виртуального окружения? (y/n): "
+    if /i "!venv_choice!" neq "y" (
         echo 👋 Запуск отменен
         pause
         exit /b 0
@@ -44,7 +47,7 @@ if exist "venv\Scripts\activate.bat" (
 
 REM Проверка зависимостей
 echo 🔍 Проверка зависимостей...
-python -c "import loguru, aiohttp, pydantic" >nul 2>&1
+%PYTHON_EXE% -c "import loguru, aiohttp, pydantic" >nul 2>&1
 if errorlevel 1 (
     echo ❌ Не все зависимости установлены!
     echo 💡 Установите зависимости: pip install -r requirements.txt
@@ -110,7 +113,11 @@ set /p confirm="Продолжить с Spot торговлей? (y/n): "
 if /i "%confirm%" neq "y" goto menu
 
 echo 🚀 Запуск Spot торгового бота...
-python src\main_spot.py
+%PYTHON_EXE% src\main_spot.py
+if errorlevel 1 (
+    echo ❌ Ошибка при запуске Spot бота
+    pause
+)
 goto end
 
 :futures_mode
@@ -135,17 +142,26 @@ set /p confirm="Вы уверены, что хотите продолжить? (
 if /i "%confirm%" neq "y" goto menu
 
 echo 🚀 Запуск Futures торгового бота...
-python src\main_futures.py
+%PYTHON_EXE% src\main_futures.py
+if errorlevel 1 (
+    echo ❌ Ошибка при запуске Futures бота
+    pause
+)
 goto end
 
 :interactive_mode
 echo 🚀 Запуск в интерактивном режиме...
-python run.py --interactive
+%PYTHON_EXE% run_bot.py --interactive
+if errorlevel 1 (
+    echo ❌ Ошибка при запуске в интерактивном режиме
+    echo 💡 Попробуйте: python run_bot.py --help
+    pause
+)
 goto end
 
 :check_config
 echo 🔍 Проверка конфигурации...
-python run.py --check-config
+%PYTHON_EXE% -c "from src.config import load_config; print('✅ Конфигурация валидна')"
 echo.
 pause
 goto menu

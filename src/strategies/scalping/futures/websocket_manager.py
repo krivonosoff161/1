@@ -53,6 +53,9 @@ class FuturesWebSocketManager:
         """
         self.ws_url = ws_url
         self.ws: Optional[aiohttp.ClientWebSocketResponse] = None
+        self.session: Optional[
+            aiohttp.ClientSession
+        ] = None  # ✅ Сохраняем сессию для закрытия
         self.connected = False
         self.subscribed_channels: Dict[str, dict] = {}
         self.callbacks: Dict[str, Callable] = {}
@@ -81,8 +84,9 @@ class FuturesWebSocketManager:
             True если подключение успешно
         """
         try:
-            session = aiohttp.ClientSession()
-            self.ws = await session.ws_connect(self.ws_url)
+            # ✅ Сохраняем сессию для корректного закрытия
+            self.session = aiohttp.ClientSession()
+            self.ws = await self.session.ws_connect(self.ws_url)
             self.connected = True
             self.reconnect_attempts = 0
             self.last_heartbeat = time.time()
@@ -118,6 +122,15 @@ class FuturesWebSocketManager:
                 await asyncio.sleep(0.1)
             except Exception:
                 pass
+
+        # ✅ КРИТИЧЕСКОЕ: Закрываем сессию, чтобы не было "Unclosed client session"
+        if self.session and not self.session.closed:
+            try:
+                await self.session.close()
+                await asyncio.sleep(0.1)  # Даем время на корректное закрытие
+                logger.debug("✅ WebSocket сессия закрыта")
+            except Exception as e:
+                logger.debug(f"⚠️ Ошибка при закрытии WebSocket сессии: {e}")
 
         logger.info("🔌 WebSocket отключен")
 

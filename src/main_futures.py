@@ -10,7 +10,9 @@ import sys
 from pathlib import Path
 
 # Добавляем корневую папку проекта в путь
-project_root = Path(__file__).parent
+project_root = Path(
+    __file__
+).parent.parent  # Переходим на уровень выше (из src в корень)
 sys.path.insert(0, str(project_root))
 
 from loguru import logger
@@ -22,17 +24,24 @@ from src.strategies.scalping.futures.orchestrator import \
 
 async def main():
     """Основная функция запуска Futures бота"""
+    orchestrator = None
     try:
         logger.info("🚀 Запуск Futures торгового бота...")
 
         # Загружаем конфигурацию
         config_path = project_root / "config" / "config_futures.yaml"
         if not config_path.exists():
-            logger.error(f"❌ Конфигурационный файл не найден: {config_path}")
-            logger.info(
-                "💡 Создайте файл config/config_futures.yaml с вашими настройками"
-            )
-            return
+            # Пробуем альтернативный путь (если запускаем из корня)
+            alt_path = Path("config/config_futures.yaml")
+            if alt_path.exists():
+                config_path = alt_path
+            else:
+                logger.error(f"❌ Конфигурационный файл не найден: {config_path}")
+                logger.error(f"❌ Альтернативный путь также не найден: {alt_path}")
+                logger.info(
+                    "💡 Создайте файл config/config_futures.yaml с вашими настройками"
+                )
+                return
 
         # Создаем конфигурацию
         config = BotConfig.load_from_file(str(config_path))
@@ -62,9 +71,30 @@ async def main():
         await orchestrator.start()
 
     except KeyboardInterrupt:
-        logger.info("🛑 Получен сигнал остановки...")
+        logger.info("🛑 Получен сигнал остановки (Ctrl+C)...")
+        # Останавливаем оркестратор при KeyboardInterrupt
+        if orchestrator:
+            try:
+                await orchestrator.stop()
+            except (asyncio.CancelledError, Exception) as stop_error:
+                logger.debug(
+                    f"⚠️ Ошибка при остановке (ожидаемо при прерывании): {stop_error}"
+                )
+    except asyncio.CancelledError:
+        logger.info("🛑 Задача отменена")
+        if orchestrator:
+            try:
+                await orchestrator.stop()
+            except Exception as stop_error:
+                logger.debug(f"⚠️ Ошибка при остановке: {stop_error}")
     except Exception as e:
         logger.error(f"❌ Критическая ошибка: {e}")
+        # Останавливаем оркестратор при ошибке
+        if orchestrator:
+            try:
+                await orchestrator.stop()
+            except Exception as stop_error:
+                logger.debug(f"⚠️ Ошибка при остановке: {stop_error}")
         raise
     finally:
         logger.info("✅ Futures бот остановлен")
@@ -73,20 +103,29 @@ async def main():
 if __name__ == "__main__":
     # Настройка логирования
     logger.remove()
+
+    # ✅ КОНСОЛЬ: только INFO и выше (чтобы не засорять экран)
     logger.add(
         sys.stdout,
         level="INFO",
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     )
 
-    # Добавляем файловое логирование
+    # ✅ ФАЙЛ: ВСЕ логи (DEBUG+) с ротацией и архивацией
+    # Создаем директорию для логов, если её нет
+    log_dir = Path("logs/futures")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
     logger.add(
-        "logs/futures/futures_main.log",
-        level="DEBUG",
+        str(log_dir / "futures_main_{time:YYYY-MM-DD}.log"),  # Имя файла с датой
+        level="DEBUG",  # ✅ ВСЕ уровни логирования
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        rotation="10 MB",
-        retention="7 days",
-        compression="zip",
+        rotation="10 MB",  # Ротация при достижении 10 MB
+        retention="30 days",  # Храним 30 дней
+        compression="zip",  # ✅ АРХИВАЦИЯ старых логов
+        encoding="utf-8",
+        backtrace=True,  # Полный backtrace при ошибках
+        diagnose=True,  # Дополнительная диагностика
     )
 
     # Запуск
