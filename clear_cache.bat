@@ -8,8 +8,8 @@ echo   OCHISTKA KESHA
 echo =====================================
 echo.
 
-REM Change to project root directory (parent of scripts)
-cd /d "%~dp0\.."
+REM Change to script directory (project root)
+cd /d "%~dp0"
 
 echo Ochishchayu kesh...
 if exist "data\cache\" (

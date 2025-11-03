@@ -54,33 +54,131 @@ class FuturesSignalGenerator:
                                     SimpleMovingAverage)
 
         self.indicator_manager = IndicatorManager()
-        # ✅ Добавляем ВСЕ необходимые индикаторы для генерации сигналов
+
+        # ✅ ИСПРАВЛЕНИЕ: Получаем базовые периоды из конфига (из ranging как fallback)
+        # Эти периоды используются для базовых расчетов, конкретные режимы используют свои параметры
+        rsi_period = 14
+        rsi_overbought = 70
+        rsi_oversold = 30
+        atr_period = 14
+        sma_period = 20
+        macd_fast = 12
+        macd_slow = 26
+        macd_signal = 9
+        bb_period = 20
+        bb_std_multiplier = 2.0
+        ema_fast = 12
+        ema_slow = 26
+
+        # Получаем базовые параметры из конфига
+        try:
+            scalping_config = getattr(self.config, "scalping", None)
+            if scalping_config:
+                # Базовые параметры из scalping секции (если есть)
+                if hasattr(scalping_config, "rsi_period"):
+                    rsi_period = getattr(scalping_config, "rsi_period", 14)
+                if hasattr(scalping_config, "rsi_overbought"):
+                    rsi_overbought = getattr(scalping_config, "rsi_overbought", 70)
+                if hasattr(scalping_config, "rsi_oversold"):
+                    rsi_oversold = getattr(scalping_config, "rsi_oversold", 30)
+                if hasattr(scalping_config, "macd_fast"):
+                    macd_fast = getattr(scalping_config, "macd_fast", 12)
+                if hasattr(scalping_config, "macd_slow"):
+                    macd_slow = getattr(scalping_config, "macd_slow", 26)
+                if hasattr(scalping_config, "macd_signal"):
+                    macd_signal = getattr(scalping_config, "macd_signal", 9)
+                if hasattr(scalping_config, "bb_period"):
+                    bb_period = getattr(scalping_config, "bb_period", 20)
+                if hasattr(scalping_config, "bb_std_dev"):
+                    bb_std_multiplier = getattr(scalping_config, "bb_std_dev", 2.0)
+                if hasattr(scalping_config, "ma_fast"):
+                    ema_fast = getattr(scalping_config, "ma_fast", 12)
+                if hasattr(scalping_config, "ma_slow"):
+                    ema_slow = getattr(scalping_config, "ma_slow", 26)
+
+                # Пытаемся получить периоды из ranging режима (как базовые)
+                adaptive_regime = getattr(scalping_config, "adaptive_regime", None)
+                if adaptive_regime:
+                    ranging_params = None
+                    if hasattr(adaptive_regime, "ranging_params"):
+                        ranging_params = getattr(
+                            adaptive_regime, "ranging_params", None
+                        )
+                    elif isinstance(adaptive_regime, dict):
+                        ranging_params = adaptive_regime.get("ranging_params", {})
+
+                    if ranging_params:
+                        indicators = None
+                        if hasattr(ranging_params, "indicators"):
+                            indicators = getattr(ranging_params, "indicators", {})
+                        elif isinstance(ranging_params, dict):
+                            indicators = ranging_params.get("indicators", {})
+
+                        if indicators:
+                            # Используем периоды из ranging режима как базовые
+                            if isinstance(indicators, dict):
+                                # Из dict
+                                if "sma_fast" in indicators:
+                                    sma_period = indicators.get(
+                                        "sma_fast", 20
+                                    )  # Используем fast как базовый SMA
+                                if "ema_fast" in indicators:
+                                    ema_fast = indicators.get("ema_fast", 12)
+                                if "ema_slow" in indicators:
+                                    ema_slow = indicators.get("ema_slow", 26)
+                                if "atr_period" in indicators:
+                                    atr_period = indicators.get("atr_period", 14)
+                            elif hasattr(indicators, "sma_fast"):
+                                # Из атрибутов Pydantic модели
+                                sma_period = getattr(indicators, "sma_fast", 20)
+                                ema_fast = getattr(indicators, "ema_fast", 12)
+                                ema_slow = getattr(indicators, "ema_slow", 26)
+                                atr_period = getattr(indicators, "atr_period", 14)
+        except Exception as e:
+            logger.debug(
+                f"⚠️ Не удалось получить периоды индикаторов из конфига: {e}, используем дефолтные"
+            )
+
+        # ✅ Добавляем индикаторы с параметрами из конфига
         self.indicator_manager.add_indicator(
-            "RSI", RSI(period=14, overbought=70, oversold=30)
+            "RSI",
+            RSI(period=rsi_period, overbought=rsi_overbought, oversold=rsi_oversold),
         )
-        self.indicator_manager.add_indicator("ATR", ATR(period=14))
-        self.indicator_manager.add_indicator("SMA", SimpleMovingAverage(period=20))
+        self.indicator_manager.add_indicator("ATR", ATR(period=atr_period))
+        self.indicator_manager.add_indicator(
+            "SMA", SimpleMovingAverage(period=sma_period)
+        )
         # ✅ Добавляем индикаторы, которые используются в генерации сигналов
         self.indicator_manager.add_indicator(
-            "MACD", MACD(fast_period=12, slow_period=26, signal_period=9)
+            "MACD",
+            MACD(
+                fast_period=macd_fast, slow_period=macd_slow, signal_period=macd_signal
+            ),
         )
         # ✅ ИСПРАВЛЕНИЕ: BollingerBands использует std_multiplier, а не std_dev
         self.indicator_manager.add_indicator(
-            "BollingerBands", BollingerBands(period=20, std_multiplier=2.0)
+            "BollingerBands",
+            BollingerBands(period=bb_period, std_multiplier=bb_std_multiplier),
         )
         self.indicator_manager.add_indicator(
-            "EMA_12", ExponentialMovingAverage(period=12)
+            "EMA_12", ExponentialMovingAverage(period=ema_fast)
         )
         self.indicator_manager.add_indicator(
-            "EMA_26", ExponentialMovingAverage(period=26)
+            "EMA_26", ExponentialMovingAverage(period=ema_slow)
         )
 
         logger.debug(
-            "📊 Инициализированы индикаторы: RSI, ATR, SMA, MACD, BollingerBands, EMA_12, EMA_26"
+            f"📊 Инициализированы индикаторы с параметрами из конфига: "
+            f"RSI(period={rsi_period}), ATR({atr_period}), SMA({sma_period}), "
+            f"MACD({macd_fast}/{macd_slow}/{macd_signal}), BB({bb_period}), "
+            f"EMA({ema_fast}/{ema_slow})"
         )
 
         # Модули фильтрации - ИНТЕГРАЦИЯ адаптивных систем
-        self.regime_manager = None  # Инициализируется в initialize()
+        self.regime_manager = (
+            None  # Инициализируется в initialize() (общий для всех символов)
+        )
+        self.regime_managers = {}  # ✅ Отдельный ARM для каждого символа
         self.correlation_filter = None
         self.mtf_filter = None
         self.pivot_filter = None
@@ -161,12 +259,58 @@ class FuturesSignalGenerator:
                     if ohlcv_data:
                         await self.regime_manager.initialize(ohlcv_data)
 
-                    logger.info("✅ Adaptive Regime Manager инициализирован для Futures")
+                    # ✅ Создаем отдельный ARM для каждого символа
+                    for symbol in self.scalping_config.symbols:
+                        symbol_regime_config = (
+                            regime_config  # Можно настроить индивидуально
+                        )
+                        self.regime_managers[symbol] = AdaptiveRegimeManager(
+                            symbol_regime_config
+                        )
+                        # Инициализируем если есть данные
+                        if ohlcv_data and symbol in ohlcv_data:
+                            await self.regime_managers[symbol].initialize(
+                                {symbol: ohlcv_data[symbol]}
+                            )
+
+                    logger.info(
+                        f"✅ Adaptive Regime Manager инициализирован: "
+                        f"общий + {len(self.regime_managers)} для символов"
+                    )
                 except Exception as e:
                     logger.warning(f"⚠️ ARM инициализация не удалась: {e}")
                     self.regime_manager = None
             else:
                 logger.info("⚠️ Adaptive Regime Manager отключен в конфиге")
+
+            # ✅ Инициализация Multi-Timeframe фильтра
+            try:
+                from src.strategies.modules.multi_timeframe import (
+                    MTFConfig, MultiTimeframeFilter)
+
+                # Создаем конфигурацию MTF (можно взять из config если есть)
+                mtf_config = MTFConfig(
+                    confirmation_timeframe="5m",  # Проверяем тренд на 5m
+                    score_bonus=2,
+                    block_opposite=True,  # Блокируем противоположные сигналы
+                    ema_fast_period=8,
+                    ema_slow_period=21,
+                    cache_ttl_seconds=30,  # Кэш на 30 секунд
+                )
+
+                # Инициализируем MTF фильтр (client может быть None - свечи получаем напрямую)
+                self.mtf_filter = MultiTimeframeFilter(
+                    client=self.client, config=mtf_config  # Может быть None
+                )
+
+                logger.info(
+                    f"✅ Multi-Timeframe Filter инициализирован: "
+                    f"таймфрейм={mtf_config.confirmation_timeframe}, "
+                    f"block_opposite={mtf_config.block_opposite}"
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ MTF инициализация не удалась: {e}")
+                self.mtf_filter = None
 
             self.is_initialized = True
             logger.info("✅ FuturesSignalGenerator инициализирован")
@@ -190,8 +334,43 @@ class FuturesSignalGenerator:
             signals = []
 
             # Генерация сигналов для каждой торговой пары
+            # ✅ Детекция режима для каждого символа отдельно
             for symbol in self.scalping_config.symbols:
-                symbol_signals = await self._generate_symbol_signals(symbol)
+                # Получаем данные один раз для символа (оптимизация)
+                market_data = await self._get_market_data(symbol)
+                if not market_data:
+                    continue
+
+                # Обновляем режим ARM для текущего символа (используем персональный ARM если есть)
+                regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+
+                if (
+                    regime_manager
+                    and market_data.ohlcv_data
+                    and len(market_data.ohlcv_data) >= 50
+                ):
+                    try:
+                        # Берем последнюю цену закрытия как current_price
+                        current_price = market_data.ohlcv_data[-1].close
+
+                        # Обновляем режим на основе свежих данных (detect_regime не async)
+                        detection_result = regime_manager.detect_regime(
+                            market_data.ohlcv_data, current_price
+                        )
+                        current_regime = regime_manager.get_current_regime()
+                        logger.debug(
+                            f"🧠 ARM режим для {symbol}: {current_regime} "
+                            f"(confidence: {detection_result.confidence:.1%})"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Ошибка обновления режима ARM для {symbol}: {e}"
+                        )
+
+                # Генерируем сигналы для текущего символа (передаем уже полученные данные)
+                symbol_signals = await self._generate_symbol_signals(
+                    symbol, market_data
+                )
                 signals.extend(symbol_signals)
 
             # Фильтрация и ранжирование сигналов
@@ -206,11 +385,19 @@ class FuturesSignalGenerator:
             logger.error(f"Ошибка генерации сигналов: {e}")
             return []
 
-    async def _generate_symbol_signals(self, symbol: str) -> List[Dict[str, Any]]:
-        """Генерация сигналов для конкретной торговой пары"""
+    async def _generate_symbol_signals(
+        self, symbol: str, market_data: Optional[MarketData] = None
+    ) -> List[Dict[str, Any]]:
+        """Генерация сигналов для конкретной торговой пары
+
+        Args:
+            symbol: Торговая пара
+            market_data: Рыночные данные (если не переданы - получим сами)
+        """
         try:
-            # Получение рыночных данных
-            market_data = await self._get_market_data(symbol)
+            # Получение рыночных данных (если не переданы)
+            if not market_data:
+                market_data = await self._get_market_data(symbol)
             if not market_data:
                 return []
 
@@ -335,36 +522,73 @@ class FuturesSignalGenerator:
             rsi_val = indicators.get("rsi", "N/A")
             macd_val = indicators.get("macd", {})
             if isinstance(macd_val, dict):
-                macd_str = f"macd={macd_val.get('macd', 'N/A')}, signal={macd_val.get('signal', 'N/A')}"
+                macd_line = macd_val.get("macd", 0)
+                signal_line = macd_val.get("signal", 0)
+                histogram = macd_line - signal_line
+                macd_str = (
+                    f"macd={macd_line}, signal={signal_line}, histogram={histogram}"
+                )
             else:
                 macd_str = str(macd_val)
+
+            # Добавляем EMA и BB для диагностики
+            ema_12 = indicators.get("ema_12", 0)
+            ema_26 = indicators.get("ema_26", 0)
+            bb = indicators.get("bollinger_bands", {})
+            current_price = (
+                market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
+
             logger.debug(
-                f"📊 Индикаторы для {symbol}: RSI={rsi_val}, MACD={{{macd_str}}}"
+                f"📊 Индикаторы для {symbol}:\n"
+                f"   Цена: ${current_price:.2f}\n"
+                f"   RSI: {rsi_val}\n"
+                f"   MACD: {{{macd_str}}}\n"
+                f"   EMA: 12={ema_12:.2f}, 26={ema_26:.2f}\n"
+                f"   BB: upper={bb.get('upper', 0):.2f}, lower={bb.get('lower', 0):.2f}, middle={bb.get('middle', 0):.2f}"
             )
 
             # RSI сигналы
             rsi_signals = await self._generate_rsi_signals(
                 symbol, indicators, market_data
             )
+            if rsi_signals:
+                logger.debug(f"✅ RSI дал {len(rsi_signals)} сигнал(ов) для {symbol}")
             signals.extend(rsi_signals)
 
             # MACD сигналы
             macd_signals = await self._generate_macd_signals(
                 symbol, indicators, market_data
             )
+            if macd_signals:
+                logger.debug(
+                    f"✅ MACD дал {len(macd_signals)} сигнал(ов) для {symbol}: {[s.get('type') for s in macd_signals]}"
+                )
             signals.extend(macd_signals)
 
             # Bollinger Bands сигналы
             bb_signals = await self._generate_bollinger_signals(
                 symbol, indicators, market_data
             )
+            if bb_signals:
+                logger.debug(
+                    f"✅ Bollinger Bands дал {len(bb_signals)} сигнал(ов) для {symbol}: {[s.get('type') for s in bb_signals]}"
+                )
             signals.extend(bb_signals)
 
             # Moving Average сигналы
             ma_signals = await self._generate_ma_signals(
                 symbol, indicators, market_data
             )
+            if ma_signals:
+                logger.debug(
+                    f"✅ Moving Average дал {len(ma_signals)} сигнал(ов) для {symbol}: {[s.get('type') for s in ma_signals]}"
+                )
             signals.extend(ma_signals)
+
+            logger.debug(
+                f"📊 Всего базовых сигналов для {symbol}: {len(signals)} ({[s.get('type', 'unknown') for s in signals]})"
+            )
 
             return signals
 
@@ -372,23 +596,91 @@ class FuturesSignalGenerator:
             logger.error(f"Ошибка генерации базовых сигналов для {symbol}: {e}")
             return []
 
+    def _get_regime_indicators_params(
+        self, regime: str = None, symbol: str = None
+    ) -> Dict:
+        """
+        Получить параметры индикаторов для режима из конфига.
+
+        Args:
+            regime: Режим ("trending"/"ranging"/"choppy") или None для текущего режима
+            symbol: Символ для получения режима (использует персональный ARM если есть)
+
+        Returns:
+            Dict с параметрами индикаторов
+        """
+        # Используем персональный ARM для символа или общий
+        regime_manager = None
+        if symbol and symbol in self.regime_managers:
+            regime_manager = self.regime_managers[symbol]
+        elif self.regime_manager:
+            regime_manager = self.regime_manager
+
+        if not regime_manager:
+            # Fallback: используем ranging параметры
+            regime = "ranging"
+        elif regime is None:
+            # Получаем текущий режим от ARM
+            regime = regime_manager.get_current_regime() or "ranging"
+
+        # Получаем параметры режима из конфига
+        try:
+            scalping_config = getattr(self.config, "scalping", None)
+            if scalping_config:
+                adaptive_regime = getattr(scalping_config, "adaptive_regime", None)
+                if adaptive_regime:
+                    regime_params = getattr(adaptive_regime, f"{regime}_params", None)
+                    if regime_params:
+                        indicators = getattr(regime_params, "indicators", {})
+                        if indicators:
+                            return indicators
+        except Exception as e:
+            logger.debug(f"⚠️ Не удалось получить параметры режима {regime}: {e}")
+
+        # Дефолтные значения (ranging)
+        return {
+            "rsi_overbought": 70,
+            "rsi_oversold": 30,
+            "ema_fast": 10,
+            "ema_slow": 25,
+        }
+
     async def _generate_rsi_signals(
         self, symbol: str, indicators: Dict, market_data: MarketData
     ) -> List[Dict[str, Any]]:
-        """Генерация RSI сигналов"""
+        """Генерация RSI сигналов с режим-специфичными порогами"""
         signals = []
 
         try:
             rsi = indicators.get("rsi", 50)
 
-            # Перепроданность (покупка)
-            if rsi < 30:
+            # ✅ Получаем режим-специфичные параметры для текущего символа
+            regime_params = self._get_regime_indicators_params(symbol=symbol)
+            rsi_oversold = regime_params.get("rsi_oversold", 30)
+            rsi_overbought = regime_params.get("rsi_overbought", 70)
+
+            # Получаем текущий режим для логирования
+            regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+            current_regime = (
+                regime_manager.get_current_regime() if regime_manager else "N/A"
+            )
+
+            logger.debug(
+                f"📊 RSI для {symbol}: значение={rsi:.2f}, "
+                f"пороги oversold={rsi_oversold}, overbought={rsi_overbought} "
+                f"(режим: {current_regime})"
+            )
+
+            # Перепроданность (покупка) - используем адаптивный порог
+            if rsi < rsi_oversold:
+                # Нормализованная сила: от 0 до 1
+                strength = min(1.0, (rsi_oversold - rsi) / rsi_oversold)
                 signals.append(
                     {
                         "symbol": symbol,
                         "side": "buy",
                         "type": "rsi_oversold",
-                        "strength": (30 - rsi) / 30,  # Нормализованная сила
+                        "strength": strength,
                         "price": market_data.ohlcv_data[-1].close
                         if market_data.ohlcv_data
                         else 0.0,
@@ -398,14 +690,16 @@ class FuturesSignalGenerator:
                     }
                 )
 
-            # Перекупленность (продажа)
-            elif rsi > 70:
+            # Перекупленность (продажа) - используем адаптивный порог
+            elif rsi > rsi_overbought:
+                # Нормализованная сила: от 0 до 1
+                strength = min(1.0, (rsi - rsi_overbought) / (100 - rsi_overbought))
                 signals.append(
                     {
                         "symbol": symbol,
                         "side": "sell",
                         "type": "rsi_overbought",
-                        "strength": (rsi - 70) / 30,  # Нормализованная сила
+                        "strength": strength,
                         "price": market_data.ohlcv_data[-1].close
                         if market_data.ohlcv_data
                         else 0.0,
@@ -430,10 +724,20 @@ class FuturesSignalGenerator:
             macd = indicators.get("macd", {})
             macd_line = macd.get("macd", 0)
             signal_line = macd.get("signal", 0)
-            histogram = macd.get("histogram", 0)
+            # ✅ ИСПРАВЛЕНИЕ: Правильно вычисляем histogram
+            histogram = macd.get("histogram", macd_line - signal_line)
+
+            logger.debug(
+                f"🔍 MACD для {symbol}: macd_line={macd_line:.4f}, "
+                f"signal_line={signal_line:.4f}, histogram={histogram:.4f}"
+            )
 
             # Пересечение MACD линии и сигнальной линии
             if macd_line > signal_line and histogram > 0:
+                logger.debug(
+                    f"✅ MACD BULLISH сигнал для {symbol}: macd({macd_line:.4f}) > signal({signal_line:.4f}), "
+                    f"histogram={histogram:.4f} > 0"
+                )
                 signals.append(
                     {
                         "symbol": symbol,
@@ -452,6 +756,10 @@ class FuturesSignalGenerator:
                 )
 
             elif macd_line < signal_line and histogram < 0:
+                logger.debug(
+                    f"✅ MACD BEARISH сигнал для {symbol}: macd({macd_line:.4f}) < signal({signal_line:.4f}), "
+                    f"histogram={histogram:.4f} < 0"
+                )
                 signals.append(
                     {
                         "symbol": symbol,
@@ -489,8 +797,18 @@ class FuturesSignalGenerator:
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
             )
 
+            logger.debug(
+                f"🔍 BB для {symbol}: цена={current_price:.2f}, upper={upper:.2f}, "
+                f"lower={lower:.2f}, middle={middle:.2f}, "
+                f"цена<=lower={current_price <= lower if lower > 0 else False}, "
+                f"цена>=upper={current_price >= upper if upper > 0 else False}"
+            )
+
             # Отскок от нижней полосы (покупка)
             if current_price <= lower and (middle - lower) > 0:
+                logger.debug(
+                    f"✅ BB OVERSOLD сигнал для {symbol}: цена({current_price:.2f}) <= lower({lower:.2f})"
+                )
                 signals.append(
                     {
                         "symbol": symbol,
@@ -508,6 +826,9 @@ class FuturesSignalGenerator:
 
             # Отскок от верхней полосы (продажа)
             elif current_price >= upper and (upper - middle) > 0:
+                logger.debug(
+                    f"✅ BB OVERBOUGHT сигнал для {symbol}: цена({current_price:.2f}) >= upper({upper:.2f})"
+                )
                 signals.append(
                     {
                         "symbol": symbol,
@@ -531,7 +852,7 @@ class FuturesSignalGenerator:
     async def _generate_ma_signals(
         self, symbol: str, indicators: Dict, market_data: MarketData
     ) -> List[Dict[str, Any]]:
-        """Генерация Moving Average сигналов"""
+        """Генерация Moving Average сигналов с проверкой направления движения цены"""
         signals = []
 
         try:
@@ -541,38 +862,117 @@ class FuturesSignalGenerator:
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
             )
 
-            # Пересечение быстрой и медленной MA
-            if ma_fast > ma_slow and current_price > ma_fast and ma_slow > 0:
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "buy",
-                        "type": "ma_bullish",
-                        "strength": (ma_fast - ma_slow) / ma_slow,
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
-                        "timestamp": datetime.now(),
-                        "indicator_value": ma_fast,
-                        "confidence": 0.6,
-                    }
+            # ✅ УЛУЧШЕНИЕ: Проверяем направление движения цены (последние 3-5 свечей)
+            price_direction = None  # "up", "down", "neutral"
+            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= 5:
+                # Берем последние 5 свечей для определения направления
+                recent_candles = market_data.ohlcv_data[-5:]
+                closes = [c.close for c in recent_candles]
+
+                # Сравниваем первую и последнюю цену в окне
+                price_change = (
+                    (closes[-1] - closes[0]) / closes[0] if closes[0] > 0 else 0
                 )
 
+                # Определяем направление (порог 0.05% чтобы избежать шума)
+                if price_change > 0.0005:  # Рост > 0.05%
+                    price_direction = "up"
+                elif price_change < -0.0005:  # Падение > 0.05%
+                    price_direction = "down"
+                else:
+                    price_direction = "neutral"
+
+                # Также проверяем последние 3 свечи для более быстрой реакции
+                if len(recent_candles) >= 3:
+                    short_closes = [c.close for c in recent_candles[-3:]]
+                    short_change = (
+                        (short_closes[-1] - short_closes[0]) / short_closes[0]
+                        if short_closes[0] > 0
+                        else 0
+                    )
+                    # Если короткий тренд сильнее - используем его
+                    if abs(short_change) > abs(price_change) * 1.5:
+                        if short_change > 0.0005:
+                            price_direction = "up"
+                        elif short_change < -0.0005:
+                            price_direction = "down"
+
+            # ✅ ДИАГНОСТИКА: Логируем значения для анализа
+            logger.debug(
+                f"🔍 MA для {symbol}: EMA_12={ma_fast:.2f}, EMA_26={ma_slow:.2f}, "
+                f"цена={current_price:.2f}, ma_fast>ma_slow={ma_fast > ma_slow}, "
+                f"цена>ma_fast={current_price > ma_fast if ma_fast > 0 else False}, "
+                f"направление_цены={price_direction}"
+            )
+
+            # Пересечение быстрой и медленной MA
+            if ma_fast > ma_slow and current_price > ma_fast and ma_slow > 0:
+                # ✅ УЛУЧШЕНИЕ: Не даем bullish сигнал если цена падает
+                if price_direction == "down":
+                    logger.debug(
+                        f"⚠️ MA BULLISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"EMA показывает bullish, но цена падает (направление={price_direction})"
+                    )
+                else:
+                    strength = (ma_fast - ma_slow) / ma_slow
+                    # Снижаем силу сигнала если направление neutral (не подтверждено)
+                    if price_direction == "neutral":
+                        strength *= 0.7
+
+                    logger.debug(
+                        f"✅ MA BULLISH сигнал для {symbol}: EMA_12({ma_fast:.2f}) > EMA_26({ma_slow:.2f}), "
+                        f"цена({current_price:.2f}) > EMA_12, направление={price_direction}, strength={strength:.4f}"
+                    )
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "buy",
+                            "type": "ma_bullish",
+                            "strength": strength,
+                            "price": market_data.ohlcv_data[-1].close
+                            if market_data.ohlcv_data
+                            else 0.0,
+                            "timestamp": datetime.now(),
+                            "indicator_value": ma_fast,
+                            "confidence": 0.7
+                            if price_direction == "up"
+                            else 0.5,  # Больше уверенности если цена растет
+                        }
+                    )
+
             elif ma_fast < ma_slow and current_price < ma_fast and ma_slow > 0:
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "sell",
-                        "type": "ma_bearish",
-                        "strength": (ma_slow - ma_fast) / ma_slow,
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
-                        "timestamp": datetime.now(),
-                        "indicator_value": ma_fast,
-                        "confidence": 0.6,
-                    }
-                )
+                # ✅ УЛУЧШЕНИЕ: Не даем bearish сигнал если цена растет
+                if price_direction == "up":
+                    logger.debug(
+                        f"⚠️ MA BEARISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"EMA показывает bearish, но цена растет (направление={price_direction})"
+                    )
+                else:
+                    strength = (ma_slow - ma_fast) / ma_slow
+                    # Снижаем силу сигнала если направление neutral
+                    if price_direction == "neutral":
+                        strength *= 0.7
+
+                    logger.debug(
+                        f"✅ MA BEARISH сигнал для {symbol}: EMA_12({ma_fast:.2f}) < EMA_26({ma_slow:.2f}), "
+                        f"цена({current_price:.2f}) < EMA_12, направление={price_direction}, strength={strength:.4f}"
+                    )
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "sell",
+                            "type": "ma_bearish",
+                            "strength": strength,
+                            "price": market_data.ohlcv_data[-1].close
+                            if market_data.ohlcv_data
+                            else 0.0,
+                            "timestamp": datetime.now(),
+                            "indicator_value": ma_fast,
+                            "confidence": 0.7
+                            if price_direction == "down"
+                            else 0.5,  # Больше уверенности если цена падает
+                        }
+                    )
 
         except Exception as e:
             logger.error(f"Ошибка генерации Moving Average сигналов: {e}")
@@ -588,10 +988,11 @@ class FuturesSignalGenerator:
 
             for signal in signals:
                 # ✅ ИСПРАВЛЕНИЕ: Проверяем что фильтры инициализированы перед вызовом
-                # Проверка режима рынка (если ARM включен)
-                if self.regime_manager:
+                # Проверка режима рынка (используем персональный ARM для символа если есть)
+                regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+                if regime_manager:
                     try:
-                        if not await self.regime_manager.is_signal_valid(
+                        if not await regime_manager.is_signal_valid(
                             signal, market_data
                         ):
                             logger.debug(f"🔍 Сигнал {symbol} отфильтрован ARM")
@@ -820,7 +1221,7 @@ if __name__ == "__main__":
     # Создаем конфигурацию
     config = BotConfig(
         api_key="test_key",
-        secret_key="test_secret",
+        secret_key="test_secret",  # nosec B106
         passphrase="test_passphrase",
         sandbox=True,
         scalping=ScalpingConfig(

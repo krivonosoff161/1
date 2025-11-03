@@ -1,178 +1,166 @@
 @echo off
 setlocal enabledelayedexpansion
-chcp 65001 >nul
+chcp 65001 >nul 2>&1
 title Trading Bot Launcher
 
-REM Переход в корневую директорию скрипта
+REM Go to script root directory
 cd /d "%~dp0"
 
 echo.
-echo ╔══════════════════════════════════════════════════════════════╗
-echo ║                    🚀 TRADING BOT LAUNCHER 🚀                ║
-echo ║                                                              ║
-echo ║  Windows Launcher для торгового бота                        ║
-echo ║  Поддерживает Spot и Futures торговлю                       ║
-echo ╚══════════════════════════════════════════════════════════════╝
+echo ================================================================
+echo              TRADING BOT LAUNCHER
+echo.
+echo   Windows Launcher for Trading Bot
+echo   Supports Spot and Futures trading
+echo ================================================================
 echo.
 
-REM Проверка наличия Python
+REM Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo ❌ Python не найден в системе!
-    echo 💡 Установите Python 3.8+ и добавьте его в PATH
-    echo 💡 Скачать можно с https://python.org
+    echo [ERROR] Python not found!
+    echo [INFO] Install Python 3.8+ and add to PATH
+    echo [INFO] Download from https://python.org
     pause
     exit /b 1
 )
 
-REM Проверка наличия виртуального окружения
+REM Check virtual environment
 set PYTHON_EXE=python
 if exist "venv\Scripts\python.exe" (
-    echo ✅ Виртуальное окружение найдено
+    echo [OK] Virtual environment found
     set PYTHON_EXE=venv\Scripts\python.exe
 ) else (
-    echo ⚠️  Виртуальное окружение не найдено
-    echo 💡 Рекомендуется создать виртуальное окружение:
+    echo [WARNING] Virtual environment not found
+    echo [INFO] Recommended: create virtual environment
     echo    python -m venv venv
     echo    venv\Scripts\activate
     echo    pip install -r requirements.txt
     echo.
-    set /p venv_choice="Продолжить без виртуального окружения? (y/n): "
+    set /p venv_choice="Continue without virtual environment? (y/n): "
     if /i "!venv_choice!" neq "y" (
-        echo 👋 Запуск отменен
+        echo [INFO] Launch cancelled
         pause
         exit /b 0
     )
 )
 
-REM Проверка зависимостей
-echo 🔍 Проверка зависимостей...
+REM Check dependencies
+echo [CHECK] Checking dependencies...
 %PYTHON_EXE% -c "import loguru, aiohttp, pydantic" >nul 2>&1
 if errorlevel 1 (
-    echo ❌ Не все зависимости установлены!
-    echo 💡 Установите зависимости: pip install -r requirements.txt
+    echo [ERROR] Dependencies not installed!
+    echo [INFO] Install: pip install -r requirements.txt
     pause
     exit /b 1
 )
 
-REM Проверка конфигурационных файлов
-echo 🔍 Проверка конфигурации...
+REM Check config files
+echo [CHECK] Checking configuration...
 if not exist "config\config_spot.yaml" (
-    echo ❌ Конфигурационный файл config\config_spot.yaml не найден!
-    echo 💡 Создайте файл конфигурации для Spot торговли
+    echo [ERROR] Config file config\config_spot.yaml not found!
+    echo [INFO] Create config file for Spot trading
     pause
     exit /b 1
 )
 
 if not exist "config\config_futures.yaml" (
-    echo ❌ Конфигурационный файл config\config_futures.yaml не найден!
-    echo 💡 Создайте файл конфигурации для Futures торговли
+    echo [ERROR] Config file config\config_futures.yaml not found!
+    echo [INFO] Create config file for Futures trading
     pause
     exit /b 1
 )
 
-echo ✅ Конфигурационные файлы найдены
+echo [OK] Configuration files found
 
-REM Создание папок для логов
+REM Create log directories
 if not exist "logs\spot" mkdir "logs\spot"
 if not exist "logs\futures" mkdir "logs\futures"
 
 echo.
-echo Выберите режим торговли:
-echo 1. Spot Trading (Спот торговля)
-echo 2. Futures Trading (Фьючерсная торговля)
-echo 3. Интерактивный режим
-echo 4. Проверка конфигурации
-echo 5. Выход
+echo Select trading mode:
+echo 1. Spot Trading
+echo 2. Futures Trading
+echo 3. Check configuration
+echo 4. Exit
 echo.
 
 :menu
-set /p choice="Введите номер (1-5): "
+set /p choice="Enter number (1-4): "
 
 if "%choice%"=="1" goto spot_mode
 if "%choice%"=="2" goto futures_mode
-if "%choice%"=="3" goto interactive_mode
-if "%choice%"=="4" goto check_config
-if "%choice%"=="5" goto exit
-echo ❌ Неверный выбор. Попробуйте снова.
+if "%choice%"=="3" goto check_config
+if "%choice%"=="4" goto exit
+echo [ERROR] Invalid choice. Try again.
 goto menu
 
 :spot_mode
 echo.
-echo ╔══════════════════════════════════════════════════════════════╗
-echo ║                    📈 SPOT TRADING MODE 📈                  ║
-echo ║                                                              ║
-echo ║  Особенности Spot торговли:                                  ║
-echo ║  • Торговля без левериджа (1:1)                             ║
-echo ║  • Более низкие риски                                       ║
-echo ║  • Подходит для начинающих                                  ║
-echo ║  • Меньшая волатильность PnL                                ║
-echo ╚══════════════════════════════════════════════════════════════╝
+echo ================================================================
+echo              SPOT TRADING MODE
 echo.
-set /p confirm="Продолжить с Spot торговлей? (y/n): "
+echo   Spot Trading Features:
+echo   - Trading without leverage (1:1)
+echo   - Lower risks
+echo   - Suitable for beginners
+echo   - Lower PnL volatility
+echo ================================================================
+echo.
+set /p confirm="Continue with Spot trading? (y/n): "
 if /i "%confirm%" neq "y" goto menu
 
-echo 🚀 Запуск Spot торгового бота...
+echo [START] Starting Spot trading bot...
 %PYTHON_EXE% src\main_spot.py
 if errorlevel 1 (
-    echo ❌ Ошибка при запуске Spot бота
+    echo [ERROR] Error starting Spot bot
     pause
 )
 goto end
 
 :futures_mode
 echo.
-echo ╔══════════════════════════════════════════════════════════════╗
-echo ║                   ⚡ FUTURES TRADING MODE ⚡                 ║
-echo ║                                                              ║
-echo ║  Особенности Futures торговли:                               ║
-echo ║  • Торговля с левериджем (3x по умолчанию)                  ║
-echo ║  • Высокие риски и потенциальная доходность                 ║
-echo ║  • Требует опыт в торговле                                  ║
-echo ║  • Защита от ликвидации                                     ║
-echo ║                                                              ║
-echo ║  ⚠️  КРИТИЧЕСКИ ВАЖНО:                                      ║
-echo ║     • Настройте правильные пороги маржи                     ║
-echo ║     • Используйте sandbox для тестирования                   ║
-echo ║     • Начните с минимальных сумм                            ║
-echo ╚══════════════════════════════════════════════════════════════╝
+echo ================================================================
+echo              FUTURES TRADING MODE
 echo.
-echo ⚠️  ВНИМАНИЕ: Futures торговля связана с высокими рисками!
-set /p confirm="Вы уверены, что хотите продолжить? (y/n): "
+echo   Futures Trading Features:
+echo   - Trading with leverage (3x default)
+echo   - High risks and potential returns
+echo   - Requires trading experience
+echo   - Liquidation protection
+echo.
+echo   [WARNING] CRITICALLY IMPORTANT:
+echo   - Configure correct margin thresholds
+echo   - Use sandbox for testing
+echo   - Start with minimum amounts
+echo ================================================================
+echo.
+echo [WARNING] Futures trading involves high risks!
+set /p confirm="Are you sure you want to continue? (y/n): "
 if /i "%confirm%" neq "y" goto menu
 
-echo 🚀 Запуск Futures торгового бота...
+echo [START] Starting Futures trading bot...
 %PYTHON_EXE% src\main_futures.py
 if errorlevel 1 (
-    echo ❌ Ошибка при запуске Futures бота
-    pause
-)
-goto end
-
-:interactive_mode
-echo 🚀 Запуск в интерактивном режиме...
-%PYTHON_EXE% run_bot.py --interactive
-if errorlevel 1 (
-    echo ❌ Ошибка при запуске в интерактивном режиме
-    echo 💡 Попробуйте: python run_bot.py --help
+    echo [ERROR] Error starting Futures bot
     pause
 )
 goto end
 
 :check_config
-echo 🔍 Проверка конфигурации...
-%PYTHON_EXE% -c "from src.config import load_config; print('✅ Конфигурация валидна')"
+echo [CHECK] Checking configuration...
+%PYTHON_EXE% -c "from src.config import load_config; print('[OK] Configuration valid')"
 echo.
 pause
 goto menu
 
 :exit
-echo 👋 До свидания!
+echo [INFO] Goodbye!
 goto end
 
 :end
 echo.
-echo ✅ Торговый бот остановлен
-echo 📊 Логи сохранены в папке logs\
+echo [OK] Trading bot stopped
+echo [INFO] Logs saved in logs\ folder
 echo.
 pause

@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 from loguru import logger
 
 from src.models import OHLCV
+from src.strategies.scalping.futures.indicators.fast_adx import FastADX
 
 
 class RegimeType(Enum):
@@ -201,9 +202,16 @@ class AdaptiveRegimeManager:
             RegimeType.CHOPPY: timedelta(0),
         }
 
+        # ✅ FastADX для настоящего расчета ADX вместо ADX Proxy
+        adx_period = getattr(config, "adx_period", 9)
+        self.fast_adx = FastADX(
+            period=adx_period, threshold=config.trending_adx_threshold
+        )
+
         logger.info(
             f"ARM initialized: ADX trend={config.trending_adx_threshold}, "
-            f"volatility={config.low_volatility_threshold:.1%}-{config.high_volatility_threshold:.1%}"
+            f"volatility={config.low_volatility_threshold:.1%}-{config.high_volatility_threshold:.1%}, "
+            f"FastADX period={adx_period}"
         )
 
     def detect_regime(
@@ -234,12 +242,23 @@ class AdaptiveRegimeManager:
         regime, confidence, reason = self._classify_regime(indicators)
 
         # 🔍 DEBUG: Логируем детекцию режима
+        adx_val = indicators.get("adx", indicators.get("adx_proxy", 0))
+        di_plus = indicators.get("di_plus", 0)
+        di_minus = indicators.get("di_minus", 0)
+        trend_dir = indicators.get("trend_direction", "N/A")
+        vol_ratio = indicators.get("volume_ratio", 1.0)
+        volatility = indicators.get("volatility_percent", 0)
+        # ✅ Ограничиваем вывод volatility (если >100% значит ошибка)
+        volatility_str = (
+            f"{volatility:.2%}" if volatility <= 100 else f"{volatility:.0f}% (ERROR!)"
+        )
         logger.debug(
             f"🧠 ARM Detect Regime:\n"
             f"   Detected: {regime.value.upper()} (confidence: {confidence:.1%})\n"
             f"   Reason: {reason}\n"
-            f"   ADX proxy: {indicators.get('adx_proxy', 0):.1f}\n"
-            f"   Volatility: {indicators.get('volatility_percent', 0):.2%}\n"
+            f"   ADX: {adx_val:.1f} (+DI={di_plus:.1f}, -DI={di_minus:.1f}, direction={trend_dir})\n"
+            f"   Volatility: {volatility_str}\n"
+            f"   Volume Ratio: {vol_ratio:.2f}x\n"
             f"   Reversals: {indicators.get('reversals', 0)}"
         )
 
@@ -270,13 +289,35 @@ class AdaptiveRegimeManager:
         atr = sum(true_ranges[-14:]) / 14 if len(true_ranges) >= 14 else 0
         volatility_percent = (atr / current_price) * 100 if current_price > 0 else 0
 
-        # ADX (упрощенный - направленность движения)
-        # Используем разницу между High-Low за период
-        directional_movement = sum([abs(highs[i] - lows[i]) for i in range(-14, 0)])
-        total_movement = sum([highs[i] - lows[i] for i in range(-14, 0)])
-        adx_proxy = (
-            (directional_movement / total_movement * 100) if total_movement > 0 else 0
+        # ✅ ИСПОЛЬЗУЕМ НАСТОЯЩИЙ ADX через FastADX вместо ADX Proxy
+        # Обновляем FastADX с историческими данными
+        for candle in candles[-self.fast_adx.period :]:
+            self.fast_adx.update(high=candle.high, low=candle.low, close=candle.close)
+
+        # Получаем настоящий ADX и +DI/-DI
+        adx_value = self.fast_adx.get_adx_value()
+        di_plus = self.fast_adx.get_di_plus()
+        di_minus = self.fast_adx.get_di_minus()
+        trend_direction = (
+            self.fast_adx.get_trend_direction()
+        )  # "bullish"/"bearish"/"neutral"
+
+        # Для обратной совместимости сохраняем как adx_proxy, но это теперь настоящий ADX
+        adx_proxy = adx_value
+
+        # ✅ Volume indicators для подтверждения режима
+        volumes = [c.volume for c in candles]
+        # Volume MA (20) - средний объем
+        volume_ma = (
+            sum(volumes[-20:]) / 20
+            if len(volumes) >= 20
+            else sum(volumes) / len(volumes)
+            if volumes
+            else 0
         )
+        # Volume Ratio = текущий объем / средний объем
+        current_volume = volumes[-1] if volumes else 0
+        volume_ratio = current_volume / volume_ma if volume_ma > 0 else 1.0
 
         # Trend strength (отклонение от SMA)
         trend_deviation = ((current_price - sma_50) / sma_50) * 100
@@ -301,10 +342,16 @@ class AdaptiveRegimeManager:
             "current_price": current_price,
             "atr": atr,
             "volatility_percent": volatility_percent,
-            "adx_proxy": adx_proxy,
+            "adx_proxy": adx_proxy,  # Теперь это настоящий ADX
+            "adx": adx_value,  # Добавляем явное значение ADX
+            "di_plus": di_plus,  # +DI для направления тренда
+            "di_minus": di_minus,  # -DI для направления тренда
+            "trend_direction": trend_direction,  # "bullish"/"bearish"/"neutral"
             "trend_deviation": abs(trend_deviation),
             "range_width": range_width,
             "reversals": reversals,
+            "volume_ma": volume_ma,  # Средний объем
+            "volume_ratio": volume_ratio,  # Текущий объем / средний объем
         }
 
     def _classify_regime(
@@ -322,24 +369,64 @@ class AdaptiveRegimeManager:
         range_width = indicators["range_width"]
         reversals = indicators["reversals"]
 
-        # CHOPPY: Высокая волатильность + много разворотов
-        if vol > self.config.high_volatility_threshold and reversals > 10:
-            confidence = min(1.0, (vol / 0.1) * 0.5 + (reversals / 20) * 0.5)
+        # CHOPPY: Высокая волатильность + много разворотов + высокий объем
+        volume_ratio = indicators.get("volume_ratio", 1.0)
+        # ✅ Высокий объем + хаос = choppy (не путать с trending!)
+        has_choppy_volume = volume_ratio > 1.5  # Очень высокий объем + хаос
+
+        if (
+            vol > self.config.high_volatility_threshold
+            and reversals > 10
+            and has_choppy_volume
+        ):
+            confidence = min(
+                1.0,
+                (vol / 0.1) * 0.4
+                + (reversals / 20) * 0.3
+                + (0.3 if has_choppy_volume else 0),
+            )
             reason = (
-                f"High volatility ({vol:.2%}) + {reversals} reversals "
-                f"→ Chaotic market"
+                f"High volatility ({vol:.2%}) + {reversals} reversals + "
+                f"high volume ({volume_ratio:.2f}x) → Chaotic market"
             )
             return RegimeType.CHOPPY, confidence, reason
 
-        # TRENDING: Сильный тренд + направленное движение
+        # TRENDING: Сильный тренд + направленное движение + подтверждение объемом
+        # ✅ ИСПОЛЬЗУЕМ НАСТОЯЩИЙ ADX и направление тренда (+DI/-DI)
+        trend_direction = indicators.get("trend_direction", "neutral")
+        di_plus = indicators.get("di_plus", 0)
+        di_minus = indicators.get("di_minus", 0)
+        volume_ratio = indicators.get("volume_ratio", 1.0)
+
+        # Проверяем что есть направленность (+DI > -DI для bullish или -DI > +DI для bearish)
+        has_direction = (trend_direction in ["bullish", "bearish"]) or (
+            abs(di_plus - di_minus) > 5.0  # Разница между +DI и -DI > 5
+        )
+
+        # ✅ Проверяем подтверждение объемом (высокий объем = сильный тренд)
+        has_volume_confirmation = volume_ratio > 1.2  # Объем выше среднего на 20%
+
         if (
             trend_dev > self.config.trend_strength_percent
             and adx > self.config.trending_adx_threshold
+            and has_direction
+            and has_volume_confirmation  # ✅ Добавили проверку объема
         ):
-            confidence = min(1.0, (trend_dev / 5.0) * 0.6 + (adx / 50.0) * 0.4)
+            confidence = min(
+                1.0,
+                (trend_dev / 5.0) * 0.3
+                + (adx / 50.0) * 0.3
+                + (0.2 if has_direction else 0)
+                + (0.2 if has_volume_confirmation else 0),
+            )
+            trend_info = (
+                f"({trend_direction}, +DI={di_plus:.1f}, -DI={di_minus:.1f})"
+                if trend_direction != "neutral"
+                else ""
+            )
             reason = (
-                f"Strong trend (deviation {trend_dev:.2%}, ADX {adx:.1f}) "
-                f"→ Trending market"
+                f"Strong trend (deviation {trend_dev:.2%}, ADX {adx:.1f} {trend_info}, "
+                f"volume={volume_ratio:.2f}x) → Trending market"
             )
             return RegimeType.TRENDING, confidence, reason
 
@@ -445,6 +532,52 @@ class AdaptiveRegimeManager:
             return detection.regime
 
         return None
+
+    async def is_signal_valid(self, signal: Dict, market_data=None) -> bool:
+        """
+        Проверяет валидность сигнала для текущего режима.
+
+        Args:
+            signal: Торговый сигнал
+            market_data: Рыночные данные (опционально)
+
+        Returns:
+            True если сигнал валиден для текущего режима
+        """
+        try:
+            # Получаем параметры текущего режима
+            regime_params = self.get_current_parameters()
+
+            # Проверяем min_score_threshold
+            signal_strength = signal.get("strength", 0)
+            # Нормализуем min_score_threshold (обычно 3-6) к 0-1 диапазону
+            # min_score_threshold = 3 означает минимум 3/12 = 0.25 силы
+            # min_score_threshold = 6 означает минимум 6/12 = 0.5 силы
+            min_strength = regime_params.min_score_threshold / 12.0
+
+            if signal_strength < min_strength:
+                logger.debug(
+                    f"🔍 Сигнал отфильтрован ARM: strength={signal_strength:.3f} < "
+                    f"min={min_strength:.3f} (режим: {self.current_regime.value})"
+                )
+                return False
+
+            # Дополнительные проверки по режиму
+            if self.current_regime == RegimeType.CHOPPY:
+                # В choppy режиме требуем больше подтверждений (выше confidence)
+                confidence = signal.get("confidence", 0)
+                if confidence < 0.7:  # Требуем минимум 70% уверенности
+                    logger.debug(
+                        f"🔍 Сигнал отфильтрован ARM (choppy): confidence={confidence:.2f} < 0.7"
+                    )
+                    return False
+
+            return True
+
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка проверки сигнала в ARM: {e}")
+            # В случае ошибки разрешаем сигнал (fail-open)
+            return True
 
     def get_current_parameters(self, balance_manager=None) -> RegimeParameters:
         """

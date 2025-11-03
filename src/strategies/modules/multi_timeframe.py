@@ -15,13 +15,13 @@ Logic:
 
 import time
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
+import aiohttp
 import numpy as np
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from src.clients.spot_client import OKXClient
 from src.models import OHLCV
 
 
@@ -75,23 +75,23 @@ class MultiTimeframeFilter:
         ...     score += result.bonus
     """
 
-    def __init__(self, client: OKXClient, config: MTFConfig):
+    def __init__(self, client=None, config: MTFConfig = None):
         """
         Инициализация MTF фильтра.
 
         Args:
-            client: OKX API клиент
-            config: Конфигурация MTF модуля
+            client: OKX API клиент (опционально, можно получать свечи напрямую)
+            config: Конфигурация MTF модуля (если None - использует дефолтные значения)
         """
-        self.client = client
-        self.config = config
+        self.client = client  # Может быть None - тогда получаем свечи напрямую
+        self.config = config or MTFConfig()  # Дефолтная конфигурация если не передана
 
         # Кэш для свечей старшего таймфрейма
         self._candles_cache: Dict[str, tuple[List[OHLCV], float]] = {}
 
         logger.info(
-            f"MTF Filter initialized: {config.confirmation_timeframe}, "
-            f"bonus={config.score_bonus}, block_opposite={config.block_opposite}"
+            f"MTF Filter initialized: {self.config.confirmation_timeframe}, "
+            f"bonus={self.config.score_bonus}, block_opposite={self.config.block_opposite}"
         )
 
     def update_parameters(self, new_config: MTFConfig):
@@ -274,12 +274,24 @@ class MultiTimeframeFilter:
         try:
             # Запрашиваем больше свечей для расчета EMA
             limit = max(50, self.config.ema_slow_period * 2)
-            candles = await self.client.get_candles(
-                symbol=symbol, timeframe=self.config.confirmation_timeframe, limit=limit
-            )
+
+            # ✅ АДАПТАЦИЯ: Получаем свечи напрямую через публичный API (работает для futures и spot)
+            if self.client and hasattr(self.client, "get_candles"):
+                # Если клиент поддерживает get_candles - используем его
+                candles = await self.client.get_candles(
+                    symbol=symbol,
+                    timeframe=self.config.confirmation_timeframe,
+                    limit=limit,
+                )
+            else:
+                # ✅ Получаем напрямую через публичный API (как в signal_generator)
+                candles = await self._fetch_candles_directly(
+                    symbol, self.config.confirmation_timeframe, limit
+                )
 
             # Кэшируем результат
-            self._candles_cache[symbol] = (candles, current_time)
+            if candles:
+                self._candles_cache[symbol] = (candles, current_time)
 
             logger.debug(
                 f"MTF: Получено {len(candles)} свечей {self.config.confirmation_timeframe} для {symbol}"
@@ -356,6 +368,111 @@ class MultiTimeframeFilter:
             ema[i] = (prices[i] - ema[i - 1]) * multiplier + ema[i - 1]
 
         return ema
+
+    async def _fetch_candles_directly(
+        self, symbol: str, timeframe: str, limit: int
+    ) -> List[OHLCV]:
+        """
+        Получить свечи напрямую через публичный API OKX.
+
+        Args:
+            symbol: Торговая пара (например "BTC-USDT")
+            timeframe: Таймфрейм ("5m", "15m", "1H" и т.д.)
+            limit: Количество свечей
+
+        Returns:
+            List[OHLCV]: Список свечей
+        """
+        try:
+            # Формируем instId для futures (SWAP)
+            inst_id = f"{symbol}-SWAP"
+
+            # Формируем URL для публичного API
+            url = f"https://www.okx.com/api/v5/market/candles"
+            params = {"instId": inst_id, "bar": timeframe, "limit": limit}
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("code") == "0" and data.get("data"):
+                            candles_data = data["data"]
+
+                            # Конвертируем в OHLCV формат
+                            ohlcv_list = []
+                            for candle in candles_data:
+                                if len(candle) >= 6:
+                                    ohlcv_item = OHLCV(
+                                        timestamp=int(candle[0])
+                                        // 1000,  # OKX возвращает в миллисекундах
+                                        symbol=symbol,
+                                        open=float(candle[1]),
+                                        high=float(candle[2]),
+                                        low=float(candle[3]),
+                                        close=float(candle[4]),
+                                        volume=float(candle[5]),
+                                    )
+                                    ohlcv_list.append(ohlcv_item)
+
+                            # Сортируем по timestamp (старые -> новые)
+                            ohlcv_list.sort(key=lambda x: x.timestamp)
+
+                            return ohlcv_list
+                        else:
+                            logger.warning(
+                                f"MTF: API вернул ошибку для {symbol}: {data.get('msg', 'Unknown')}"
+                            )
+                    else:
+                        logger.warning(
+                            f"MTF: HTTP {resp.status} при получении свечей для {symbol}"
+                        )
+
+            return []
+
+        except Exception as e:
+            logger.error(f"MTF: Ошибка при прямом получении свечей для {symbol}: {e}")
+            return []
+
+    async def is_signal_valid(self, signal: Dict, market_data=None) -> bool:
+        """
+        Проверка валидности сигнала через MTF фильтр.
+
+        Args:
+            signal: Торговый сигнал (должен содержать "symbol" и "side")
+            market_data: Рыночные данные (не используются в MTF)
+
+        Returns:
+            bool: True если сигнал валиден, False если заблокирован
+        """
+        try:
+            symbol = signal.get("symbol")
+            side = signal.get("side")  # "buy" или "sell"
+
+            if not symbol or not side:
+                logger.warning(f"MTF: Неполный сигнал для проверки: {signal}")
+                return True  # Fail-open: если нет данных - разрешаем
+
+            # Конвертируем side в формат MTF ("buy" -> "LONG", "sell" -> "SHORT")
+            signal_side = "LONG" if side == "buy" else "SHORT"
+
+            # Проверяем подтверждение
+            result = await self.check_confirmation(symbol, signal_side)
+
+            # Если сигнал заблокирован - возвращаем False
+            if result.blocked:
+                logger.debug(
+                    f"🔍 MTF заблокировал сигнал {symbol} {signal_side}: {result.reason}"
+                )
+                return False
+
+            # Если сигнал подтвержден или нейтрален - разрешаем (может быть улучшен score)
+            return True
+
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Ошибка проверки MTF для сигнала: {e}, разрешаем сигнал (fail-open)"
+            )
+            return True  # Fail-open: при ошибке разрешаем сигнал
 
     def clear_cache(self, symbol: Optional[str] = None):
         """

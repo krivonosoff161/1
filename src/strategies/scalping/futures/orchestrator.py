@@ -868,12 +868,13 @@ class FuturesScalpingOrchestrator:
                         }
                     )
 
-                    # Инициализируем TrailingStopLoss для новой позиции
-                    # ⚠️ УЧЕТ КОМИССИИ: 0.1% на круг (0.05% вход + 0.05% выход для taker на OKX)
-                    # Можно получить из конфига, но пока используем безопасное значение
-                    trading_fee_rate = 0.001  # 0.1% на весь цикл (открытие + закрытие)
+                    # ✅ ИСПРАВЛЕНИЕ: Получаем ВСЕ параметры TrailingStopLoss из конфига
+                    trading_fee_rate = 0.001  # Fallback: 0.1% на весь цикл
+                    initial_trail = 0.05  # Fallback
+                    max_trail = 0.2  # Fallback
+                    min_trail = 0.02  # Fallback
 
-                    # Пытаемся получить из конфига, если есть
+                    # Получаем параметры из конфига
                     try:
                         if (
                             hasattr(self.config, "futures_modules")
@@ -883,6 +884,7 @@ class FuturesScalpingOrchestrator:
                                 trailing_sl_config = (
                                     self.config.futures_modules.trailing_sl
                                 )
+                                # Получаем trading_fee_rate
                                 if hasattr(trailing_sl_config, "trading_fee_rate"):
                                     trading_fee_rate = getattr(
                                         trailing_sl_config, "trading_fee_rate", 0.001
@@ -891,16 +893,49 @@ class FuturesScalpingOrchestrator:
                                     trading_fee_rate = trailing_sl_config.get(
                                         "trading_fee_rate", 0.001
                                     )
+
+                                # ✅ Получаем initial_trail, max_trail, min_trail из конфига
+                                if hasattr(trailing_sl_config, "initial_trail"):
+                                    initial_trail = getattr(
+                                        trailing_sl_config, "initial_trail", 0.05
+                                    )
+                                elif isinstance(trailing_sl_config, dict):
+                                    initial_trail = trailing_sl_config.get(
+                                        "initial_trail", 0.05
+                                    )
+
+                                if hasattr(trailing_sl_config, "max_trail"):
+                                    max_trail = getattr(
+                                        trailing_sl_config, "max_trail", 0.2
+                                    )
+                                elif isinstance(trailing_sl_config, dict):
+                                    max_trail = trailing_sl_config.get("max_trail", 0.2)
+
+                                if hasattr(trailing_sl_config, "min_trail"):
+                                    min_trail = getattr(
+                                        trailing_sl_config, "min_trail", 0.02
+                                    )
+                                elif isinstance(trailing_sl_config, dict):
+                                    min_trail = trailing_sl_config.get(
+                                        "min_trail", 0.02
+                                    )
+
+                                logger.debug(
+                                    f"✅ TrailingStopLoss параметры из конфига: "
+                                    f"initial={initial_trail}, max={max_trail}, "
+                                    f"min={min_trail}, fee={trading_fee_rate:.3%}"
+                                )
                     except Exception as e:
                         logger.debug(
-                            f"Не удалось получить trading_fee_rate из конфига: {e}, используем 0.1%"
+                            f"⚠️ Не удалось получить параметры TrailingStopLoss из конфига: {e}, "
+                            f"используем fallback значения"
                         )
 
                     tsl = TrailingStopLoss(
-                        initial_trail=0.05,
-                        max_trail=0.2,
-                        min_trail=0.02,
-                        trading_fee_rate=trading_fee_rate,  # ✅ Учитываем комиссию!
+                        initial_trail=initial_trail,  # ✅ Из конфига
+                        max_trail=max_trail,  # ✅ Из конфига
+                        min_trail=min_trail,  # ✅ Из конфига
+                        trading_fee_rate=trading_fee_rate,  # ✅ Из конфига
                     )
                     tsl.initialize(entry_price=price, side=signal["side"])
                     self.trailing_sl_by_symbol[symbol] = tsl
@@ -1130,12 +1165,48 @@ class FuturesScalpingOrchestrator:
     def _get_regime_params(self, regime_name: str) -> dict:
         """Получает параметры текущего режима из ARM"""
         try:
-            adaptive_regime = getattr(self.config, "adaptive_regime", {})
+            # ✅ ИСПРАВЛЕНИЕ: Используем scalping_config.adaptive_regime, а не config.adaptive_regime
+            scalping_config = getattr(self.config, "scalping", None)
+            if not scalping_config:
+                logger.warning("scalping_config не найден")
+                return {}
+
+            # Получаем adaptive_regime из scalping_config
+            adaptive_regime = None
+            if hasattr(scalping_config, "adaptive_regime"):
+                adaptive_regime = getattr(scalping_config, "adaptive_regime", None)
+            elif isinstance(scalping_config, dict):
+                adaptive_regime = scalping_config.get("adaptive_regime", {})
+
+            if not adaptive_regime:
+                logger.debug("adaptive_regime не найден в scalping_config")
+                return {}
+
+            # Получаем параметры режима (trending/ranging/choppy)
             if isinstance(adaptive_regime, dict):
-                return adaptive_regime.get(regime_name, {})
+                regime_params = adaptive_regime.get(regime_name, {})
+            elif hasattr(adaptive_regime, regime_name):
+                regime_params = getattr(adaptive_regime, regime_name)
+                # Если это Pydantic модель, конвертируем в dict
+                if hasattr(regime_params, "__dict__"):
+                    regime_params = regime_params.__dict__
+                elif hasattr(regime_params, "dict"):
+                    regime_params = regime_params.dict()
+            else:
+                logger.debug(f"Режим {regime_name} не найден в adaptive_regime")
+                return {}
+
+            # Если получили dict - возвращаем
+            if isinstance(regime_params, dict):
+                return regime_params
+
+            logger.debug(
+                f"Не удалось получить параметры режима {regime_name} в формате dict"
+            )
             return {}
+
         except Exception as e:
-            logger.warning(f"Ошибка получения параметров режима: {e}")
+            logger.warning(f"Ошибка получения параметров режима {regime_name}: {e}")
             return {}
 
     async def _check_drawdown_protection(self) -> bool:
