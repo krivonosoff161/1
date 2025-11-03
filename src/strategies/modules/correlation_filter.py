@@ -275,6 +275,64 @@ class CorrelationFilter:
                     f"  Strong correlation: {pair1}/{pair2} = {corr_data.correlation:.3f}"
                 )
 
+    async def is_signal_valid(self, signal: Dict, market_data=None) -> bool:
+        """
+        Проверка валидности сигнала через Correlation фильтр.
+
+        Args:
+            signal: Торговый сигнал (должен содержать "symbol" и "side" как "buy"/"sell")
+            market_data: Рыночные данные (не используются)
+
+        Returns:
+            bool: True если сигнал валиден, False если заблокирован
+        """
+        try:
+            if not self.config.enabled:
+                return True  # Фильтр отключен - разрешаем все
+
+            symbol = signal.get("symbol")
+            signal_side = signal.get("side")  # "buy" или "sell"
+
+            if not symbol or not signal_side:
+                logger.warning(f"Correlation: Неполный сигнал для проверки: {signal}")
+                return True  # Fail-open: если нет данных - разрешаем
+
+            # Конвертируем side в формат CorrelationFilter ("buy" -> "LONG", "sell" -> "SHORT")
+            signal_side_long = "LONG" if signal_side == "buy" else "SHORT"
+
+            # Получаем текущие открытые позиции из signal (если переданы)
+            # Если позиции не переданы - CorrelationFilter не может работать корректно
+            # В этом случае разрешаем сигнал (fail-open)
+            current_positions = signal.get("current_positions", {})
+
+            # Если позиции не переданы - не можем проверить корреляцию
+            # В этом случае разрешаем сигнал (фильтр не активен без позиций)
+            # TODO: В будущем можно получать позиции из position_manager через callback
+
+            # Проверяем через check_entry
+            result = await self.check_entry(
+                symbol=symbol,
+                signal_side=signal_side_long,
+                current_positions=current_positions,
+            )
+
+            # Если заблокирован - возвращаем False
+            if result.blocked:
+                logger.debug(
+                    f"🔍 CorrelationFilter заблокировал сигнал {symbol} {signal_side_long}: {result.reason}"
+                )
+                return False
+
+            # Если разрешен - возвращаем True
+            return True
+
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Ошибка проверки CorrelationFilter для сигнала: {e}, "
+                f"разрешаем сигнал (fail-open)"
+            )
+            return True  # Fail-open: при ошибке разрешаем сигнал
+
     def get_stats(self) -> Dict:
         """Получить статистику фильтра"""
         cache_stats = self.correlation_manager.get_cache_stats()

@@ -14,6 +14,7 @@ Logic:
 import time
 from typing import Dict, List, Optional
 
+import aiohttp
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -228,6 +229,60 @@ class PivotPointsFilter:
                 near_level=False, bonus=0, reason=f"Error: {str(e)}"
             )
 
+    async def is_signal_valid(self, signal: Dict, market_data=None) -> bool:
+        """
+        Проверка валидности сигнала через Pivot Points фильтр.
+
+        Pivot Points НЕ блокирует сигналы, только дает бонусы к score.
+
+        Args:
+            signal: Торговый сигнал (должен содержать "symbol", "side", "price")
+            market_data: Рыночные данные (не используются)
+
+        Returns:
+            bool: Всегда True (не блокирует, только бонусы)
+        """
+        try:
+            if not self.config.enabled:
+                return True  # Фильтр отключен - разрешаем все
+
+            symbol = signal.get("symbol")
+            signal_side = signal.get("side")  # "buy" или "sell"
+            current_price = signal.get("price", 0.0)
+
+            if not symbol or not signal_side or not current_price:
+                logger.debug(f"Pivot: Неполный сигнал для проверки: {signal}")
+                return True  # Fail-open
+
+            # Конвертируем side в формат PivotPoints ("buy" -> "LONG", "sell" -> "SHORT")
+            signal_side_long = "LONG" if signal_side == "buy" else "SHORT"
+
+            # Проверяем через check_entry (получаем бонус, но не блокируем)
+            result = await self.check_entry(
+                symbol=symbol,
+                current_price=current_price,
+                signal_side=signal_side_long,
+            )
+
+            # Добавляем бонус к score сигнала (если есть)
+            if result.bonus > 0:
+                signal["pivot_bonus"] = result.bonus
+                signal["pivot_level"] = result.level_name
+                logger.debug(
+                    f"✅ PivotPoints: {symbol} {signal_side_long} получил бонус +{result.bonus} "
+                    f"(уровень: {result.level_name})"
+                )
+
+            # Pivot Points НЕ блокирует сигналы - всегда разрешаем
+            return True
+
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Ошибка проверки PivotPoints для сигнала: {e}, "
+                f"разрешаем сигнал (fail-open)"
+            )
+            return True  # Fail-open: при ошибке разрешаем сигнал
+
     async def _get_pivot_levels(self, symbol: str) -> Optional[PivotLevels]:
         """
         Получить Pivot уровни с кэшированием.
@@ -255,9 +310,16 @@ class PivotPointsFilter:
 
         # Попытка 1: Дневные свечи (1D) - предпочтительный вариант
         try:
-            daily_candles = await self.client.get_candles(
-                symbol=symbol, timeframe=self.config.daily_timeframe, limit=10
-            )
+            # ✅ АДАПТАЦИЯ: Получаем свечи напрямую через публичный API если client не поддерживает get_candles
+            if self.client and hasattr(self.client, "get_candles"):
+                daily_candles = await self.client.get_candles(
+                    symbol=symbol, timeframe=self.config.daily_timeframe, limit=10
+                )
+            else:
+                daily_candles = await self._fetch_candles_directly(
+                    symbol, self.config.daily_timeframe, 10
+                )
+
             if daily_candles:
                 logger.debug(
                     f"Pivot: Got {len(daily_candles)} daily (1D) candles for {symbol}"
@@ -269,9 +331,13 @@ class PivotPointsFilter:
         if not daily_candles:
             try:
                 logger.info(f"Pivot: Trying 4H candles fallback for {symbol}...")
-                h4_candles = await self.client.get_candles(
-                    symbol=symbol, timeframe="4H", limit=60  # 60 * 4H = 10 дней
-                )
+                if self.client and hasattr(self.client, "get_candles"):
+                    h4_candles = await self.client.get_candles(
+                        symbol=symbol, timeframe="4H", limit=60  # 60 * 4H = 10 дней
+                    )
+                else:
+                    h4_candles = await self._fetch_candles_directly(symbol, "4H", 60)
+
                 if h4_candles:
                     # Группируем 4H свечи в дневные (6 свечей = 1 день)
                     daily_candles = self._group_to_daily(h4_candles, candles_per_day=6)
@@ -285,9 +351,13 @@ class PivotPointsFilter:
         if not daily_candles:
             try:
                 logger.info(f"Pivot: Trying 1H candles fallback for {symbol}...")
-                h1_candles = await self.client.get_candles(
-                    symbol=symbol, timeframe="1H", limit=240  # 240 * 1H = 10 дней
-                )
+                if self.client and hasattr(self.client, "get_candles"):
+                    h1_candles = await self.client.get_candles(
+                        symbol=symbol, timeframe="1H", limit=240  # 240 * 1H = 10 дней
+                    )
+                else:
+                    h1_candles = await self._fetch_candles_directly(symbol, "1H", 240)
+
                 if h1_candles:
                     # Группируем 1H свечи в дневные (24 свечи = 1 день)
                     daily_candles = self._group_to_daily(h1_candles, candles_per_day=24)
@@ -366,6 +436,70 @@ class PivotPointsFilter:
             daily_candles.append(daily_candle)
 
         return daily_candles
+
+    async def _fetch_candles_directly(
+        self, symbol: str, timeframe: str, limit: int
+    ) -> List[OHLCV]:
+        """
+        Получить свечи напрямую через публичный API OKX.
+
+        Args:
+            symbol: Торговая пара (например "BTC-USDT")
+            timeframe: Таймфрейм ("1D", "4H", "1H" и т.д.)
+            limit: Количество свечей
+
+        Returns:
+            List[OHLCV]: Список свечей
+        """
+        try:
+            # Формируем instId для futures (SWAP)
+            inst_id = f"{symbol}-SWAP"
+
+            # Формируем URL для публичного API
+            url = f"https://www.okx.com/api/v5/market/candles"
+            params = {"instId": inst_id, "bar": timeframe, "limit": limit}
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("code") == "0" and data.get("data"):
+                            candles_data = data["data"]
+
+                            # Конвертируем в OHLCV формат
+                            ohlcv_list = []
+                            for candle in candles_data:
+                                if len(candle) >= 6:
+                                    ohlcv_item = OHLCV(
+                                        timestamp=int(candle[0])
+                                        // 1000,  # OKX возвращает в миллисекундах
+                                        symbol=symbol,
+                                        open=float(candle[1]),
+                                        high=float(candle[2]),
+                                        low=float(candle[3]),
+                                        close=float(candle[4]),
+                                        volume=float(candle[5]),
+                                    )
+                                    ohlcv_list.append(ohlcv_item)
+
+                            # Сортируем по timestamp (старые -> новые)
+                            ohlcv_list.sort(key=lambda x: x.timestamp)
+
+                            return ohlcv_list
+                        else:
+                            logger.warning(
+                                f"Pivot: API вернул ошибку для {symbol}: {data.get('msg', 'Unknown')}"
+                            )
+                    else:
+                        logger.warning(
+                            f"Pivot: HTTP {resp.status} при получении свечей для {symbol}"
+                        )
+
+            return []
+
+        except Exception as e:
+            logger.error(f"Pivot: Ошибка при прямом получении свечей для {symbol}: {e}")
+            return []
 
     def clear_cache(self, symbol: Optional[str] = None):
         """Очистить кэш уровней"""

@@ -224,6 +224,23 @@ class FuturesSignalGenerator:
 
             if adaptive_regime_config and enabled:
                 try:
+                    # ✅ Функция для извлечения параметров режима из конфига
+                    def extract_regime_params(regime_name: str) -> Optional[Dict]:
+                        """Извлекает параметры режима из конфига"""
+                        regime_data = None
+                        if isinstance(adaptive_regime_config, dict):
+                            regime_data = adaptive_regime_config.get(regime_name, {})
+                        elif hasattr(adaptive_regime_config, regime_name):
+                            regime_data = getattr(
+                                adaptive_regime_config, regime_name, {}
+                            )
+                            # Если это Pydantic модель, конвертируем в dict
+                            if hasattr(regime_data, "dict"):
+                                regime_data = regime_data.dict()
+                            elif hasattr(regime_data, "__dict__"):
+                                regime_data = regime_data.__dict__
+                        return regime_data if isinstance(regime_data, dict) else None
+
                     # Получаем detection секцию (может быть dict или атрибут)
                     detection = None
                     if isinstance(adaptive_regime_config, dict):
@@ -240,6 +257,128 @@ class FuturesSignalGenerator:
                     else:
                         detection_dict = {}
 
+                    # ✅ Загружаем параметры режимов из конфига
+                    from src.strategies.modules.adaptive_regime_manager import (
+                        IndicatorParameters, ModuleParameters,
+                        RegimeParameters)
+
+                    def create_regime_params(regime_name: str) -> RegimeParameters:
+                        """Создает RegimeParameters из конфига"""
+                        params_dict = extract_regime_params(regime_name) or {}
+                        indicators_dict = params_dict.get("indicators", {})
+                        modules_dict = params_dict.get("modules", {})
+
+                        # Создаем IndicatorParameters с дефолтами
+                        indicators = IndicatorParameters(
+                            rsi_overbought=indicators_dict.get("rsi_overbought", 70),
+                            rsi_oversold=indicators_dict.get("rsi_oversold", 30),
+                            volume_threshold=indicators_dict.get(
+                                "volume_threshold", 1.1
+                            ),
+                            sma_fast=indicators_dict.get("sma_fast", 10),
+                            sma_slow=indicators_dict.get("sma_slow", 30),
+                            ema_fast=indicators_dict.get("ema_fast", 10),
+                            ema_slow=indicators_dict.get("ema_slow", 30),
+                            atr_period=indicators_dict.get("atr_period", 14),
+                            min_volatility_atr=indicators_dict.get(
+                                "min_volatility_atr", 0.0005
+                            ),
+                        )
+
+                        # Создаем ModuleParameters с дефолтами
+                        mtf_dict = modules_dict.get("multi_timeframe", {})
+                        corr_dict = modules_dict.get("correlation_filter", {})
+                        time_dict = modules_dict.get("time_filter", {})
+                        pivot_dict = modules_dict.get("pivot_points", {})
+                        vp_dict = modules_dict.get("volume_profile", {})
+                        adx_dict = modules_dict.get("adx_filter", {})
+
+                        modules = ModuleParameters(
+                            mtf_block_opposite=mtf_dict.get("block_opposite", True),
+                            mtf_score_bonus=mtf_dict.get("score_bonus", 2),
+                            mtf_confirmation_timeframe=mtf_dict.get(
+                                "confirmation_timeframe", "15m"
+                            ),
+                            correlation_threshold=corr_dict.get(
+                                "correlation_threshold", 0.7
+                            ),
+                            max_correlated_positions=corr_dict.get(
+                                "max_correlated_positions", 2
+                            ),
+                            block_same_direction_only=corr_dict.get(
+                                "block_same_direction_only", True
+                            ),
+                            prefer_overlaps=time_dict.get("prefer_overlaps", True),
+                            avoid_low_liquidity_hours=time_dict.get(
+                                "avoid_low_liquidity_hours", True
+                            ),
+                            pivot_level_tolerance_percent=pivot_dict.get(
+                                "level_tolerance_percent", 0.25
+                            ),
+                            pivot_score_bonus_near_level=pivot_dict.get(
+                                "score_bonus_near_level", 1
+                            ),
+                            pivot_use_last_n_days=pivot_dict.get("use_last_n_days", 5),
+                            vp_score_bonus_in_value_area=vp_dict.get(
+                                "score_bonus_in_value_area", 1
+                            ),
+                            vp_score_bonus_near_poc=vp_dict.get(
+                                "score_bonus_near_poc", 1
+                            ),
+                            vp_poc_tolerance_percent=vp_dict.get(
+                                "poc_tolerance_percent", 0.25
+                            ),
+                            vp_lookback_candles=vp_dict.get("lookback_candles", 200),
+                            adx_threshold=adx_dict.get("adx_threshold", 25.0),
+                            adx_di_difference=adx_dict.get("adx_di_difference", 5.0),
+                            avoid_weekends=time_dict.get("avoid_weekends", True),
+                        )
+
+                        # Создаем RegimeParameters
+                        # ✅ ИСПРАВЛЕНИЕ: Используем более мягкие дефолты для ranging режима
+                        default_min_score = (
+                            2
+                            if regime_name == "ranging"
+                            else (3 if regime_name == "trending" else 5)
+                        )
+                        return RegimeParameters(
+                            min_score_threshold=params_dict.get(
+                                "min_score_threshold", default_min_score
+                            ),
+                            max_trades_per_hour=params_dict.get(
+                                "max_trades_per_hour", 10
+                            ),
+                            position_size_multiplier=params_dict.get(
+                                "position_size_multiplier", 1.0
+                            ),
+                            tp_atr_multiplier=params_dict.get("tp_atr_multiplier", 0.5),
+                            sl_atr_multiplier=params_dict.get(
+                                "sl_atr_multiplier", 0.35
+                            ),
+                            max_holding_minutes=params_dict.get(
+                                "max_holding_minutes", 5
+                            ),
+                            cooldown_after_loss_minutes=params_dict.get(
+                                "cooldown_after_loss_minutes", 5
+                            ),
+                            pivot_bonus_multiplier=params_dict.get(
+                                "pivot_bonus_multiplier", 1.5
+                            ),
+                            volume_profile_bonus_multiplier=params_dict.get(
+                                "volume_profile_bonus_multiplier", 1.5
+                            ),
+                            indicators=indicators,
+                            modules=modules,
+                            ph_enabled=params_dict.get("ph_enabled", True),
+                            ph_threshold=params_dict.get("ph_threshold", 0.50),
+                            ph_time_limit=params_dict.get("ph_time_limit", 300),
+                        )
+
+                    # Создаем параметры режимов из конфига
+                    trending_params = create_regime_params("trending")
+                    ranging_params = create_regime_params("ranging")
+                    choppy_params = create_regime_params("choppy")
+
                     regime_config = RegimeConfig(
                         enabled=True,
                         # Параметры детекции из конфига
@@ -252,7 +391,10 @@ class FuturesSignalGenerator:
                         high_volatility_threshold=detection_dict.get(
                             "high_volatility_threshold", 0.03
                         ),
-                        # lookback_candles и adx_period используются внутри, но не передаются в RegimeConfig
+                        # ✅ Параметры режимов из конфига
+                        trending_params=trending_params,
+                        ranging_params=ranging_params,
+                        choppy_params=choppy_params,
                     )
                     self.regime_manager = AdaptiveRegimeManager(regime_config)
 
@@ -288,11 +430,48 @@ class FuturesSignalGenerator:
                 from src.strategies.modules.multi_timeframe import (
                     MTFConfig, MultiTimeframeFilter)
 
-                # Создаем конфигурацию MTF (можно взять из config если есть)
+                # ✅ ИСПРАВЛЕНИЕ: Используем параметры из базового конфига или режима
+                # Получаем параметры MTF из базового конфига (или дефолты)
+                base_mtf_config = None
+                if hasattr(self.scalping_config, "multi_timeframe"):
+                    base_mtf_config = self.scalping_config.multi_timeframe
+                elif isinstance(self.scalping_config, dict):
+                    base_mtf_config = self.scalping_config.get("multi_timeframe", {})
+
+                # Получаем параметры из базового конфига или используем дефолты
+                mtf_timeframe = "5m"  # По умолчанию 5m для futures
+                mtf_score_bonus = 2
+                mtf_block_opposite = (
+                    False  # ✅ ИЗМЕНЕНО: false по умолчанию (соответствует режимам)
+                )
+
+                if base_mtf_config:
+                    if isinstance(base_mtf_config, dict):
+                        mtf_timeframe = base_mtf_config.get(
+                            "confirmation_timeframe", mtf_timeframe
+                        )
+                        mtf_score_bonus = base_mtf_config.get(
+                            "score_bonus", mtf_score_bonus
+                        )
+                        mtf_block_opposite = base_mtf_config.get(
+                            "block_opposite", mtf_block_opposite
+                        )
+                    elif hasattr(base_mtf_config, "confirmation_timeframe"):
+                        mtf_timeframe = getattr(
+                            base_mtf_config, "confirmation_timeframe", mtf_timeframe
+                        )
+                        mtf_score_bonus = getattr(
+                            base_mtf_config, "score_bonus", mtf_score_bonus
+                        )
+                        mtf_block_opposite = getattr(
+                            base_mtf_config, "block_opposite", mtf_block_opposite
+                        )
+
+                # Создаем конфигурацию MTF
                 mtf_config = MTFConfig(
-                    confirmation_timeframe="5m",  # Проверяем тренд на 5m
-                    score_bonus=2,
-                    block_opposite=True,  # Блокируем противоположные сигналы
+                    confirmation_timeframe=mtf_timeframe,
+                    score_bonus=mtf_score_bonus,
+                    block_opposite=mtf_block_opposite,  # ✅ Используем из конфига (по умолчанию False)
                     ema_fast_period=8,
                     ema_slow_period=21,
                     cache_ttl_seconds=30,  # Кэш на 30 секунд
@@ -312,6 +491,303 @@ class FuturesSignalGenerator:
                 logger.warning(f"⚠️ MTF инициализация не удалась: {e}")
                 self.mtf_filter = None
 
+            # ✅ Инициализация Correlation Filter
+            try:
+                from src.strategies.modules.correlation_filter import (
+                    CorrelationFilter, CorrelationFilterConfig)
+
+                # Получаем параметры из базового конфига
+                corr_config_data = None
+                if hasattr(self.scalping_config, "correlation_filter"):
+                    corr_config_data = self.scalping_config.correlation_filter
+                elif isinstance(self.scalping_config, dict):
+                    corr_config_data = self.scalping_config.get(
+                        "correlation_filter", {}
+                    )
+
+                corr_enabled = True  # По умолчанию включен
+                corr_threshold = 0.7
+                corr_max_positions = 2
+                corr_block_same_direction = True
+
+                if corr_config_data:
+                    if isinstance(corr_config_data, dict):
+                        corr_threshold = corr_config_data.get(
+                            "correlation_threshold", corr_threshold
+                        )
+                        corr_max_positions = corr_config_data.get(
+                            "max_correlated_positions", corr_max_positions
+                        )
+                        corr_block_same_direction = corr_config_data.get(
+                            "block_same_direction_only", corr_block_same_direction
+                        )
+                    elif hasattr(corr_config_data, "correlation_threshold"):
+                        corr_threshold = getattr(
+                            corr_config_data, "correlation_threshold", corr_threshold
+                        )
+                        corr_max_positions = getattr(
+                            corr_config_data,
+                            "max_correlated_positions",
+                            corr_max_positions,
+                        )
+                        corr_block_same_direction = getattr(
+                            corr_config_data,
+                            "block_same_direction_only",
+                            corr_block_same_direction,
+                        )
+
+                corr_config = CorrelationFilterConfig(
+                    enabled=corr_enabled,
+                    correlation_threshold=corr_threshold,
+                    max_correlated_positions=corr_max_positions,
+                    block_same_direction_only=corr_block_same_direction,
+                )
+
+                # CorrelationFilter требует OKXClient, но у нас может быть futures client
+                # Используем self.client (может быть None - тогда фильтр не инициализируется)
+                if self.client:
+                    # Если client не OKXClient, можно попробовать адаптировать или пропустить
+                    try:
+                        self.correlation_filter = CorrelationFilter(
+                            client=self.client,
+                            config=corr_config,
+                            all_symbols=self.scalping_config.symbols,
+                        )
+                        logger.info(
+                            f"✅ Correlation Filter инициализирован: "
+                            f"threshold={corr_threshold}, max_positions={corr_max_positions}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Correlation Filter инициализация не удалась "
+                            f"(возможно несовместимый client): {e}"
+                        )
+                        self.correlation_filter = None
+                else:
+                    logger.warning("⚠️ Correlation Filter пропущен: client не доступен")
+                    self.correlation_filter = None
+            except Exception as e:
+                logger.warning(f"⚠️ Correlation Filter инициализация не удалась: {e}")
+                self.correlation_filter = None
+
+            # ✅ Инициализация Pivot Points Filter
+            try:
+                from src.strategies.modules.pivot_points import (
+                    PivotPointsConfig, PivotPointsFilter)
+
+                # Получаем параметры из базового конфига
+                pivot_config_data = None
+                if hasattr(self.scalping_config, "pivot_points"):
+                    pivot_config_data = self.scalping_config.pivot_points
+                elif isinstance(self.scalping_config, dict):
+                    pivot_config_data = self.scalping_config.get("pivot_points", {})
+
+                # Проверяем enabled флаг
+                pivot_enabled = True  # По умолчанию включен
+                if hasattr(self.scalping_config, "pivot_points_enabled"):
+                    pivot_enabled = getattr(
+                        self.scalping_config, "pivot_points_enabled", True
+                    )
+                elif isinstance(self.scalping_config, dict):
+                    pivot_enabled = self.scalping_config.get(
+                        "pivot_points_enabled", True
+                    )
+
+                pivot_tolerance = 0.003  # 0.3%
+                pivot_bonus = 1
+                pivot_timeframe = "1D"
+                pivot_use_days = 1
+
+                if pivot_config_data:
+                    if isinstance(pivot_config_data, dict):
+                        pivot_enabled = (
+                            pivot_config_data.get("enabled", pivot_enabled)
+                            if "enabled" in pivot_config_data
+                            else pivot_enabled
+                        )
+                        pivot_tolerance = pivot_config_data.get(
+                            "level_tolerance_percent", pivot_tolerance
+                        )
+                        pivot_bonus = pivot_config_data.get(
+                            "score_bonus_near_level", pivot_bonus
+                        )
+                        pivot_timeframe = pivot_config_data.get(
+                            "daily_timeframe", pivot_timeframe
+                        )
+                        pivot_use_days = pivot_config_data.get(
+                            "use_last_n_days", pivot_use_days
+                        )
+                    elif hasattr(pivot_config_data, "level_tolerance_percent"):
+                        pivot_enabled = getattr(
+                            pivot_config_data, "enabled", pivot_enabled
+                        )
+                        pivot_tolerance = getattr(
+                            pivot_config_data,
+                            "level_tolerance_percent",
+                            pivot_tolerance,
+                        )
+                        pivot_bonus = getattr(
+                            pivot_config_data, "score_bonus_near_level", pivot_bonus
+                        )
+                        pivot_timeframe = getattr(
+                            pivot_config_data, "daily_timeframe", pivot_timeframe
+                        )
+                        pivot_use_days = getattr(
+                            pivot_config_data, "use_last_n_days", pivot_use_days
+                        )
+
+                if pivot_enabled and self.client:
+                    pivot_config = PivotPointsConfig(
+                        enabled=True,
+                        daily_timeframe=pivot_timeframe,
+                        use_last_n_days=pivot_use_days,
+                        level_tolerance_percent=pivot_tolerance,
+                        score_bonus_near_level=pivot_bonus,
+                        cache_ttl_seconds=3600,  # 1 час кэш
+                    )
+
+                    try:
+                        self.pivot_filter = PivotPointsFilter(
+                            client=self.client,
+                            config=pivot_config,
+                        )
+                        logger.info(
+                            f"✅ Pivot Points Filter инициализирован: "
+                            f"tolerance={pivot_tolerance:.2%}, bonus={pivot_bonus}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Pivot Points Filter инициализация не удалась: {e}"
+                        )
+                        self.pivot_filter = None
+                else:
+                    logger.debug(
+                        "⚠️ Pivot Points Filter отключен или client не доступен"
+                    )
+                    self.pivot_filter = None
+            except Exception as e:
+                logger.warning(f"⚠️ Pivot Points Filter инициализация не удалась: {e}")
+                self.pivot_filter = None
+
+            # ✅ Инициализация Volume Profile Filter
+            try:
+                from src.strategies.modules.volume_profile_filter import (
+                    VolumeProfileConfig, VolumeProfileFilter)
+
+                # Получаем параметры из базового конфига
+                vp_config_data = None
+                if hasattr(self.scalping_config, "volume_profile"):
+                    vp_config_data = self.scalping_config.volume_profile
+                elif isinstance(self.scalping_config, dict):
+                    vp_config_data = self.scalping_config.get("volume_profile", {})
+
+                # Проверяем enabled флаг
+                vp_enabled = True  # По умолчанию включен
+                if hasattr(self.scalping_config, "volume_profile_enabled"):
+                    vp_enabled = getattr(
+                        self.scalping_config, "volume_profile_enabled", True
+                    )
+                elif isinstance(self.scalping_config, dict):
+                    vp_enabled = self.scalping_config.get(
+                        "volume_profile_enabled", True
+                    )
+
+                vp_timeframe = "1H"
+                vp_lookback = 100
+                vp_buckets = 50
+                vp_va_percent = 70.0
+                vp_bonus_va = 1
+                vp_bonus_poc = 1
+                vp_poc_tolerance = 0.005  # 0.5%
+
+                if vp_config_data:
+                    if isinstance(vp_config_data, dict):
+                        vp_enabled = (
+                            vp_config_data.get("enabled", vp_enabled)
+                            if "enabled" in vp_config_data
+                            else vp_enabled
+                        )
+                        vp_timeframe = vp_config_data.get(
+                            "lookback_timeframe", vp_timeframe
+                        )
+                        vp_lookback = vp_config_data.get(
+                            "lookback_candles", vp_lookback
+                        )
+                        vp_buckets = vp_config_data.get("price_buckets", vp_buckets)
+                        vp_va_percent = vp_config_data.get(
+                            "value_area_percent", vp_va_percent
+                        )
+                        vp_bonus_va = vp_config_data.get(
+                            "score_bonus_in_value_area", vp_bonus_va
+                        )
+                        vp_bonus_poc = vp_config_data.get(
+                            "score_bonus_near_poc", vp_bonus_poc
+                        )
+                        vp_poc_tolerance = vp_config_data.get(
+                            "poc_tolerance_percent", vp_poc_tolerance
+                        )
+                    elif hasattr(vp_config_data, "lookback_timeframe"):
+                        vp_enabled = getattr(vp_config_data, "enabled", vp_enabled)
+                        vp_timeframe = getattr(
+                            vp_config_data, "lookback_timeframe", vp_timeframe
+                        )
+                        vp_lookback = getattr(
+                            vp_config_data, "lookback_candles", vp_lookback
+                        )
+                        vp_buckets = getattr(
+                            vp_config_data, "price_buckets", vp_buckets
+                        )
+                        vp_va_percent = getattr(
+                            vp_config_data, "value_area_percent", vp_va_percent
+                        )
+                        vp_bonus_va = getattr(
+                            vp_config_data, "score_bonus_in_value_area", vp_bonus_va
+                        )
+                        vp_bonus_poc = getattr(
+                            vp_config_data, "score_bonus_near_poc", vp_bonus_poc
+                        )
+                        vp_poc_tolerance = getattr(
+                            vp_config_data, "poc_tolerance_percent", vp_poc_tolerance
+                        )
+
+                if vp_enabled and self.client:
+                    vp_config = VolumeProfileConfig(
+                        enabled=True,
+                        lookback_timeframe=vp_timeframe,
+                        lookback_candles=vp_lookback,
+                        price_buckets=vp_buckets,
+                        value_area_percent=vp_va_percent,
+                        score_bonus_in_value_area=vp_bonus_va,
+                        score_bonus_near_poc=vp_bonus_poc,
+                        poc_tolerance_percent=vp_poc_tolerance,
+                        cache_ttl_seconds=600,  # 10 минут кэш
+                    )
+
+                    try:
+                        self.volume_filter = VolumeProfileFilter(
+                            client=self.client,
+                            config=vp_config,
+                        )
+                        logger.info(
+                            f"✅ Volume Profile Filter инициализирован: "
+                            f"timeframe={vp_timeframe}, lookback={vp_lookback}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Volume Profile Filter инициализация не удалась: {e}"
+                        )
+                        self.volume_filter = None
+                else:
+                    logger.debug(
+                        "⚠️ Volume Profile Filter отключен или client не доступен"
+                    )
+                    self.volume_filter = None
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Volume Profile Filter инициализация не удалась: {e}"
+                )
+                self.volume_filter = None
+
             self.is_initialized = True
             logger.info("✅ FuturesSignalGenerator инициализирован")
 
@@ -319,9 +795,14 @@ class FuturesSignalGenerator:
             logger.error(f"Ошибка инициализации FuturesSignalGenerator: {e}")
             self.is_initialized = True  # Все равно продолжаем
 
-    async def generate_signals(self) -> List[Dict[str, Any]]:
+    async def generate_signals(
+        self, current_positions: Dict = None
+    ) -> List[Dict[str, Any]]:
         """
         Генерация торговых сигналов
+
+        Args:
+            current_positions: Текущие открытые позиции для CorrelationFilter
 
         Returns:
             Список торговых сигналов
@@ -369,7 +850,7 @@ class FuturesSignalGenerator:
 
                 # Генерируем сигналы для текущего символа (передаем уже полученные данные)
                 symbol_signals = await self._generate_symbol_signals(
-                    symbol, market_data
+                    symbol, market_data, current_positions=current_positions
                 )
                 signals.extend(symbol_signals)
 
@@ -386,13 +867,17 @@ class FuturesSignalGenerator:
             return []
 
     async def _generate_symbol_signals(
-        self, symbol: str, market_data: Optional[MarketData] = None
+        self,
+        symbol: str,
+        market_data: Optional[MarketData] = None,
+        current_positions: Dict = None,
     ) -> List[Dict[str, Any]]:
         """Генерация сигналов для конкретной торговой пары
 
         Args:
             symbol: Торговая пара
             market_data: Рыночные данные (если не переданы - получим сами)
+            current_positions: Текущие открытые позиции для CorrelationFilter
         """
         try:
             # Получение рыночных данных (если не переданы)
@@ -404,9 +889,9 @@ class FuturesSignalGenerator:
             # Генерация базовых сигналов
             base_signals = await self._generate_base_signals(symbol, market_data)
 
-            # Применение фильтров
+            # Применение фильтров (передаем позиции для CorrelationFilter)
             filtered_signals = await self._apply_filters(
-                symbol, base_signals, market_data
+                symbol, base_signals, market_data, current_positions=current_positions
             )
 
             return filtered_signals
@@ -671,41 +1156,96 @@ class FuturesSignalGenerator:
                 f"(режим: {current_regime})"
             )
 
+            # ✅ Получаем EMA для проверки тренда
+            ema_fast = indicators.get("ema_12", 0)
+            ema_slow = indicators.get("ema_26", 0)
+            current_price = (
+                market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
+
             # Перепроданность (покупка) - используем адаптивный порог
             if rsi < rsi_oversold:
+                # Проверяем тренд через EMA - если конфликт, снижаем confidence
+                is_downtrend = ema_fast < ema_slow and current_price < ema_fast
+
                 # Нормализованная сила: от 0 до 1
                 strength = min(1.0, (rsi_oversold - rsi) / rsi_oversold)
+
+                # ✅ СТРАТЕГИЯ КОНФЛИКТА: Снижаем confidence, но НЕ блокируем
+                # Это позволит использовать краткосрочные откаты для быстрого скальпа
+                if is_downtrend:
+                    # Конфликт: RSI oversold (LONG) vs EMA bearish (DOWN)
+                    confidence = 0.4  # Сниженная уверенность для быстрого скальпа
+                    has_conflict = True
+                    logger.debug(
+                        f"⚡ RSI OVERSOLD с конфликтом для {symbol}: "
+                        f"RSI({rsi:.2f}) < oversold({rsi_oversold}), "
+                        f"но EMA показывает нисходящий тренд → быстрый скальп на отскоке "
+                        f"(confidence={confidence:.1f})"
+                    )
+                else:
+                    confidence = 0.8  # Нормальная уверенность
+                    has_conflict = False
+                    logger.debug(
+                        f"✅ RSI OVERSOLD сигнал для {symbol}: "
+                        f"RSI({rsi:.2f}) < oversold({rsi_oversold}), "
+                        f"тренд не нисходящий (confidence={confidence:.1f})"
+                    )
+
                 signals.append(
                     {
                         "symbol": symbol,
                         "side": "buy",
                         "type": "rsi_oversold",
                         "strength": strength,
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
+                        "price": current_price,
                         "timestamp": datetime.now(),
                         "indicator_value": rsi,
-                        "confidence": 0.8,
+                        "confidence": confidence,
+                        "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
                     }
                 )
 
             # Перекупленность (продажа) - используем адаптивный порог
             elif rsi > rsi_overbought:
+                # Проверяем тренд через EMA - если конфликт, снижаем confidence
+                is_uptrend = ema_fast > ema_slow and current_price > ema_fast
+
                 # Нормализованная сила: от 0 до 1
                 strength = min(1.0, (rsi - rsi_overbought) / (100 - rsi_overbought))
+
+                # ✅ СТРАТЕГИЯ КОНФЛИКТА: Снижаем confidence, но НЕ блокируем
+                # Это позволит использовать краткосрочные коррекции для быстрого скальпа
+                if is_uptrend:
+                    # Конфликт: RSI overbought (SHORT) vs EMA bullish (UP)
+                    confidence = 0.4  # Сниженная уверенность для быстрого скальпа
+                    has_conflict = True
+                    logger.debug(
+                        f"⚡ RSI OVERBOUGHT с конфликтом для {symbol}: "
+                        f"RSI({rsi:.2f}) > overbought({rsi_overbought}), "
+                        f"но EMA показывает восходящий тренд → быстрый скальп на коррекции "
+                        f"(confidence={confidence:.1f})"
+                    )
+                else:
+                    confidence = 0.8  # Нормальная уверенность
+                    has_conflict = False
+                    logger.debug(
+                        f"✅ RSI OVERBOUGHT сигнал для {symbol}: "
+                        f"RSI({rsi:.2f}) > overbought({rsi_overbought}), "
+                        f"тренд не восходящий (confidence={confidence:.1f})"
+                    )
+
                 signals.append(
                     {
                         "symbol": symbol,
                         "side": "sell",
                         "type": "rsi_overbought",
                         "strength": strength,
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
+                        "price": current_price,
                         "timestamp": datetime.now(),
                         "indicator_value": rsi,
-                        "confidence": 0.8,
+                        "confidence": confidence,
+                        "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
                     }
                 )
 
@@ -805,44 +1345,78 @@ class FuturesSignalGenerator:
             )
 
             # Отскок от нижней полосы (покупка)
+            # ✅ ИСПРАВЛЕНИЕ: Не даем LONG сигнал в нисходящем тренде!
             if current_price <= lower and (middle - lower) > 0:
-                logger.debug(
-                    f"✅ BB OVERSOLD сигнал для {symbol}: цена({current_price:.2f}) <= lower({lower:.2f})"
-                )
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "buy",
-                        "type": "bb_oversold",
-                        "strength": (lower - current_price) / (middle - lower),
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
-                        "timestamp": datetime.now(),
-                        "indicator_value": current_price,
-                        "confidence": 0.75,
-                    }
-                )
+                # Проверяем тренд через EMA перед генерацией LONG сигнала
+                ema_fast = indicators.get("ema_12", 0)
+                ema_slow = indicators.get("ema_26", 0)
+
+                # Если EMA показывает нисходящий тренд - НЕ даем LONG сигнал
+                is_downtrend = ema_fast < ema_slow and current_price < ema_fast
+
+                if is_downtrend:
+                    logger.debug(
+                        f"⚠️ BB OVERSOLD сигнал ОТМЕНЕН для {symbol}: "
+                        f"цена({current_price:.2f}) <= lower({lower:.2f}), "
+                        f"но EMA показывает нисходящий тренд (EMA_12={ema_fast:.2f} < EMA_26={ema_slow:.2f})"
+                    )
+                else:
+                    logger.debug(
+                        f"✅ BB OVERSOLD сигнал для {symbol}: "
+                        f"цена({current_price:.2f}) <= lower({lower:.2f}), "
+                        f"тренд не нисходящий (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f})"
+                    )
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "buy",
+                            "type": "bb_oversold",
+                            "strength": (lower - current_price) / (middle - lower),
+                            "price": market_data.ohlcv_data[-1].close
+                            if market_data.ohlcv_data
+                            else 0.0,
+                            "timestamp": datetime.now(),
+                            "indicator_value": current_price,
+                            "confidence": 0.75,
+                        }
+                    )
 
             # Отскок от верхней полосы (продажа)
+            # ✅ ИСПРАВЛЕНИЕ: Не даем SHORT сигнал в восходящем тренде!
             elif current_price >= upper and (upper - middle) > 0:
-                logger.debug(
-                    f"✅ BB OVERBOUGHT сигнал для {symbol}: цена({current_price:.2f}) >= upper({upper:.2f})"
-                )
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "sell",
-                        "type": "bb_overbought",
-                        "strength": (current_price - upper) / (upper - middle),
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
-                        "timestamp": datetime.now(),
-                        "indicator_value": current_price,
-                        "confidence": 0.75,
-                    }
-                )
+                # Проверяем тренд через EMA перед генерацией SHORT сигнала
+                ema_fast = indicators.get("ema_12", 0)
+                ema_slow = indicators.get("ema_26", 0)
+
+                # Если EMA показывает восходящий тренд - НЕ даем SHORT сигнал
+                is_uptrend = ema_fast > ema_slow and current_price > ema_fast
+
+                if is_uptrend:
+                    logger.debug(
+                        f"⚠️ BB OVERBOUGHT сигнал ОТМЕНЕН для {symbol}: "
+                        f"цена({current_price:.2f}) >= upper({upper:.2f}), "
+                        f"но EMA показывает восходящий тренд (EMA_12={ema_fast:.2f} > EMA_26={ema_slow:.2f})"
+                    )
+                else:
+                    logger.debug(
+                        f"✅ BB OVERBOUGHT сигнал для {symbol}: "
+                        f"цена({current_price:.2f}) >= upper({upper:.2f}), "
+                        f"тренд не восходящий (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f})"
+                    )
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "sell",
+                            "type": "bb_overbought",
+                            "strength": (current_price - upper) / (upper - middle),
+                            "price": market_data.ohlcv_data[-1].close
+                            if market_data.ohlcv_data
+                            else 0.0,
+                            "timestamp": datetime.now(),
+                            "indicator_value": current_price,
+                            "confidence": 0.75,
+                        }
+                    )
 
         except Exception as e:
             logger.error(f"Ошибка генерации Bollinger Bands сигналов: {e}")
@@ -915,6 +1489,9 @@ class FuturesSignalGenerator:
                     )
                 else:
                     strength = (ma_fast - ma_slow) / ma_slow
+                    # ✅ ИСПРАВЛЕНИЕ: Увеличиваем strength (базовые значения слишком маленькие)
+                    # Умножаем на 100 для нормализации (0.0001 → 0.01, но ограничиваем максимум 1.0)
+                    strength = min(1.0, strength * 100)
                     # Снижаем силу сигнала если направление neutral (не подтверждено)
                     if price_direction == "neutral":
                         strength *= 0.7
@@ -949,6 +1526,9 @@ class FuturesSignalGenerator:
                     )
                 else:
                     strength = (ma_slow - ma_fast) / ma_slow
+                    # ✅ ИСПРАВЛЕНИЕ: Увеличиваем strength (базовые значения слишком маленькие)
+                    # Умножаем на 100 для нормализации (0.0001 → 0.01, но ограничиваем максимум 1.0)
+                    strength = min(1.0, strength * 100)
                     # Снижаем силу сигнала если направление neutral
                     if price_direction == "neutral":
                         strength *= 0.7
@@ -980,13 +1560,28 @@ class FuturesSignalGenerator:
         return signals
 
     async def _apply_filters(
-        self, symbol: str, signals: List[Dict[str, Any]], market_data: MarketData
+        self,
+        symbol: str,
+        signals: List[Dict[str, Any]],
+        market_data: MarketData,
+        current_positions: Dict = None,
     ) -> List[Dict[str, Any]]:
-        """Применение фильтров к сигналам"""
+        """Применение фильтров к сигналам
+
+        Args:
+            symbol: Торговая пара
+            signals: Список сигналов
+            market_data: Рыночные данные
+            current_positions: Текущие открытые позиции для CorrelationFilter
+        """
         try:
             filtered_signals = []
 
             for signal in signals:
+                # ✅ Добавляем текущие позиции в сигнал для CorrelationFilter
+                if current_positions:
+                    signal["current_positions"] = current_positions
+
                 # ✅ ИСПРАВЛЕНИЕ: Проверяем что фильтры инициализированы перед вызовом
                 # Проверка режима рынка (используем персональный ARM для символа если есть)
                 regime_manager = self.regime_managers.get(symbol) or self.regime_manager
@@ -1002,9 +1597,32 @@ class FuturesSignalGenerator:
                             f"⚠️ Ошибка проверки ARM для {symbol}: {e}, пропускаем фильтр"
                         )
 
-                # Проверка корреляции (если фильтр инициализирован)
+                # ✅ Проверка корреляции (если фильтр инициализирован)
+                # Обновляем параметры CorrelationFilter из текущего режима перед проверкой
                 if self.correlation_filter:
                     try:
+                        # Получаем параметры CorrelationFilter из текущего режима ARM
+                        regime_manager = (
+                            self.regime_managers.get(symbol) or self.regime_manager
+                        )
+                        if regime_manager:
+                            regime_params = regime_manager.get_current_parameters()
+                            if regime_params and hasattr(regime_params, "modules"):
+                                # Обновляем параметры CorrelationFilter из текущего режима
+                                from src.strategies.modules.correlation_filter import \
+                                    CorrelationFilterConfig
+
+                                corr_modules = regime_params.modules
+                                corr_new_config = CorrelationFilterConfig(
+                                    enabled=True,
+                                    correlation_threshold=corr_modules.correlation_threshold,
+                                    max_correlated_positions=corr_modules.max_correlated_positions,
+                                    block_same_direction_only=corr_modules.block_same_direction_only,
+                                )
+                                self.correlation_filter.update_parameters(
+                                    corr_new_config
+                                )
+
                         if not await self.correlation_filter.is_signal_valid(
                             signal, market_data
                         ):
@@ -1017,9 +1635,32 @@ class FuturesSignalGenerator:
                             f"⚠️ Ошибка проверки CorrelationFilter для {symbol}: {e}, пропускаем фильтр"
                         )
 
-                # Проверка мультитаймфрейма (если фильтр инициализирован)
+                # ✅ Проверка мультитаймфрейма (если фильтр инициализирован)
+                # Обновляем параметры MTF из текущего режима перед проверкой
                 if self.mtf_filter:
                     try:
+                        # Получаем параметры MTF из текущего режима ARM
+                        regime_manager = (
+                            self.regime_managers.get(symbol) or self.regime_manager
+                        )
+                        if regime_manager:
+                            regime_params = regime_manager.get_current_parameters()
+                            if regime_params and hasattr(regime_params, "modules"):
+                                # Обновляем параметры MTF из текущего режима
+                                from src.strategies.modules.multi_timeframe import \
+                                    MTFConfig
+
+                                mtf_modules = regime_params.modules
+                                mtf_new_config = MTFConfig(
+                                    confirmation_timeframe=mtf_modules.mtf_confirmation_timeframe,
+                                    score_bonus=mtf_modules.mtf_score_bonus,
+                                    block_opposite=mtf_modules.mtf_block_opposite,  # ✅ Используем из режима
+                                    ema_fast_period=8,
+                                    ema_slow_period=21,
+                                    cache_ttl_seconds=30,
+                                )
+                                self.mtf_filter.update_parameters(mtf_new_config)
+
                         if not await self.mtf_filter.is_signal_valid(
                             signal, market_data
                         ):
@@ -1030,9 +1671,27 @@ class FuturesSignalGenerator:
                             f"⚠️ Ошибка проверки MTF для {symbol}: {e}, пропускаем фильтр"
                         )
 
-                # Проверка pivot points (если фильтр инициализирован)
+                # ✅ Проверка pivot points (если фильтр инициализирован)
+                # Обновляем параметры PivotPoints из текущего режима перед проверкой
                 if self.pivot_filter:
                     try:
+                        # Получаем параметры PivotPoints из текущего режима ARM
+                        regime_manager = (
+                            self.regime_managers.get(symbol) or self.regime_manager
+                        )
+                        if regime_manager:
+                            regime_params = regime_manager.get_current_parameters()
+                            if regime_params and hasattr(regime_params, "modules"):
+                                # Обновляем параметры PivotPoints напрямую в config
+                                pivot_modules = regime_params.modules
+                                self.pivot_filter.config.level_tolerance_percent = (
+                                    pivot_modules.pivot_level_tolerance_percent
+                                )
+                                self.pivot_filter.config.score_bonus_near_level = (
+                                    pivot_modules.pivot_score_bonus_near_level
+                                )
+                                # Примечание: use_last_n_days обычно не меняется при проверке
+
                         if not await self.pivot_filter.is_signal_valid(
                             signal, market_data
                         ):
@@ -1043,9 +1702,30 @@ class FuturesSignalGenerator:
                             f"⚠️ Ошибка проверки PivotPoints для {symbol}: {e}, пропускаем фильтр"
                         )
 
-                # Проверка volume profile (если фильтр инициализирован)
+                # ✅ Проверка volume profile (если фильтр инициализирован)
+                # Обновляем параметры VolumeProfile из текущего режима перед проверкой
                 if self.volume_filter:
                     try:
+                        # Получаем параметры VolumeProfile из текущего режима ARM
+                        regime_manager = (
+                            self.regime_managers.get(symbol) or self.regime_manager
+                        )
+                        if regime_manager:
+                            regime_params = regime_manager.get_current_parameters()
+                            if regime_params and hasattr(regime_params, "modules"):
+                                # Обновляем параметры VolumeProfile напрямую в config
+                                vp_modules = regime_params.modules
+                                self.volume_filter.config.score_bonus_in_value_area = (
+                                    vp_modules.vp_score_bonus_in_value_area
+                                )
+                                self.volume_filter.config.score_bonus_near_poc = (
+                                    vp_modules.vp_score_bonus_near_poc
+                                )
+                                self.volume_filter.config.poc_tolerance_percent = (
+                                    vp_modules.vp_poc_tolerance_percent
+                                )
+                                # Примечание: lookback_candles обычно не меняется при проверке
+
                         if not await self.volume_filter.is_signal_valid(
                             signal, market_data
                         ):

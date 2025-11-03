@@ -419,10 +419,29 @@ class FuturesOrderExecutor:
                 tp_multiplier = float(self.scalping_config.get("tp_percent", 0.3))
                 sl_multiplier = float(self.scalping_config.get("sl_percent", 0.2))
 
+            # ✅ ОБРАБОТКА КОНФЛИКТА RSI/EMA: Ужесточаем TP/SL для быстрого скальпа
+            has_conflict = signal.get("has_conflict", False)
+            if has_conflict:
+                # При конфликте: более агрессивный TP и узкий SL для быстрого выхода
+                # TP: 0.25-0.3 ATR (быстрая прибыль на коррекции)
+                # SL: 0.2-0.25 ATR (быстрый выход при ошибке)
+                tp_multiplier = min(
+                    tp_multiplier * 0.5, 0.3
+                )  # Макс 0.3 ATR для быстрого скальпа
+                sl_multiplier = min(
+                    sl_multiplier * 0.5, 0.25
+                )  # Макс 0.25 ATR для узкого SL
+                logger.debug(
+                    f"⚡ Конфликт RSI/EMA: адаптированные TP/SL для быстрого скальпа "
+                    f"(TP={tp_multiplier:.2f}x ATR, SL={sl_multiplier:.2f}x ATR)"
+                )
+
             # Адаптация под силу сигнала
             strength = signal.get("strength", 0.5)
-            tp_multiplier *= 0.5 + strength  # 0.5x-1.5x range
-            sl_multiplier *= 0.5 + strength
+            # Если конфликт, не увеличиваем multiplier от strength (уже достаточно агрессивный)
+            if not has_conflict:
+                tp_multiplier *= 0.5 + strength  # 0.5x-1.5x range
+                sl_multiplier *= 0.5 + strength
 
             # 🎯 РАСЧЕТ ОТ ATR (ПЛАВАЮЩИЙ!)
             tp_distance = atr * tp_multiplier

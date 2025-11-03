@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
+import aiohttp
 import numpy as np
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -287,12 +288,20 @@ class CorrelationManager:
         # Получаем свежие свечи
         try:
             limit = self.config.lookback_candles + 10  # Запас
-            candles = await self.client.get_candles(
-                symbol=symbol, timeframe=self.config.timeframe, limit=limit
-            )
+
+            # ✅ АДАПТАЦИЯ: Получаем свечи напрямую через публичный API если client не поддерживает get_candles
+            if self.client and hasattr(self.client, "get_candles"):
+                candles = await self.client.get_candles(
+                    symbol=symbol, timeframe=self.config.timeframe, limit=limit
+                )
+            else:
+                candles = await self._fetch_candles_directly(
+                    symbol, self.config.timeframe, limit
+                )
 
             # Кэшируем
-            self._candles_cache[symbol] = (candles, current_time)
+            if candles:
+                self._candles_cache[symbol] = (candles, current_time)
 
             logger.debug(
                 f"Correlation: Fetched {len(candles)} candles {self.config.timeframe} for {symbol}"
@@ -330,6 +339,72 @@ class CorrelationManager:
             return 0.0
 
         return float(correlation)
+
+    async def _fetch_candles_directly(
+        self, symbol: str, timeframe: str, limit: int
+    ) -> List[OHLCV]:
+        """
+        Получить свечи напрямую через публичный API OKX.
+
+        Args:
+            symbol: Торговая пара (например "BTC-USDT")
+            timeframe: Таймфрейм ("5m", "15m", "1H" и т.д.)
+            limit: Количество свечей
+
+        Returns:
+            List[OHLCV]: Список свечей
+        """
+        try:
+            # Формируем instId для futures (SWAP)
+            inst_id = f"{symbol}-SWAP"
+
+            # Формируем URL для публичного API
+            url = f"https://www.okx.com/api/v5/market/candles"
+            params = {"instId": inst_id, "bar": timeframe, "limit": limit}
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("code") == "0" and data.get("data"):
+                            candles_data = data["data"]
+
+                            # Конвертируем в OHLCV формат
+                            ohlcv_list = []
+                            for candle in candles_data:
+                                if len(candle) >= 6:
+                                    ohlcv_item = OHLCV(
+                                        timestamp=int(candle[0])
+                                        // 1000,  # OKX возвращает в миллисекундах
+                                        symbol=symbol,
+                                        open=float(candle[1]),
+                                        high=float(candle[2]),
+                                        low=float(candle[3]),
+                                        close=float(candle[4]),
+                                        volume=float(candle[5]),
+                                    )
+                                    ohlcv_list.append(ohlcv_item)
+
+                            # Сортируем по timestamp (старые -> новые)
+                            ohlcv_list.sort(key=lambda x: x.timestamp)
+
+                            return ohlcv_list
+                        else:
+                            logger.warning(
+                                f"Correlation: API вернул ошибку для {symbol}: {data.get('msg', 'Unknown')}"
+                            )
+                    else:
+                        logger.warning(
+                            f"Correlation: HTTP {resp.status} при получении свечей для {symbol}"
+                        )
+
+            return []
+
+        except Exception as e:
+            logger.error(
+                f"Correlation: Ошибка при прямом получении свечей для {symbol}: {e}"
+            )
+            return []
 
     def clear_cache(self, symbol: Optional[str] = None):
         """

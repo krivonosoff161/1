@@ -638,34 +638,9 @@ class FuturesScalpingOrchestrator:
     async def _check_for_signals(self, symbol: str, price: float):
         """✅ РЕАЛЬНАЯ генерация сигналов на основе индикаторов"""
         try:
-            # ✅ КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем РЕАЛЬНЫЕ позиции на бирже, а не только кэш
-            try:
-                all_positions = await self.client.get_positions()
-                # Фильтруем только позиции по текущему символу с ненулевым размером
-                symbol_positions = [
-                    p
-                    for p in all_positions
-                    if p.get("instId", "").startswith(symbol)
-                    and float(p.get("pos", "0")) != 0
-                ]
-
-                if symbol_positions:
-                    logger.debug(
-                        f"⚠️ Позиция {symbol} уже существует на бирже: "
-                        f"size={symbol_positions[0].get('pos')}, "
-                        f"side={symbol_positions[0].get('posSide')}"
-                    )
-                    return  # Позиция уже есть на бирже - пропускаем
-            except Exception as e:
-                logger.warning(
-                    f"⚠️ Ошибка проверки позиций на бирже: {e}, используем кэш"
-                )
-                # Fallback на кэш
-                if (
-                    symbol in self.active_positions
-                    and "order_id" in self.active_positions.get(symbol, {})
-                ):
-                    return
+            # ✅ ИСПРАВЛЕНИЕ: Убираем проверку "если позиция уже есть по символу"
+            # Теперь разрешаем несколько позиций по одному символу (например, 3 на BTC и 3 на ETH)
+            # Проверяем только общий лимит позиций
 
             # ✅ Проверяем максимальное количество открытых позиций (GLOBAL CHECK)
             try:
@@ -676,7 +651,9 @@ class FuturesScalpingOrchestrator:
 
                 balance = await self.client.get_balance()
                 balance_profile = self._get_balance_profile(balance)
-                max_open = balance_profile.get("max_open_positions", 2)
+                max_open = balance_profile.get(
+                    "max_open_positions", 6
+                )  # ✅ Увеличено до 6 (3 на BTC + 3 на ETH)
 
                 if active_positions_count >= max_open:
                     logger.debug(
@@ -691,8 +668,30 @@ class FuturesScalpingOrchestrator:
             # Используем реальные индикаторы, а не тестовую логику!
             try:
                 logger.debug(f"🔍 Генерация сигналов для {symbol}...")
+
+                # ✅ Получаем текущие позиции для CorrelationFilter
+                try:
+                    all_positions = await self.client.get_positions()
+                    # Конвертируем в формат для CorrelationFilter
+                    current_positions_dict = {}
+                    for pos in all_positions:
+                        pos_size = float(pos.get("pos", "0"))
+                        if pos_size != 0:
+                            inst_id = pos.get("instId", "")
+                            # ✅ ИСПРАВЛЕНИЕ: Убираем только -SWAP, оставляем -USDT (формат "BTC-USDT")
+                            symbol_key = inst_id.replace("-SWAP", "")
+                            current_positions_dict[symbol_key] = pos
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Не удалось получить позиции для CorrelationFilter: {e}"
+                    )
+                    current_positions_dict = {}
+
                 # Генерируем сигналы для всех символов (система сама отфильтрует по symbol)
-                signals = await self.signal_generator.generate_signals()
+                # Передаем позиции в signal_generator для CorrelationFilter
+                signals = await self.signal_generator.generate_signals(
+                    current_positions=current_positions_dict
+                )
 
                 logger.debug(f"📊 Сгенерировано сигналов: {len(signals)}")
 
@@ -987,8 +986,18 @@ class FuturesScalpingOrchestrator:
                     logger.warning(f"Ошибка адаптации под режим: {e}")
 
             # 3.5 НОВОЕ: Адаптируем под силу сигнала (НО с ограничением max_usd_size!)
+            # ✅ ОБРАБОТКА КОНФЛИКТА RSI/EMA: Уменьшаем размер для быстрого скальпа
+            has_conflict = signal.get("has_conflict", False)
             signal_strength = signal.get("strength", 0.5)
-            if signal_strength > 0.8:
+
+            if has_conflict:
+                # При конфликте: уменьшенный размер (50% от стандартного) для снижения риска
+                strength_multiplier = 0.5
+                logger.debug(
+                    f"⚡ Конфликт RSI/EMA: уменьшенный размер для быстрого скальпа "
+                    f"(strength={signal_strength:.2f}, multiplier=0.5)"
+                )
+            elif signal_strength > 0.8:
                 # Очень сильный сигнал → увеличиваем размер
                 strength_multiplier = 1.5  # +50% для очень сильного
                 logger.debug(
