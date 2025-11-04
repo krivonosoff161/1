@@ -1,0 +1,24 @@
+{
+  "filters": {
+    "levels": ["INFO", "WARNING", "ERROR", "CRITICAL"],
+    "keywords": [],
+    "exclude": ["DEBUG"]
+  },
+  "reports": {
+    "format": "html",
+    "charts": true,
+    "save_path": "logs/reports"
+  },
+  "analysis": {
+    "show_duplicates": true,
+    "show_errors": true,
+    "show_performance": true,
+    "compare_sessions": true
+  },
+  "archive": {
+    "auto_archive_days": 7,
+    "archive_format": "zip",
+    "keep_recent_days": 30
+  }
+}
+

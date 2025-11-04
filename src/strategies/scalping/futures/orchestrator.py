@@ -69,12 +69,18 @@ class FuturesScalpingOrchestrator:
         okx_config = config.get_okx_config()
 
         # Клиент
+        # ✅ АДАПТИВНО: leverage из конфига (используем self.scalping_config, который уже определен выше)
+        leverage = getattr(self.scalping_config, "leverage", 3)
+        if leverage is None or leverage <= 0:
+            logger.warning("⚠️ leverage не указан в конфиге, используем 3 (fallback)")
+            leverage = 3
+
         self.client = OKXFuturesClient(
             api_key=okx_config.api_key,
             secret_key=okx_config.api_secret,
             passphrase=okx_config.passphrase,
             sandbox=okx_config.sandbox,
-            leverage=3,  # Futures по умолчанию 3x
+            leverage=leverage,  # ✅ АДАПТИВНО: Из конфига
         )
 
         # Модули безопасности - берем параметры из futures_modules или defaults
@@ -84,7 +90,7 @@ class FuturesScalpingOrchestrator:
         )
 
         self.margin_calculator = MarginCalculator(
-            default_leverage=3,  # Futures по умолчанию 3x
+            default_leverage=leverage,  # ✅ АДАПТИВНО: Из конфига (уже получен выше)
             maintenance_margin_ratio=0.01,
             initial_margin_ratio=0.1,
         )
@@ -154,6 +160,23 @@ class FuturesScalpingOrchestrator:
         self.active_positions = {}
         self.trading_session = None
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Кэш последних ордеров и задержки между сигналами
+        # Кэш последних ордеров: {symbol: {order_id, timestamp, status}}
+        self.last_orders_cache = {}
+        # Время последнего сигнала по символу: {symbol: timestamp}
+        self.last_signal_time = {}
+        # Минимальная задержка между сигналами для одного символа (секунды)
+        self.signal_cooldown_seconds = (
+            60  # 60 секунд между сигналами для одного символа
+        )
+        # Кэш активных ордеров: {symbol: {order_ids, timestamp}}
+        self.active_orders_cache = {}
+        # Время последней проверки активных ордеров
+        self.last_orders_check_time = {}
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Блокировки для предотвращения race condition
+        # Блокировка обработки сигналов по символам: {symbol: asyncio.Lock}
+        self.signal_locks = {}  # Будет создаваться по требованию
+
         logger.info("FuturesScalpingOrchestrator инициализирован")
 
     async def start(self):
@@ -172,6 +195,9 @@ class FuturesScalpingOrchestrator:
 
             # Запуск торговых модулей
             await self._start_trading_modules()
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Загружаем существующие позиции и инициализируем TrailingStopLoss
+            await self._load_existing_positions()
 
             # Основной торговый цикл
             self.is_running = True
@@ -220,7 +246,13 @@ class FuturesScalpingOrchestrator:
             if not self.client.sandbox:
                 for symbol in self.scalping_config.symbols:
                     try:
-                        leverage = 3  # Futures по умолчанию 3x
+                        # ✅ АДАПТИВНО: leverage из конфига
+                        leverage = getattr(self.scalping_config, "leverage", None)
+                        if leverage is None or leverage <= 0:
+                            logger.warning(
+                                f"⚠️ leverage не указан в конфиге для {symbol}, используем 3 (fallback)"
+                            )
+                            leverage = 3
                         await self.client.set_leverage(symbol, leverage)
                         logger.info(f"✅ Плечо {leverage}x установлено для {symbol}")
                     except Exception as e:
@@ -252,7 +284,8 @@ class FuturesScalpingOrchestrator:
                         symbol = inst_id.replace("-SWAP", "")
                         if symbol:
                             # ✅ Логируем получение данных из WebSocket (DEBUG, но будет видно в логах)
-                            logger.debug(f"📡 WebSocket: получены данные для {symbol}")
+                            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование каждого WebSocket сообщения
+                            # logger.debug(f"📡 WebSocket: получены данные для {symbol}")
                             await self._handle_ticker_data(symbol, data)
 
                 # Подписка на тикеры для всех символов
@@ -280,15 +313,9 @@ class FuturesScalpingOrchestrator:
             if "data" in data and len(data["data"]) > 0:
                 ticker = data["data"][0]
 
-                # ✅ ДИАГНОСТИКА: Логируем все поля тикера для проверки
-                if symbol in ["BTC-USDT", "ETH-USDT"]:  # Только для основных пар
-                    logger.debug(
-                        f"🔍 Диагностика {symbol}: "
-                        f"last={ticker.get('last', 'N/A')}, "
-                        f"bidPx={ticker.get('bidPx', 'N/A')}, "
-                        f"askPx={ticker.get('askPx', 'N/A')}, "
-                        f"instId={ticker.get('instId', 'N/A')}"
-                    )
+                # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование каждого тикера
+                # Логируем только через INFO уровень (цена) для экономии места
+                # logger.debug(f"🔍 Диагностика {symbol}: ...")
 
                 if "last" in ticker:
                     price = float(ticker["last"])
@@ -309,10 +336,8 @@ class FuturesScalpingOrchestrator:
 
                             # Обновляем FastADX для расчета тренда
                             self.fast_adx.update(high=high, low=low, close=close)
-                            logger.debug(
-                                f"📊 FastADX обновлен для {symbol}: "
-                                f"price={price:.2f} (используем как high/low/close)"
-                            )
+                            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование каждого FastADX update
+                            # logger.debug(f"📊 FastADX обновлен для {symbol}")
                     except Exception as e:
                         logger.debug(
                             f"⚠️ Не удалось обновить FastADX для {symbol}: {e}"
@@ -368,6 +393,141 @@ class FuturesScalpingOrchestrator:
             logger.error(f"Ошибка инициализации торговых модулей: {e}")
             raise
 
+    async def _load_existing_positions(self):
+        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Загружаем существующие позиции и инициализируем TrailingStopLoss"""
+        try:
+            logger.info("📊 Загрузка существующих позиций с биржи...")
+
+            # Получаем все позиции с биржи
+            all_positions = await self.client.get_positions()
+
+            loaded_count = 0
+            for pos in all_positions:
+                pos_size = float(pos.get("pos", "0"))
+                if abs(pos_size) < 0.000001:
+                    continue  # Пропускаем нулевые позиции
+
+                inst_id = pos.get("instId", "")
+                symbol = inst_id.replace("-SWAP", "")
+
+                # Получаем данные позиции
+                entry_price = float(pos.get("avgPx", "0"))
+                pos_side_raw = pos.get("posSide", "").lower()
+                pos_size_abs = abs(pos_size)
+
+                # Определяем сторону (buy/sell)
+                if pos_size > 0:
+                    side = "buy"  # LONG
+                else:
+                    side = "sell"  # SHORT
+
+                if entry_price == 0:
+                    logger.warning(f"⚠️ Entry price = 0 для {symbol}, пропускаем")
+                    continue
+
+                # Получаем текущую цену
+                try:
+                    ticker = await self.client.get_ticker(symbol)
+                    current_price = float(ticker.get("last", entry_price))
+                except:
+                    current_price = entry_price
+                    logger.warning(
+                        f"⚠️ Не удалось получить текущую цену для {symbol}, используем entry_price"
+                    )
+
+                # Добавляем в active_positions
+                from datetime import datetime
+
+                self.active_positions[symbol] = {
+                    "instId": inst_id,
+                    "side": side,
+                    "size": pos_size_abs,
+                    "entry_price": entry_price,
+                    "margin": float(pos.get("margin", "0")),
+                    "entry_time": datetime.now(),  # Время загрузки (не точное время открытия)
+                    "timestamp": datetime.now(),
+                    "time_extended": False,
+                }
+
+                # Инициализируем TrailingStopLoss (используем ту же логику, что и при открытии)
+                trading_fee_rate = 0.0004
+                initial_trail = 0.05
+                max_trail = 0.2
+                min_trail = 0.02
+
+                # Получаем параметры из конфига
+                try:
+                    if (
+                        hasattr(self.config, "futures_modules")
+                        and self.config.futures_modules
+                    ):
+                        if hasattr(self.config.futures_modules, "trailing_sl"):
+                            trailing_sl_config = self.config.futures_modules.trailing_sl
+                            if hasattr(trailing_sl_config, "trading_fee_rate"):
+                                trading_fee_rate = getattr(
+                                    trailing_sl_config, "trading_fee_rate", 0.0004
+                                )
+                            elif isinstance(trailing_sl_config, dict):
+                                trading_fee_rate = trailing_sl_config.get(
+                                    "trading_fee_rate", 0.0004
+                                )
+
+                            if hasattr(trailing_sl_config, "initial_trail"):
+                                initial_trail = getattr(
+                                    trailing_sl_config, "initial_trail", 0.05
+                                )
+                            elif isinstance(trailing_sl_config, dict):
+                                initial_trail = trailing_sl_config.get(
+                                    "initial_trail", 0.05
+                                )
+
+                            if hasattr(trailing_sl_config, "max_trail"):
+                                max_trail = getattr(
+                                    trailing_sl_config, "max_trail", 0.2
+                                )
+                            elif isinstance(trailing_sl_config, dict):
+                                max_trail = trailing_sl_config.get("max_trail", 0.2)
+
+                            if hasattr(trailing_sl_config, "min_trail"):
+                                min_trail = getattr(
+                                    trailing_sl_config, "min_trail", 0.02
+                                )
+                            elif isinstance(trailing_sl_config, dict):
+                                min_trail = trailing_sl_config.get("min_trail", 0.02)
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Не удалось получить параметры TrailingStopLoss из конфига: {e}"
+                    )
+
+                # Создаем и инициализируем TrailingStopLoss
+                tsl = TrailingStopLoss(
+                    initial_trail=initial_trail,
+                    max_trail=max_trail,
+                    min_trail=min_trail,
+                    trading_fee_rate=trading_fee_rate,
+                )
+                tsl.initialize(entry_price=entry_price, side=side)
+                # Устанавливаем текущую цену как highest для корректной работы
+                tsl.update(current_price)
+                self.trailing_sl_by_symbol[symbol] = tsl
+
+                logger.info(
+                    f"✅ Загружена позиция {symbol} {side.upper()}: "
+                    f"size={pos_size_abs}, entry={entry_price:.2f}, "
+                    f"TrailingStopLoss инициализирован"
+                )
+                loaded_count += 1
+
+            if loaded_count > 0:
+                logger.info(
+                    f"📊 Загружено {loaded_count} существующих позиций с TrailingStopLoss"
+                )
+            else:
+                logger.info("📊 Открытых позиций не найдено")
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка загрузки существующих позиций: {e}", exc_info=True)
+
     async def _main_trading_loop(self):
         """Основной торговый цикл"""
         logger.info("🔄 Запуск основного торгового цикла")
@@ -385,7 +545,8 @@ class FuturesScalpingOrchestrator:
                     break
 
                 # Генерация сигналов
-                logger.debug("🔄 Основной цикл: генерация сигналов...")
+                # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование каждого цикла
+                # logger.debug("🔄 Основной цикл: генерация сигналов...")
                 signals = await self.signal_generator.generate_signals()
                 if len(signals) > 0:
                     logger.info(
@@ -405,6 +566,12 @@ class FuturesScalpingOrchestrator:
 
                 # Управление позициями
                 await self._manage_positions()
+
+                if not self.is_running:
+                    break
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Периодически обновляем статус ордеров в кэше
+                await self._update_orders_cache_status()
 
                 if not self.is_running:
                     break
@@ -485,9 +652,91 @@ class FuturesScalpingOrchestrator:
                 if strength < self.scalping_config.min_signal_strength:
                     continue
 
-                # Проверка наличия активной позиции
-                if symbol in self.active_positions:
-                    logger.debug(f"Позиция {symbol} уже открыта, пропускаем сигнал")
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем направление позиции!
+                # На OKX Futures несколько ордеров в ОДНОМ направлении объединяются в ОДНУ позицию
+                # Поэтому нужно блокировать новые ордера, если уже есть позиция в этом направлении
+                max_positions_per_symbol = getattr(
+                    self.scalping_config, "max_positions_per_symbol", 4
+                )
+                allow_concurrent = getattr(
+                    self.scalping_config, "allow_concurrent_positions", False
+                )
+
+                try:
+                    # Получаем реальные позиции с биржи
+                    all_positions = await self.client.get_positions()
+                    signal_side = signal.get("side", "").lower()  # "buy" или "sell"
+
+                    # Определяем направление позиции для сигнала
+                    signal_position_side = "long" if signal_side == "buy" else "short"
+
+                    symbol_positions = [
+                        p
+                        for p in all_positions
+                        if (
+                            p.get("instId", "").replace("-SWAP", "") == symbol
+                            or p.get("instId", "") == symbol
+                        )
+                        and abs(float(p.get("pos", "0"))) > 0.000001
+                    ]
+
+                    # Проверяем, есть ли уже позиция в направлении сигнала
+                    position_in_signal_direction = None
+                    for pos in symbol_positions:
+                        pos_side = pos.get("posSide", "").lower()
+                        pos_size = float(pos.get("pos", "0"))
+
+                        # Определяем направление позиции
+                        if pos_size > 0:
+                            actual_side = "long"
+                        else:
+                            actual_side = "short"
+
+                        # Если позиция в том же направлении, что и сигнал
+                        if actual_side == signal_position_side:
+                            position_in_signal_direction = pos
+                            break
+
+                    if position_in_signal_direction:
+                        # ✅ КРИТИЧЕСКОЕ: Позиция уже есть в направлении сигнала
+                        # На OKX Futures новый ордер в том же направлении просто увеличит размер позиции
+                        # Это означает, что мы НЕ создаем новую позицию, а увеличиваем существующую
+                        # Поэтому блокируем, чтобы не накапливать комиссию на одной позиции
+                        pos_size = abs(
+                            float(position_in_signal_direction.get("pos", "0"))
+                        )
+                        logger.warning(
+                            f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
+                            f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                            f"(на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!)"
+                        )
+                        continue
+                    elif len(symbol_positions) > 0:
+                        # Есть позиции в ДРУГОМ направлении
+                        if not allow_concurrent:
+                            # РЕЖИМ 1: Не разрешаем несколько позиций
+                            logger.debug(
+                                f"⚠️ Позиция {symbol} в другом направлении уже открыта ({len(symbol_positions)} позиций), "
+                                f"БЛОКИРУЕМ новые сигналы (allow_concurrent=false)"
+                            )
+                            continue
+                        else:
+                            # РЕЖИМ 2: Разрешаем позиции в разных направлениях, но проверяем лимит
+                            if len(symbol_positions) >= max_positions_per_symbol:
+                                logger.debug(
+                                    f"⚠️ Достигнут лимит позиций по {symbol}: {len(symbol_positions)}/{max_positions_per_symbol}, "
+                                    f"БЛОКИРУЕМ новые сигналы"
+                                )
+                                continue
+                            else:
+                                # Разрешаем - позиция в другом направлении (LONG + SHORT одновременно)
+                                logger.debug(
+                                    f"📊 Есть {len(symbol_positions)} позиция(й) по {symbol} в другом направлении, "
+                                    f"разрешаем открытие {signal_position_side.upper()} позиции (allow_concurrent=true)"
+                                )
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка проверки позиций для {symbol}: {e}")
+                    # При ошибке - лучше пропустить, чем создать дубликат
                     continue
 
                 # Валидация сигнала
@@ -551,6 +800,26 @@ class FuturesScalpingOrchestrator:
             strength = signal.get("strength", 0)
 
             logger.info(f"🎯 Исполнение сигнала: {symbol} {side} (сила: {strength:.2f})")
+
+            # 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем активные ордера перед размещением
+            try:
+                inst_id = f"{symbol}-SWAP"
+                active_orders = await self.client.get_active_orders(symbol)
+                open_position_orders = [
+                    o
+                    for o in active_orders
+                    if o.get("instId") == inst_id
+                    and o.get("side", "").lower() in ["buy", "sell"]
+                    and o.get("reduceOnly", "false").lower() != "true"
+                ]
+                if len(open_position_orders) > 0:
+                    logger.warning(
+                        f"⚠️ Уже есть {len(open_position_orders)} активных ордеров для {symbol}, пропускаем"
+                    )
+                    return
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка проверки активных ордеров: {e}")
+                return
 
             # Расчет размера позиции
             balance = await self.client.get_balance()
@@ -635,101 +904,309 @@ class FuturesScalpingOrchestrator:
         except Exception as e:
             logger.error(f"Ошибка экстренных действий: {e}")
 
+    def _normalize_symbol(self, symbol: str) -> str:
+        """Нормализует символ для единообразного использования в кэшах и блокировках"""
+        # Убираем все разделители и приводим к верхнему регистру
+        # "BTC-USDT" → "BTCUSDT", "BTCUSDT" → "BTCUSDT", "BTC-USDT-SWAP" → "BTCUSDT"
+        normalized = symbol.replace("-", "").replace("_", "").upper()
+        # Если есть SWAP, убираем
+        normalized = normalized.replace("SWAP", "")
+        return normalized
+
     async def _check_for_signals(self, symbol: str, price: float):
         """✅ РЕАЛЬНАЯ генерация сигналов на основе индикаторов"""
         try:
-            # ✅ ИСПРАВЛЕНИЕ: Убираем проверку "если позиция уже есть по символу"
-            # Теперь разрешаем несколько позиций по одному символу (например, 3 на BTC и 3 на ETH)
-            # Проверяем только общий лимит позиций
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Нормализуем символ для блокировки
+            # Это предотвращает race condition при разных форматах ("BTC-USDT" vs "BTCUSDT")
+            normalized_symbol = self._normalize_symbol(symbol)
 
-            # ✅ Проверяем максимальное количество открытых позиций (GLOBAL CHECK)
-            try:
-                all_positions = await self.client.get_positions()
-                active_positions_count = len(
-                    [p for p in all_positions if float(p.get("pos", "0")) != 0]
-                )
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: БЛОКИРОВКА для предотвращения race condition
+            # Создаем блокировку для нормализованного символа, если её нет
+            if normalized_symbol not in self.signal_locks:
+                self.signal_locks[normalized_symbol] = asyncio.Lock()
 
-                balance = await self.client.get_balance()
-                balance_profile = self._get_balance_profile(balance)
-                max_open = balance_profile.get(
-                    "max_open_positions", 6
-                )  # ✅ Увеличено до 6 (3 на BTC + 3 на ETH)
+            # Используем блокировку - только один поток может обрабатывать сигнал для символа одновременно
+            async with self.signal_locks[normalized_symbol]:
+                # ✅ ИСПРАВЛЕНИЕ: Убираем проверку "если позиция уже есть по символу"
+                # Теперь разрешаем несколько позиций по одному символу (например, 3 на BTC и 3 на ETH)
+                # Проверяем только общий лимит позиций
 
-                if active_positions_count >= max_open:
-                    logger.debug(
-                        f"⚠️ Достигнут лимит открытых позиций: {active_positions_count}/{max_open}. "
-                        f"Пропускаем открытие {symbol}"
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 1: Проверка задержки между сигналами (используем нормализованный символ)
+                import time
+
+                current_time = time.time()
+                if normalized_symbol in self.last_signal_time:
+                    time_since_last = (
+                        current_time - self.last_signal_time[normalized_symbol]
                     )
-                    return
-            except Exception as e:
-                logger.warning(f"⚠️ Ошибка проверки лимита позиций: {e}")
+                    if time_since_last < self.signal_cooldown_seconds:
+                        logger.debug(
+                            f"⏱️ Задержка между сигналами для {symbol}: {time_since_last:.1f}s < {self.signal_cooldown_seconds}s, пропускаем"
+                        )
+                        return
 
-            # ✅ РЕАЛЬНАЯ ГЕНЕРАЦИЯ СИГНАЛОВ через signal_generator
-            # Используем реальные индикаторы, а не тестовую логику!
-            try:
-                logger.debug(f"🔍 Генерация сигналов для {symbol}...")
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 2: Проверка последнего ордера через кэш (используем нормализованный символ)
+                if normalized_symbol in self.last_orders_cache:
+                    last_order = self.last_orders_cache[normalized_symbol]
+                    order_time = last_order.get("timestamp", 0)
+                    order_status = last_order.get("status", "unknown")
+                    # ✅ УСИЛЕНО: Если ордер был размещен менее 15 секунд назад и pending - строго блокируем
+                    # Это предотвращает двойные ордера из-за задержки API
+                    time_since_order = current_time - order_time
+                    if time_since_order < 15 and order_status == "pending":
+                        logger.warning(
+                            f"⚠️ Ордер для {symbol} был размещен {time_since_order:.1f}s назад (status=pending), "
+                            f"строго блокируем новый ордер (предотвращение двойных ордеров)"
+                        )
+                        return
+                    # Если последний ордер был недавно (менее 30 секунд) и не был отменен/исполнен - пропускаем
+                    if time_since_order < 30 and order_status not in [
+                        "filled",
+                        "cancelled",
+                        "rejected",
+                    ]:
+                        logger.debug(
+                            f"⏱️ Последний ордер для {symbol} был недавно ({current_time - order_time:.1f}s назад), "
+                            f"статус: {order_status}, пропускаем новый сигнал"
+                        )
+                        return
 
-                # ✅ Получаем текущие позиции для CorrelationFilter
+                # 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем активные ордера ПЕРЕД генерацией сигнала
+                # Используем кэш для оптимизации (проверяем не чаще раза в 5 секунд)
+                inst_id = f"{symbol}-SWAP"
+                should_check_orders = True
+                if normalized_symbol in self.last_orders_check_time:
+                    time_since_check = (
+                        current_time - self.last_orders_check_time[normalized_symbol]
+                    )
+                    if time_since_check < 5:  # Проверяем не чаще раза в 5 секунд
+                        # Используем кэш (с нормализованным символом)
+                        if normalized_symbol in self.active_orders_cache:
+                            cached_orders = self.active_orders_cache[normalized_symbol]
+                            if cached_orders.get("order_ids"):
+                                logger.debug(
+                                    f"📦 Используем кэш активных ордеров для {symbol}: {len(cached_orders['order_ids'])} ордеров"
+                                )
+                                if len(cached_orders["order_ids"]) > 0:
+                                    logger.warning(
+                                        f"⚠️ В кэше есть {len(cached_orders['order_ids'])} активных ордеров для {symbol}, "
+                                        f"пропускаем генерацию нового сигнала"
+                                    )
+                                    return
+                                should_check_orders = False
+
+                if should_check_orders:
+                    try:
+                        active_orders = await self.client.get_active_orders(symbol)
+                        # Считаем только ордера на открытие позиции (не reduceOnly)
+                        open_position_orders = [
+                            o
+                            for o in active_orders
+                            if o.get("instId") == inst_id
+                            and o.get("side", "").lower() in ["buy", "sell"]
+                            and o.get("reduceOnly", "false").lower() != "true"
+                        ]
+
+                        # Обновляем кэш (с нормализованным символом)
+                        self.active_orders_cache[normalized_symbol] = {
+                            "order_ids": [o.get("ordId") for o in open_position_orders],
+                            "timestamp": current_time,
+                        }
+                        self.last_orders_check_time[normalized_symbol] = current_time
+
+                        if len(open_position_orders) > 0:
+                            logger.warning(
+                                f"⚠️ Уже есть {len(open_position_orders)} активных ордеров на открытие позиции {symbol}, "
+                                f"пропускаем генерацию нового сигнала"
+                            )
+                            return
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Ошибка проверки активных ордеров для {symbol}: {e}"
+                        )
+                        # Если не можем проверить - лучше пропустить, чем создать дубликат
+                        return
+
+                # 🔥 СКАЛЬПИНГ: Проверяем реальные позиции на бирже перед открытием новых
                 try:
                     all_positions = await self.client.get_positions()
-                    # Конвертируем в формат для CorrelationFilter
-                    current_positions_dict = {}
-                    for pos in all_positions:
-                        pos_size = float(pos.get("pos", "0"))
-                        if pos_size != 0:
-                            inst_id = pos.get("instId", "")
-                            # ✅ ИСПРАВЛЕНИЕ: Убираем только -SWAP, оставляем -USDT (формат "BTC-USDT")
-                            symbol_key = inst_id.replace("-SWAP", "")
-                            current_positions_dict[symbol_key] = pos
+                    active_positions_count = len(
+                        [p for p in all_positions if float(p.get("pos", "0")) != 0]
+                    )
+
+                    # ✅ ИСПРАВЛЕНИЕ: Проверяем позиции по нескольким вариантам instId
+                    # instId может быть в форматах: "ETH-USDT-SWAP", "ETH-USDT", "ETHUSDT-SWAP"
+                    symbol_positions = []
+                    for p in all_positions:
+                        pos_inst_id = p.get("instId", "")
+                        pos_size = abs(float(p.get("pos", "0")))
+
+                        # Проверяем все возможные форматы
+                        if pos_size > 0.000001:
+                            # Формат "-SWAP" (стандартный)
+                            if pos_inst_id == inst_id:
+                                symbol_positions.append(p)
+                            # Формат без "-SWAP" (если API вернул без суффикса)
+                            elif pos_inst_id == symbol:
+                                symbol_positions.append(p)
+                            # Формат с другим разделителем
+                            elif pos_inst_id.replace("-", "") == inst_id.replace(
+                                "-", ""
+                            ):
+                                symbol_positions.append(p)
+
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем направление позиции!
+                    # На OKX Futures несколько ордеров в ОДНОМ направлении объединяются в ОДНУ позицию
+                    # Поэтому нужно блокировать новые ордера, если уже есть позиция в этом направлении
+                    max_positions_per_symbol = getattr(
+                        self.scalping_config, "max_positions_per_symbol", 4
+                    )
+                    allow_concurrent = getattr(
+                        self.scalping_config, "allow_concurrent_positions", False
+                    )
+
+                    # Получаем направление сигнала из генератора сигналов
+                    # Нужно определить направление сигнала здесь - но в _check_for_signals мы еще не знаем направление
+                    # Поэтому проверяем все позиции и блокируем, если есть позиция в любом направлении
+                    # (проверка направления будет в _process_signals)
+
+                    if len(symbol_positions) > 0:
+                        # ✅ КРИТИЧЕСКОЕ: На OKX Futures ордера в одном направлении объединяются
+                        # Поэтому блокируем новые ордера, если уже есть позиция (независимо от направления)
+                        # Это предотвращает накопление комиссии на одной позиции
+                        positions_info = [
+                            f"{p.get('instId')}: {p.get('pos')}"
+                            for p in symbol_positions
+                        ]
+                        pos_size = abs(float(symbol_positions[0].get("pos", "0")))
+                        pos_side = (
+                            "long"
+                            if float(symbol_positions[0].get("pos", "0")) > 0
+                            else "short"
+                        )
+                        logger.warning(
+                            f"⚠️ Позиция {symbol} {pos_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
+                            f"БЛОКИРУЕМ новые ордера (на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!). "
+                            f"Позиции: {positions_info}"
+                        )
+                        return
+
+                    balance = await self.client.get_balance()
+                    balance_profile = self._get_balance_profile(balance)
+                    max_open = balance_profile.get(
+                        "max_open_positions", 6
+                    )  # ✅ Увеличено до 6 (3 на BTC + 3 на ETH)
+
+                    if active_positions_count >= max_open:
+                        logger.debug(
+                            f"⚠️ Достигнут лимит открытых позиций на бирже: {active_positions_count}/{max_open}. "
+                            f"Пропускаем открытие {symbol}"
+                        )
+                        return
+
+                    # 🔥 СКАЛЬПИНГ: Проверяем реальный баланс на бирже
+                    # get_balance() возвращает equity (общий баланс с учетом PnL)
+                    if balance < 20.0:  # Минимум $20 баланса для открытия позиции
+                        logger.debug(
+                            f"⚠️ Недостаточно баланса на бирже: ${balance:.2f} < $20.00. "
+                            f"Пропускаем открытие {symbol}"
+                        )
+                        return
+
                 except Exception as e:
-                    logger.debug(
-                        f"⚠️ Не удалось получить позиции для CorrelationFilter: {e}"
-                    )
-                    current_positions_dict = {}
+                    logger.warning(f"⚠️ Ошибка проверки лимита позиций: {e}")
 
-                # Генерируем сигналы для всех символов (система сама отфильтрует по symbol)
-                # Передаем позиции в signal_generator для CorrelationFilter
-                signals = await self.signal_generator.generate_signals(
-                    current_positions=current_positions_dict
-                )
+                # ✅ РЕАЛЬНАЯ ГЕНЕРАЦИЯ СИГНАЛОВ через signal_generator
+                # Используем реальные индикаторы, а не тестовую логику!
+                try:
+                    # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование (есть INFO логи)
+                    # logger.debug(f"🔍 Генерация сигналов для {symbol}...")
 
-                logger.debug(f"📊 Сгенерировано сигналов: {len(signals)}")
+                    # ✅ Получаем текущие позиции для CorrelationFilter
+                    try:
+                        all_positions = await self.client.get_positions()
+                        # Конвертируем в формат для CorrelationFilter
+                        current_positions_dict = {}
+                        for pos in all_positions:
+                            pos_size = float(pos.get("pos", "0"))
+                            if pos_size != 0:
+                                inst_id_pos = pos.get("instId", "")
+                                # ✅ ИСПРАВЛЕНИЕ: Убираем только -SWAP, оставляем -USDT (формат "BTC-USDT")
+                                symbol_key = inst_id_pos.replace("-SWAP", "")
+                                current_positions_dict[symbol_key] = pos
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Не удалось получить позиции для CorrelationFilter: {e}"
+                        )
+                        current_positions_dict = {}
 
-                # Ищем сигнал для текущего символа
-                symbol_signal = None
-                for signal in signals:
-                    if signal.get("symbol") == symbol:
-                        symbol_signal = signal
-                        break
-
-                # Если нашли реальный сигнал - выполняем его
-                if symbol_signal:
-                    side = symbol_signal.get("side")
-                    strength = symbol_signal.get("strength", 0)
-                    side_str = "LONG" if side == "buy" else "SHORT"
-
-                    logger.info(
-                        f"🎯 РЕАЛЬНЫЙ СИГНАЛ {symbol} {side_str} @ ${price:.2f} "
-                        f"(сила={strength:.2f})"
-                    )
-
-                    # Выполняем реальный сигнал
-                    await self._execute_signal_from_price(symbol, price, symbol_signal)
-                    logger.info(
-                        f"✅ Позиция {symbol} {side_str} открыта по реальному сигналу"
-                    )
-                else:
-                    # ✅ Изменено на INFO для видимости - важно знать что сигналов нет
-                    logger.info(
-                        f"📊 {symbol}: сигналов нет (индикаторы не дают сигнала). "
-                        f"Всего сгенерировано: {len(signals)} сигналов."
+                    # Генерируем сигналы для всех символов (система сама отфильтрует по symbol)
+                    # Передаем позиции в signal_generator для CorrelationFilter
+                    signals = await self.signal_generator.generate_signals(
+                        current_positions=current_positions_dict
                     )
 
-            except Exception as e:
-                logger.error(
-                    f"❌ Ошибка генерации реальных сигналов для {symbol}: {e}",
-                    exc_info=True,
-                )
+                    # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
+                    # logger.debug(f"📊 Сгенерировано сигналов: {len(signals)}")
+
+                    # Ищем сигнал для текущего символа
+                    symbol_signal = None
+                    for signal in signals:
+                        if signal.get("symbol") == symbol:
+                            symbol_signal = signal
+                            break
+
+                    # Если нашли реальный сигнал - выполняем его
+                    if symbol_signal:
+                        side = symbol_signal.get("side")
+                        strength = symbol_signal.get("strength", 0)
+                        side_str = "LONG" if side == "buy" else "SHORT"
+
+                        logger.info(
+                            f"🎯 РЕАЛЬНЫЙ СИГНАЛ {symbol} {side_str} @ ${price:.2f} "
+                            f"(сила={strength:.2f})"
+                        )
+
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем время последнего сигнала СРАЗУ (с нормализованным символом)
+                        # Это предотвращает повторную обработку сигнала
+                        self.last_signal_time[normalized_symbol] = current_time
+
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Дополнительная проверка перед выполнением
+                        # Проверяем, не был ли уже размещен ордер за последние 2 секунды (с нормализованным символом)
+                        if normalized_symbol in self.last_orders_cache:
+                            last_order = self.last_orders_cache[normalized_symbol]
+                            order_time = last_order.get("timestamp", 0)
+                            if (current_time - order_time) < 2:
+                                logger.warning(
+                                    f"⚠️ Ордер для {symbol} был размещен {current_time - order_time:.1f}s назад, "
+                                    f"пропускаем выполнение сигнала (блокировка внутри lock)"
+                                )
+                                return
+
+                        # Выполняем реальный сигнал
+                        success = await self._execute_signal_from_price(
+                            symbol, price, symbol_signal
+                        )
+                        if success:
+                            logger.info(
+                                f"✅ Позиция {symbol} {side_str} открыта по реальному сигналу"
+                            )
+                        else:
+                            logger.warning(
+                                f"⚠️ Не удалось открыть позицию {symbol} {side_str} (недостаточно маржи или другие ограничения)"
+                            )
+                    else:
+                        # ✅ Изменено на INFO для видимости - важно знать что сигналов нет
+                        logger.info(
+                            f"📊 {symbol}: сигналов нет (индикаторы не дают сигнала). "
+                            f"Всего сгенерировано: {len(signals)} сигналов."
+                        )
+
+                except Exception as e:
+                    logger.error(
+                        f"❌ Ошибка генерации реальных сигналов для {symbol}: {e}",
+                        exc_info=True,
+                    )
 
         except Exception as e:
             logger.error(f"❌ Ошибка проверки сигналов: {e}")
@@ -753,16 +1230,82 @@ class FuturesScalpingOrchestrator:
 
         return MarketData(symbol=symbol, timeframe="1m", ohlcv_data=[ohlcv])
 
-    async def _execute_signal_from_price(self, symbol: str, price: float, signal=None):
-        """Выполняет торговый сигнал на основе цены"""
+    async def _execute_signal_from_price(
+        self, symbol: str, price: float, signal=None
+    ) -> bool:
+        """Выполняет торговый сигнал на основе цены. Возвращает True если позиция успешно открыта."""
         try:
-            # Проверяем, нет ли уже открытой позиции
+            # 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем РЕАЛЬНЫЕ позиции на бирже ПЕРЕД открытием новой
+            # Это предотвращает дубликаты даже при race condition или перезапуске бота
+            try:
+                inst_id = f"{symbol}-SWAP"
+                # Проверяем все позиции (не только по символу, чтобы увидеть все)
+                all_positions = await self.client.get_positions()
+                for pos in all_positions:
+                    pos_size = float(pos.get("pos", "0"))
+                    pos_inst_id = pos.get("instId", "")
+
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем все возможные форматы instId
+                    # instId может быть: "BTC-USDT-SWAP", "BTCUSDT-SWAP", "BTC-USDT" и т.д.
+                    if (
+                        abs(pos_size) > 0.000001
+                    ):  # Учитываем даже очень маленькие позиции
+                        # Нормализуем оба instId (убираем разделители и приводим к одному формату)
+                        normalized_pos_id = pos_inst_id.replace("-", "").upper()
+                        normalized_inst_id = inst_id.replace("-", "").upper()
+
+                        # Проверяем совпадение
+                        if (
+                            normalized_pos_id == normalized_inst_id
+                            or pos_inst_id == inst_id
+                        ):
+                            logger.warning(
+                                f"⚠️ Позиция {symbol} уже открыта на бирже (size={pos_size}, instId={pos_inst_id}), "
+                                f"пропускаем открытие дубликата"
+                            )
+                            return False
+
+                # 🔥 ДОПОЛНИТЕЛЬНО: Проверяем активные ордера на открытие позиции
+                # Если есть pending ордер - тоже не открываем дубликат
+                active_orders = await self.client.get_active_orders(symbol)
+                for order in active_orders:
+                    order_inst_id = order.get("instId", "")
+                    order_side = order.get("side", "").lower()
+
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем все возможные форматы instId
+                    normalized_order_id = order_inst_id.replace("-", "").upper()
+                    normalized_inst_id = inst_id.replace("-", "").upper()
+
+                    # Если есть активный ордер на открытие позиции (не закрытие) - пропускаем
+                    if (
+                        normalized_order_id == normalized_inst_id
+                        or order_inst_id == inst_id
+                    ) and order_side in ["buy", "sell"]:
+                        # Проверяем, что это не ордер на закрытие (reduceOnly)
+                        is_reduce_only = (
+                            order.get("reduceOnly", "false").lower() == "true"
+                        )
+                        if not is_reduce_only:
+                            logger.warning(
+                                f"⚠️ Уже есть активный ордер на открытие позиции {symbol} (ordId={order.get('ordId', 'N/A')}, instId={order_inst_id}), "
+                                f"пропускаем открытие дубликата"
+                            )
+                            return False
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Ошибка проверки позиций/ордеров на бирже для {symbol}: {e}"
+                )
+                # Если не удалось проверить - лучше пропустить, чем открыть дубликат
+                # СТРОГАЯ ПРОВЕРКА: если не можем проверить - не открываем
+                return False
+
+            # Дополнительная проверка внутреннего счетчика (быстрая, но может быть неактуальной)
             if (
                 symbol in self.active_positions
                 and "order_id" in self.active_positions[symbol]
             ):
-                logger.debug(f"Позиция {symbol} уже открыта, пропускаем")
-                return
+                logger.debug(f"Позиция {symbol} уже в активных, пропускаем")
+                return False
 
             # Используем переданный сигнал или создаем тестовый
             if signal is None:
@@ -780,25 +1323,26 @@ class FuturesScalpingOrchestrator:
                         logger.debug(f"Не удалось получить режим: {e}")
                         regime = None
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Определяем тип ордера из конфига или используем лимитные (Maker)
-                # Лимитные ордера дают меньшую комиссию (0.02% vs 0.05% для Taker)
-                order_type = (
-                    "limit"  # По умолчанию лимитные (Maker) для экономии на комиссии
-                )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем РЫНОЧНЫЕ ордера (Market) для мгновенного исполнения
+                # Лимитные ордера могут оставаться в pending и не открывать позиции
+                # Рыночные ордера исполняются мгновенно и открывают позиции сразу
+                # Для скальпинга важнее скорость исполнения, чем экономия комиссии (0.05% vs 0.02%)
+                order_type = "market"  # ✅ Изменено: "limit" → "market"
 
-                # Проверяем конфиг, есть ли предпочтение типа ордера
+                # Проверяем конфиг, можно ли переопределить
                 try:
                     if hasattr(self.config, "scalping") and self.config.scalping:
                         scalping_config = self.config.scalping
-                        if hasattr(scalping_config, "prefer_market_orders") and getattr(
-                            scalping_config, "prefer_market_orders", False
-                        ):
-                            order_type = "market"
-                        elif hasattr(scalping_config, "order_type"):
-                            order_type = getattr(scalping_config, "order_type", "limit")
+                        if hasattr(scalping_config, "order_type"):
+                            order_type = getattr(
+                                scalping_config, "order_type", "market"
+                            )  # ✅ Изменено: "limit" → "market"
+                        elif hasattr(scalping_config, "prefer_market_orders"):
+                            if getattr(scalping_config, "prefer_market_orders", False):
+                                order_type = "market"
                 except Exception as e:
                     logger.debug(
-                        f"Не удалось получить тип ордера из конфига: {e}, используем limit (Maker)"
+                        f"Не удалось получить тип ордера из конфига: {e}, используем market (мгновенное исполнение)"
                     )
 
                 signal = {
@@ -807,7 +1351,7 @@ class FuturesScalpingOrchestrator:
                     "price": price,
                     "strength": 0.8,
                     "regime": regime,  # ✅ Добавляем режим для адаптивных TP/SL
-                    "type": order_type,  # ✅ Используем лимитные (Maker) для экономии комиссии
+                    "type": order_type,  # ✅ Рыночные ордера (Market) для мгновенного исполнения
                 }
 
             # Рассчитываем размер позиции
@@ -816,7 +1360,7 @@ class FuturesScalpingOrchestrator:
 
             if position_size <= 0:
                 logger.warning(f"Размер позиции слишком мал: {position_size}")
-                return
+                return False
 
             # Проверка через MaxSizeLimiter
             # ⚠️ ИСПРАВЛЕНИЕ: size_usd = notional (номинальная стоимость), а не маржа!
@@ -826,24 +1370,256 @@ class FuturesScalpingOrchestrator:
 
             if not can_open:
                 logger.warning(f"Нельзя открыть позицию: {reason}")
-                return
+                return False
 
             # Проверка через FundingRateMonitor
             if not self.funding_monitor.is_funding_favorable(signal["side"]):
                 logger.warning(f"Funding неблагоприятен для {signal['side']}")
-                return
+                return False
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Последняя проверка перед размещением ордера (с нормализованным символом)
+            # Проверяем, не был ли только что размещен ордер (даже если его еще нет в активных)
+            import time
+
+            current_time = time.time()
+            normalized_symbol = self._normalize_symbol(symbol)
+            if normalized_symbol in self.last_orders_cache:
+                last_order = self.last_orders_cache[normalized_symbol]
+                order_time = last_order.get("timestamp", 0)
+                order_status = last_order.get("status", "unknown")
+                time_since_order = current_time - order_time
+                # ✅ УСИЛЕНО: Если ордер был размещен менее 15 секунд назад и pending - строго блокируем
+                if time_since_order < 15 and order_status == "pending":
+                    logger.warning(
+                        f"⚠️ Ордер для {symbol} был размещен {time_since_order:.1f}s назад (status=pending), "
+                        f"СТРОГО блокируем размещение дубликата (предотвращение двойных ордеров)"
+                    )
+                    return False
+                # Если ордер был размещен менее 30 секунд назад и еще не исполнен/отменен - блокируем
+                if time_since_order < 30 and order_status not in [
+                    "filled",
+                    "cancelled",
+                    "rejected",
+                ]:
+                    logger.warning(
+                        f"⚠️ Ордер для {symbol} был размещен {time_since_order:.1f}s назад, "
+                        f"пропускаем размещение дубликата"
+                    )
+                    return False
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Финальная проверка активных ордеров ПЕРЕД размещением
+            # Это предотвращает race condition, когда два сигнала проходят проверку одновременно
+            try:
+                active_orders = await self.client.get_active_orders(symbol)
+                inst_id = f"{symbol}-SWAP"
+                open_position_orders = [
+                    o
+                    for o in active_orders
+                    if o.get("instId") == inst_id
+                    and o.get("side", "").lower() in ["buy", "sell"]
+                    and o.get("reduceOnly", "false").lower() != "true"
+                ]
+
+                if len(open_position_orders) > 0:
+                    order_ids = [o.get("ordId") for o in open_position_orders]
+                    logger.warning(
+                        f"⚠️ Обнаружены {len(open_position_orders)} активных ордеров для {symbol} ПЕРЕД размещением: {order_ids}, "
+                        f"БЛОКИРУЕМ размещение дубликата (race condition защита)"
+                    )
+                    return False
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Ошибка финальной проверки активных ордеров для {symbol}: {e}"
+                )
+                # При ошибке - лучше пропустить, чем создать дубликат
+                return False
 
             # Выполняем ордер с TP/SL
             result = await self.order_executor.execute_signal(signal, position_size)
 
             if result.get("success"):
+                order_id = result.get("order_id")
+                order_type = result.get(
+                    "order_type", "market"
+                )  # ✅ Изменено: "limit" → "market"
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем кэш СРАЗУ после размещения ордера
+                # Это предотвращает race condition, когда второй сигнал проходит проверку
+                # до того, как первый ордер появится в API
+                import time
+
+                current_time = time.time()
+                normalized_symbol = self._normalize_symbol(symbol)
+                self.last_orders_cache[normalized_symbol] = {
+                    "order_id": order_id,
+                    "timestamp": current_time,
+                    "status": "pending",  # Временно pending, будет обновлен после проверки
+                    "order_type": order_type,
+                    "side": signal.get("side", "unknown"),
+                }
+                logger.debug(
+                    f"📦 Кэш обновлен СРАЗУ после размещения ордера {order_id} для {symbol} (race condition защита)"
+                )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем, действительно ли позиция открылась
+                # Для рыночных ордеров - сразу открыта (исполняются мгновенно)
+                # Для лимитных ордеров - проверяем, что ордер исполнен
+                position_opened = False
+                if order_type == "market":
+                    # Рыночный ордер - позиция открыта сразу
+                    position_opened = True
+                    logger.info(
+                        f"✅ Рыночный ордер исполнен, позиция открыта: {symbol} {position_size:.6f}"
+                    )
+                else:
+                    # Лимитный ордер - проверяем статус
+                    try:
+                        # Ждем немного для исполнения лимитного ордера (1-2 секунды)
+                        await asyncio.sleep(2)
+                        # Проверяем статус ордера
+                        active_orders = await self.client.get_active_orders(symbol)
+                        inst_id = f"{symbol}-SWAP"
+                        order_filled = True
+                        for order in active_orders:
+                            if (
+                                str(order.get("ordId", "")) == str(order_id)
+                                and order.get("instId") == inst_id
+                            ):
+                                # Ордер еще активен - не исполнен
+                                order_filled = False
+                                order_state = order.get("state", "").lower()
+                                if order_state in ["filled", "partially_filled"]:
+                                    order_filled = True
+                                break
+
+                        if order_filled:
+                            # Проверяем, что позиция действительно открылась
+                            positions = await self.client.get_positions()
+                            for pos in positions:
+                                pos_inst_id = pos.get("instId", "")
+                                pos_size = abs(float(pos.get("pos", "0")))
+                                if (
+                                    pos_inst_id == inst_id or pos_inst_id == symbol
+                                ) and pos_size > 0.000001:
+                                    position_opened = True
+                                    logger.info(
+                                        f"✅ Лимитный ордер исполнен, позиция открыта: {symbol} {position_size:.6f}"
+                                    )
+                                    break
+
+                        if not position_opened:
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем, не был ли ордер отменен
+                            # Если ордер был отменен (например, Slippage Guard), но позиция не открылась,
+                            # проверяем еще раз через 1 секунду на случай, если ордер был частично исполнен
+                            try:
+                                await asyncio.sleep(1)
+                                # Проверяем статус ордера
+                                active_orders = await self.client.get_active_orders(
+                                    symbol
+                                )
+                                order_cancelled = True
+                                for order in active_orders:
+                                    if str(order.get("ordId", "")) == str(order_id):
+                                        order_state = order.get("state", "").lower()
+                                        if order_state in [
+                                            "filled",
+                                            "partially_filled",
+                                        ]:
+                                            # Ордер исполнен! Проверяем позицию еще раз
+                                            positions = (
+                                                await self.client.get_positions()
+                                            )
+                                            for pos in positions:
+                                                pos_inst_id = pos.get("instId", "")
+                                                pos_size = abs(
+                                                    float(pos.get("pos", "0"))
+                                                )
+                                                if (
+                                                    pos_inst_id == inst_id
+                                                    or pos_inst_id == symbol
+                                                ) and pos_size > 0.000001:
+                                                    position_opened = True
+                                                    logger.info(
+                                                        f"✅ Лимитный ордер {order_id} исполнен после проверки, позиция открыта: {symbol}"
+                                                    )
+                                                    break
+                                        order_cancelled = False
+                                        break
+
+                                if order_cancelled:
+                                    logger.warning(
+                                        f"⚠️ Лимитный ордер {order_id} для {symbol} был отменен (возможно Slippage Guard), "
+                                        f"позиция НЕ открылась"
+                                    )
+                                    # Обновляем кэш со статусом "cancelled"
+                                    self.last_orders_cache[normalized_symbol] = {
+                                        "order_id": order_id,
+                                        "timestamp": current_time,
+                                        "status": "cancelled",
+                                        "order_type": order_type,
+                                        "side": signal.get("side", "unknown"),
+                                    }
+                                    return False
+                            except Exception as e:
+                                logger.debug(
+                                    f"Ошибка повторной проверки ордера {order_id}: {e}"
+                                )
+
+                            if not position_opened:
+                                logger.warning(
+                                    f"⚠️ Лимитный ордер {order_id} размещен для {symbol}, но позиция НЕ открылась "
+                                    f"(ордер еще pending или не исполнен). НЕ считаем позицию открытой!"
+                                )
+                                # Обновляем кэш, но НЕ считаем позицию открытой
+                                self.last_orders_cache[normalized_symbol] = {
+                                    "order_id": order_id,
+                                    "timestamp": current_time,
+                                    "status": "pending",
+                                    "order_type": order_type,
+                                    "side": signal.get("side", "unknown"),
+                                }
+                                return False  # Позиция не открыта - выходим
+                    except Exception as e:
+                        logger.error(f"Ошибка проверки статуса ордера {order_id}: {e}")
+                        # При ошибке - лучше не считать позицию открытой
+                        return False
+
+                # ✅ ТОЛЬКО если позиция действительно открылась - продолжаем
+                if not position_opened:
+                    logger.warning(
+                        f"⚠️ Позиция {symbol} НЕ открылась после размещения ордера {order_id}"
+                    )
+                    return False
+
                 logger.info(f"✅ Позиция открыта: {symbol} {position_size:.6f}")
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем кэш последних ордеров СРАЗУ после размещения (с нормализованным символом)
+                if order_id:
+                    self.last_orders_cache[normalized_symbol] = {
+                        "order_id": order_id,
+                        "timestamp": current_time,
+                        "status": "filled",  # ✅ Исправлено: статус filled, так как позиция открылась
+                        "order_type": order_type,
+                        "side": signal.get("side", "unknown"),
+                    }
+                    logger.debug(
+                        f"📦 Обновлен кэш последнего ордера для {symbol}: {order_id} (status=filled)"
+                    )
 
                 # 🛡️ Обновляем total_margin_used
                 # ⚠️ ИСПРАВЛЕНИЕ: Правильный расчет margin из position_size (монеты)
-                # position_size в МОНЕТАХ, price в USD, leverage = 3x
+                # position_size в МОНЕТАХ, price в USD, leverage из конфига
                 # margin = (size_in_coins × price) / leverage = notional / leverage
-                leverage = getattr(self.scalping_config, "leverage", 3)
+                # ✅ АДАПТИВНО: leverage из конфига
+                leverage = getattr(self.scalping_config, "leverage", None)
+                if leverage is None or leverage <= 0:
+                    logger.error(
+                        "❌ leverage не указан в конфиге! Проверьте config_futures.yaml"
+                    )
+                    leverage = 3  # Fallback только для расчета, но логируем ошибку
+                    logger.warning(
+                        f"⚠️ Используем fallback leverage={leverage}, но это не должно происходить!"
+                    )
                 notional = position_size * price  # Номинальная стоимость позиции
                 margin_used = notional / leverage  # Маржа = notional / leverage
                 self.total_margin_used += margin_used
@@ -852,103 +1628,113 @@ class FuturesScalpingOrchestrator:
                     f"(notional=${notional:.2f}, margin=${margin_used:.2f}, leverage={leverage}x)"
                 )
 
+                # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавляем позицию в MaxSizeLimiter!
+                # Без этого лимитер не отслеживает открытые позиции и разрешает открывать больше!
+                self.max_size_limiter.add_position(symbol, size_usd)
+                logger.debug(
+                    f"✅ Позиция {symbol} добавлена в MaxSizeLimiter: ${size_usd:.2f} (всего: ${self.max_size_limiter.get_total_size():.2f})"
+                )
+
                 # Сохраняем в active_positions
                 if symbol not in self.active_positions:
                     self.active_positions[symbol] = {}
-                    self.active_positions[symbol].update(
-                        {
-                            "order_id": result.get("order_id"),
-                            "side": signal["side"],
-                            "size": position_size,
-                            "entry_price": price,
-                            "margin": margin_used,  # margin для этой позиции
-                            "timestamp": datetime.now(),
-                            # ✅ БЕЗ tp_order_id и sl_order_id - используем TrailingSL!
-                        }
-                    )
+                entry_time = datetime.now()
+                self.active_positions[symbol].update(
+                    {
+                        "order_id": result.get("order_id"),
+                        "side": signal["side"],
+                        "size": position_size,
+                        "entry_price": price,
+                        "margin": margin_used,  # margin для этой позиции
+                        "entry_time": entry_time,  # ✅ НОВОЕ: Время открытия позиции
+                        "timestamp": entry_time,  # Для совместимости
+                        "time_extended": False,  # ✅ НОВОЕ: Флаг продления времени
+                        # ✅ БЕЗ tp_order_id и sl_order_id - используем TrailingSL!
+                    }
+                )
 
-                    # ✅ ИСПРАВЛЕНИЕ: Получаем ВСЕ параметры TrailingStopLoss из конфига
-                    trading_fee_rate = 0.001  # Fallback: 0.1% на весь цикл
-                    initial_trail = 0.05  # Fallback
-                    max_trail = 0.2  # Fallback
-                    min_trail = 0.02  # Fallback
+                # ✅ ИСПРАВЛЕНИЕ: Получаем ВСЕ параметры TrailingStopLoss из конфига
+                # 🔥 СКАЛЬПИНГ: Используем Limit ордера (Maker) → комиссия 0.02% + 0.02% = 0.04% (0.0004)
+                trading_fee_rate = 0.0004  # Fallback: 0.04% на весь цикл (Maker открытие + Maker закрытие)
+                initial_trail = 0.05  # Fallback
+                max_trail = 0.2  # Fallback
+                min_trail = 0.02  # Fallback
 
-                    # Получаем параметры из конфига
-                    try:
-                        if (
-                            hasattr(self.config, "futures_modules")
-                            and self.config.futures_modules
-                        ):
-                            if hasattr(self.config.futures_modules, "trailing_sl"):
-                                trailing_sl_config = (
-                                    self.config.futures_modules.trailing_sl
+                # Получаем параметры из конфига
+                try:
+                    if (
+                        hasattr(self.config, "futures_modules")
+                        and self.config.futures_modules
+                    ):
+                        if hasattr(self.config.futures_modules, "trailing_sl"):
+                            trailing_sl_config = self.config.futures_modules.trailing_sl
+                            # Получаем trading_fee_rate
+                            if hasattr(trailing_sl_config, "trading_fee_rate"):
+                                trading_fee_rate = getattr(
+                                    trailing_sl_config, "trading_fee_rate", 0.0004
                                 )
-                                # Получаем trading_fee_rate
-                                if hasattr(trailing_sl_config, "trading_fee_rate"):
-                                    trading_fee_rate = getattr(
-                                        trailing_sl_config, "trading_fee_rate", 0.001
-                                    )
-                                elif isinstance(trailing_sl_config, dict):
-                                    trading_fee_rate = trailing_sl_config.get(
-                                        "trading_fee_rate", 0.001
-                                    )
-
-                                # ✅ Получаем initial_trail, max_trail, min_trail из конфига
-                                if hasattr(trailing_sl_config, "initial_trail"):
-                                    initial_trail = getattr(
-                                        trailing_sl_config, "initial_trail", 0.05
-                                    )
-                                elif isinstance(trailing_sl_config, dict):
-                                    initial_trail = trailing_sl_config.get(
-                                        "initial_trail", 0.05
-                                    )
-
-                                if hasattr(trailing_sl_config, "max_trail"):
-                                    max_trail = getattr(
-                                        trailing_sl_config, "max_trail", 0.2
-                                    )
-                                elif isinstance(trailing_sl_config, dict):
-                                    max_trail = trailing_sl_config.get("max_trail", 0.2)
-
-                                if hasattr(trailing_sl_config, "min_trail"):
-                                    min_trail = getattr(
-                                        trailing_sl_config, "min_trail", 0.02
-                                    )
-                                elif isinstance(trailing_sl_config, dict):
-                                    min_trail = trailing_sl_config.get(
-                                        "min_trail", 0.02
-                                    )
-
-                                logger.debug(
-                                    f"✅ TrailingStopLoss параметры из конфига: "
-                                    f"initial={initial_trail}, max={max_trail}, "
-                                    f"min={min_trail}, fee={trading_fee_rate:.3%}"
+                            elif isinstance(trailing_sl_config, dict):
+                                trading_fee_rate = trailing_sl_config.get(
+                                    "trading_fee_rate", 0.0004
                                 )
-                    except Exception as e:
-                        logger.debug(
-                            f"⚠️ Не удалось получить параметры TrailingStopLoss из конфига: {e}, "
-                            f"используем fallback значения"
-                        )
 
-                    tsl = TrailingStopLoss(
-                        initial_trail=initial_trail,  # ✅ Из конфига
-                        max_trail=max_trail,  # ✅ Из конфига
-                        min_trail=min_trail,  # ✅ Из конфига
-                        trading_fee_rate=trading_fee_rate,  # ✅ Из конфига
-                    )
-                    tsl.initialize(entry_price=price, side=signal["side"])
-                    self.trailing_sl_by_symbol[symbol] = tsl
+                            # ✅ Получаем initial_trail, max_trail, min_trail из конфига
+                            if hasattr(trailing_sl_config, "initial_trail"):
+                                initial_trail = getattr(
+                                    trailing_sl_config, "initial_trail", 0.05
+                                )
+                            elif isinstance(trailing_sl_config, dict):
+                                initial_trail = trailing_sl_config.get(
+                                    "initial_trail", 0.05
+                                )
+
+                            if hasattr(trailing_sl_config, "max_trail"):
+                                max_trail = getattr(
+                                    trailing_sl_config, "max_trail", 0.2
+                                )
+                            elif isinstance(trailing_sl_config, dict):
+                                max_trail = trailing_sl_config.get("max_trail", 0.2)
+
+                            if hasattr(trailing_sl_config, "min_trail"):
+                                min_trail = getattr(
+                                    trailing_sl_config, "min_trail", 0.02
+                                )
+                            elif isinstance(trailing_sl_config, dict):
+                                min_trail = trailing_sl_config.get("min_trail", 0.02)
+
+                            logger.debug(
+                                f"✅ TrailingStopLoss параметры из конфига: "
+                                f"initial={initial_trail}, max={max_trail}, "
+                                f"min={min_trail}, fee={trading_fee_rate:.3%}"
+                            )
+                except Exception as e:
                     logger.debug(
-                        f"TrailingStopLoss для {symbol} инициализирован с комиссией: {trading_fee_rate:.3%}"
+                        f"⚠️ Не удалось получить параметры TrailingStopLoss из конфига: {e}, "
+                        f"используем fallback значения"
                     )
 
-                    logger.info(f"🎯 Позиция {symbol} открыта с TrailingSL")
+                tsl = TrailingStopLoss(
+                    initial_trail=initial_trail,  # ✅ Из конфига
+                    max_trail=max_trail,  # ✅ Из конфига
+                    min_trail=min_trail,  # ✅ Из конфига
+                    trading_fee_rate=trading_fee_rate,  # ✅ Из конфига
+                )
+                tsl.initialize(entry_price=price, side=signal["side"])
+                self.trailing_sl_by_symbol[symbol] = tsl
+                logger.debug(
+                    f"TrailingStopLoss для {symbol} инициализирован с комиссией: {trading_fee_rate:.3%}"
+                )
 
+                logger.info(f"🎯 Позиция {symbol} открыта с TrailingSL")
+                return True
             else:
-                logger.warning(f"Не удалось открыть позицию: {result.get('error')}")
+                error_msg = result.get("error", "Неизвестная ошибка")
+                logger.error(f"❌ Не удалось разместить ордер для {symbol}: {error_msg}")
+                return False
 
         except Exception as e:
-            logger.error(f"Ошибка выполнения сигнала: {e}")
+            logger.error(f"Ошибка выполнения сигнала: {e}", exc_info=True)
+            return False
 
     async def _calculate_position_size(
         self, balance: float, price: float, signal: dict
@@ -959,9 +1745,21 @@ class FuturesScalpingOrchestrator:
             balance_profile = self._get_balance_profile(balance)
 
             # 2. Получаем базовый размер позиции
+            # ✅ base_position_usd это НОМИНАЛЬНАЯ стоимость (notional)
             base_usd_size = balance_profile["base_position_usd"]
+            # min/max_position_usd тоже в номинальной стоимости (будем пересчитывать в маржу позже)
             min_usd_size = balance_profile["min_position_usd"]
             max_usd_size = balance_profile["max_position_usd"]
+
+            # ✅ Если min/max не заданы в конфиге - рассчитываем из base (50% и 200%)
+            if min_usd_size is None or min_usd_size <= 0:
+                min_usd_size = (
+                    base_usd_size * 0.5
+                )  # 50% от base (номинальная стоимость)
+            if max_usd_size is None or max_usd_size <= 0:
+                max_usd_size = (
+                    base_usd_size * 2.0
+                )  # 200% от base (номинальная стоимость)
 
             # 3. Адаптируем под режим рынка (если ARM активен)
             if (
@@ -1030,11 +1828,23 @@ class FuturesScalpingOrchestrator:
                 f"💰 После multiplier: base_usd_size=${base_usd_size:.2f} (max=${max_usd_size:.2f})"
             )
 
-            # 4. ПРИМЕНЯЕМ ЛЕВЕРИДЖ (Futures)
-            leverage = getattr(
-                self.scalping_config, "leverage", 3
-            )  # Futures по умолчанию 3x
-            margin_required = base_usd_size  # Требуемая маржа (в USD)
+            # 4. ПРИМЕНЯЕМ ЛЕВЕРИДЖ (Futures) - из конфига!
+            leverage = getattr(self.scalping_config, "leverage", None)
+            if leverage is None or leverage <= 0:
+                logger.error(
+                    "❌ leverage не указан в конфиге или <= 0! Проверьте config_futures.yaml"
+                )
+                raise ValueError(
+                    "leverage должен быть указан в конфиге (например, leverage: 3)"
+                )
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: base_usd_size это НОМИНАЛЬНАЯ стоимость (notional)
+            # Маржа = номинальная стоимость / леверидж
+            # Например: notional=$25, leverage=3x → margin=$8.33
+            margin_required = base_usd_size / leverage  # Требуемая маржа (в USD)
+
+            # ✅ Пересчитываем min/max из номинальной стоимости в маржу для проверок
+            min_margin_usd = min_usd_size / leverage  # min в марже
+            max_margin_usd = max_usd_size / leverage  # max в марже
 
             # 5. 🛡️ ЗАЩИТА: Max Margin Used (80%)
             max_margin_allowed = balance * self.max_margin_percent  # 80%
@@ -1043,8 +1853,10 @@ class FuturesScalpingOrchestrator:
                     f"⚠️ Достигнут лимит маржи: {self.total_margin_used + margin_required:.2f} > {max_margin_allowed:.2f}"
                 )
                 margin_required = max(0, max_margin_allowed - self.total_margin_used)
-                if margin_required < min_usd_size:
-                    logger.error(f"❌ Недостаточно свободной маржи для открытия позиции")
+                if margin_required < min_margin_usd:
+                    logger.error(
+                        f"❌ Недостаточно свободной маржи для открытия позиции (требуется минимум ${min_margin_usd:.2f} маржи)"
+                    )
                     return 0.0
 
             # 6. 🛡️ ЗАЩИТА: Max Loss per Trade (2%)
@@ -1081,8 +1893,8 @@ class FuturesScalpingOrchestrator:
                 margin_required = balance * 0.9
 
             # 8. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем ограничения к МАРЖЕ (не к notional!)
-            # usd_size = маржа (то что блокируется), max_usd_size тоже в марже!
-            margin_usd = max(min_usd_size, min(margin_required, max_usd_size))
+            # margin_usd = маржа (то что блокируется), используем min/max_margin_usd
+            margin_usd = max(min_margin_usd, min(margin_required, max_margin_usd))
 
             # 9. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Переводим МАРЖУ в количество монет
             # position_size = (margin_usd * leverage) / price
@@ -1103,7 +1915,7 @@ class FuturesScalpingOrchestrator:
             logger.info(
                 f"💰 Расчет: balance=${balance:.2f}, "
                 f"profile={balance_profile['name']}, "
-                f"margin=${margin_usd:.2f} (лимит: ${min_usd_size:.2f}-${max_usd_size:.2f}), "
+                f"margin=${margin_usd:.2f} (лимит: ${min_margin_usd:.2f}-${max_margin_usd:.2f} маржи), "
                 f"notional=${notional_usd:.2f} (leverage={leverage}x), "
                 f"position_size={position_size:.6f}"
             )
@@ -1115,60 +1927,125 @@ class FuturesScalpingOrchestrator:
             return 0.0
 
     def _get_balance_profile(self, balance: float) -> dict:
-        """Определяет профиль баланса"""
+        """Определяет профиль баланса - ВСЕ параметры из конфига!"""
         balance_profiles = getattr(self.scalping_config, "balance_profiles", {})
 
-        # Профили по возрастанию порога
-        profiles = [
-            {"name": "small", "threshold": 1500.0},
-            {"name": "medium", "threshold": 3000.0},
-            {"name": "large", "threshold": 999999.0},
-        ]
+        if not balance_profiles:
+            logger.error(
+                "❌ balance_profiles не найден в конфиге! Проверьте config_futures.yaml"
+            )
+            raise ValueError("balance_profiles должен быть указан в конфиге")
 
-        # Определяем профиль
-        for profile in profiles:
+        # ✅ АДАПТИВНАЯ СИСТЕМА: Профили берутся из конфига, сортируем по threshold
+        profile_list = []
+        for profile_name, profile_config in balance_profiles.items():
+            threshold = getattr(profile_config, "threshold", None)
+            if threshold is None:
+                logger.warning(
+                    f"⚠️ Профиль {profile_name} не имеет threshold, пропускаем"
+                )
+                continue
+            profile_list.append(
+                {"name": profile_name, "threshold": threshold, "config": profile_config}
+            )
+
+        # Сортируем по threshold (от меньшего к большему)
+        profile_list.sort(key=lambda x: x["threshold"])
+
+        if not profile_list:
+            logger.error("❌ Не найдено ни одного валидного профиля в конфиге!")
+            raise ValueError("Должен быть хотя бы один профиль в balance_profiles")
+
+        # Определяем профиль по балансу
+        for profile in profile_list:
             if balance <= profile["threshold"]:
-                profile_config = balance_profiles.get(profile["name"], None)
+                profile_config = profile["config"]
+                profile_name = profile["name"]
 
-                if profile_config is None:
-                    # Возвращаем дефолтные значения
-                    return {
-                        "name": profile["name"],
-                        "base_position_usd": 50.0,
-                        "min_position_usd": 10.0,
-                        "max_position_usd": 100.0,
-                        "max_open_positions": 2,
-                        "max_position_percent": 8.0,
-                    }
+                # ✅ ВСЕ параметры из конфига, без fallback!
+                base_pos_usd = getattr(profile_config, "base_position_usd", None)
+                if base_pos_usd is None or base_pos_usd <= 0:
+                    logger.error(
+                        f"❌ Профиль {profile_name}: base_position_usd не указан или <= 0 в конфиге!"
+                    )
+                    raise ValueError(
+                        f"base_position_usd должен быть указан в конфиге для профиля {profile_name}"
+                    )
 
-                # Используем атрибуты Pydantic модели
+                min_pos_usd = getattr(profile_config, "min_position_usd", None)
+                max_pos_usd = getattr(profile_config, "max_position_usd", None)
+
+                # ✅ Если min/max не заданы - рассчитываем из base (50% и 200% номинальной стоимости)
+                if min_pos_usd is None or min_pos_usd <= 0:
+                    min_pos_usd = base_pos_usd * 0.5  # 50% от base
+                    logger.debug(
+                        f"📊 Профиль {profile_name}: min_position_usd рассчитан из base ({min_pos_usd:.2f})"
+                    )
+                if max_pos_usd is None or max_pos_usd <= 0:
+                    max_pos_usd = base_pos_usd * 2.0  # 200% от base
+                    logger.debug(
+                        f"📊 Профиль {profile_name}: max_position_usd рассчитан из base ({max_pos_usd:.2f})"
+                    )
+
+                max_open_positions = getattr(profile_config, "max_open_positions", None)
+                if max_open_positions is None:
+                    logger.warning(
+                        f"⚠️ Профиль {profile_name}: max_open_positions не указан, используем 2"
+                    )
+                    max_open_positions = 2
+
+                max_position_percent = getattr(
+                    profile_config, "max_position_percent", None
+                )
+                if max_position_percent is None:
+                    logger.warning(
+                        f"⚠️ Профиль {profile_name}: max_position_percent не указан, используем 8.0"
+                    )
+                    max_position_percent = 8.0
+
                 return {
-                    "name": profile["name"],
-                    "base_position_usd": getattr(
-                        profile_config, "base_position_usd", 50.0
-                    ),
-                    "min_position_usd": getattr(
-                        profile_config, "min_position_usd", 10.0
-                    ),
-                    "max_position_usd": getattr(
-                        profile_config, "max_position_usd", 100.0
-                    ),
-                    "max_open_positions": getattr(
-                        profile_config, "max_open_positions", 2
-                    ),
-                    "max_position_percent": getattr(
-                        profile_config, "max_position_percent", 8.0
-                    ),
+                    "name": profile_name,
+                    "base_position_usd": base_pos_usd,
+                    "min_position_usd": min_pos_usd,
+                    "max_position_usd": max_pos_usd,
+                    "max_open_positions": max_open_positions,
+                    "max_position_percent": max_position_percent,
                 }
 
-        # Fallback
+        # Если баланс больше всех порогов - используем последний (самый большой) профиль
+        last_profile = profile_list[-1]
+        profile_config = last_profile["config"]
+        profile_name = last_profile["name"]
+        logger.debug(
+            f"📊 Баланс {balance:.2f} больше всех порогов, используем профиль {profile_name}"
+        )
+
+        base_pos_usd = getattr(profile_config, "base_position_usd", None)
+        if base_pos_usd is None or base_pos_usd <= 0:
+            logger.error(
+                f"❌ Профиль {profile_name}: base_position_usd не указан в конфиге!"
+            )
+            raise ValueError(
+                f"base_position_usd должен быть указан в конфиге для профиля {profile_name}"
+            )
+
+        min_pos_usd = getattr(profile_config, "min_position_usd", None)
+        max_pos_usd = getattr(profile_config, "max_position_usd", None)
+        if min_pos_usd is None or min_pos_usd <= 0:
+            min_pos_usd = base_pos_usd * 0.5
+        if max_pos_usd is None or max_pos_usd <= 0:
+            max_pos_usd = base_pos_usd * 2.0
+
+        max_open_positions = getattr(profile_config, "max_open_positions", 2)
+        max_position_percent = getattr(profile_config, "max_position_percent", 8.0)
+
         return {
-            "name": "default",
-            "base_position_usd": 50.0,
-            "min_position_usd": 10.0,
-            "max_position_usd": 100.0,
-            "max_open_positions": 2,
-            "max_position_percent": 8.0,
+            "name": profile_name,
+            "base_position_usd": base_pos_usd,
+            "min_position_usd": min_pos_usd,
+            "max_position_usd": max_pos_usd,
+            "max_open_positions": max_open_positions,
+            "max_position_percent": max_position_percent,
         }
 
     def _get_regime_params(self, regime_name: str) -> dict:
@@ -1312,6 +2189,12 @@ class FuturesScalpingOrchestrator:
 
             # Получаем TrailingStopLoss для этой позиции
             if symbol not in self.trailing_sl_by_symbol:
+                # ✅ УЛУЧШЕНО: Логируем, если TrailingStopLoss не инициализирован
+                logger.warning(
+                    f"⚠️ TrailingStopLoss не инициализирован для {symbol} "
+                    f"(позиция найдена в active_positions, но нет в trailing_sl_by_symbol). "
+                    f"Это может быть позиция, открытая до перезапуска бота."
+                )
                 return
 
             tsl = self.trailing_sl_by_symbol[symbol]
@@ -1390,9 +2273,262 @@ class FuturesScalpingOrchestrator:
                     f"profit={profit_pct:.2%}, trend={trend_strength:.2f if trend_strength else 'N/A'})"
                 )
                 await self._close_position(symbol, "trailing_stop")
+                return
+
+            # ✅ НОВОЕ: Проверка времени жизни позиции с продлением
+            await self._check_position_holding_time(
+                symbol, current_price, profit_pct, market_regime
+            )
 
         except Exception as e:
             logger.error(f"Ошибка обновления трейлинг стоп-лосса: {e}")
+
+    async def _check_position_holding_time(
+        self,
+        symbol: str,
+        current_price: float,
+        profit_pct: float,
+        market_regime: str = None,
+    ):
+        """
+        ✅ НОВОЕ: Проверка времени жизни позиции с продлением для прибыльных
+
+        Args:
+            symbol: Символ позиции
+            current_price: Текущая цена
+            profit_pct: Прибыль в процентах (с учетом комиссии)
+            market_regime: Режим рынка (trending/ranging/choppy)
+        """
+        try:
+            position = self.active_positions.get(symbol, {})
+            if not position:
+                return
+
+            entry_time = position.get("entry_time")
+            if not entry_time:
+                # Если нет entry_time - пытаемся использовать timestamp
+                entry_time = position.get("timestamp")
+                if not entry_time:
+                    logger.warning(f"⚠️ Нет времени открытия для позиции {symbol}")
+                    return
+
+            # Вычисляем время удержания
+            if isinstance(entry_time, datetime):
+                time_held = (
+                    datetime.now() - entry_time
+                ).total_seconds() / 60  # в минутах
+            else:
+                # Если это строка или другой формат - пропускаем
+                logger.debug(
+                    f"⚠️ Неверный формат entry_time для {symbol}: {entry_time}"
+                )
+                return
+
+            # Получаем параметры режима
+            try:
+                if (
+                    hasattr(self.signal_generator, "regime_manager")
+                    and self.signal_generator.regime_manager
+                ):
+                    regime_obj = (
+                        self.signal_generator.regime_manager.get_current_regime()
+                        if not market_regime
+                        else market_regime
+                    )
+                    if isinstance(regime_obj, str):
+                        regime_obj = regime_obj.lower()
+
+                    # Получаем параметры режима из конфига
+                    regime_params = None
+                    if regime_obj == "trending":
+                        regime_params = (
+                            self.signal_generator.regime_manager.config.trending
+                        )
+                    elif regime_obj == "ranging":
+                        regime_params = (
+                            self.signal_generator.regime_manager.config.ranging
+                        )
+                    elif regime_obj == "choppy":
+                        regime_params = (
+                            self.signal_generator.regime_manager.config.choppy
+                        )
+
+                    if regime_params:
+                        max_holding_minutes = getattr(
+                            regime_params, "max_holding_minutes", 30
+                        )
+                        extend_time_if_profitable = getattr(
+                            regime_params, "extend_time_if_profitable", True
+                        )
+                        min_profit_for_extension = getattr(
+                            regime_params, "min_profit_for_extension", 0.1
+                        )
+                        extension_percent = getattr(
+                            regime_params, "extension_percent", 50
+                        )
+                    else:
+                        # Fallback значения
+                        max_holding_minutes = 30
+                        extend_time_if_profitable = True
+                        min_profit_for_extension = 0.1
+                        extension_percent = 50
+                else:
+                    # Fallback значения
+                    max_holding_minutes = 30
+                    extend_time_if_profitable = True
+                    min_profit_for_extension = 0.1
+                    extension_percent = 50
+            except Exception as e:
+                logger.debug(
+                    f"Не удалось получить параметры режима: {e}, используем fallback"
+                )
+                max_holding_minutes = 30
+                extend_time_if_profitable = True
+                min_profit_for_extension = 0.1
+                extension_percent = 50
+
+            # Используем сохраненное значение max_holding_minutes, если было продление
+            actual_max_holding = position.get(
+                "max_holding_minutes", max_holding_minutes
+            )
+
+            # Проверяем, истекло ли время
+            if time_held >= actual_max_holding:
+                time_extended = position.get("time_extended", False)
+
+                # Если время можно продлить и позиция в прибыли
+                if (
+                    extend_time_if_profitable
+                    and not time_extended
+                    and profit_pct > min_profit_for_extension
+                ):
+                    # Продлеваем время от исходного значения
+                    original_max_holding = max_holding_minutes
+                    extension_minutes = original_max_holding * (
+                        extension_percent / 100.0
+                    )
+                    new_max_holding = original_max_holding + extension_minutes
+                    position["time_extended"] = True
+                    position[
+                        "max_holding_minutes"
+                    ] = new_max_holding  # Сохраняем новое значение
+
+                    logger.info(
+                        f"⏰ Позиция {symbol} в прибыли {profit_pct:.2%} (>{min_profit_for_extension:.2%}), "
+                        f"продлеваем время на {extension_minutes:.1f} минут "
+                        f"(до {new_max_holding:.1f} минут, было {original_max_holding:.1f})"
+                    )
+                    return  # Продлили, не закрываем
+                else:
+                    # Время истекло - закрываем
+                    logger.info(
+                        f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
+                        f"(лимит: {actual_max_holding:.1f} минут), "
+                        f"прибыль: {profit_pct:.2%}, закрываем по времени"
+                    )
+                    await self._close_position(symbol, "max_holding_time")
+                    return
+
+        except Exception as e:
+            logger.error(f"Ошибка проверки времени жизни позиции {symbol}: {e}")
+
+    async def _update_orders_cache_status(self):
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляет статус ордеров в кэше
+        Проверяет статус последних ордеров и обновляет кэш
+        """
+        try:
+            import time
+
+            current_time = time.time()
+
+            # Проверяем только ордера, которые были размещены недавно (менее 5 минут назад)
+            symbols_to_check = []
+            for normalized_symbol_key, order_info in self.last_orders_cache.items():
+                order_time = order_info.get("timestamp", 0)
+                order_status = order_info.get("status", "unknown")
+                # Проверяем только pending ордера, которые старше 10 секунд
+                if order_status == "pending" and (current_time - order_time) > 10:
+                    # Находим оригинальный символ для API запросов
+                    symbol = None
+                    for config_symbol in self.scalping_config.symbols:
+                        if (
+                            self._normalize_symbol(config_symbol)
+                            == normalized_symbol_key
+                        ):
+                            symbol = config_symbol
+                            break
+                    if symbol:
+                        symbols_to_check.append((symbol, normalized_symbol_key))
+
+            # Проверяем статус ордеров (не чаще раза в 30 секунд на символ)
+            for symbol, normalized_symbol_key in symbols_to_check:
+                try:
+                    # Проверяем активные ордера
+                    active_orders = await self.client.get_active_orders(symbol)
+                    inst_id = f"{symbol}-SWAP"
+
+                    order_info = self.last_orders_cache.get(normalized_symbol_key, {})
+                    order_id = order_info.get("order_id")
+
+                    if order_id:
+                        # Ищем наш ордер среди активных
+                        found = False
+                        for order in active_orders:
+                            if (
+                                order.get("ordId") == str(order_id)
+                                and order.get("instId") == inst_id
+                            ):
+                                # Ордер все еще активен
+                                order_state = order.get("state", "").lower()
+                                if order_state in ["filled", "partially_filled"]:
+                                    self.last_orders_cache[normalized_symbol_key][
+                                        "status"
+                                    ] = "filled"
+                                    logger.debug(
+                                        f"✅ Ордер {order_id} для {symbol} исполнен"
+                                    )
+                                elif order_state in ["cancelled", "canceled"]:
+                                    self.last_orders_cache[normalized_symbol_key][
+                                        "status"
+                                    ] = "cancelled"
+                                    logger.debug(
+                                        f"⚠️ Ордер {order_id} для {symbol} отменен"
+                                    )
+                                found = True
+                                break
+
+                        # Если ордера нет среди активных - возможно исполнен
+                        if not found:
+                            # Проверяем позиции - возможно ордер исполнился
+                            all_positions = await self.client.get_positions()
+                            for pos in all_positions:
+                                if (
+                                    pos.get("instId") == inst_id
+                                    and abs(float(pos.get("pos", "0"))) > 0.000001
+                                ):
+                                    # Есть позиция - возможно ордер исполнился
+                                    self.last_orders_cache[normalized_symbol_key][
+                                        "status"
+                                    ] = "filled"
+                                    logger.debug(
+                                        f"✅ Ордер {order_id} для {symbol} вероятно исполнен (есть позиция)"
+                                    )
+                                    break
+                            else:
+                                # Нет активного ордера и нет позиции - возможно отменен
+                                self.last_orders_cache[normalized_symbol_key][
+                                    "status"
+                                ] = "cancelled"
+                                logger.debug(
+                                    f"⚠️ Ордер {order_id} для {symbol} вероятно отменен (нет в активных)"
+                                )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Ошибка обновления статуса ордера для {symbol}: {e}"
+                    )
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка обновления кэша ордеров: {e}")
 
     async def _close_position(self, symbol: str, reason: str):
         """Закрытие позиции через position_manager"""
@@ -1405,6 +2541,12 @@ class FuturesScalpingOrchestrator:
                 # ✅ Закрываем через position_manager (API)
                 await self.position_manager.close_position_manually(symbol)
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем кэш при закрытии позиции (с нормализованным символом)
+                normalized_symbol = self._normalize_symbol(symbol)
+                if normalized_symbol in self.last_orders_cache:
+                    self.last_orders_cache[normalized_symbol]["status"] = "closed"
+                    logger.debug(f"📦 Обновлен статус ордера для {symbol} на 'closed'")
+
                 # 🛡️ Вычитаем margin при закрытии
                 position_margin = position.get("margin", 0)
                 if position_margin > 0:
@@ -1412,6 +2554,17 @@ class FuturesScalpingOrchestrator:
                     logger.debug(
                         f"💼 Общая маржа после закрытия: ${self.total_margin_used:.2f}"
                     )
+
+                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Удаляем позицию из MaxSizeLimiter!
+                    # Рассчитываем размер позиции в USD (notional)
+                    position_size = position.get("size", 0)
+                    entry_price = position.get("entry_price", 0)
+                    if position_size > 0 and entry_price > 0:
+                        size_usd = position_size * entry_price
+                        self.max_size_limiter.remove_position(symbol)
+                        logger.debug(
+                            f"✅ Позиция {symbol} удалена из MaxSizeLimiter: ${size_usd:.2f} (осталось: ${self.max_size_limiter.get_total_size():.2f})"
+                        )
 
                     # Удаляем из active_positions
                     del self.active_positions[symbol]

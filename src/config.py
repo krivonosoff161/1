@@ -118,9 +118,13 @@ class ScalpingConfig(BaseModel):
     time_filter: Dict = Field(default_factory=dict)
     volatility_modes_enabled: bool = Field(default=False)
     volatility_modes: Dict = Field(default_factory=dict)
-    pivot_points_enabled: bool = Field(default=False)
+    pivot_points_enabled: bool = Field(
+        default=True
+    )  # ✅ ИСПРАВЛЕНО: Включено по умолчанию
     pivot_points: Dict = Field(default_factory=dict)
-    volume_profile_enabled: bool = Field(default=False)
+    volume_profile_enabled: bool = Field(
+        default=True
+    )  # ✅ ИСПРАВЛЕНО: Включено по умолчанию
     volume_profile: Dict = Field(default_factory=dict)
     balance_checker_enabled: bool = Field(default=False)
     balance_checker: Dict = Field(default_factory=dict)

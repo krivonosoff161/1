@@ -474,8 +474,23 @@ class FuturesPositionManager:
             size = float(actual_position.get("pos", "0"))
             side = actual_position.get("posSide", "long")
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем финальный PnL перед закрытием
+            final_pnl = 0.0
+            try:
+                # Пробуем разные варианты названий полей для unrealized PnL
+                if "upl" in actual_position and actual_position.get("upl"):
+                    final_pnl = float(actual_position["upl"])
+                elif "uPnl" in actual_position and actual_position.get("uPnl"):
+                    final_pnl = float(actual_position["uPnl"])
+                elif "unrealizedPnl" in actual_position and actual_position.get(
+                    "unrealizedPnl"
+                ):
+                    final_pnl = float(actual_position["unrealizedPnl"])
+            except (ValueError, TypeError):
+                pass
+
             logger.info(
-                f"🔄 Закрытие позиции {symbol} по причине: {reason}, размер={size} контрактов"
+                f"🔄 Закрытие позиции {symbol} по причине: {reason}, размер={size} контрактов, PnL={final_pnl:.2f} USDT"
             )
 
             # Определение стороны закрытия
@@ -483,16 +498,21 @@ class FuturesPositionManager:
 
             # Размещение рыночного ордера на закрытие
             # ⚠️ size из API уже в контрактах, поэтому size_in_contracts=True
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем reduceOnly=True для закрытия
             result = await self.client.place_futures_order(
                 symbol=symbol,
                 side=close_side,
                 size=abs(size),
                 order_type="market",
                 size_in_contracts=True,  # size из API уже в контрактах
+                reduce_only=True,  # ✅ КРИТИЧЕСКОЕ: Только закрытие, не открытие новой позиции
             )
 
             if result.get("code") == "0":
-                logger.info(f"✅ Позиция {symbol} закрыта по {reason}")
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем финальный PnL в лог для анализатора
+                logger.info(
+                    f"✅ Позиция {symbol} закрыта по {reason}, PnL = {final_pnl:+.2f} USDT"
+                )
 
                 # Обновление статистики
                 self._update_close_stats(reason)
@@ -632,8 +652,21 @@ class FuturesPositionManager:
 
                 side = pos_data.get("posSide", "long")
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем финальный PnL перед закрытием
+                final_pnl = 0.0
+                try:
+                    # Пробуем разные варианты названий полей для unrealized PnL
+                    if "upl" in pos_data and pos_data.get("upl"):
+                        final_pnl = float(pos_data["upl"])
+                    elif "uPnl" in pos_data and pos_data.get("uPnl"):
+                        final_pnl = float(pos_data["uPnl"])
+                    elif "unrealizedPnl" in pos_data and pos_data.get("unrealizedPnl"):
+                        final_pnl = float(pos_data["unrealizedPnl"])
+                except (ValueError, TypeError):
+                    pass
+
                 logger.info(
-                    f"🔄 Закрытие позиции {symbol} {side} размер={size} контрактов"
+                    f"🔄 Закрытие позиции {symbol} {side} размер={size} контрактов, PnL={final_pnl:.2f} USDT"
                 )
 
                 # Определение стороны закрытия
@@ -641,17 +674,22 @@ class FuturesPositionManager:
 
                 # ✅ Размещаем рыночный ордер на закрытие
                 # ⚠️ size из API уже в контрактах, поэтому size_in_contracts=True
-                # ⚠️ Для закрытия позиции используем reduceOnly для безопасности
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для закрытия позиции используем reduceOnly=True
+                # Это гарантирует, что ордер не откроет новую позицию, а только закроет существующую
                 result = await self.client.place_futures_order(
                     symbol=symbol,
                     side=close_side,
                     size=abs(size),
                     order_type="market",
                     size_in_contracts=True,  # size из API уже в контрактах
+                    reduce_only=True,  # ✅ КРИТИЧЕСКОЕ: Только закрытие, не открытие новой позиции
                 )
 
                 if result.get("code") == "0":
-                    logger.info(f"✅ Позиция {symbol} закрыта через API")
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем финальный PnL в лог для анализатора
+                    logger.info(
+                        f"✅ Позиция {symbol} закрыта через API, PnL = {final_pnl:+.2f} USDT"
+                    )
                     # Удаляем из активных позиций
                     if symbol in self.active_positions:
                         del self.active_positions[symbol]

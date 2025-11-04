@@ -186,29 +186,46 @@ class CorrelationFilter:
                 if not corr_data:
                     continue
 
-                # Сохраняем значение корреляции
-                correlation_values[open_symbol] = corr_data.correlation
+                # ✅ ИСПРАВЛЕНИЕ: Безопасное извлечение correlation
+                # corr_data может быть CorrelationData (Pydantic модель) или словарем
+                if isinstance(corr_data, dict):
+                    correlation_value = corr_data.get("correlation", 0.0)
+                else:
+                    # CorrelationData объект
+                    correlation_value = getattr(corr_data, "correlation", 0.0)
 
-                # Проверяем порог
-                if abs(corr_data.correlation) >= self.config.correlation_threshold:
+                # Сохраняем значение корреляции
+                correlation_values[open_symbol] = correlation_value
+
+                # Проверяем порог (используем безопасно извлеченное значение)
+                if abs(correlation_value) >= self.config.correlation_threshold:
                     # Если включен фильтр по направлению
                     if self.config.block_same_direction_only:
                         # Блокируем только если направления совпадают
-                        position_direction = (
-                            "LONG" if position.side == PositionSide.LONG else "SHORT"
-                        )
+                        # ✅ ИСПРАВЛЕНИЕ: position может быть словарем (из API) или объектом Position
+                        if isinstance(position, dict):
+                            # Из API: "pos" > 0 = LONG, < 0 = SHORT
+                            pos_size = float(position.get("pos", "0"))
+                            position_direction = "LONG" if pos_size > 0 else "SHORT"
+                        else:
+                            # Объект Position
+                            position_direction = (
+                                "LONG"
+                                if position.side == PositionSide.LONG
+                                else "SHORT"
+                            )
                         if signal_side == position_direction:
                             correlated_positions.append(open_symbol)
                             logger.debug(
                                 f"Correlation Filter: {symbol} {signal_side} correlated with "
-                                f"{open_symbol} {position_direction} ({corr_data.correlation:.2f})"
+                                f"{open_symbol} {position_direction} ({correlation_value:.2f})"
                             )
                     else:
                         # Блокируем независимо от направления
                         correlated_positions.append(open_symbol)
                         logger.debug(
                             f"Correlation Filter: {symbol} correlated with "
-                            f"{open_symbol} ({corr_data.correlation:.2f})"
+                            f"{open_symbol} ({correlation_value:.2f})"
                         )
 
             # Проверяем лимит коррелированных позиций

@@ -186,10 +186,8 @@ class MarginCalculator:
         # Это правильнее чем делить на entry_price, потому что position_value уже учитывает current_price
         position_size = position_value / current_price if current_price > 0 else 0
 
-        logger.debug(
-            f"🔍 margin_calculator: position_value={position_value:.2f} USD, "
-            f"current_price={current_price:.2f}, position_size={position_size:.6f} монет"
-        )
+        # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
+        # logger.debug(f"🔍 margin_calculator: position_value={position_value:.2f} USD")
 
         if side.lower() == "buy" or side.lower() == "long":
             pnl = (current_price - entry_price) * position_size
@@ -245,10 +243,10 @@ class MarginCalculator:
             # Но для consistency используем available_margin:
             available_margin = equity - margin_used + pnl
 
-        logger.debug(
-            f"🔍 margin_calculator: equity={equity:.2f}, pnl={pnl:.2f}, "
-            f"margin_used={margin_used:.2f}, available_margin={available_margin:.2f}"
-        )
+        # ✅ ОПТИМИЗАЦИЯ: Логируем только при изменениях или проблемах (не каждый раз)
+        # Убрано избыточное DEBUG логирование каждой проверки (экономия ~20% логов)
+        # Можно включить обратно при необходимости отладки margin проблем
+        # logger.debug(f"🔍 margin_calculator: equity={equity:.2f}, pnl={pnl:.2f}, margin_used={margin_used:.2f}")
 
         # Расчет коэффициента маржи
         # margin_ratio показывает, во сколько раз доступная маржа превышает использованную

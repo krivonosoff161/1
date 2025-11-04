@@ -121,9 +121,11 @@ class RegimeConfig:
     min_regime_duration_minutes: int = 15  # Минимум 15 мин в одном режиме
     required_confirmations: int = 3  # Нужно 3 подтверждения для переключения
     # Параметры для каждого режима
+    # ⚠️ ВАЖНО: Эти дефолты используются ТОЛЬКО как fallback если конфиг не загружен!
+    # В реальной работе параметры загружаются из config.yaml через signal_generator
     trending_params: RegimeParameters = field(
         default_factory=lambda: RegimeParameters(
-            min_score_threshold=3.0,
+            min_score_threshold=3.0,  # Должен быть переопределен из config.yaml!
             max_trades_per_hour=15,
             position_size_multiplier=1.2,
             tp_atr_multiplier=2.5,
@@ -138,7 +140,7 @@ class RegimeConfig:
     )
     ranging_params: RegimeParameters = field(
         default_factory=lambda: RegimeParameters(
-            min_score_threshold=4.0,
+            min_score_threshold=4.0,  # ⚠️ ЗАХАРДКОЖЕН! Должен быть переопределен из config.yaml (там min_score_threshold=2)!
             max_trades_per_hour=10,
             position_size_multiplier=1.0,
             tp_atr_multiplier=2.0,
@@ -153,7 +155,7 @@ class RegimeConfig:
     )
     choppy_params: RegimeParameters = field(
         default_factory=lambda: RegimeParameters(
-            min_score_threshold=5.0,
+            min_score_threshold=5.0,  # Должен быть переопределен из config.yaml!
             max_trades_per_hour=8,
             position_size_multiplier=0.8,
             tp_atr_multiplier=1.5,

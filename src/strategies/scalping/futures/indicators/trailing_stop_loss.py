@@ -33,7 +33,7 @@ class TrailingStopLoss:
         initial_trail: float = 0.05,
         max_trail: float = 0.2,
         min_trail: float = 0.02,
-        trading_fee_rate: float = 0.001,  # 0.1% на круг (0.05% вход + 0.05% выход для taker)
+        trading_fee_rate: float = 0.0004,  # 0.04% на круг (0.02% вход + 0.02% выход для Maker/Limit)
     ):
         """
         Инициализация Trailing Stop Loss.
@@ -42,7 +42,7 @@ class TrailingStopLoss:
             initial_trail: Начальный трейлинг в % (по умолчанию 0.05%)
             max_trail: Максимальный трейлинг в % (по умолчанию 0.2%)
             min_trail: Минимальный трейлинг в % (по умолчанию 0.02%)
-            trading_fee_rate: Комиссия на круг (открытие + закрытие) в долях (0.001 = 0.1%)
+            trading_fee_rate: Комиссия на круг (открытие + закрытие) в долях (0.0004 = 0.04% для Limit/Maker, 0.001 = 0.1% для Market/Taker)
         """
         self.initial_trail = initial_trail
         self.max_trail = max_trail

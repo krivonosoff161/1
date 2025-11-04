@@ -314,7 +314,7 @@ scalping:
   balance_profiles:
     small:
       threshold_usd: 1000
-      base_position_usd: 60
+      base_position_usd: 25  # Номинальная стоимость позиции (с левериджем 3x = ~$8 маржи)
       max_open_positions: 6  # ✅ Увеличено: 3 на BTC + 3 на ETH
       max_position_percent: 20
       tp_atr_multiplier_boost: 1.2
@@ -323,7 +323,7 @@ scalping:
       min_score_boost: 1
     medium:
       threshold_usd: 5000
-      base_position_usd: 120
+      base_position_usd: 45  # Номинальная стоимость позиции (с левериджем 3x = ~$15 маржи)
       max_open_positions: 8  # ✅ Увеличено: 4 на BTC + 4 на ETH
       max_position_percent: 15
       tp_atr_multiplier_boost: 1.0
@@ -332,7 +332,7 @@ scalping:
       min_score_boost: 0
     large:
       threshold_usd: 10000
-      base_position_usd: 200
+      base_position_usd: 75  # Номинальная стоимость позиции (с левериджем 3x = ~$25 маржи)
       max_open_positions: 10  # ✅ Увеличено: 5 на BTC + 5 на ETH
       max_position_percent: 10
       tp_atr_multiplier_boost: 0.9

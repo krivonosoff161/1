@@ -121,6 +121,17 @@ class SlippageGuard:
             if order_type not in ["market", "limit"]:
                 return  # Только рыночные и лимитные ордера
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: НЕ отменяем лимитные ордера!
+            # Лимитные ордера не должны отменяться slippage guard, так как:
+            # 1. Они размещаются по желаемой цене
+            # 2. Отмена после размещения = потеря комиссии
+            # 3. Лимитные ордера должны исполняться или отменяться вручную
+            if order_type == "limit":
+                logger.debug(
+                    f"Slippage Guard: пропускаем проверку лимитного ордера {order_id} (не отменяем лимитные ордера)"
+                )
+                return
+
             # Получаем текущие цены
             current_prices = await self._get_current_prices(client, symbol)
             if not current_prices:
@@ -222,10 +233,60 @@ class SlippageGuard:
         """Определение необходимости отмены ордера"""
 
         # Проверка времени ордера
-        order_time = datetime.fromisoformat(
-            order.get("cTime", "").replace("Z", "+00:00")
-        )
-        time_since_order = (datetime.now() - order_time).total_seconds()
+        try:
+            c_time = order.get("cTime", "")
+            if not c_time:
+                # Если нет времени - пропускаем проверку таймаута
+                logger.debug(f"Ордер {order.get('ordId')} не имеет времени создания")
+                return False
+
+            # OKX возвращает время в формате:
+            # - Строка ISO: "2024-01-15T10:30:00.000Z"
+            # - Timestamp в миллисекундах: "1705315800000" (строка или число)
+
+            # Проверяем, это строка или число
+            if isinstance(c_time, (int, float)):
+                # Timestamp в миллисекундах
+                order_time = datetime.fromtimestamp(c_time / 1000.0)
+                from datetime import timezone
+
+                order_time = order_time.replace(tzinfo=timezone.utc)
+            elif isinstance(c_time, str):
+                # Строка - пытаемся распарсить как ISO или timestamp
+                try:
+                    # Пробуем распарсить как timestamp (в миллисекундах)
+                    timestamp_ms = float(c_time)
+                    order_time = datetime.fromtimestamp(timestamp_ms / 1000.0)
+                    from datetime import timezone
+
+                    order_time = order_time.replace(tzinfo=timezone.utc)
+                except (ValueError, TypeError):
+                    # Не timestamp - парсим как ISO строку
+                    c_time_str = c_time.replace("Z", "+00:00")
+                    # Если формат без миллисекунд - добавляем
+                    if "+00:00" in c_time_str and "." not in c_time_str.split("+")[0]:
+                        c_time_str = c_time_str.replace("+00:00", ".000+00:00")
+                    order_time = datetime.fromisoformat(c_time_str)
+                    # Если order_time не имеет timezone - добавляем UTC
+                    if order_time.tzinfo is None:
+                        from datetime import timezone
+
+                        order_time = order_time.replace(tzinfo=timezone.utc)
+            else:
+                logger.warning(f"Неизвестный формат времени ордера: {type(c_time)}")
+                return False
+
+            # Вычисляем разницу во времени
+            current_time = (
+                datetime.now(order_time.tzinfo) if order_time.tzinfo else datetime.now()
+            )
+            time_since_order = (current_time - order_time).total_seconds()
+        except (ValueError, AttributeError, TypeError) as e:
+            logger.warning(
+                f"Ошибка парсинга времени ордера {order.get('ordId')}: {e}, cTime={order.get('cTime')}, type={type(order.get('cTime'))}"
+            )
+            # Если не можем распарсить - пропускаем проверку таймаута (не критично)
+            return False
 
         if time_since_order > self.order_timeout:
             logger.warning(

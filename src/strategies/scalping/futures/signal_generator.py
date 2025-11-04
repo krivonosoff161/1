@@ -265,6 +265,16 @@ class FuturesSignalGenerator:
                     def create_regime_params(regime_name: str) -> RegimeParameters:
                         """Создает RegimeParameters из конфига"""
                         params_dict = extract_regime_params(regime_name) or {}
+                        # ✅ ЛОГИРОВАНИЕ: Проверяем что параметры найдены
+                        if not params_dict:
+                            logger.warning(
+                                f"⚠️ Параметры для режима '{regime_name}' не найдены в конфиге! "
+                                f"Используются дефолтные значения."
+                            )
+                        else:
+                            logger.debug(
+                                f"✅ Найдены параметры для '{regime_name}': {list(params_dict.keys())}"
+                            )
                         indicators_dict = params_dict.get("indicators", {})
                         modules_dict = params_dict.get("modules", {})
 
@@ -341,10 +351,18 @@ class FuturesSignalGenerator:
                             if regime_name == "ranging"
                             else (3 if regime_name == "trending" else 5)
                         )
+                        # ✅ Получаем min_score_threshold из конфига (обязательно!)
+                        min_score_threshold = params_dict.get(
+                            "min_score_threshold", default_min_score
+                        )
+                        logger.info(
+                            f"📋 Загружены параметры для {regime_name}: "
+                            f"min_score_threshold={min_score_threshold} "
+                            f"(из конфига: {params_dict.get('min_score_threshold') is not None})"
+                        )
+
                         return RegimeParameters(
-                            min_score_threshold=params_dict.get(
-                                "min_score_threshold", default_min_score
-                            ),
+                            min_score_threshold=min_score_threshold,
                             max_trades_per_hour=params_dict.get(
                                 "max_trades_per_hour", 10
                             ),
@@ -588,9 +606,20 @@ class FuturesSignalGenerator:
                     pivot_enabled = getattr(
                         self.scalping_config, "pivot_points_enabled", True
                     )
+                    logger.info(
+                        f"✅ Pivot Points enabled из атрибута: {pivot_enabled} (тип: {type(pivot_enabled)})"
+                    )
                 elif isinstance(self.scalping_config, dict):
                     pivot_enabled = self.scalping_config.get(
                         "pivot_points_enabled", True
+                    )
+                    logger.info(f"✅ Pivot Points enabled из dict: {pivot_enabled}")
+                else:
+                    logger.warning(
+                        f"⚠️ Pivot Points: scalping_config не dict и нет атрибута, используем по умолчанию: {pivot_enabled}"
+                    )
+                    logger.warning(
+                        f"⚠️ Тип scalping_config: {type(self.scalping_config)}, атрибуты: {dir(self.scalping_config)[:10]}"
                     )
 
                 pivot_tolerance = 0.003  # 0.3%
@@ -600,11 +629,22 @@ class FuturesSignalGenerator:
 
                 if pivot_config_data:
                     if isinstance(pivot_config_data, dict):
-                        pivot_enabled = (
-                            pivot_config_data.get("enabled", pivot_enabled)
-                            if "enabled" in pivot_config_data
-                            else pivot_enabled
-                        )
+                        # ✅ ИСПРАВЛЕНО: Если "enabled" есть в pivot_config_data - используем его
+                        # Если нет - оставляем pivot_enabled из pivot_points_enabled (верхний уровень)
+                        logger.debug(f"📊 pivot_config_data (dict): {pivot_config_data}")
+                        if "enabled" in pivot_config_data:
+                            old_enabled = pivot_enabled
+                            pivot_enabled = pivot_config_data.get(
+                                "enabled", pivot_enabled
+                            )
+                            logger.debug(
+                                f"📊 Pivot Points enabled из pivot_config_data: {old_enabled} → {pivot_enabled}"
+                            )
+                        else:
+                            logger.debug(
+                                f"📊 pivot_config_data не содержит 'enabled', оставляем {pivot_enabled} из pivot_points_enabled"
+                            )
+                        # Иначе оставляем pivot_enabled как есть (из pivot_points_enabled)
                         pivot_tolerance = pivot_config_data.get(
                             "level_tolerance_percent", pivot_tolerance
                         )
@@ -618,9 +658,12 @@ class FuturesSignalGenerator:
                             "use_last_n_days", pivot_use_days
                         )
                     elif hasattr(pivot_config_data, "level_tolerance_percent"):
-                        pivot_enabled = getattr(
-                            pivot_config_data, "enabled", pivot_enabled
-                        )
+                        # ✅ ИСПРАВЛЕНО: Если атрибут enabled есть - используем его, иначе оставляем из верхнего уровня
+                        if hasattr(pivot_config_data, "enabled"):
+                            pivot_enabled = getattr(
+                                pivot_config_data, "enabled", pivot_enabled
+                            )
+                        # Иначе оставляем pivot_enabled как есть (из pivot_points_enabled)
                         pivot_tolerance = getattr(
                             pivot_config_data,
                             "level_tolerance_percent",
@@ -661,8 +704,14 @@ class FuturesSignalGenerator:
                         )
                         self.pivot_filter = None
                 else:
-                    logger.debug(
-                        "⚠️ Pivot Points Filter отключен или client не доступен"
+                    reason = []
+                    if not pivot_enabled:
+                        reason.append("отключен в конфиге (pivot_enabled=False)")
+                    if not self.client:
+                        reason.append("client не доступен (self.client is None)")
+                    logger.warning(
+                        f"⚠️ Pivot Points Filter не инициализирован: {', '.join(reason) if reason else 'неизвестная причина'} "
+                        f"(pivot_enabled={pivot_enabled}, client={'есть' if self.client else 'None'})"
                     )
                     self.pivot_filter = None
             except Exception as e:
@@ -687,9 +736,20 @@ class FuturesSignalGenerator:
                     vp_enabled = getattr(
                         self.scalping_config, "volume_profile_enabled", True
                     )
+                    logger.info(
+                        f"✅ Volume Profile enabled из атрибута: {vp_enabled} (тип: {type(vp_enabled)})"
+                    )
                 elif isinstance(self.scalping_config, dict):
                     vp_enabled = self.scalping_config.get(
                         "volume_profile_enabled", True
+                    )
+                    logger.info(f"✅ Volume Profile enabled из dict: {vp_enabled}")
+                else:
+                    logger.warning(
+                        f"⚠️ Volume Profile: scalping_config не dict и нет атрибута, используем по умолчанию: {vp_enabled}"
+                    )
+                    logger.warning(
+                        f"⚠️ Тип scalping_config: {type(self.scalping_config)}, атрибуты: {dir(self.scalping_config)[:10]}"
                     )
 
                 vp_timeframe = "1H"
@@ -702,11 +762,19 @@ class FuturesSignalGenerator:
 
                 if vp_config_data:
                     if isinstance(vp_config_data, dict):
-                        vp_enabled = (
-                            vp_config_data.get("enabled", vp_enabled)
-                            if "enabled" in vp_config_data
-                            else vp_enabled
-                        )
+                        # ✅ ИСПРАВЛЕНО: Если "enabled" есть в vp_config_data - используем его
+                        # Если нет - оставляем vp_enabled из volume_profile_enabled (верхний уровень)
+                        logger.debug(f"📊 vp_config_data (dict): {vp_config_data}")
+                        if "enabled" in vp_config_data:
+                            old_enabled = vp_enabled
+                            vp_enabled = vp_config_data.get("enabled", vp_enabled)
+                            logger.debug(
+                                f"📊 Volume Profile enabled из vp_config_data: {old_enabled} → {vp_enabled}"
+                            )
+                        else:
+                            logger.debug(
+                                f"📊 vp_config_data не содержит 'enabled', оставляем {vp_enabled} из volume_profile_enabled"
+                            )
                         vp_timeframe = vp_config_data.get(
                             "lookback_timeframe", vp_timeframe
                         )
@@ -727,7 +795,10 @@ class FuturesSignalGenerator:
                             "poc_tolerance_percent", vp_poc_tolerance
                         )
                     elif hasattr(vp_config_data, "lookback_timeframe"):
-                        vp_enabled = getattr(vp_config_data, "enabled", vp_enabled)
+                        # ✅ ИСПРАВЛЕНО: Если атрибут enabled есть - используем его, иначе оставляем из верхнего уровня
+                        if hasattr(vp_config_data, "enabled"):
+                            vp_enabled = getattr(vp_config_data, "enabled", vp_enabled)
+                        # Иначе оставляем vp_enabled как есть (из volume_profile_enabled)
                         vp_timeframe = getattr(
                             vp_config_data, "lookback_timeframe", vp_timeframe
                         )
@@ -778,8 +849,14 @@ class FuturesSignalGenerator:
                         )
                         self.volume_filter = None
                 else:
-                    logger.debug(
-                        "⚠️ Volume Profile Filter отключен или client не доступен"
+                    reason = []
+                    if not vp_enabled:
+                        reason.append("отключен в конфиге (vp_enabled=False)")
+                    if not self.client:
+                        reason.append("client не доступен (self.client is None)")
+                    logger.warning(
+                        f"⚠️ Volume Profile Filter не инициализирован: {', '.join(reason) if reason else 'неизвестная причина'} "
+                        f"(vp_enabled={vp_enabled}, client={'есть' if self.client else 'None'})"
                     )
                     self.volume_filter = None
             except Exception as e:
@@ -839,10 +916,8 @@ class FuturesSignalGenerator:
                             market_data.ohlcv_data, current_price
                         )
                         current_regime = regime_manager.get_current_regime()
-                        logger.debug(
-                            f"🧠 ARM режим для {symbol}: {current_regime} "
-                            f"(confidence: {detection_result.confidence:.1%})"
-                        )
+                        # ✅ ОПТИМИЗАЦИЯ: Логируем режим только при изменении или раз в N минут
+                        # logger.debug(f"🧠 ARM режим для {symbol}: {current_regime}")
                     except Exception as e:
                         logger.warning(
                             f"⚠️ Ошибка обновления режима ARM для {symbol}: {e}"
@@ -1024,56 +1099,48 @@ class FuturesSignalGenerator:
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
             )
 
-            logger.debug(
-                f"📊 Индикаторы для {symbol}:\n"
-                f"   Цена: ${current_price:.2f}\n"
-                f"   RSI: {rsi_val}\n"
-                f"   MACD: {{{macd_str}}}\n"
-                f"   EMA: 12={ema_12:.2f}, 26={ema_26:.2f}\n"
-                f"   BB: upper={bb.get('upper', 0):.2f}, lower={bb.get('lower', 0):.2f}, middle={bb.get('middle', 0):.2f}"
-            )
+            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование всех индикаторов (экономия ~30% логов)
+            # Логируем только при генерации реальных сигналов (INFO уровень)
+            # logger.debug(f"📊 Индикаторы для {symbol}: цена=${current_price:.2f}, RSI={rsi_val}")
 
             # RSI сигналы
             rsi_signals = await self._generate_rsi_signals(
                 symbol, indicators, market_data
             )
-            if rsi_signals:
-                logger.debug(f"✅ RSI дал {len(rsi_signals)} сигнал(ов) для {symbol}")
+            # ✅ ОПТИМИЗАЦИЯ: Логирование через INFO уровень при наличии сигналов
+            # if rsi_signals:
+            #     logger.debug(f"✅ RSI дал {len(rsi_signals)} сигнал(ов) для {symbol}")
             signals.extend(rsi_signals)
 
             # MACD сигналы
             macd_signals = await self._generate_macd_signals(
                 symbol, indicators, market_data
             )
-            if macd_signals:
-                logger.debug(
-                    f"✅ MACD дал {len(macd_signals)} сигнал(ов) для {symbol}: {[s.get('type') for s in macd_signals]}"
-                )
+            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
+            # if macd_signals:
+            #     logger.debug(f"✅ MACD дал {len(macd_signals)} сигнал(ов) для {symbol}")
             signals.extend(macd_signals)
 
             # Bollinger Bands сигналы
             bb_signals = await self._generate_bollinger_signals(
                 symbol, indicators, market_data
             )
-            if bb_signals:
-                logger.debug(
-                    f"✅ Bollinger Bands дал {len(bb_signals)} сигнал(ов) для {symbol}: {[s.get('type') for s in bb_signals]}"
-                )
+            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
+            # if bb_signals:
+            #     logger.debug(f"✅ Bollinger Bands дал {len(bb_signals)} сигнал(ов) для {symbol}")
             signals.extend(bb_signals)
 
             # Moving Average сигналы
             ma_signals = await self._generate_ma_signals(
                 symbol, indicators, market_data
             )
-            if ma_signals:
-                logger.debug(
-                    f"✅ Moving Average дал {len(ma_signals)} сигнал(ов) для {symbol}: {[s.get('type') for s in ma_signals]}"
-                )
+            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
+            # if ma_signals:
+            #     logger.debug(f"✅ Moving Average дал {len(ma_signals)} сигнал(ов) для {symbol}")
             signals.extend(ma_signals)
 
-            logger.debug(
-                f"📊 Всего базовых сигналов для {symbol}: {len(signals)} ({[s.get('type', 'unknown') for s in signals]})"
-            )
+            # ✅ ОПТИМИЗАЦИЯ: Логируем только если есть сигналы (INFO уровень) или важная информация
+            # logger.debug(f"📊 Всего базовых сигналов для {symbol}: {len(signals)}")
 
             return signals
 
@@ -1150,11 +1217,8 @@ class FuturesSignalGenerator:
                 regime_manager.get_current_regime() if regime_manager else "N/A"
             )
 
-            logger.debug(
-                f"📊 RSI для {symbol}: значение={rsi:.2f}, "
-                f"пороги oversold={rsi_oversold}, overbought={rsi_overbought} "
-                f"(режим: {current_regime})"
-            )
+            # ✅ ОПТИМИЗАЦИЯ: Логируем RSI только при генерации сигналов (не каждый раз)
+            # logger.debug(f"📊 RSI для {symbol}: значение={rsi:.2f}")
 
             # ✅ Получаем EMA для проверки тренда
             ema_fast = indicators.get("ema_12", 0)
@@ -1177,20 +1241,13 @@ class FuturesSignalGenerator:
                     # Конфликт: RSI oversold (LONG) vs EMA bearish (DOWN)
                     confidence = 0.4  # Сниженная уверенность для быстрого скальпа
                     has_conflict = True
-                    logger.debug(
-                        f"⚡ RSI OVERSOLD с конфликтом для {symbol}: "
-                        f"RSI({rsi:.2f}) < oversold({rsi_oversold}), "
-                        f"но EMA показывает нисходящий тренд → быстрый скальп на отскоке "
-                        f"(confidence={confidence:.1f})"
-                    )
+                    # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
+                    # logger.debug(f"⚡ RSI OVERSOLD с конфликтом для {symbol}: confidence={confidence:.1f}")
                 else:
                     confidence = 0.8  # Нормальная уверенность
                     has_conflict = False
-                    logger.debug(
-                        f"✅ RSI OVERSOLD сигнал для {symbol}: "
-                        f"RSI({rsi:.2f}) < oversold({rsi_oversold}), "
-                        f"тренд не нисходящий (confidence={confidence:.1f})"
-                    )
+                    # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
+                    # logger.debug(f"✅ RSI OVERSOLD сигнал для {symbol}: RSI={rsi:.2f}")
 
                 signals.append(
                     {
@@ -1229,11 +1286,8 @@ class FuturesSignalGenerator:
                 else:
                     confidence = 0.8  # Нормальная уверенность
                     has_conflict = False
-                    logger.debug(
-                        f"✅ RSI OVERBOUGHT сигнал для {symbol}: "
-                        f"RSI({rsi:.2f}) > overbought({rsi_overbought}), "
-                        f"тренд не восходящий (confidence={confidence:.1f})"
-                    )
+                    # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
+                    # logger.debug(f"✅ RSI OVERBOUGHT сигнал для {symbol}: RSI={rsi:.2f}")
 
                 signals.append(
                     {
@@ -1267,10 +1321,8 @@ class FuturesSignalGenerator:
             # ✅ ИСПРАВЛЕНИЕ: Правильно вычисляем histogram
             histogram = macd.get("histogram", macd_line - signal_line)
 
-            logger.debug(
-                f"🔍 MACD для {symbol}: macd_line={macd_line:.4f}, "
-                f"signal_line={signal_line:.4f}, histogram={histogram:.4f}"
-            )
+            # ✅ ОПТИМИЗАЦИЯ: Логируем MACD только при генерации сигналов (не каждый раз)
+            # logger.debug(f"🔍 MACD для {symbol}: histogram={histogram:.4f}")
 
             # Пересечение MACD линии и сигнальной линии
             if macd_line > signal_line and histogram > 0:
@@ -1283,9 +1335,12 @@ class FuturesSignalGenerator:
                         "symbol": symbol,
                         "side": "buy",
                         "type": "macd_bullish",
-                        "strength": min(
-                            abs(histogram) / 100, 1.0
-                        ),  # Нормализованная сила
+                        # ✅ ИСПРАВЛЕНИЕ: Улучшенная нормализация MACD histogram
+                        # MACD histogram может быть очень большой (сотни), поэтому делим на 200
+                        # Пример: histogram=47 → strength = 47/200 = 0.235 (23.5%)
+                        # histogram=100 → strength = 100/200 = 0.5 (50%)
+                        # histogram=200+ → strength = 1.0 (максимум)
+                        "strength": min(abs(histogram) / 200.0, 1.0),
                         "price": market_data.ohlcv_data[-1].close
                         if market_data.ohlcv_data
                         else 0.0,
@@ -1296,18 +1351,19 @@ class FuturesSignalGenerator:
                 )
 
             elif macd_line < signal_line and histogram < 0:
-                logger.debug(
-                    f"✅ MACD BEARISH сигнал для {symbol}: macd({macd_line:.4f}) < signal({signal_line:.4f}), "
-                    f"histogram={histogram:.4f} < 0"
-                )
+                # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
+                # logger.debug(f"✅ MACD BEARISH сигнал для {symbol}: histogram={histogram:.4f}")
                 signals.append(
                     {
                         "symbol": symbol,
                         "side": "sell",
                         "type": "macd_bearish",
-                        "strength": min(
-                            abs(histogram) / 100, 1.0
-                        ),  # Нормализованная сила
+                        # ✅ ИСПРАВЛЕНИЕ: Улучшенная нормализация MACD histogram
+                        # MACD histogram может быть очень большой (сотни), поэтому делим на 200
+                        # Пример: histogram=47 → strength = 47/200 = 0.235 (23.5%)
+                        # histogram=100 → strength = 100/200 = 0.5 (50%)
+                        # histogram=200+ → strength = 1.0 (максимум)
+                        "strength": min(abs(histogram) / 200.0, 1.0),
                         "price": market_data.ohlcv_data[-1].close
                         if market_data.ohlcv_data
                         else 0.0,
@@ -1337,12 +1393,8 @@ class FuturesSignalGenerator:
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
             )
 
-            logger.debug(
-                f"🔍 BB для {symbol}: цена={current_price:.2f}, upper={upper:.2f}, "
-                f"lower={lower:.2f}, middle={middle:.2f}, "
-                f"цена<=lower={current_price <= lower if lower > 0 else False}, "
-                f"цена>=upper={current_price >= upper if upper > 0 else False}"
-            )
+            # ✅ ОПТИМИЗАЦИЯ: Логируем BB только при генерации сигналов (не каждый раз)
+            # logger.debug(f"🔍 BB для {symbol}: цена={current_price:.2f}")
 
             # Отскок от нижней полосы (покупка)
             # ✅ ИСПРАВЛЕНИЕ: Не даем LONG сигнал в нисходящем тренде!
@@ -1371,7 +1423,15 @@ class FuturesSignalGenerator:
                             "symbol": symbol,
                             "side": "buy",
                             "type": "bb_oversold",
-                            "strength": (lower - current_price) / (middle - lower),
+                            # ✅ ИСПРАВЛЕНИЕ: Улучшенная нормализация BB oversold strength
+                            # strength = расстояние от нижней полосы / ширина полосы
+                            # Нормализуем к 0-1, но ограничиваем максимум 1.0
+                            "strength": min(
+                                (lower - current_price) / (middle - lower)
+                                if (middle - lower) > 0
+                                else 0.5,
+                                1.0,
+                            ),
                             "price": market_data.ohlcv_data[-1].close
                             if market_data.ohlcv_data
                             else 0.0,
@@ -1408,7 +1468,15 @@ class FuturesSignalGenerator:
                             "symbol": symbol,
                             "side": "sell",
                             "type": "bb_overbought",
-                            "strength": (current_price - upper) / (upper - middle),
+                            # ✅ ИСПРАВЛЕНИЕ: Улучшенная нормализация BB overbought strength
+                            # strength = расстояние от верхней полосы / ширина полосы
+                            # Нормализуем к 0-1, но ограничиваем максимум 1.0
+                            "strength": min(
+                                (current_price - upper) / (upper - middle)
+                                if (upper - middle) > 0
+                                else 0.5,
+                                1.0,
+                            ),
                             "price": market_data.ohlcv_data[-1].close
                             if market_data.ohlcv_data
                             else 0.0,
@@ -1488,13 +1556,17 @@ class FuturesSignalGenerator:
                         f"EMA показывает bullish, но цена падает (направление={price_direction})"
                     )
                 else:
-                    strength = (ma_fast - ma_slow) / ma_slow
-                    # ✅ ИСПРАВЛЕНИЕ: Увеличиваем strength (базовые значения слишком маленькие)
-                    # Умножаем на 100 для нормализации (0.0001 → 0.01, но ограничиваем максимум 1.0)
-                    strength = min(1.0, strength * 100)
+                    # ✅ ИСПРАВЛЕНИЕ: Правильный расчет strength для MA BULLISH
+                    # strength = процентное изменение между EMA (в долях, не процентах)
+                    strength = (ma_fast - ma_slow) / ma_slow  # Например: 0.0005 = 0.05%
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Умножаем на 2000 для нормализации к 0-1
+                    # Логика: разница 0.05% → strength = 0.05% * 2000 = 100% = 1.0
+                    # Разница 0.01% → strength = 0.01% * 2000 = 20% = 0.2
+                    # Это позволит даже маленьким разницам EMA давать разумный strength
+                    strength = min(1.0, abs(strength) * 2000)  # abs() для безопасности
                     # Снижаем силу сигнала если направление neutral (не подтверждено)
                     if price_direction == "neutral":
-                        strength *= 0.7
+                        strength *= 0.9  # Менее агрессивное снижение (было 0.7)
 
                     logger.debug(
                         f"✅ MA BULLISH сигнал для {symbol}: EMA_12({ma_fast:.2f}) > EMA_26({ma_slow:.2f}), "
@@ -1525,13 +1597,17 @@ class FuturesSignalGenerator:
                         f"EMA показывает bearish, но цена растет (направление={price_direction})"
                     )
                 else:
-                    strength = (ma_slow - ma_fast) / ma_slow
-                    # ✅ ИСПРАВЛЕНИЕ: Увеличиваем strength (базовые значения слишком маленькие)
-                    # Умножаем на 100 для нормализации (0.0001 → 0.01, но ограничиваем максимум 1.0)
-                    strength = min(1.0, strength * 100)
+                    # ✅ ИСПРАВЛЕНИЕ: Правильный расчет strength для MA BEARISH
+                    # strength = процентное изменение между EMA (в долях, не процентах)
+                    strength = (ma_slow - ma_fast) / ma_slow  # Например: 0.0005 = 0.05%
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Умножаем на 2000 для нормализации к 0-1
+                    # Логика: разница 0.05% → strength = 0.05% * 2000 = 100% = 1.0
+                    # Разница 0.01% → strength = 0.01% * 2000 = 20% = 0.2
+                    # Это позволит даже маленьким разницам EMA давать разумный strength
+                    strength = min(1.0, abs(strength) * 2000)  # abs() для безопасности
                     # Снижаем силу сигнала если направление neutral
                     if price_direction == "neutral":
-                        strength *= 0.7
+                        strength *= 0.9  # Менее агрессивное снижение (было 0.7)
 
                     logger.debug(
                         f"✅ MA BEARISH сигнал для {symbol}: EMA_12({ma_fast:.2f}) < EMA_26({ma_slow:.2f}), "

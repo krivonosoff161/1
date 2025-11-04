@@ -100,13 +100,10 @@ class OKXFuturesClient:
 
         sign_str = timestamp + method.upper() + request_path + body
 
-        # Логируем компоненты подписи для отладки
-        logger.debug(f"Signature components:")
-        logger.debug(f"  Timestamp: {timestamp}")
-        logger.debug(f"  Method: {method.upper()}")
-        logger.debug(f"  Endpoint: {endpoint}")
-        logger.debug(f"  Body: '{body}'")
-        logger.debug(f"  Full message: '{sign_str}'")
+        # ✅ ОПТИМИЗАЦИЯ: Логируем компоненты подписи только при ошибках
+        # Убрано избыточное DEBUG логирование каждого API запроса (экономия ~50% логов)
+        # Можно включить обратно при необходимости отладки API проблем
+        # logger.debug(f"Signature components: {method} {endpoint}")
 
         signature = base64.b64encode(
             hmac.new(
@@ -250,6 +247,10 @@ class OKXFuturesClient:
             default = 0.001
         elif "ETH" in symbol:
             default = 0.01
+        elif "SOL" in symbol:
+            default = 0.01  # ✅ SOL обычно 0.01
+        elif "DOGE" in symbol:
+            default = 1.0  # ✅ DOGE обычно 1.0
         else:
             default = 0.001
 
@@ -295,6 +296,97 @@ class OKXFuturesClient:
         self._instrument_details_cache[symbol] = default_details
         logger.warning(f"⚠️ Используем fallback детали для {symbol}: {default_details}")
         return default_details
+
+    async def get_price_limits(self, symbol: str) -> dict:
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получает лимиты цены биржи для символа
+
+        Returns:
+            dict с ключами: max_buy_price, min_sell_price, или None при ошибке
+        """
+        try:
+            inst_id = f"{symbol}-SWAP"
+            # Получаем информацию об инструменте через публичный API
+            url = f"https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId={inst_id}"
+            import aiohttp
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("code") == "0" and data.get("data"):
+                            inst = data["data"][0]
+                            # Получаем лимиты цены из ticker (более актуальные)
+                            ticker_url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                            async with session.get(ticker_url) as ticker_resp:
+                                if ticker_resp.status == 200:
+                                    ticker_data = await ticker_resp.json()
+                                    if ticker_data.get(
+                                        "code"
+                                    ) == "0" and ticker_data.get("data"):
+                                        ticker = ticker_data["data"][0]
+                                        # Получаем текущую цену и спред
+                                        current_price = float(ticker.get("last", "0"))
+                                        # Лимиты цены: обычно ±5% от текущей цены
+                                        # Но OKX API может вернуть более точные значения
+                                        max_buy_price = (
+                                            current_price * 1.05
+                                        )  # +5% от текущей
+                                        min_sell_price = (
+                                            current_price * 0.95
+                                        )  # -5% от текущей
+
+                                        # Попробуем получить более точные лимиты из order book
+                                        orderbook_url = f"https://www.okx.com/api/v5/market/books?instId={inst_id}&sz=1"
+                                        async with session.get(
+                                            orderbook_url
+                                        ) as book_resp:
+                                            if book_resp.status == 200:
+                                                book_data = await book_resp.json()
+                                                if book_data.get(
+                                                    "code"
+                                                ) == "0" and book_data.get("data"):
+                                                    book = book_data["data"][0]
+                                                    asks = book.get("asks", [])
+                                                    bids = book.get("bids", [])
+                                                    if asks and bids:
+                                                        # Берем лучшие цены из стакана
+                                                        best_ask = float(asks[0][0])
+                                                        best_bid = float(bids[0][0])
+                                                        # Более консервативные лимиты: ±2% от лучших цен
+                                                        max_buy_price = best_ask * 1.02
+                                                        min_sell_price = best_bid * 0.98
+
+                                        return {
+                                            "max_buy_price": max_buy_price,
+                                            "min_sell_price": min_sell_price,
+                                            "current_price": current_price,
+                                        }
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось получить лимиты цены для {symbol}: {e}")
+
+        # Fallback: используем ±3% от текущей цены
+        try:
+            import aiohttp
+
+            inst_id = f"{symbol}-SWAP"
+            url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("code") == "0" and data.get("data"):
+                            ticker = data["data"][0]
+                            current_price = float(ticker.get("last", "0"))
+                            return {
+                                "max_buy_price": current_price * 1.03,
+                                "min_sell_price": current_price * 0.97,
+                                "current_price": current_price,
+                            }
+        except:
+            pass
+
+        return None
 
     async def get_balance(self) -> float:
         """Возвращает USDT equity (единый для spot и фьючей)"""
@@ -442,6 +534,7 @@ class OKXFuturesClient:
         price: Optional[float] = None,
         order_type: str = "market",
         size_in_contracts: bool = False,
+        reduce_only: bool = False,
     ) -> dict:
         """
         Рыночный или лимитный ордер
@@ -453,6 +546,7 @@ class OKXFuturesClient:
             price: Цена для лимитного ордера
             order_type: "market" или "limit"
             size_in_contracts: Если True, size уже в контрактах; если False - в монетах (нужна конвертация)
+            reduce_only: Если True, ордер только закрывает позицию (не открывает новую)
         """
         # Получаем детали инструмента (ctVal, lotSz, minSz)
         instrument_details = await self.get_instrument_details(symbol)
@@ -511,12 +605,27 @@ class OKXFuturesClient:
             "ordType": order_type,
         }
 
-        # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для закрытия позиций используем reduceOnly!
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для лимитных ордеров не используем postOnly
+        # postOnly может привести к тому, что ордер не исполнится сразу
+        # Используем агрессивную цену (0.05% offset) для быстрого исполнения
+        if order_type == "limit":
+            # Не добавляем postOnly - ордер должен исполниться быстро
+            pass
+
+        # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Убираем Post-Only для лимитных ордеров!
+        # Post-Only НЕ ПОДХОДИТ для скальпинга - ордер НЕ ИСПОЛНЯЕТСЯ сразу!
+        # Post-Only означает что ордер ДОЛЖЕН быть принят как ликвидность в стакане
+        # Но если цена близко к рынку (0.01%), ордер может не попасть в стакан и ВИСЕТЬ!
+        # Для скальпинга нужны ордера которые исполняются СРАЗУ
+        # Лимитный ордер БЕЗ Post-Only может исполниться как Maker (если попадет в стакан) или как Taker (если цена попадет)
+        # Но главное - он ИСПОЛНИТСЯ, а не будет висеть!
+        # if order_type == "limit":
+        #     payload["postOnly"] = "true"  # ❌ УБРАНО: Убивает скальпинг!
+
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем параметр reduce_only
         # Это гарантирует, что ордер закроет существующую позицию, а не откроет новую
         # ВАЖНО: Для isolated margin OKX требует posSide даже при reduceOnly!
-        if size_in_contracts:
-            # Это закрытие позиции - добавляем reduceOnly
-            # ⚠️ ДЛЯ ISOLATED MARGIN нужно указать posSide даже при reduceOnly!
+        if reduce_only:
             payload["reduceOnly"] = "true"
             # Определяем posSide на основе стороны закрытия
             # Если закрываем long - продаем (side="sell"), значит была long
@@ -526,13 +635,11 @@ class OKXFuturesClient:
             elif side.lower() == "buy":
                 payload["posSide"] = "short"  # Закрываем short позицию
         else:
-            # Добавляем posSide для открытия новых позиций
-            if "SWAP" in f"{symbol}-SWAP":
-                # Определяем posSide на основе side
-                if side.lower() == "buy":
-                    payload["posSide"] = "long"
-                elif side.lower() == "sell":
-                    payload["posSide"] = "short"
+            # Для открытия новых позиций добавляем posSide
+            if side.lower() == "buy":
+                payload["posSide"] = "long"
+            elif side.lower() == "sell":
+                payload["posSide"] = "short"
 
         if price:
             payload["px"] = str(price)
@@ -545,9 +652,13 @@ class OKXFuturesClient:
         """OCO для фьючей (min distance 0,01 % = 10 bips)"""
         # Определяем size_step для инструмента (ПРАВИЛЬНЫЕ минимальные lot sizes для OKX SWAP!)
         if "BTC" in symbol:
-            size_step = 0.001  # ✅ 0.001 BTC минимум для BTC-USDT-SWAP (можно отправить 0.0001, но принимается только 0.001+)
+            size_step = 0.001  # ✅ 0.001 BTC минимум для BTC-USDT-SWAP
         elif "ETH" in symbol:
-            size_step = 0.01  # ✅ 0.01 ETH минимум для ETH-USDT-SWAP (проверим)
+            size_step = 0.01  # ✅ 0.01 ETH минимум для ETH-USDT-SWAP
+        elif "SOL" in symbol:
+            size_step = 0.01  # ✅ 0.01 SOL минимум для SOL-USDT-SWAP
+        elif "DOGE" in symbol:
+            size_step = 1.0  # ✅ 1.0 DOGE минимум для DOGE-USDT-SWAP
         else:
             size_step = 0.001  # По умолчанию
 

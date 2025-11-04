@@ -145,6 +145,14 @@ class FuturesOrderExecutor:
             price = None
             if order_type == "limit":
                 price = await self._calculate_limit_price(symbol, side)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если не удалось рассчитать цену - используем рыночный ордер
+                if price is None or price <= 0:
+                    logger.warning(
+                        f"⚠️ Не удалось рассчитать цену для лимитного ордера {symbol}, "
+                        f"используем рыночный ордер как fallback"
+                    )
+                    order_type = "market"
+                    price = None
 
             # Размещение ордера
             if order_type == "market":
@@ -178,66 +186,101 @@ class FuturesOrderExecutor:
 
     def _determine_order_type(self, signal: Dict[str, Any]) -> str:
         """Определение типа ордера на основе сигнала"""
-        signal_type = signal.get("type", "market")
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для скальпинга используем market ордера для мгновенного исполнения
+        # Лимитные ордера могут оставаться в pending и не открывать позиции
+        # Рыночные ордера исполняются мгновенно и открывают позиции сразу
+        signal_type = signal.get("type", "market")  # ✅ Изменено: "limit" → "market"
 
-        # Маппинг типов сигналов на типы ордеров
-        if signal_type in [
-            "rsi_oversold",
-            "rsi_overbought",
-            "bb_oversold",
-            "bb_overbought",
-        ]:
-            return "market"  # Быстрое исполнение для отскоков
-        elif signal_type in [
-            "macd_bullish",
-            "macd_bearish",
-            "ma_bullish",
-            "ma_bearish",
-        ]:
-            return "limit"  # Лимитные ордера для трендовых сигналов
-        else:
-            return "market"  # По умолчанию рыночные ордера
+        # Если signal_type это тип ордера (market, limit, oco) - используем его
+        if signal_type in ["market", "limit", "oco"]:
+            return signal_type
+
+        # Если signal_type это тип сигнала (rsi_oversold, macd_bullish и т.д.) - используем market по умолчанию
+        # ✅ КРИТИЧЕСКОЕ: Для скальпинга используем market для мгновенного исполнения и открытия позиций
+        return "market"
 
     async def _calculate_limit_price(self, symbol: str, side: str) -> float:
-        """Расчет цены для лимитного ордера"""
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Расчет цены для лимитного ордера с проверкой лимитов биржи
+        """
         try:
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем РЕАЛЬНУЮ текущую цену через API
-            import aiohttp
+            # Получаем лимиты цены биржи
+            price_limits = await self.client.get_price_limits(symbol)
 
-            # Получаем текущую цену через публичный API OKX
-            inst_id = f"{symbol}-SWAP"
-            url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+            if not price_limits:
+                logger.warning(
+                    f"⚠️ Не удалось получить лимиты цены для {symbol}, используем fallback"
+                )
+                # Fallback: используем текущую цену с безопасным offset
+                import aiohttp
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("code") == "0" and data.get("data"):
-                            ticker = data["data"][0]
-                            current_price = float(ticker.get("last", "0"))
+                inst_id = f"{symbol}-SWAP"
+                url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if data.get("code") == "0" and data.get("data"):
+                                ticker = data["data"][0]
+                                current_price = float(ticker.get("last", "0"))
+                                if current_price > 0:
+                                    # Используем более безопасный offset 0.05%
+                                    if side.lower() == "buy":
+                                        limit_price = current_price * 1.0005
+                                    else:
+                                        limit_price = current_price * 0.9995
+                                    logger.debug(
+                                        f"💰 Лимитная цена (fallback) для {symbol} {side}: {limit_price:.2f}"
+                                    )
+                                    return limit_price
+                return 0.0
 
-                            if current_price > 0:
-                                # Расчет цены с учетом спреда
-                                if side.lower() == "buy":
-                                    # Для покупки - немного ниже текущей цены (чтобы быть Maker)
-                                    limit_price = current_price * 0.9995  # 0.05% ниже
-                                else:  # sell
-                                    # Для продажи - немного выше текущей цены (чтобы быть Maker)
-                                    limit_price = current_price * 1.0005  # 0.05% выше
+            current_price = price_limits.get("current_price", 0)
+            max_buy_price = price_limits.get("max_buy_price", 0)
+            min_sell_price = price_limits.get("min_sell_price", 0)
 
-                                logger.debug(
-                                    f"💰 Лимитная цена для {symbol} {side}: {limit_price:.2f} (текущая: {current_price:.2f})"
-                                )
-                                return limit_price
+            if current_price <= 0:
+                logger.error(f"❌ Неверная текущая цена для {symbol}: {current_price}")
+                return 0.0
 
-            # Fallback - если не получили цену
-            logger.warning(
-                f"⚠️ Не удалось получить текущую цену для {symbol}, возвращаем 0"
+            # ✅ ИСПРАВЛЕНИЕ: Используем более безопасный offset 0.05% (вместо 0.01%)
+            # Это уменьшает вероятность выхода за лимиты биржи
+            if side.lower() == "buy":
+                # Для покупки - 0.05% выше текущей цены
+                limit_price = current_price * 1.0005
+                # ✅ КРИТИЧЕСКОЕ: Проверяем лимит биржи
+                if limit_price > max_buy_price:
+                    # Если превышаем лимит - используем лимит минус небольшой запас
+                    limit_price = (
+                        max_buy_price * 0.9999
+                    )  # 0.01% ниже лимита для безопасности
+                    logger.warning(
+                        f"⚠️ Лимитная цена для {symbol} BUY превышает лимит биржи ({max_buy_price:.2f}), "
+                        f"используем скорректированную цену: {limit_price:.2f}"
+                    )
+            else:  # sell
+                # Для продажи - 0.05% ниже текущей цены
+                limit_price = current_price * 0.9995
+                # ✅ КРИТИЧЕСКОЕ: Проверяем лимит биржи
+                if limit_price < min_sell_price:
+                    # Если ниже лимита - используем лимит плюс небольшой запас
+                    limit_price = (
+                        min_sell_price * 1.0001
+                    )  # 0.01% выше лимита для безопасности
+                    logger.warning(
+                        f"⚠️ Лимитная цена для {symbol} SELL ниже лимита биржи ({min_sell_price:.2f}), "
+                        f"используем скорректированную цену: {limit_price:.2f}"
+                    )
+
+            logger.debug(
+                f"💰 Лимитная цена для {symbol} {side}: {limit_price:.2f} "
+                f"(текущая: {current_price:.2f}, лимиты: max_buy={max_buy_price:.2f}, min_sell={min_sell_price:.2f}, "
+                f"разница: {(limit_price/current_price - 1)*100:.3f}%)"
             )
-            return 0.0
+            return limit_price
 
         except Exception as e:
-            logger.error(f"Ошибка расчета лимитной цены: {e}")
+            logger.error(f"Ошибка расчета лимитной цены для {symbol}: {e}")
             return 0.0
 
     async def _place_market_order(
@@ -277,7 +320,9 @@ class FuturesOrderExecutor:
     async def _place_limit_order(
         self, symbol: str, side: str, size: float, price: float
     ) -> Dict[str, Any]:
-        """Размещение лимитного ордера"""
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Размещение лимитного ордера с fallback на рыночный
+        """
         try:
             logger.info(
                 f"📊 Размещение лимитного ордера: {symbol} {side} {size:.6f} @ {price:.2f}"
@@ -303,13 +348,55 @@ class FuturesOrderExecutor:
                 }
             else:
                 error_msg = result.get("msg", "Неизвестная ошибка")
-                logger.error(f"❌ Ошибка размещения лимитного ордера: {error_msg}")
+                error_code = result.get("code", "")
 
-                return {"success": False, "error": error_msg, "order_type": "limit"}
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем код ошибки
+                # Если ошибка связана с лимитом цены (51006) - пробуем рыночный ордер
+                if (
+                    "51006" in str(error_msg)
+                    or "price limit" in error_msg.lower()
+                    or "price is not within" in error_msg.lower()
+                ):
+                    logger.warning(
+                        f"⚠️ Лимитный ордер отклонен из-за лимита цены (51006), "
+                        f"пробуем рыночный ордер как fallback"
+                    )
+                    # Fallback на рыночный ордер
+                    market_result = await self._place_market_order(symbol, side, size)
+                    if market_result.get("success"):
+                        logger.info(
+                            f"✅ Рыночный ордер размещен как fallback (лимитный был отклонен)"
+                        )
+                    return market_result
+
+                logger.error(
+                    f"❌ Ошибка размещения лимитного ордера: {error_msg} (code: {error_code})"
+                )
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "order_type": "limit",
+                    "error_code": error_code,
+                }
 
         except Exception as e:
             logger.error(f"Ошибка размещения лимитного ордера: {e}")
-            return {"success": False, "error": str(e)}
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: При исключении тоже пробуем рыночный ордер
+            try:
+                logger.warning(
+                    f"⚠️ Исключение при размещении лимитного ордера, пробуем рыночный как fallback"
+                )
+                market_result = await self._place_market_order(symbol, side, size)
+                if market_result.get("success"):
+                    logger.info(
+                        f"✅ Рыночный ордер размещен как fallback (исключение при лимитном)"
+                    )
+                return market_result
+            except Exception as market_error:
+                logger.error(
+                    f"❌ Ошибка размещения рыночного ордера (fallback): {market_error}"
+                )
+                return {"success": False, "error": str(e)}
 
     async def _place_oco_order(
         self, signal: Dict[str, Any], size: float

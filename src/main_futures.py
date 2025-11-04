@@ -120,8 +120,8 @@ if __name__ == "__main__":
         str(log_dir / "futures_main_{time:YYYY-MM-DD}.log"),  # Имя файла с датой
         level="DEBUG",  # ✅ ВСЕ уровни логирования
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        rotation="10 MB",  # Ротация при достижении 10 MB
-        retention="30 days",  # Храним 30 дней
+        rotation="5 MB",  # ✅ ОПТИМИЗИРОВАНО: Ротация при достижении 5 MB (было 10 MB)
+        retention="7 days",  # ✅ ОПТИМИЗИРОВАНО: Храним 7 дней (было 30 дней)
         compression="zip",  # ✅ АРХИВАЦИЯ старых логов
         encoding="utf-8",
         backtrace=True,  # Полный backtrace при ошибках
