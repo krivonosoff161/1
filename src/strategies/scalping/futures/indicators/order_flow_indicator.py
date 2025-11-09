@@ -5,7 +5,6 @@ Order Flow Indicator для Futures торговли.
 силы покупателей и продавцов на рынке.
 """
 
-import math
 from collections import deque
 from typing import Deque, Dict, Optional
 
@@ -194,7 +193,7 @@ class OrderFlowIndicator:
         trend = self.get_delta_trend()
 
         # Расчет силы давления (0-100%)
-        strength = abs(current_delta) * 100
+        strength = abs(avg_delta) * 100
 
         return {
             "current_delta": current_delta,

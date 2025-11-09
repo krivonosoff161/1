@@ -94,7 +94,7 @@ class FuturesOrderExecutor:
         try:
             symbol = signal.get("symbol")
             side = signal.get("side")
-            signal_type = signal.get("type", "market")
+            signal_type = signal.get("type", "limit")  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
 
             logger.info(
                 f"🎯 Исполнение сигнала: {symbol} {side} размер={position_size:.6f}"
@@ -136,7 +136,7 @@ class FuturesOrderExecutor:
         try:
             symbol = signal.get("symbol")
             side = signal.get("side")
-            signal_type = signal.get("type", "market")
+            signal_type = signal.get("type", "limit")  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
 
             # Определение типа ордера
             order_type = self._determine_order_type(signal)
@@ -173,7 +173,7 @@ class FuturesOrderExecutor:
                     "symbol": symbol,
                     "side": side,
                     "size": position_size,
-                    "type": order_type,
+                    "type": order_type,  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: Limit ордера для экономии комиссий
                     "timestamp": datetime.now(),
                     "signal": signal,
                 }
@@ -186,18 +186,18 @@ class FuturesOrderExecutor:
 
     def _determine_order_type(self, signal: Dict[str, Any]) -> str:
         """Определение типа ордера на основе сигнала"""
-        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для скальпинга используем market ордера для мгновенного исполнения
-        # Лимитные ордера могут оставаться в pending и не открывать позиции
-        # Рыночные ордера исполняются мгновенно и открывают позиции сразу
-        signal_type = signal.get("type", "market")  # ✅ Изменено: "limit" → "market"
+        # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: Используем limit ордера для экономии комиссий (0.02% вместо 0.05%)
+        # Limit ордера дешевле в 2.5 раза, что критично при 180-200 сделках/день
+        # Если limit ордер не исполнится - следующий сигнал, это нормально для скальпинга
+        signal_type = signal.get("type", "limit")  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
 
         # Если signal_type это тип ордера (market, limit, oco) - используем его
         if signal_type in ["market", "limit", "oco"]:
             return signal_type
 
-        # Если signal_type это тип сигнала (rsi_oversold, macd_bullish и т.д.) - используем market по умолчанию
-        # ✅ КРИТИЧЕСКОЕ: Для скальпинга используем market для мгновенного исполнения и открытия позиций
-        return "market"
+        # Если signal_type это тип сигнала (rsi_oversold, macd_bullish и т.д.) - используем limit по умолчанию
+        # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: Используем limit для экономии комиссий (экономия $126/месяц)
+        return "limit"
 
     async def _calculate_limit_price(self, symbol: str, side: str) -> float:
         """

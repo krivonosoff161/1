@@ -129,10 +129,18 @@ class LogAnalyzer:
         # Поиск в папке futures
         futures_dir = self.logs_dir / "futures"
         if futures_dir.exists():
-            # Ищем .log файлы
+            # Ищем .log файлы в корне (исторический формат)
             for log_file in futures_dir.glob("*.log"):
-                if not log_file.name.endswith(".zip"):
+                if log_file.is_file() and not log_file.name.endswith(".zip"):
                     log_files.append(log_file)
+
+            # Ищем .log файлы в подпапках (новый распакованный формат)
+            for subdir in futures_dir.iterdir():
+                if subdir.is_dir():
+                    for nested_log in subdir.glob("*.log"):
+                        if not nested_log.is_file():
+                            continue
+                        log_files.append(nested_log)
 
             # Ищем .zip архивы
             for zip_file in futures_dir.glob("*.zip"):

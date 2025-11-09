@@ -251,6 +251,8 @@ class OKXFuturesClient:
             default = 0.01  # ✅ SOL обычно 0.01
         elif "DOGE" in symbol:
             default = 1.0  # ✅ DOGE обычно 1.0
+        elif "XRP" in symbol:
+            default = 1.0  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: XRP обычно 1.0 (как DOGE)
         else:
             default = 0.001
 
@@ -657,6 +659,8 @@ class OKXFuturesClient:
             size_step = 0.01  # ✅ 0.01 ETH минимум для ETH-USDT-SWAP
         elif "SOL" in symbol:
             size_step = 0.01  # ✅ 0.01 SOL минимум для SOL-USDT-SWAP
+        elif "XRP" in symbol:
+            size_step = 1.0  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: 1.0 XRP минимум для XRP-USDT-SWAP (как DOGE)
         elif "DOGE" in symbol:
             size_step = 1.0  # ✅ 1.0 DOGE минимум для DOGE-USDT-SWAP
         else:

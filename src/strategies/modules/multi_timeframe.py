@@ -46,6 +46,20 @@ class MTFConfig(BaseModel):
     cache_ttl_seconds: int = Field(
         default=30, ge=10, le=300, description="Время жизни кэша свечей (секунды)"
     )
+    fail_open_enabled: bool = Field(
+        default=False,
+        description="Разрешать периодически пропускать сигналы без подтверждения",
+    )
+    fail_open_blocks: int = Field(
+        default=3,
+        ge=1,
+        description="Количество подряд блокировок перед fail-open",
+    )
+    fail_open_cooldown_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="Кулдаун после срабатывания fail-open",
+    )
 
 
 class MTFResult(BaseModel):
@@ -88,6 +102,7 @@ class MultiTimeframeFilter:
 
         # Кэш для свечей старшего таймфрейма
         self._candles_cache: Dict[str, tuple[List[OHLCV], float]] = {}
+        self._fail_open_state: Dict[str, Dict[str, float]] = {}
 
         logger.info(
             f"MTF Filter initialized: {self.config.confirmation_timeframe}, "
@@ -112,6 +127,8 @@ class MultiTimeframeFilter:
             f"   score_bonus: {old_bonus} → {new_config.score_bonus}\n"
             f"   timeframe: {new_config.confirmation_timeframe}"
         )
+        # Сбросить fail-open состояние при изменении конфигурации
+        self._fail_open_state.clear()
 
     async def check_confirmation(self, symbol: str, signal_side: str) -> MTFResult:
         """
@@ -460,10 +477,18 @@ class MultiTimeframeFilter:
 
             # Если сигнал заблокирован - возвращаем False
             if result.blocked:
+                if self._should_fail_open(symbol):
+                    signal["mtf_fail_open"] = True
+                    logger.info(
+                        f"🔓 MTF fail-open: {symbol} {signal_side} допущен после серии блокировок"
+                    )
+                    return True
                 logger.debug(
                     f"🔍 MTF заблокировал сигнал {symbol} {signal_side}: {result.reason}"
                 )
                 return False
+
+            self._reset_fail_open(symbol)
 
             # Если сигнал подтвержден или нейтрален - разрешаем (может быть улучшен score)
             return True
@@ -488,3 +513,29 @@ class MultiTimeframeFilter:
         else:
             self._candles_cache.clear()
             logger.debug("MTF: Весь кэш очищен")
+
+    def _should_fail_open(self, symbol: str) -> bool:
+        if not getattr(self.config, "fail_open_enabled", False):
+            return False
+        now = time.time()
+        state = self._fail_open_state.setdefault(
+            symbol,
+            {"consecutive": 0, "cooldown_until": 0.0},
+        )
+        if state["cooldown_until"] > now:
+            return False
+
+        state["consecutive"] = state.get("consecutive", 0) + 1
+        threshold = max(1, getattr(self.config, "fail_open_blocks", 3))
+        if state["consecutive"] >= threshold:
+            cooldown = max(1, getattr(self.config, "fail_open_cooldown_seconds", 60))
+            state["consecutive"] = 0
+            state["cooldown_until"] = now + cooldown
+            return True
+        return False
+
+    def _reset_fail_open(self, symbol: str) -> None:
+        state = self._fail_open_state.get(symbol)
+        if not state:
+            return
+        state["consecutive"] = 0

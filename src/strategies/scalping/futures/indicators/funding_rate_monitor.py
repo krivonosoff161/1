@@ -26,14 +26,14 @@ class FundingRateMonitor:
         funding_history: История funding rates
     """
 
-    def __init__(self, max_funding_rate: float = 0.05):
+    def __init__(self, max_funding_rate: float = 0.0009):
         """
         Инициализация мониторинга фандинга.
 
         Args:
             max_funding_rate: Максимальный допустимый funding в %
         """
-        self.max_funding_rate = max_funding_rate
+        self.max_funding_rate = self._normalize_rate(max_funding_rate)
         self.current_funding = 0.0
         self.funding_history: Deque[float] = deque(maxlen=24)  # 24 часа
 
@@ -44,9 +44,10 @@ class FundingRateMonitor:
         Args:
             funding_rate: Текущий funding rate
         """
-        self.current_funding = funding_rate
-        self.funding_history.append(funding_rate)
-        logger.debug(f"Funding rate обновлен: {funding_rate:.4%}")
+        normalized = self._normalize_rate(funding_rate)
+        self.current_funding = normalized
+        self.funding_history.append(normalized)
+        logger.debug(f"Funding rate обновлен: {normalized:.4%}")
 
     def get_current_funding(self) -> float:
         """Получение текущего funding rate."""
@@ -93,6 +94,16 @@ class FundingRateMonitor:
                 return False
 
         return True
+
+    @staticmethod
+    def _normalize_rate(rate: float) -> float:
+        try:
+            value = float(rate)
+        except (TypeError, ValueError):
+            return 0.0
+        if value > 1 or value < -1:
+            value /= 100.0
+        return value
 
     def get_funding_trend(self) -> str:
         """

@@ -100,6 +100,9 @@ class ScalpingConfig(BaseModel):
     sl_percent: Optional[float] = Field(
         default=None, ge=0.1, le=10.0, description="Stop Loss %"
     )
+    signal_cooldown_seconds: float = Field(
+        default=0.0, ge=0.0, le=600.0, description="Минимальная задержка между сигналами на символ"
+    )
 
     class Config:
         extra = "allow"  # Разрешаем дополнительные поля из YAML
@@ -137,15 +140,272 @@ class TradingConfig(BaseModel):
     base_currency: str = Field(default="USDT")
 
 
+class FundingFilterConfig(BaseModel):
+    enabled: bool = Field(default=True)
+    max_positive_rate: float = Field(
+        default=0.0006, description="Максимальный допустимый funding для лонга (доля)"
+    )
+    max_negative_rate: float = Field(
+        default=0.0006, description="Максимальный допустимый funding для шорта (доля)"
+    )
+    max_abs_rate: float = Field(
+        default=0.0008, description="Абсолютный порог funding вне зависимости от стороны"
+    )
+    include_next_funding: bool = Field(
+        default=True, description="Учитывать прогноз следующего периода funding"
+    )
+    refresh_interval_seconds: int = Field(
+        default=300, description="Интервал обновления кэша funding (секунды)", ge=10
+    )
+
+
+class LiquiditySymbolOverride(BaseModel):
+    min_daily_volume_usd: Optional[float] = None
+    min_best_bid_volume_usd: Optional[float] = None
+    min_best_ask_volume_usd: Optional[float] = None
+    min_orderbook_depth_usd: Optional[float] = None
+    max_spread_percent: Optional[float] = None
+
+
+class LiquidityRegimeMultiplier(BaseModel):
+    min_daily_volume_multiplier: Optional[float] = None
+    min_best_bid_volume_multiplier: Optional[float] = None
+    min_best_ask_volume_multiplier: Optional[float] = None
+    min_orderbook_depth_multiplier: Optional[float] = None
+    max_spread_multiplier: Optional[float] = None
+
+
+class LiquidityFilterConfig(BaseModel):
+    enabled: bool = Field(default=True)
+    min_daily_volume_usd: float = Field(
+        default=20_000_000.0, description="Минимальный 24ч объём в USD"
+    )
+    min_best_bid_volume_usd: float = Field(
+        default=250_000.0, description="Минимальный объём на лучшем bid (USD)"
+    )
+    min_best_ask_volume_usd: float = Field(
+        default=250_000.0, description="Минимальный объём на лучшем ask (USD)"
+    )
+    min_orderbook_depth_usd: float = Field(
+        default=500_000.0, description="Минимальная суммарная глубина стакана (USD)"
+    )
+    depth_levels: int = Field(
+        default=5, description="Количество уровней стакана для оценки глубины", ge=1, le=20
+    )
+    max_spread_percent: float = Field(
+        default=0.25, description="Максимально допустимый спред в процентах"
+    )
+    refresh_interval_seconds: int = Field(
+        default=30, description="Интервал обновления кэша ликвидности (секунды)", ge=5
+    )
+    symbol_overrides: Dict[str, LiquiditySymbolOverride] = Field(
+        default_factory=dict,
+        description="Индивидуальные пороги ликвидности по символам",
+    )
+    fail_open_enabled: bool = Field(
+        default=False, description="Включить временное ослабление порогов при серии блокировок"
+    )
+    max_consecutive_blocks: int = Field(
+        default=5, ge=1, description="Количество подряд блокировок перед ослаблением порогов"
+    )
+    relax_multiplier: float = Field(
+        default=0.5,
+        gt=0.0,
+        description="Множитель ослабления объёмных порогов (значение <1 уменьшает требования)",
+    )
+    relax_duration_seconds: int = Field(
+        default=60, ge=1, description="Длительность ослабления порогов (секунды)"
+    )
+    regime_multipliers: Dict[str, LiquidityRegimeMultiplier] = Field(
+        default_factory=dict,
+        description="Множители порогов по режимам ARM",
+    )
+
+
+class OrderFlowRegimeProfile(BaseModel):
+    window: Optional[int] = None
+    long_threshold: Optional[float] = None
+    short_threshold: Optional[float] = None
+    min_total_depth_usd: Optional[float] = None
+
+
+class OrderFlowFilterConfig(BaseModel):
+    enabled: bool = Field(default=True)
+    window: int = Field(default=50, ge=5, le=500)
+    long_threshold: float = Field(
+        default=0.05, description="Минимальный delta для подтверждения лонга"
+    )
+    short_threshold: float = Field(
+        default=-0.05, description="Максимальный delta для подтверждения шорта"
+    )
+    min_total_depth_usd: float = Field(
+        default=300_000.0, description="Минимальная суммарная глубина стакана (USD)"
+    )
+    refresh_interval_seconds: int = Field(
+        default=15, description="Интервал обновления кэша ордер флоу (секунды)", ge=5
+    )
+    fail_open_enabled: bool = Field(
+        default=False,
+        description="Включить временное ослабление порогов, если фильтр блокирует сигналы подряд",
+    )
+    max_consecutive_blocks: int = Field(
+        default=4, ge=1, description="Количество подряд блокировок до активации fail-open"
+    )
+    relax_multiplier: float = Field(
+        default=0.5,
+        gt=0.0,
+        description="Множитель ослабления порогов order flow (значение <1 снижает требования)",
+    )
+    relax_duration_seconds: int = Field(
+        default=30, ge=1, description="Длительность ослабления порогов order flow (секунды)"
+    )
+    regime_profiles: Dict[str, OrderFlowRegimeProfile] = Field(
+        default_factory=dict,
+        description="Наборы порогов OrderFlow по режимам ARM",
+    )
+
+
+class VolatilityFilterConfig(BaseModel):
+    enabled: bool = Field(default=True)
+    lookback_candles: int = Field(default=30, ge=5, le=200)
+    min_range_percent: float = Field(
+        default=0.15, description="Минимальный диапазон движения цены (проценты)"
+    )
+    max_range_percent: float = Field(
+        default=3.5, description="Максимальный диапазон движения цены (проценты)"
+    )
+    min_atr_percent: float = Field(
+        default=0.05, description="Минимальное значение ATR относительно цены (проценты)"
+    )
+    max_atr_percent: float = Field(
+        default=2.0, description="Максимальное значение ATR относительно цены (проценты)"
+    )
+
+
+class ImpulseTrailingConfig(BaseModel):
+    initial_trail: float = Field(
+        default=0.003, ge=0.0, le=0.1, description="Стартовый трейл для импульсной сделки"
+    )
+    max_trail: float = Field(
+        default=0.02, ge=0.0, le=0.2, description="Максимальный трейл для импульсной сделки"
+    )
+    min_trail: float = Field(
+        default=0.001, ge=0.0, le=0.1, description="Минимальный трейл для импульсной сделки"
+    )
+    step_profit: float = Field(
+        default=0.003,
+        ge=0.0,
+        le=0.1,
+        description="Шаг прибыли (в долях) для последовательного подтягивания трейла",
+    )
+    step_trail: float = Field(
+        default=0.001,
+        ge=0.0,
+        le=0.05,
+        description="Насколько увеличивать трейл при каждом шаге прибыли",
+    )
+    aggressive_max_trail: Optional[float] = Field(
+        default=0.03,
+        ge=0.0,
+        le=0.2,
+        description="Ограничение трейла в агрессивном режиме (если None — используем max_trail)",
+    )
+    loss_cut_percent: Optional[float] = Field(
+        default=0.015,
+        ge=0.0,
+        le=0.2,
+        description="Принудительное закрытие при откате (в долях или процентах)",
+    )
+    timeout_minutes: Optional[float] = Field(
+        default=3.0,
+        ge=0.0,
+        le=30.0,
+        description="Максимальное время удержания импульсной позиции",
+    )
+
+
+class ImpulseRelaxConfig(BaseModel):
+    liquidity_multiplier: float = Field(
+        default=0.7,
+        gt=0.0,
+        le=1.0,
+        description="Множитель ослабления порогов LiquidityFilter",
+    )
+    order_flow_multiplier: float = Field(
+        default=0.6,
+        gt=0.0,
+        le=1.0,
+        description="Множитель ослабления порогов OrderFlowFilter",
+    )
+    allow_mtf_bypass: bool = Field(
+        default=True, description="Пропускать проверку MTF для импульсных сигналов"
+    )
+    bypass_correlation: bool = Field(
+        default=False,
+        description="Игнорировать CorrelationFilter для импульсных сигналов",
+    )
+
+
+class ImpulseTradingConfig(BaseModel):
+    enabled: bool = Field(default=False)
+    lookback_candles: int = Field(
+        default=6, ge=3, le=120, description="Количество свечей для оценки импульса"
+    )
+    min_body_atr_ratio: float = Field(
+        default=1.6,
+        ge=0.5,
+        le=10.0,
+        description="Минимальное отношение тела свечи к ATR для признания импульса",
+    )
+    min_volume_ratio: float = Field(
+        default=1.4,
+        ge=0.5,
+        le=10.0,
+        description="Минимальное отношение объема к среднему за lookback",
+    )
+    pivot_lookback: int = Field(
+        default=20,
+        ge=5,
+        le=200,
+        description="Глубина поиска предыдущих экстремумов для подтверждения пробоя",
+    )
+    min_breakout_percent: float = Field(
+        default=0.002,
+        ge=0.0,
+        le=0.1,
+        description="Минимальное превышение предыдущего экстремума (в долях)",
+    )
+    max_wick_ratio: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Максимальная доля тени относительно тела (чтобы свеча была импульсной)",
+    )
+    trailing: ImpulseTrailingConfig = Field(
+        default_factory=ImpulseTrailingConfig,
+        description="Профиль трейлинга для импульсных сделок",
+    )
+    relax: ImpulseRelaxConfig = Field(
+        default_factory=ImpulseRelaxConfig,
+        description="Настройки ослабления фильтров для импульсных сделок",
+    )
+
+
 class FuturesModulesConfig(BaseModel):
     """Конфигурация Futures-специфичных модулей"""
 
     slippage_guard: Optional[Dict] = Field(default_factory=dict)
-    order_flow: Optional[Dict] = Field(default_factory=dict)
+    order_flow: Optional[OrderFlowFilterConfig] = Field(default_factory=OrderFlowFilterConfig)
     micro_pivot: Optional[Dict] = Field(default_factory=dict)
     trailing_sl: Optional[Dict] = Field(default_factory=dict)
     funding_monitor: Optional[Dict] = Field(default_factory=dict)
     max_size_limiter: Optional[Dict] = Field(default_factory=dict)
+    funding_filter: Optional[FundingFilterConfig] = Field(default_factory=FundingFilterConfig)
+    liquidity_filter: Optional[LiquidityFilterConfig] = Field(default_factory=LiquidityFilterConfig)
+    volatility_filter: Optional[VolatilityFilterConfig] = Field(default_factory=VolatilityFilterConfig)
+    impulse_trading: Optional[ImpulseTradingConfig] = Field(
+        default_factory=ImpulseTradingConfig
+    )
 
 
 class BotConfig(BaseModel):

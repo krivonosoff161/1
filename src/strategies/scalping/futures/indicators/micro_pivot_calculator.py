@@ -33,9 +33,9 @@ class MicroPivotCalculator:
             timeframe: Таймфрейм для расчета (по умолчанию "15m")
         """
         self.timeframe = timeframe
-        self.highs: Deque[float] = deque(maxlen=20)
-        self.lows: Deque[float] = deque(maxlen=20)
-        self.closes: Deque[float] = deque(maxlen=20)
+        self.highs: Deque[float] = deque(maxlen=40)
+        self.lows: Deque[float] = deque(maxlen=40)
+        self.closes: Deque[float] = deque(maxlen=40)
 
     def update(self, high: float, low: float, close: float) -> None:
         """
@@ -77,9 +77,14 @@ class MicroPivotCalculator:
             return {}
 
         # Стандартный расчет пивотов
-        high = max(self.highs)
-        low = min(self.lows)
-        close = self.closes[-1]
+        lookback = min(len(self.highs), 15)
+        highs = list(self.highs)[-lookback:]
+        lows = list(self.lows)[-lookback:]
+        closes = list(self.closes)[-lookback:]
+
+        high = max(highs)
+        low = min(lows)
+        close = closes[-1]
 
         pivot = (high + low + close) / 3
 
@@ -123,7 +128,7 @@ class MicroPivotCalculator:
         }
 
     def get_optimal_tp(
-        self, entry_price: float, side: str, max_distance_pct: float = 0.5
+        self, entry_price: float, side: str, max_distance_pct: float = 0.01
     ) -> float:
         """
         Получение оптимального TP на основе пивотов.
@@ -172,17 +177,15 @@ class MicroPivotCalculator:
             return target
 
     def _get_default_tp(
-        self, entry_price: float, side: str, max_distance_pct: float = 0.5
+        self, entry_price: float, side: str, max_distance_pct: float = 0.01
     ) -> float:
         """Получение дефолтного TP."""
         max_distance = entry_price * max_distance_pct
 
         if side == "long":
-            # Консервативный TP для лонга
-            return entry_price * 1.003
+            return entry_price + max_distance
         else:
-            # Консервативный TP для шорта
-            return entry_price * 0.997
+            return entry_price - max_distance
 
     def get_current_range(self) -> Dict[str, float]:
         """

@@ -23,6 +23,8 @@ from src.strategies.modules.correlation_filter import CorrelationFilter
 from src.strategies.modules.multi_timeframe import MultiTimeframeFilter
 from src.strategies.modules.pivot_points import PivotPointsFilter
 from src.strategies.modules.volume_profile_filter import VolumeProfileFilter
+from .filters import (FundingRateFilter, LiquidityFilter, OrderFlowFilter,
+                      VolatilityRegimeFilter)
 
 
 class FuturesSignalGenerator:
@@ -183,6 +185,39 @@ class FuturesSignalGenerator:
         self.mtf_filter = None
         self.pivot_filter = None
         self.volume_filter = None
+        self.funding_filter = None
+        self.liquidity_filter = None
+        self.order_flow_filter = None
+        self.volatility_filter = None
+        self.impulse_config = None
+
+        modules_config = getattr(self.config, "futures_modules", None)
+        if modules_config:
+            try:
+                if getattr(modules_config, "funding_filter", None):
+                    self.funding_filter = FundingRateFilter(
+                        client=self.client,
+                        config=modules_config.funding_filter,
+                    )
+                if getattr(modules_config, "liquidity_filter", None):
+                    self.liquidity_filter = LiquidityFilter(
+                        client=self.client,
+                        config=modules_config.liquidity_filter,
+                    )
+                if getattr(modules_config, "order_flow", None):
+                    self.order_flow_filter = OrderFlowFilter(
+                        client=self.client,
+                        config=modules_config.order_flow,
+                    )
+                if getattr(modules_config, "volatility_filter", None):
+                    self.volatility_filter = VolatilityRegimeFilter(
+                        config=modules_config.volatility_filter
+                    )
+                    self.impulse_config = getattr(modules_config, "impulse_trading", None)
+            except Exception as filter_exc:
+                logger.warning(
+                    f"⚠️ Не удалось инициализировать futures-фильтры: {filter_exc}"
+                )
 
         # Состояние
         self.is_initialized = False
@@ -1139,6 +1174,12 @@ class FuturesSignalGenerator:
             #     logger.debug(f"✅ Moving Average дал {len(ma_signals)} сигнал(ов) для {symbol}")
             signals.extend(ma_signals)
 
+            impulse_signals = self._detect_impulse_signals(
+                symbol, market_data, indicators
+            )
+            if impulse_signals:
+                signals.extend(impulse_signals)
+
             # ✅ ОПТИМИЗАЦИЯ: Логируем только если есть сигналы (INFO уровень) или важная информация
             # logger.debug(f"📊 Всего базовых сигналов для {symbol}: {len(signals)}")
 
@@ -1635,6 +1676,111 @@ class FuturesSignalGenerator:
 
         return signals
 
+    def _detect_impulse_signals(
+        self, symbol: str, market_data: MarketData, indicators: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Детекция импульсных свечей (breakout) для мгновенных входов."""
+
+        config = self.impulse_config
+        if not config or not getattr(config, "enabled", False):
+            return []
+
+        candles = market_data.ohlcv_data or []
+        if len(candles) < max(config.lookback_candles + 1, config.pivot_lookback + 1):
+            return []
+
+        atr_value = indicators.get("atr")
+        if not atr_value or atr_value <= 0:
+            return []
+
+        current_candle = candles[-1]
+        prev_candles = candles[-(config.lookback_candles + 1) : -1]
+        if not prev_candles:
+            return []
+
+        body = current_candle.close - current_candle.open
+        direction = "buy" if body >= 0 else "sell"
+        body_abs = abs(body)
+        body_ratio = body_abs / atr_value
+        if body_ratio < config.min_body_atr_ratio:
+            return []
+
+        avg_volume = sum(c.volume for c in prev_candles) / max(len(prev_candles), 1)
+        if avg_volume <= 0 or current_candle.volume < avg_volume * config.min_volume_ratio:
+            return []
+
+        if direction == "buy":
+            upper_wick = current_candle.high - current_candle.close
+            reference_highs = candles[-(config.pivot_lookback + 1) : -1]
+            pivot_level = max(c.high for c in reference_highs)
+            breakout_ok = current_candle.close >= pivot_level * (1 + config.min_breakout_percent)
+            wick_ratio = (upper_wick / body_abs) if body_abs > 0 else 0
+            if not breakout_ok or wick_ratio > config.max_wick_ratio:
+                return []
+        else:
+            upper_wick = current_candle.high - current_candle.open
+            reference_lows = candles[-(config.pivot_lookback + 1) : -1]
+            pivot_level = min(c.low for c in reference_lows)
+            breakout_ok = current_candle.close <= pivot_level * (1 - config.min_breakout_percent)
+            wick_ratio = (upper_wick / body_abs) if body_abs > 0 else 0
+            if not breakout_ok or wick_ratio > config.max_wick_ratio:
+                return []
+
+        strength = min(1.0, body_ratio / config.min_body_atr_ratio)
+        meta = {
+            "body_ratio_atr": round(body_ratio, 3),
+            "volume_ratio": round(current_candle.volume / max(avg_volume, 1e-9), 3),
+            "pivot_level": pivot_level,
+            "close": current_candle.close,
+            "high": current_candle.high,
+            "low": current_candle.low,
+        }
+
+        logger.info(
+            f"🚀 Импульсный сигнал {symbol} {direction.upper()}: тело/ATR={body_ratio:.2f}, "
+            f"объём x{meta['volume_ratio']:.2f}, пробой уровня {pivot_level:.4f}"
+        )
+
+        relax_cfg = getattr(config, "relax", None)
+        trailing_cfg = getattr(config, "trailing", None)
+
+        signal = {
+            "symbol": symbol,
+            "side": "buy" if direction == "buy" else "sell",
+            "type": "impulse_breakout",
+            "strength": strength,
+            "price": current_candle.close,
+            "timestamp": datetime.now(),
+            "indicator_value": body_ratio,
+            "confidence": 0.9,
+            "is_impulse": True,
+            "impulse_meta": meta,
+        }
+
+        if relax_cfg:
+            signal["impulse_relax"] = {
+                "liquidity": getattr(relax_cfg, "liquidity_multiplier", 1.0),
+                "order_flow": getattr(relax_cfg, "order_flow_multiplier", 1.0),
+                "allow_mtf_bypass": getattr(relax_cfg, "allow_mtf_bypass", False),
+                "bypass_correlation": getattr(relax_cfg, "bypass_correlation", False),
+            }
+
+        if trailing_cfg:
+            signal["impulse_trailing"] = {
+                "initial_trail": getattr(trailing_cfg, "initial_trail", None),
+                "max_trail": getattr(trailing_cfg, "max_trail", None),
+                "min_trail": getattr(trailing_cfg, "min_trail", None),
+                "step_profit": getattr(trailing_cfg, "step_profit", None),
+                "step_trail": getattr(trailing_cfg, "step_trail", None),
+                "aggressive_max_trail": getattr(
+                    trailing_cfg, "aggressive_max_trail", None
+                ),
+                "loss_cut_percent": getattr(trailing_cfg, "loss_cut_percent", None),
+                "timeout_minutes": getattr(trailing_cfg, "timeout_minutes", None),
+            }
+
+        return [signal]
+
     async def _apply_filters(
         self,
         symbol: str,
@@ -1658,9 +1804,32 @@ class FuturesSignalGenerator:
                 if current_positions:
                     signal["current_positions"] = current_positions
 
+                is_impulse = signal.get("is_impulse", False)
+                impulse_relax = signal.get("impulse_relax") or {}
+                liquidity_relax = 1.0
+                order_flow_relax = 1.0
+                if is_impulse:
+                    try:
+                        liquidity_relax = float(impulse_relax.get("liquidity", 1.0))
+                    except (TypeError, ValueError):
+                        liquidity_relax = 1.0
+                    try:
+                        order_flow_relax = float(impulse_relax.get("order_flow", 1.0))
+                    except (TypeError, ValueError):
+                        order_flow_relax = 1.0
+                bypass_correlation = bool(
+                    is_impulse and impulse_relax.get("bypass_correlation", False)
+                )
+                bypass_mtf = bool(
+                    is_impulse and impulse_relax.get("allow_mtf_bypass", False)
+                )
+
                 # ✅ ИСПРАВЛЕНИЕ: Проверяем что фильтры инициализированы перед вызовом
                 # Проверка режима рынка (используем персональный ARM для символа если есть)
                 regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+                current_regime_name = (
+                    regime_manager.get_current_regime() if regime_manager else None
+                )
                 if regime_manager:
                     try:
                         if not await regime_manager.is_signal_valid(
@@ -1676,85 +1845,86 @@ class FuturesSignalGenerator:
                 # ✅ Проверка корреляции (если фильтр инициализирован)
                 # Обновляем параметры CorrelationFilter из текущего режима перед проверкой
                 if self.correlation_filter:
-                    try:
-                        # Получаем параметры CorrelationFilter из текущего режима ARM
-                        regime_manager = (
-                            self.regime_managers.get(symbol) or self.regime_manager
-                        )
-                        if regime_manager:
-                            regime_params = regime_manager.get_current_parameters()
-                            if regime_params and hasattr(regime_params, "modules"):
-                                # Обновляем параметры CorrelationFilter из текущего режима
-                                from src.strategies.modules.correlation_filter import \
-                                    CorrelationFilterConfig
-
-                                corr_modules = regime_params.modules
-                                corr_new_config = CorrelationFilterConfig(
-                                    enabled=True,
-                                    correlation_threshold=corr_modules.correlation_threshold,
-                                    max_correlated_positions=corr_modules.max_correlated_positions,
-                                    block_same_direction_only=corr_modules.block_same_direction_only,
-                                )
-                                self.correlation_filter.update_parameters(
-                                    corr_new_config
-                                )
-
-                        if not await self.correlation_filter.is_signal_valid(
-                            signal, market_data
-                        ):
-                            logger.debug(
-                                f"🔍 Сигнал {symbol} отфильтрован CorrelationFilter"
-                            )
-                            continue
-                    except Exception as e:
+                    if bypass_correlation:
                         logger.debug(
-                            f"⚠️ Ошибка проверки CorrelationFilter для {symbol}: {e}, пропускаем фильтр"
+                            f"🔓 CorrelationFilter пропущен (impulse) для {symbol}"
                         )
+                    else:
+                        try:
+                            # Получаем параметры CorrelationFilter из текущего режима ARM
+                            if regime_manager:
+                                regime_params = regime_manager.get_current_parameters()
+                                if regime_params and hasattr(regime_params, "modules"):
+                                    # Обновляем параметры CorrelationFilter из текущего режима
+                                    from src.strategies.modules.correlation_filter import (
+                                        CorrelationFilterConfig,
+                                    )
+
+                                    corr_modules = regime_params.modules
+                                    corr_new_config = CorrelationFilterConfig(
+                                        enabled=True,
+                                        correlation_threshold=corr_modules.correlation_threshold,
+                                        max_correlated_positions=corr_modules.max_correlated_positions,
+                                        block_same_direction_only=corr_modules.block_same_direction_only,
+                                    )
+                                    self.correlation_filter.update_parameters(
+                                        corr_new_config
+                                    )
+
+                            if not await self.correlation_filter.is_signal_valid(
+                                signal, market_data
+                            ):
+                                logger.debug(
+                                    f"🔍 Сигнал {symbol} отфильтрован CorrelationFilter"
+                                )
+                                continue
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Ошибка проверки CorrelationFilter для {symbol}: {e}, пропускаем фильтр"
+                            )
 
                 # ✅ Проверка мультитаймфрейма (если фильтр инициализирован)
                 # Обновляем параметры MTF из текущего режима перед проверкой
                 if self.mtf_filter:
-                    try:
-                        # Получаем параметры MTF из текущего режима ARM
-                        regime_manager = (
-                            self.regime_managers.get(symbol) or self.regime_manager
-                        )
-                        if regime_manager:
-                            regime_params = regime_manager.get_current_parameters()
-                            if regime_params and hasattr(regime_params, "modules"):
-                                # Обновляем параметры MTF из текущего режима
-                                from src.strategies.modules.multi_timeframe import \
-                                    MTFConfig
+                    if bypass_mtf:
+                        logger.info(f"🔓 MTF пропущен (impulse) для {symbol}")
+                    else:
+                        try:
+                            # Получаем параметры MTF из текущего режима ARM
+                            if regime_manager:
+                                regime_params = regime_manager.get_current_parameters()
+                                if regime_params and hasattr(regime_params, "modules"):
+                                    # Обновляем параметры MTF из текущего режима
+                                    from src.strategies.modules.multi_timeframe import (
+                                        MTFConfig,
+                                    )
 
-                                mtf_modules = regime_params.modules
-                                mtf_new_config = MTFConfig(
-                                    confirmation_timeframe=mtf_modules.mtf_confirmation_timeframe,
-                                    score_bonus=mtf_modules.mtf_score_bonus,
-                                    block_opposite=mtf_modules.mtf_block_opposite,  # ✅ Используем из режима
-                                    ema_fast_period=8,
-                                    ema_slow_period=21,
-                                    cache_ttl_seconds=30,
-                                )
-                                self.mtf_filter.update_parameters(mtf_new_config)
+                                    mtf_modules = regime_params.modules
+                                    mtf_new_config = MTFConfig(
+                                        confirmation_timeframe=mtf_modules.mtf_confirmation_timeframe,
+                                        score_bonus=mtf_modules.mtf_score_bonus,
+                                        block_opposite=mtf_modules.mtf_block_opposite,  # ✅ Используем из режима
+                                        ema_fast_period=8,
+                                        ema_slow_period=21,
+                                        cache_ttl_seconds=30,
+                                    )
+                                    self.mtf_filter.update_parameters(mtf_new_config)
 
-                        if not await self.mtf_filter.is_signal_valid(
-                            signal, market_data
-                        ):
-                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован MTF")
-                            continue
-                    except Exception as e:
-                        logger.debug(
-                            f"⚠️ Ошибка проверки MTF для {symbol}: {e}, пропускаем фильтр"
-                        )
+                            if not await self.mtf_filter.is_signal_valid(
+                                signal, market_data
+                            ):
+                                logger.debug(f"🔍 Сигнал {symbol} отфильтрован MTF")
+                                continue
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Ошибка проверки MTF для {symbol}: {e}, пропускаем фильтр"
+                            )
 
                 # ✅ Проверка pivot points (если фильтр инициализирован)
                 # Обновляем параметры PivotPoints из текущего режима перед проверкой
                 if self.pivot_filter:
                     try:
                         # Получаем параметры PivotPoints из текущего режима ARM
-                        regime_manager = (
-                            self.regime_managers.get(symbol) or self.regime_manager
-                        )
                         if regime_manager:
                             regime_params = regime_manager.get_current_parameters()
                             if regime_params and hasattr(regime_params, "modules"):
@@ -1783,9 +1953,6 @@ class FuturesSignalGenerator:
                 if self.volume_filter:
                     try:
                         # Получаем параметры VolumeProfile из текущего режима ARM
-                        regime_manager = (
-                            self.regime_managers.get(symbol) or self.regime_manager
-                        )
                         if regime_manager:
                             regime_params = regime_manager.get_current_parameters()
                             if regime_params and hasattr(regime_params, "modules"):
@@ -1812,6 +1979,57 @@ class FuturesSignalGenerator:
                     except Exception as e:
                         logger.debug(
                             f"⚠️ Ошибка проверки VolumeProfile для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                liquidity_snapshot = None
+                if self.liquidity_filter:
+                    try:
+                        liquidity_ok, liquidity_snapshot = await self.liquidity_filter.evaluate(
+                            symbol,
+                            regime=current_regime_name,
+                            relax_multiplier=liquidity_relax,
+                        )
+                        if not liquidity_ok:
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ LiquidityFilter ошибка для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                if self.order_flow_filter:
+                    try:
+                        order_flow_snapshot = liquidity_snapshot
+                        if not await self.order_flow_filter.is_signal_valid(
+                            symbol,
+                            signal.get("side", ""),
+                            snapshot=order_flow_snapshot,
+                            regime=current_regime_name,
+                            relax_multiplier=order_flow_relax,
+                        ):
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ OrderFlowFilter ошибка для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                if self.funding_filter:
+                    try:
+                        if not await self.funding_filter.is_signal_valid(
+                            symbol, signal.get("side", "")
+                        ):
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ FundingRateFilter ошибка для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                if self.volatility_filter:
+                    try:
+                        if not self.volatility_filter.is_signal_valid(symbol, market_data):
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ VolatilityRegimeFilter ошибка для {symbol}: {e}, пропускаем фильтр"
                         )
 
                 # Адаптация под Futures специфику

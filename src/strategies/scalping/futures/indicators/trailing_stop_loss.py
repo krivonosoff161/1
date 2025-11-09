@@ -5,6 +5,8 @@ Trailing Stop Loss для Futures торговли.
 захватывая большую прибыль от волатильности.
 """
 
+import time
+from datetime import datetime
 from typing import Optional
 
 from loguru import logger
@@ -33,7 +35,10 @@ class TrailingStopLoss:
         initial_trail: float = 0.05,
         max_trail: float = 0.2,
         min_trail: float = 0.02,
-        trading_fee_rate: float = 0.0004,  # 0.04% на круг (0.02% вход + 0.02% выход для Maker/Limit)
+        trading_fee_rate: float = 0.0009,  # 0.09% на круг (0.045% вход + 0.045% выход для maker на OKX)
+        loss_cut_percent: Optional[float] = None,
+        timeout_loss_percent: Optional[float] = None,
+        timeout_minutes: Optional[float] = None,
     ):
         """
         Инициализация Trailing Stop Loss.
@@ -42,7 +47,7 @@ class TrailingStopLoss:
             initial_trail: Начальный трейлинг в % (по умолчанию 0.05%)
             max_trail: Максимальный трейлинг в % (по умолчанию 0.2%)
             min_trail: Минимальный трейлинг в % (по умолчанию 0.02%)
-            trading_fee_rate: Комиссия на круг (открытие + закрытие) в долях (0.0004 = 0.04% для Limit/Maker, 0.001 = 0.1% для Market/Taker)
+            trading_fee_rate: Комиссия на круг (открытие + закрытие) в долях (0.0009 = 0.09% для Limit/Maker, 0.001 = 0.1% для Market/Taker)
         """
         self.initial_trail = initial_trail
         self.max_trail = max_trail
@@ -55,6 +60,27 @@ class TrailingStopLoss:
         self.lowest_price = float("inf")
         self.entry_price = 0.0
         self.side = None
+        self.entry_timestamp = 0.0
+        self.loss_cut_percent = self._normalize_percent(loss_cut_percent)
+        self.timeout_loss_percent = self._normalize_percent(timeout_loss_percent)
+        self.timeout_minutes = (
+            timeout_minutes if timeout_minutes and timeout_minutes > 0 else None
+        )
+        self.aggressive_mode = False
+        self.aggressive_step_profit = 0.0
+        self.aggressive_step_trail = 0.0
+        self.aggressive_max_trail: Optional[float] = max_trail
+        self._next_trail_profit_target: Optional[float] = None
+
+    @staticmethod
+    def _normalize_percent(value: Optional[float]) -> Optional[float]:
+        """Конвертирует процент в долю и отбрасывает невалидные значения."""
+
+        if value is None:
+            return None
+        if value <= 0:
+            return None
+        return value / 100.0 if value > 1 else value
 
     def initialize(self, entry_price: float, side: str):
         """
@@ -67,6 +93,7 @@ class TrailingStopLoss:
         self.entry_price = entry_price
         self.side = side
         self.current_trail = self.initial_trail
+        self.entry_timestamp = time.time()
 
         if side == "long":
             self.highest_price = entry_price
@@ -75,9 +102,44 @@ class TrailingStopLoss:
             self.highest_price = 0.0
             self.lowest_price = entry_price
 
+        human_ts = datetime.fromtimestamp(self.entry_timestamp).isoformat()
         logger.info(
             f"TrailingStopLoss инициализирован: entry={entry_price}, "
-            f"side={side}, trail={self.current_trail:.2%}"
+            f"side={side}, trail={self.current_trail:.2%}, "
+            f"entry_time={human_ts}"
+        )
+        if self.aggressive_mode and self.aggressive_step_profit > 0:
+            self._next_trail_profit_target = self.aggressive_step_profit
+
+    def enable_aggressive_mode(
+        self,
+        step_profit: float,
+        step_trail: float,
+        aggressive_max_trail: Optional[float] = None,
+    ) -> None:
+        """Включает агрессивное подтягивание трейла (используется для импульсных сделок)."""
+
+        if step_profit <= 0 or step_trail <= 0:
+            logger.debug(
+                "TrailingStopLoss aggressive mode не активирован: шаги должны быть > 0"
+            )
+            return
+        self.aggressive_mode = True
+        self.aggressive_step_profit = step_profit
+        self.aggressive_step_trail = step_trail
+        if aggressive_max_trail and aggressive_max_trail > 0:
+            self.aggressive_max_trail = aggressive_max_trail
+        else:
+            self.aggressive_max_trail = self.max_trail
+        self._next_trail_profit_target = step_profit
+        cap_display = (
+            f"{self.aggressive_max_trail:.3%}"
+            if self.aggressive_max_trail is not None
+            else "auto"
+        )
+        logger.debug(
+            f"TrailingStopLoss aggressive mode включён: step_profit={step_profit:.3%}, "
+            f"step_trail={step_trail:.3%}, cap={cap_display}"
         )
 
     def update(self, current_price: float) -> Optional[float]:
@@ -94,6 +156,7 @@ class TrailingStopLoss:
             return None
 
         old_stop_loss = self.get_stop_loss()
+        profit_pct_total = self.get_profit_pct(current_price, include_fees=True)
 
         # Обновление экстремумов и трейлинга
         if self.side == "long":
@@ -102,13 +165,12 @@ class TrailingStopLoss:
                 self.highest_price = current_price
                 # Увеличиваем трейл при росте цены
                 # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ для расчета трейла!
-                profit_pct = self.get_profit_pct(current_price, include_fees=True)
                 self.current_trail = min(
-                    self.initial_trail + profit_pct * 2, self.max_trail
+                    self.initial_trail + max(profit_pct_total, 0.0) * 2, self.max_trail
                 )
                 logger.debug(
                     f"Long: новая максимальная цена={current_price:.2f}, "
-                    f"трейл={self.current_trail:.2%}, профит={profit_pct:.2%} (net с комиссией)"
+                    f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией)"
                 )
         else:  # short
             # Для шорта отслеживаем минимальную цену
@@ -116,14 +178,36 @@ class TrailingStopLoss:
                 self.lowest_price = current_price
                 # Увеличиваем трейл при падении цены
                 # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ для расчета трейла!
-                profit_pct = self.get_profit_pct(current_price, include_fees=True)
                 self.current_trail = min(
-                    self.initial_trail + profit_pct * 2, self.max_trail
+                    self.initial_trail + max(profit_pct_total, 0.0) * 2, self.max_trail
                 )
                 logger.debug(
                     f"Short: новая минимальная цена={current_price:.2f}, "
-                    f"трейл={self.current_trail:.2%}, профит={profit_pct:.2%} (net с комиссией)"
+                    f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией)"
                 )
+
+        if (
+            self.aggressive_mode
+            and self.aggressive_step_profit > 0
+            and self.aggressive_step_trail > 0
+            and profit_pct_total > 0
+        ):
+            target = self._next_trail_profit_target or self.aggressive_step_profit
+            cap = self.aggressive_max_trail or self.max_trail
+            updated = False
+            while profit_pct_total >= target:
+                new_trail = min(self.current_trail + self.aggressive_step_trail, cap)
+                if new_trail <= self.current_trail + 1e-6:
+                    target = profit_pct_total + self.aggressive_step_profit
+                    break
+                self.current_trail = new_trail
+                updated = True
+                target += self.aggressive_step_profit
+            if updated:
+                logger.debug(
+                    f"🚀 Aggressive trailing tighten: trail={self.current_trail:.2%}, next_target={target:.3%}"
+                )
+            self._next_trail_profit_target = target
 
         new_stop_loss = self.get_stop_loss()
 
@@ -237,6 +321,46 @@ class TrailingStopLoss:
         stop_loss = self.get_stop_loss()
         # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ!
         profit_pct = self.get_profit_pct(current_price, include_fees=True)
+        minutes_in_position = (
+            (time.time() - self.entry_timestamp) / 60.0 if self.entry_timestamp else 0.0
+        )
+        entry_iso = (
+            datetime.fromtimestamp(self.entry_timestamp).isoformat()
+            if self.entry_timestamp
+            else "n/a"
+        )
+        logger.debug(
+            f"🔍 TrailingSL check: side={self.side}, price={current_price:.5f}, "
+            f"stop={stop_loss:.5f}, profit={profit_pct:.3%}, "
+            f"time_in_position={minutes_in_position:.2f} мин, "
+            f"trail={self.current_trail:.3%}"
+        )
+
+        # ✅ Жёсткое ограничение убытка
+        if self.loss_cut_percent is not None and profit_pct <= -self.loss_cut_percent:
+            logger.warning(
+                f"⚠️ Loss-cut: прибыль {profit_pct:.2%} <= -{self.loss_cut_percent:.2%}, позиция будет закрыта "
+                f"(time_in_position={minutes_in_position:.2f} мин, entry_time={entry_iso}, branch=loss_cut)"
+            )
+            return True
+
+        # ✅ Таймаут для убыточных позиций
+        if (
+            self.timeout_loss_percent is not None
+            and self.timeout_minutes is not None
+            and self.entry_timestamp > 0
+        ):
+            minutes_in_position = (time.time() - self.entry_timestamp) / 60.0
+            if (
+                minutes_in_position >= self.timeout_minutes
+                and profit_pct <= -self.timeout_loss_percent
+            ):
+                logger.warning(
+                    f"⚠️ Timeout loss-cut: позиция держится {minutes_in_position:.2f} минут, "
+                    f"прибыль {profit_pct:.2%} ≤ -{self.timeout_loss_percent:.2%}, закрываем "
+                    f"(entry_time={entry_iso}, branch=timeout)"
+                )
+                return True
 
         # Базовая проверка стоп-лосса
         if self.side == "long":
@@ -310,9 +434,16 @@ class TrailingStopLoss:
 
         # Если позиция в убытке - закрываем строже (обычная логика)
         if profit_pct <= 0:
-            logger.debug(
-                f"⚠️ Позиция в убытке ({profit_pct:.2%}) - закрываем по стоп-лоссу: "
-                f"stop={stop_loss:.2f}, price={current_price:.2f}"
+            logger.info(
+                f"⚠️ Позиция в убытке ({profit_pct:.2%}) - закрываем по трейлинг-стопу: "
+                f"stop={stop_loss:.2f}, price={current_price:.2f}, "
+                f"time_in_position={minutes_in_position:.2f} мин, entry_time={entry_iso}, branch=trail_hit_loss"
+            )
+        else:
+            logger.info(
+                f"✅ Фиксируем прибыль ({profit_pct:.2%}) по трейлинг-стопу: "
+                f"stop={stop_loss:.2f}, price={current_price:.2f}, "
+                f"time_in_position={minutes_in_position:.2f} мин, entry_time={entry_iso}, branch=trail_hit_profit"
             )
 
         return True  # Закрываем по стоп-лоссу
@@ -324,6 +455,10 @@ class TrailingStopLoss:
         self.current_trail = self.initial_trail
         self.entry_price = 0.0
         self.side = None
+        self.entry_timestamp = 0.0
+        self._next_trail_profit_target = (
+            self.aggressive_step_profit if self.aggressive_mode else None
+        )
         logger.info("TrailingStopLoss сброшен")
 
     def __repr__(self) -> str:

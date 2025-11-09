@@ -6,7 +6,7 @@ Fast ADX для Futures торговли.
 """
 
 from collections import deque
-from typing import Any, Deque, Dict
+from typing import Any, Deque, Dict, Optional
 
 from loguru import logger
 
@@ -29,19 +29,17 @@ class FastADX:
     """
 
     def __init__(self, period: int = 9, threshold: float = 20.0):
-        """
-        Инициализация Fast ADX.
-
-        Args:
-            period: Период для расчета (по умолчанию 9)
-            threshold: Порог силы тренда (по умолчанию 20)
-        """
+        """Инициализация Fast ADX."""
         self.period = period
         self.threshold = threshold
 
         self.di_plus_history: Deque[float] = deque(maxlen=period)
         self.di_minus_history: Deque[float] = deque(maxlen=period)
         self.adx_history: Deque[float] = deque(maxlen=period)
+        self.tr_history: Deque[float] = deque(maxlen=period)
+        self.plus_dm_history: Deque[float] = deque(maxlen=period)
+        self.minus_dm_history: Deque[float] = deque(maxlen=period)
+        self.dx_history: Deque[float] = deque(maxlen=period)
 
         self.current_high = 0.0
         self.current_low = 0.0
@@ -50,33 +48,37 @@ class FastADX:
         self.prev_low = 0.0
         self.prev_close = 0.0
 
+        self._smoothed_tr: Optional[float] = None
+        self._smoothed_plus_dm: Optional[float] = None
+        self._smoothed_minus_dm: Optional[float] = None
+        self._smoothed_adx: Optional[float] = None
+
         logger.info(f"FastADX инициализирован: period={period}, threshold={threshold}")
 
     def update(self, high: float, low: float, close: float):
-        """
-        Обновление индикатора новыми данными свечи.
+        """Обновление индикатора новыми данными свечи."""
+        if self.prev_high == 0 and self.prev_low == 0:
+            self.prev_high = high
+            self.prev_low = low
+            self.prev_close = close
+            self.current_high = high
+            self.current_low = low
+            self.current_close = close
+            return
 
-        Args:
-            high: Высшая цена свечи
-            low: Низшая цена свечи
-            close: Цена закрытия свечи
-        """
-        # Сохранение предыдущих значений
         self.prev_high = self.current_high
         self.prev_low = self.current_low
         self.prev_close = self.current_close
 
-        # Обновление текущих значений
         self.current_high = high
         self.current_low = low
         self.current_close = close
 
-        # Расчет +DI и -DI
-        if self.prev_high == 0:
-            return  # Недостаточно данных
+        up_move = high - self.prev_high
+        down_move = self.prev_low - low
 
-        plus_dm = max(self.current_high - self.prev_high, 0)
-        minus_dm = max(self.prev_low - self.current_low, 0)
+        plus_dm = up_move if up_move > down_move and up_move > 0 else 0.0
+        minus_dm = down_move if down_move > up_move and down_move > 0 else 0.0
 
         tr = max(
             self.current_high - self.current_low,
@@ -84,48 +86,61 @@ class FastADX:
             abs(self.current_low - self.prev_close),
         )
 
-        if tr > 0:
-            di_plus = 100 * (plus_dm / tr)
-            di_minus = 100 * (minus_dm / tr)
+        self.tr_history.append(tr)
+        self.plus_dm_history.append(plus_dm)
+        self.minus_dm_history.append(minus_dm)
+
+        if len(self.tr_history) < self.period:
+            return
+
+        if self._smoothed_tr is None:
+            self._smoothed_tr = sum(self.tr_history)
+            self._smoothed_plus_dm = sum(self.plus_dm_history)
+            self._smoothed_minus_dm = sum(self.minus_dm_history)
         else:
-            di_plus = 0.0
-            di_minus = 0.0
+            self._smoothed_tr = self._smoothed_tr - (self._smoothed_tr / self.period) + tr
+            self._smoothed_plus_dm = self._smoothed_plus_dm - (
+                self._smoothed_plus_dm / self.period
+            ) + plus_dm
+            self._smoothed_minus_dm = self._smoothed_minus_dm - (
+                self._smoothed_minus_dm / self.period
+            ) + minus_dm
+
+        if not self._smoothed_tr or self._smoothed_tr == 0:
+            return
+
+        di_plus = 100 * (self._smoothed_plus_dm / self._smoothed_tr)
+        di_minus = 100 * (self._smoothed_minus_dm / self._smoothed_tr)
 
         self.di_plus_history.append(di_plus)
         self.di_minus_history.append(di_minus)
 
-        # Расчет ADX
-        if len(self.di_plus_history) < self.period:
-            return  # Недостаточно данных
+        di_sum = di_plus + di_minus
+        if di_sum == 0:
+            return
 
-        adx = self._calculate_adx()
-        self.adx_history.append(adx)
+        dx = 100 * abs(di_plus - di_minus) / di_sum
+        self.dx_history.append(dx)
+
+        if self._smoothed_adx is None:
+            if len(self.dx_history) >= self.period:
+                self._smoothed_adx = sum(self.dx_history) / len(self.dx_history)
+                self.adx_history.append(self._smoothed_adx)
+        else:
+            self._smoothed_adx = (
+                (self._smoothed_adx * (self.period - 1)) + dx
+            ) / self.period
+            self.adx_history.append(self._smoothed_adx)
 
     def _calculate_adx(self) -> float:
         """Расчет ADX на основе истории +DI и -DI."""
-        if len(self.di_plus_history) < self.period:
-            return 0.0
-
-        # Расчет средних значений +DI и -DI
-        avg_di_plus = sum(self.di_plus_history) / len(self.di_plus_history)
-        avg_di_minus = sum(self.di_minus_history) / len(self.di_minus_history)
-
-        # Расчет разности и суммы
-        di_diff = abs(avg_di_plus - avg_di_minus)
-        di_sum = avg_di_plus + avg_di_minus
-
-        if di_sum > 0:
-            adx = 100 * (di_diff / di_sum)
-        else:
-            adx = 0.0
-
-        return adx
-
-    def get_current_adx(self) -> float:
-        """Получение текущего значения ADX."""
         if len(self.adx_history) == 0:
             return 0.0
         return self.adx_history[-1]
+
+    def get_current_adx(self) -> float:
+        """Получение текущего значения ADX."""
+        return self._calculate_adx()
 
     def get_current_di_plus(self) -> float:
         """Получение текущего значения +DI."""
@@ -140,15 +155,15 @@ class FastADX:
         return self.di_minus_history[-1]
 
     def get_adx_value(self) -> float:
-        """Получение значения ADX (алиас для get_current_adx)."""
+        """Получение значения ADX (алиас)."""
         return self.get_current_adx()
 
     def get_di_plus(self) -> float:
-        """Получение значения +DI (алиас для get_current_di_plus)."""
+        """Получение значения +DI (алиас)."""
         return self.get_current_di_plus()
 
     def get_di_minus(self) -> float:
-        """Получение значения -DI (алиас для get_current_di_minus)."""
+        """Получение значения -DI (алиас)."""
         return self.get_current_di_minus()
 
     def is_trend_strong(self) -> bool:
@@ -168,13 +183,8 @@ class FastADX:
         else:
             return "neutral"
 
-    def get_trend_info(self) -> Dict[str, any]:
-        """
-        Получение информации о тренде.
-
-        Returns:
-            Словарь с информацией о тренде
-        """
+    def get_trend_info(self) -> Dict[str, Any]:
+        """Получение информации о тренде."""
         adx = self.get_current_adx()
         di_plus = self.get_current_di_plus()
         di_minus = self.get_current_di_minus()
@@ -195,12 +205,20 @@ class FastADX:
         self.di_plus_history.clear()
         self.di_minus_history.clear()
         self.adx_history.clear()
+        self.tr_history.clear()
+        self.plus_dm_history.clear()
+        self.minus_dm_history.clear()
+        self.dx_history.clear()
         self.current_high = 0.0
         self.current_low = 0.0
         self.current_close = 0.0
         self.prev_high = 0.0
         self.prev_low = 0.0
         self.prev_close = 0.0
+        self._smoothed_tr = None
+        self._smoothed_plus_dm = None
+        self._smoothed_minus_dm = None
+        self._smoothed_adx = None
         logger.info("FastADX сброшен")
 
     def __repr__(self) -> str:

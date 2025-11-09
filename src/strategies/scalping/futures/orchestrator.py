@@ -12,8 +12,9 @@ Futures Orchestrator для скальпинг стратегии.
 """
 
 import asyncio
+import time
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -127,8 +128,21 @@ class FuturesScalpingOrchestrator:
         self.fast_adx = FastADX(period=9, threshold=20.0)
 
         # OrderFlowIndicator для анализа потока ордеров
+        order_flow_params = None
+        if getattr(config, "futures_modules", None):
+            order_flow_params = getattr(config.futures_modules, "order_flow", None)
+        if isinstance(order_flow_params, dict):
+            of_window = order_flow_params.get("window", 100)
+            of_long = order_flow_params.get("long_threshold", 0.1)
+            of_short = order_flow_params.get("short_threshold", -0.1)
+        else:
+            of_window = getattr(order_flow_params, "window", 100)
+            of_long = getattr(order_flow_params, "long_threshold", 0.1)
+            of_short = getattr(order_flow_params, "short_threshold", -0.1)
         self.order_flow = OrderFlowIndicator(
-            window=100, long_threshold=0.1, short_threshold=-0.1
+            window=of_window,
+            long_threshold=of_long,
+            short_threshold=of_short,
         )
 
         # FundingRateMonitor для мониторинга фандинга
@@ -166,8 +180,8 @@ class FuturesScalpingOrchestrator:
         # Время последнего сигнала по символу: {symbol: timestamp}
         self.last_signal_time = {}
         # Минимальная задержка между сигналами для одного символа (секунды)
-        self.signal_cooldown_seconds = (
-            60  # 60 секунд между сигналами для одного символа
+        self.signal_cooldown_seconds = float(
+            getattr(self.scalping_config, "signal_cooldown_seconds", 0.0) or 0.0
         )
         # Кэш активных ордеров: {symbol: {order_ids, timestamp}}
         self.active_orders_cache = {}
@@ -176,6 +190,11 @@ class FuturesScalpingOrchestrator:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Блокировки для предотвращения race condition
         # Блокировка обработки сигналов по символам: {symbol: asyncio.Lock}
         self.signal_locks = {}  # Будет создаваться по требованию
+
+        # ✅ Параметры синхронизации состояния с биржей
+        check_interval = getattr(self.scalping_config, "check_interval", 5.0) or 5.0
+        self.positions_sync_interval = max(15.0, check_interval * 3)
+        self._last_positions_sync = 0.0
 
         logger.info("FuturesScalpingOrchestrator инициализирован")
 
@@ -449,73 +468,23 @@ class FuturesScalpingOrchestrator:
                     "time_extended": False,
                 }
 
-                # Инициализируем TrailingStopLoss (используем ту же логику, что и при открытии)
-                trading_fee_rate = 0.0004
-                initial_trail = 0.05
-                max_trail = 0.2
-                min_trail = 0.02
-
-                # Получаем параметры из конфига
-                try:
-                    if (
-                        hasattr(self.config, "futures_modules")
-                        and self.config.futures_modules
-                    ):
-                        if hasattr(self.config.futures_modules, "trailing_sl"):
-                            trailing_sl_config = self.config.futures_modules.trailing_sl
-                            if hasattr(trailing_sl_config, "trading_fee_rate"):
-                                trading_fee_rate = getattr(
-                                    trailing_sl_config, "trading_fee_rate", 0.0004
-                                )
-                            elif isinstance(trailing_sl_config, dict):
-                                trading_fee_rate = trailing_sl_config.get(
-                                    "trading_fee_rate", 0.0004
-                                )
-
-                            if hasattr(trailing_sl_config, "initial_trail"):
-                                initial_trail = getattr(
-                                    trailing_sl_config, "initial_trail", 0.05
-                                )
-                            elif isinstance(trailing_sl_config, dict):
-                                initial_trail = trailing_sl_config.get(
-                                    "initial_trail", 0.05
-                                )
-
-                            if hasattr(trailing_sl_config, "max_trail"):
-                                max_trail = getattr(
-                                    trailing_sl_config, "max_trail", 0.2
-                                )
-                            elif isinstance(trailing_sl_config, dict):
-                                max_trail = trailing_sl_config.get("max_trail", 0.2)
-
-                            if hasattr(trailing_sl_config, "min_trail"):
-                                min_trail = getattr(
-                                    trailing_sl_config, "min_trail", 0.02
-                                )
-                            elif isinstance(trailing_sl_config, dict):
-                                min_trail = trailing_sl_config.get("min_trail", 0.02)
-                except Exception as e:
-                    logger.debug(
-                        f"⚠️ Не удалось получить параметры TrailingStopLoss из конфига: {e}"
+                tsl = self._initialize_trailing_stop(
+                    symbol=symbol,
+                    entry_price=entry_price,
+                    side=side,
+                    current_price=current_price,
+                )
+                if tsl:
+                    logger.info(
+                        f"✅ Загружена позиция {symbol} {side.upper()}: "
+                        f"size={pos_size_abs}, entry={entry_price:.2f}, "
+                        f"TrailingStopLoss инициализирован"
                     )
-
-                # Создаем и инициализируем TrailingStopLoss
-                tsl = TrailingStopLoss(
-                    initial_trail=initial_trail,
-                    max_trail=max_trail,
-                    min_trail=min_trail,
-                    trading_fee_rate=trading_fee_rate,
-                )
-                tsl.initialize(entry_price=entry_price, side=side)
-                # Устанавливаем текущую цену как highest для корректной работы
-                tsl.update(current_price)
-                self.trailing_sl_by_symbol[symbol] = tsl
-
-                logger.info(
-                    f"✅ Загружена позиция {symbol} {side.upper()}: "
-                    f"size={pos_size_abs}, entry={entry_price:.2f}, "
-                    f"TrailingStopLoss инициализирован"
-                )
+                else:
+                    logger.warning(
+                        f"⚠️ Не удалось инициализировать TrailingStopLoss для {symbol}: "
+                        f"entry_price={entry_price}, current_price={current_price}"
+                    )
                 loaded_count += 1
 
             if loaded_count > 0:
@@ -527,6 +496,249 @@ class FuturesScalpingOrchestrator:
 
         except Exception as e:
             logger.error(f"❌ Ошибка загрузки существующих позиций: {e}", exc_info=True)
+
+    @staticmethod
+    def _get_config_value(source: Any, key: str, default: Any = None) -> Any:
+        """Безопасно извлекает значение из объекта конфигурации или dict."""
+        if source is None:
+            return default
+        if isinstance(source, dict):
+            return source.get(key, default)
+        return getattr(source, key, default) if hasattr(source, key) else default
+
+    def _get_trailing_sl_params(self) -> Dict[str, Optional[float]]:
+        """Возвращает параметры Trailing SL с учетом конфига и fallback значений."""
+        params: Dict[str, Optional[float]] = {
+            "trading_fee_rate": 0.0009,
+            "initial_trail": 0.05,
+            "max_trail": 0.2,
+            "min_trail": 0.02,
+            "loss_cut_percent": None,
+            "timeout_loss_percent": None,
+            "timeout_minutes": None,
+        }
+
+        trailing_sl_config = None
+        if hasattr(self.config, "futures_modules") and self.config.futures_modules:
+            trailing_sl_config = self._get_config_value(
+                self.config.futures_modules, "trailing_sl", None
+            )
+
+        if trailing_sl_config:
+            params["trading_fee_rate"] = self._get_config_value(
+                trailing_sl_config, "trading_fee_rate", params["trading_fee_rate"]
+            )
+            params["initial_trail"] = self._get_config_value(
+                trailing_sl_config, "initial_trail", params["initial_trail"]
+            )
+            params["max_trail"] = self._get_config_value(
+                trailing_sl_config, "max_trail", params["max_trail"]
+            )
+            params["min_trail"] = self._get_config_value(
+                trailing_sl_config, "min_trail", params["min_trail"]
+            )
+            params["loss_cut_percent"] = self._get_config_value(
+                trailing_sl_config, "loss_cut_percent", params["loss_cut_percent"]
+            )
+            params["timeout_loss_percent"] = self._get_config_value(
+                trailing_sl_config,
+                "timeout_loss_percent",
+                params["timeout_loss_percent"],
+            )
+            params["timeout_minutes"] = self._get_config_value(
+                trailing_sl_config, "timeout_minutes", params["timeout_minutes"]
+            )
+
+        # Нормализуем числовые значения
+        if params["trading_fee_rate"] is not None:
+            params["trading_fee_rate"] = max(0.0, float(params["trading_fee_rate"]))
+        for key in ("initial_trail", "max_trail", "min_trail"):
+            if params[key] is not None:
+                params[key] = max(0.0, float(params[key]))
+
+        return params
+
+    def _initialize_trailing_stop(
+        self,
+        symbol: str,
+        entry_price: float,
+        side: str,
+        current_price: Optional[float] = None,
+        signal: Optional[Dict[str, Any]] = None,
+    ) -> Optional[TrailingStopLoss]:
+        """
+        Создает или переинициализирует TrailingStopLoss для указанного символа.
+        """
+        if entry_price <= 0:
+            return None
+
+        params = self._get_trailing_sl_params()
+        impulse_trailing = None
+        if signal and signal.get("is_impulse"):
+            impulse_trailing = signal.get("impulse_trailing") or {}
+            if impulse_trailing:
+                params["initial_trail"] = impulse_trailing.get(
+                    "initial_trail", params["initial_trail"]
+                )
+                params["max_trail"] = impulse_trailing.get(
+                    "max_trail", params["max_trail"]
+                )
+                params["min_trail"] = impulse_trailing.get(
+                    "min_trail", params["min_trail"]
+                )
+                params["loss_cut_percent"] = impulse_trailing.get(
+                    "loss_cut_percent", params["loss_cut_percent"]
+                )
+                params["timeout_minutes"] = impulse_trailing.get(
+                    "timeout_minutes", params["timeout_minutes"]
+                )
+
+        # Сбрасываем предыдущий экземпляр, если он был
+        existing_tsl = self.trailing_sl_by_symbol.get(symbol)
+        if existing_tsl:
+            existing_tsl.reset()
+
+        initial_trail = params["initial_trail"] or 0.0
+        max_trail = params["max_trail"] or initial_trail
+        min_trail = params["min_trail"] or 0.0
+        trading_fee_rate = params["trading_fee_rate"] or 0.0
+
+        tsl = TrailingStopLoss(
+            initial_trail=initial_trail,
+            max_trail=max_trail,
+            min_trail=min_trail,
+            trading_fee_rate=trading_fee_rate,
+            loss_cut_percent=params["loss_cut_percent"],
+            timeout_loss_percent=params["timeout_loss_percent"],
+            timeout_minutes=params["timeout_minutes"],
+        )
+        tsl.initialize(entry_price=entry_price, side=side)
+        if impulse_trailing:
+            step_profit = float(impulse_trailing.get("step_profit", 0) or 0)
+            step_trail = float(impulse_trailing.get("step_trail", 0) or 0)
+            aggressive_cap = impulse_trailing.get("aggressive_max_trail")
+            if step_profit > 0 and step_trail > 0:
+                tsl.enable_aggressive_mode(
+                    step_profit=step_profit,
+                    step_trail=step_trail,
+                    aggressive_max_trail=aggressive_cap,
+                )
+                logger.info(
+                    f"🚀 TrailingSL импульсный режим для {symbol}: step_profit={step_profit:.3%}, "
+                    f"step_trail={step_trail:.3%}, cap={aggressive_cap if aggressive_cap else 'auto'}"
+                )
+        if current_price and current_price > 0:
+            tsl.update(current_price)
+        self.trailing_sl_by_symbol[symbol] = tsl
+        fee_display = trading_fee_rate if trading_fee_rate else 0.0
+        logger.debug(
+            f"TrailingStopLoss для {symbol}: trail={tsl.current_trail:.3%}, "
+            f"fee={fee_display:.3%}"
+        )
+        return tsl
+
+    async def _sync_positions_with_exchange(self, force: bool = False) -> None:
+        """Синхронизирует локальные позиции и лимиты с фактическими данными биржи."""
+        now = time.time()
+        if not force and (now - self._last_positions_sync) < self.positions_sync_interval:
+            return
+
+        try:
+            exchange_positions = await self.client.get_positions()
+        except Exception as e:
+            logger.debug(f"⚠️ Не удалось синхронизировать позиции с биржей: {e}")
+            return
+
+        self._last_positions_sync = time.time()
+        seen_symbols: set[str] = set()
+        total_margin = 0.0
+
+        for pos in exchange_positions or []:
+            try:
+                pos_size = float(pos.get("pos", "0") or 0)
+            except (TypeError, ValueError):
+                pos_size = 0.0
+
+            if abs(pos_size) < 1e-8:
+                continue
+
+            inst_id = pos.get("instId", "")
+            if not inst_id:
+                continue
+
+            symbol = inst_id.replace("-SWAP", "")
+            seen_symbols.add(symbol)
+
+            try:
+                entry_price = float(pos.get("avgPx", 0) or 0)
+            except (TypeError, ValueError):
+                entry_price = 0.0
+
+            try:
+                mark_price = float(pos.get("markPx", entry_price) or entry_price)
+            except (TypeError, ValueError):
+                mark_price = entry_price
+
+            side = "buy" if pos_size > 0 else "sell"
+            abs_size = abs(pos_size)
+
+            margin_raw = pos.get("margin")
+            try:
+                margin = float(margin_raw) if margin_raw is not None else 0.0
+            except (TypeError, ValueError):
+                margin = 0.0
+
+            if margin <= 0 and entry_price > 0:
+                leverage = getattr(self.scalping_config, "leverage", 3) or 3
+                margin = (abs_size * entry_price) / max(leverage, 1e-6)
+
+            total_margin += max(margin, 0.0)
+
+            effective_price = entry_price or mark_price
+            timestamp = datetime.now()
+            active_position = self.active_positions.setdefault(symbol, {})
+            if "entry_time" not in active_position:
+                active_position["entry_time"] = timestamp
+            active_position.update(
+                {
+                    "instId": inst_id,
+                    "side": side,
+                    "size": abs_size,
+                    "entry_price": effective_price,
+                    "margin": margin,
+                    "timestamp": timestamp,
+                }
+            )
+
+            if symbol not in self.trailing_sl_by_symbol:
+                self._initialize_trailing_stop(
+                    symbol=symbol,
+                    entry_price=effective_price,
+                    side=side,
+                    current_price=mark_price,
+                )
+
+            if effective_price > 0:
+                self.max_size_limiter.position_sizes[symbol] = abs_size * effective_price
+
+        stale_symbols = set(self.active_positions.keys()) - seen_symbols
+        for symbol in list(stale_symbols):
+            logger.info(f"♻️ Позиция {symbol} отсутствует на бирже, очищаем локальное состояние")
+            self.active_positions.pop(symbol, None)
+            if symbol in self.trailing_sl_by_symbol:
+                self.trailing_sl_by_symbol[symbol].reset()
+                self.trailing_sl_by_symbol.pop(symbol, None)
+            if symbol in self.max_size_limiter.position_sizes:
+                self.max_size_limiter.remove_position(symbol)
+            normalized_symbol = self._normalize_symbol(symbol)
+            if normalized_symbol in self.last_orders_cache:
+                self.last_orders_cache[normalized_symbol]["status"] = "closed"
+
+        self.total_margin_used = total_margin
+        logger.debug(
+            f"🔁 Синхронизация позиций завершена: активных={len(seen_symbols)}, "
+            f"маржа={self.total_margin_used:.2f}"
+        )
 
     async def _main_trading_loop(self):
         """Основной торговый цикл"""
@@ -572,6 +784,12 @@ class FuturesScalpingOrchestrator:
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Периодически обновляем статус ордеров в кэше
                 await self._update_orders_cache_status()
+
+                if not self.is_running:
+                    break
+
+                # ✅ Новое: синхронизация локальных позиций с биржей
+                await self._sync_positions_with_exchange()
 
                 if not self.is_running:
                     break
@@ -643,6 +861,14 @@ class FuturesScalpingOrchestrator:
     async def _process_signals(self, signals: List[Dict[str, Any]]):
         """Обработка торговых сигналов"""
         try:
+            # 🔄 НОВОЕ: отключаем legacy-обработку, чтобы не дублировать реальные сигналы,
+            # которые приходят из WebSocket (_check_for_signals)
+            if not getattr(self.scalping_config, "use_legacy_signal_processing", False):
+                logger.debug(
+                    "⏭️ Legacy _process_signals пропущен (используется realtime обработка сигналов через WebSocket)."
+                )
+                return
+
             for signal in signals:
                 symbol = signal.get("symbol")
                 side = signal.get("side")
@@ -1325,9 +1551,10 @@ class FuturesScalpingOrchestrator:
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем РЫНОЧНЫЕ ордера (Market) для мгновенного исполнения
                 # Лимитные ордера могут оставаться в pending и не открывать позиции
-                # Рыночные ордера исполняются мгновенно и открывают позиции сразу
-                # Для скальпинга важнее скорость исполнения, чем экономия комиссии (0.05% vs 0.02%)
-                order_type = "market"  # ✅ Изменено: "limit" → "market"
+                # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: Используем limit ордера для экономии комиссий
+                # Limit ордера дешевле в 2.5 раза (0.02% vs 0.05%), экономия $126/месяц при 180-200 сделках/день
+                # Если limit ордер не исполнится - следующий сигнал, это нормально для скальпинга
+                order_type = "limit"  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
 
                 # Проверяем конфиг, можно ли переопределить
                 try:
@@ -1335,14 +1562,14 @@ class FuturesScalpingOrchestrator:
                         scalping_config = self.config.scalping
                         if hasattr(scalping_config, "order_type"):
                             order_type = getattr(
-                                scalping_config, "order_type", "market"
-                            )  # ✅ Изменено: "limit" → "market"
+                                scalping_config, "order_type", "limit"
+                            )  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" по умолчанию
                         elif hasattr(scalping_config, "prefer_market_orders"):
                             if getattr(scalping_config, "prefer_market_orders", False):
                                 order_type = "market"
                 except Exception as e:
                     logger.debug(
-                        f"Не удалось получить тип ордера из конфига: {e}, используем market (мгновенное исполнение)"
+                        f"Не удалось получить тип ордера из конфига: {e}, используем limit (экономия комиссий)"
                     )
 
                 signal = {
@@ -1351,7 +1578,7 @@ class FuturesScalpingOrchestrator:
                     "price": price,
                     "strength": 0.8,
                     "regime": regime,  # ✅ Добавляем режим для адаптивных TP/SL
-                    "type": order_type,  # ✅ Рыночные ордера (Market) для мгновенного исполнения
+                    "type": order_type,  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: Limit ордера для экономии комиссий
                 }
 
             # Рассчитываем размер позиции
@@ -1440,8 +1667,8 @@ class FuturesScalpingOrchestrator:
             if result.get("success"):
                 order_id = result.get("order_id")
                 order_type = result.get(
-                    "order_type", "market"
-                )  # ✅ Изменено: "limit" → "market"
+                    "order_type", "limit"  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
+                )  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем кэш СРАЗУ после размещения ордера
                 # Это предотвращает race condition, когда второй сигнал проходит проверку
@@ -1653,79 +1880,20 @@ class FuturesScalpingOrchestrator:
                     }
                 )
 
-                # ✅ ИСПРАВЛЕНИЕ: Получаем ВСЕ параметры TrailingStopLoss из конфига
-                # 🔥 СКАЛЬПИНГ: Используем Limit ордера (Maker) → комиссия 0.02% + 0.02% = 0.04% (0.0004)
-                trading_fee_rate = 0.0004  # Fallback: 0.04% на весь цикл (Maker открытие + Maker закрытие)
-                initial_trail = 0.05  # Fallback
-                max_trail = 0.2  # Fallback
-                min_trail = 0.02  # Fallback
-
-                # Получаем параметры из конфига
-                try:
-                    if (
-                        hasattr(self.config, "futures_modules")
-                        and self.config.futures_modules
-                    ):
-                        if hasattr(self.config.futures_modules, "trailing_sl"):
-                            trailing_sl_config = self.config.futures_modules.trailing_sl
-                            # Получаем trading_fee_rate
-                            if hasattr(trailing_sl_config, "trading_fee_rate"):
-                                trading_fee_rate = getattr(
-                                    trailing_sl_config, "trading_fee_rate", 0.0004
-                                )
-                            elif isinstance(trailing_sl_config, dict):
-                                trading_fee_rate = trailing_sl_config.get(
-                                    "trading_fee_rate", 0.0004
-                                )
-
-                            # ✅ Получаем initial_trail, max_trail, min_trail из конфига
-                            if hasattr(trailing_sl_config, "initial_trail"):
-                                initial_trail = getattr(
-                                    trailing_sl_config, "initial_trail", 0.05
-                                )
-                            elif isinstance(trailing_sl_config, dict):
-                                initial_trail = trailing_sl_config.get(
-                                    "initial_trail", 0.05
-                                )
-
-                            if hasattr(trailing_sl_config, "max_trail"):
-                                max_trail = getattr(
-                                    trailing_sl_config, "max_trail", 0.2
-                                )
-                            elif isinstance(trailing_sl_config, dict):
-                                max_trail = trailing_sl_config.get("max_trail", 0.2)
-
-                            if hasattr(trailing_sl_config, "min_trail"):
-                                min_trail = getattr(
-                                    trailing_sl_config, "min_trail", 0.02
-                                )
-                            elif isinstance(trailing_sl_config, dict):
-                                min_trail = trailing_sl_config.get("min_trail", 0.02)
-
-                            logger.debug(
-                                f"✅ TrailingStopLoss параметры из конфига: "
-                                f"initial={initial_trail}, max={max_trail}, "
-                                f"min={min_trail}, fee={trading_fee_rate:.3%}"
-                            )
-                except Exception as e:
-                    logger.debug(
-                        f"⚠️ Не удалось получить параметры TrailingStopLoss из конфига: {e}, "
-                        f"используем fallback значения"
+                tsl = self._initialize_trailing_stop(
+                    symbol=symbol,
+                    entry_price=price,
+                    side=signal["side"],
+                    current_price=price,
+                    signal=signal,
+                )
+                if tsl:
+                    self.trailing_sl_by_symbol[symbol] = tsl
+                    logger.info(f"🎯 Позиция {symbol} открыта с TrailingSL")
+                else:
+                    logger.warning(
+                        f"⚠️ TrailingStopLoss не был инициализирован для {symbol} (entry={price})"
                     )
-
-                tsl = TrailingStopLoss(
-                    initial_trail=initial_trail,  # ✅ Из конфига
-                    max_trail=max_trail,  # ✅ Из конфига
-                    min_trail=min_trail,  # ✅ Из конфига
-                    trading_fee_rate=trading_fee_rate,  # ✅ Из конфига
-                )
-                tsl.initialize(entry_price=price, side=signal["side"])
-                self.trailing_sl_by_symbol[symbol] = tsl
-                logger.debug(
-                    f"TrailingStopLoss для {symbol} инициализирован с комиссией: {trading_fee_rate:.3%}"
-                )
-
-                logger.info(f"🎯 Позиция {symbol} открыта с TrailingSL")
                 return True
             else:
                 error_msg = result.get("error", "Неизвестная ошибка")
@@ -1760,6 +1928,23 @@ class FuturesScalpingOrchestrator:
                 max_usd_size = (
                     base_usd_size * 2.0
                 )  # 200% от base (номинальная стоимость)
+
+            profile_max_positions = balance_profile.get("max_open_positions")
+            global_max_positions = getattr(self.risk_config, "max_open_positions", profile_max_positions)
+            if profile_max_positions:
+                allowed_positions = max(1, min(profile_max_positions, global_max_positions))
+                if self.max_size_limiter.max_positions != allowed_positions:
+                    logger.debug(
+                        f"🔧 MaxSizeLimiter: обновляем max_positions {self.max_size_limiter.max_positions} → {allowed_positions}"
+                    )
+                    self.max_size_limiter.max_positions = allowed_positions
+                # Обновляем max_total_size_usd на основе профиля
+                max_total_size = max_usd_size * allowed_positions
+                if self.max_size_limiter.max_total_size_usd != max_total_size:
+                    logger.debug(
+                        f"🔧 MaxSizeLimiter: обновляем max_total_size_usd {self.max_size_limiter.max_total_size_usd:.2f} → {max_total_size:.2f}"
+                    )
+                    self.max_size_limiter.max_total_size_usd = max_total_size
 
             # 3. Адаптируем под режим рынка (если ARM активен)
             if (
@@ -2541,13 +2726,13 @@ class FuturesScalpingOrchestrator:
                 # ✅ Закрываем через position_manager (API)
                 await self.position_manager.close_position_manually(symbol)
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем кэш при закрытии позиции (с нормализованным символом)
+                # ✅ Обновляем кэш ордеров
                 normalized_symbol = self._normalize_symbol(symbol)
                 if normalized_symbol in self.last_orders_cache:
                     self.last_orders_cache[normalized_symbol]["status"] = "closed"
                     logger.debug(f"📦 Обновлен статус ордера для {symbol} на 'closed'")
 
-                # 🛡️ Вычитаем margin при закрытии
+                # 🛡️ Обновляем маржу и лимит позиций
                 position_margin = position.get("margin", 0)
                 if position_margin > 0:
                     self.total_margin_used -= position_margin
@@ -2555,28 +2740,29 @@ class FuturesScalpingOrchestrator:
                         f"💼 Общая маржа после закрытия: ${self.total_margin_used:.2f}"
                     )
 
-                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Удаляем позицию из MaxSizeLimiter!
-                    # Рассчитываем размер позиции в USD (notional)
-                    position_size = position.get("size", 0)
-                    entry_price = position.get("entry_price", 0)
-                    if position_size > 0 and entry_price > 0:
-                        size_usd = position_size * entry_price
+                position_size = position.get("size", 0)
+                entry_price = position.get("entry_price", 0)
+                if position_size > 0 and entry_price > 0:
+                    size_usd = position_size * entry_price
+                    if symbol in self.max_size_limiter.position_sizes:
                         self.max_size_limiter.remove_position(symbol)
                         logger.debug(
                             f"✅ Позиция {symbol} удалена из MaxSizeLimiter: ${size_usd:.2f} (осталось: ${self.max_size_limiter.get_total_size():.2f})"
                         )
 
-                    # Удаляем из active_positions
+                # Удаляем локальное состояние вне зависимости от маржи
+                if symbol in self.active_positions:
                     del self.active_positions[symbol]
 
-                    # Сбрасываем трейлинг стоп
-                    if symbol in self.trailing_sl_by_symbol:
-                        self.trailing_sl_by_symbol[symbol].reset()
-                        del self.trailing_sl_by_symbol[symbol]
+                if symbol in self.trailing_sl_by_symbol:
+                    self.trailing_sl_by_symbol[symbol].reset()
+                    del self.trailing_sl_by_symbol[symbol]
 
-                    logger.debug(
-                        f"🔄 Позиция {symbol} закрыта, система готова к новым сигналам"
-                    )
+                logger.debug(
+                    f"🔄 Позиция {symbol} закрыта, система готова к новым сигналам"
+                )
+
+                await self._sync_positions_with_exchange(force=True)
 
         except Exception as e:
             logger.error(f"Ошибка закрытия позиции: {e}")

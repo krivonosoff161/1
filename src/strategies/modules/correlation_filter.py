@@ -7,7 +7,9 @@ Correlation Filter Module
 Цель: Снизить портфельный риск путем диверсификации.
 """
 
-from typing import Dict, List, Optional
+import time
+from collections import deque
+from typing import Deque, Dict, List, Optional, Tuple
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -26,7 +28,7 @@ class CorrelationFilterConfig(BaseModel):
     max_correlated_positions: int = Field(
         default=1,
         ge=1,
-        le=3,
+        le=5,
         description="Макс. кол-во позиций в коррелированных парах одновременно",
     )
 
@@ -101,6 +103,11 @@ class CorrelationFilter:
         )
         self.correlation_manager = CorrelationManager(client, corr_manager_config)
 
+        # Динамическая статистика блокировок для адаптации порога
+        self._decision_history: Deque[Tuple[float, bool]] = deque(maxlen=120)
+        self._temporary_relax_signals_remaining: int = 0
+        self._temporary_threshold_delta: float = 0.0
+
         logger.info(
             f"Correlation Filter initialized: threshold={config.correlation_threshold}, "
             f"max_positions={config.max_correlated_positions}, "
@@ -174,6 +181,9 @@ class CorrelationFilter:
             correlated_positions = []
             correlation_values = {}
 
+            threshold = self._get_effective_threshold()
+            self.correlation_manager.config.high_correlation_threshold = threshold
+
             for open_symbol, position in current_positions.items():
                 if open_symbol == symbol:
                     continue  # Пропускаем саму пару
@@ -198,7 +208,7 @@ class CorrelationFilter:
                 correlation_values[open_symbol] = correlation_value
 
                 # Проверяем порог (используем безопасно извлеченное значение)
-                if abs(correlation_value) >= self.config.correlation_threshold:
+                if abs(correlation_value) >= threshold:
                     # Если включен фильтр по направлению
                     if self.config.block_same_direction_only:
                         # Блокируем только если направления совпадают
@@ -234,8 +244,10 @@ class CorrelationFilter:
                     f"🚫 Correlation Filter BLOCKED: {symbol} {signal_side}\n"
                     f"   Correlated positions: {correlated_positions}\n"
                     f"   Correlations: {correlation_values}\n"
+                    f"   Threshold: {threshold:.2f}\n"
                     f"   Max allowed: {self.config.max_correlated_positions}"
                 )
+                self._record_decision(blocked=True)
                 return CorrelationFilterResult(
                     allowed=False,
                     blocked=True,
@@ -256,10 +268,11 @@ class CorrelationFilter:
                     f"✅ Correlation Filter ALLOWED: {symbol} {signal_side} (no correlations)"
                 )
 
+            self._record_decision(blocked=False)
             return CorrelationFilterResult(
                 allowed=True,
                 blocked=False,
-                reason=f"Correlated positions: {len(correlated_positions)}/{self.config.max_correlated_positions}",
+                reason=f"Correlated positions: {len(correlated_positions)}/{self.config.max_correlated_positions} (threshold={threshold:.2f})",
                 correlated_positions=correlated_positions,
                 correlation_values=correlation_values,
             )
@@ -272,6 +285,47 @@ class CorrelationFilter:
                 blocked=False,
                 reason=f"Error (fail-safe): {str(e)}",
             )
+
+    def _get_effective_threshold(self) -> float:
+        """
+        Возвращает актуальный порог корреляции с учетом временной релаксации.
+        """
+        threshold = self.config.correlation_threshold
+        if self._temporary_relax_signals_remaining > 0:
+            threshold = max(0.5, threshold - self._temporary_threshold_delta)
+            self._temporary_relax_signals_remaining -= 1
+            if self._temporary_relax_signals_remaining == 0:
+                self._temporary_threshold_delta = 0.0
+        return threshold
+
+    def _record_decision(self, blocked: bool) -> None:
+        """
+        Запоминает решение фильтра и при избыточных блокировках временно снижает порог.
+        """
+        now = time.time()
+        self._decision_history.append((now, blocked))
+
+        cutoff = now - 600  # 10 минут
+        while self._decision_history and self._decision_history[0][0] < cutoff:
+            self._decision_history.popleft()
+
+        total = len(self._decision_history)
+        if (
+            blocked
+            and total >= 5
+            and self._temporary_relax_signals_remaining == 0
+        ):
+            blocked_count = sum(1 for _, is_blocked in self._decision_history if is_blocked)
+            block_rate = blocked_count / total if total else 0.0
+            if block_rate >= 0.6:
+                self._temporary_relax_signals_remaining = 3
+                self._temporary_threshold_delta = 0.1
+                logger.debug(
+                    f"🔓 CorrelationFilter: временно снижаем порог на 0.05 для следующих 3 сигналов "
+                    f"(blocked_rate={block_rate:.1%}, window={total})"
+                )
+                # Сбрасываем статистику, чтобы не триггерить повторно сразу
+                self._decision_history.clear()
 
     async def preload_correlations(self):
         """
