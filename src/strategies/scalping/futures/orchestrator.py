@@ -576,7 +576,11 @@ class FuturesScalpingOrchestrator:
 
         params = self._get_trailing_sl_params()
         regime = signal.get("regime") if signal else None
-        if not regime and hasattr(self.signal_generator, "regime_managers") and symbol in getattr(self.signal_generator, "regime_managers", {}):
+        if (
+            not regime
+            and hasattr(self.signal_generator, "regime_managers")
+            and symbol in getattr(self.signal_generator, "regime_managers", {})
+        ):
             manager = self.signal_generator.regime_managers.get(symbol)
             if manager:
                 regime = manager.get_current_regime()
@@ -1994,15 +1998,16 @@ class FuturesScalpingOrchestrator:
                 and self.signal_generator.regime_manager
             ):
                 try:
-                    regime_key = symbol_regime or self.signal_generator.regime_manager.get_current_regime()
+                    regime_key = (
+                        symbol_regime
+                        or self.signal_generator.regime_manager.get_current_regime()
+                    )
                     if regime_key:
                         regime_params = self._get_regime_params(regime_key, symbol)
                         multiplier = regime_params.get("position_size_multiplier")
                         if multiplier is not None:
                             base_usd_size *= multiplier
-                            logger.debug(
-                                f"Режим {regime_key}: multiplier={multiplier}"
-                            )
+                            logger.debug(f"Режим {regime_key}: multiplier={multiplier}")
                 except Exception as e:
                     logger.warning(f"Ошибка адаптации под режим: {e}")
 
@@ -2269,7 +2274,9 @@ class FuturesScalpingOrchestrator:
             "max_position_percent": max_position_percent,
         }
 
-    def _get_regime_params(self, regime_name: str, symbol: Optional[str] = None) -> dict:
+    def _get_regime_params(
+        self, regime_name: str, symbol: Optional[str] = None
+    ) -> dict:
         """Получает параметры текущего режима из ARM"""
         try:
             scalping_config = getattr(self.config, "scalping", None)
@@ -2288,9 +2295,7 @@ class FuturesScalpingOrchestrator:
                 return {}
 
             adaptive_dict = self._to_dict(adaptive_regime)
-            regime_params = self._to_dict(
-                adaptive_dict.get(regime_name, {})
-            )
+            regime_params = self._to_dict(adaptive_dict.get(regime_name, {}))
 
             if symbol:
                 symbol_profile = self.symbol_profiles.get(symbol, {})
@@ -2849,10 +2854,14 @@ class FuturesScalpingOrchestrator:
                     continue
                 regime_dict = self._to_dict(regime_data)
                 for section, section_value in list(regime_dict.items()):
-                    if isinstance(section_value, dict) or hasattr(section_value, "__dict__"):
+                    if isinstance(section_value, dict) or hasattr(
+                        section_value, "__dict__"
+                    ):
                         section_dict = self._to_dict(section_value)
                         for sub_key, sub_val in list(section_dict.items()):
-                            if isinstance(sub_val, dict) or hasattr(sub_val, "__dict__"):
+                            if isinstance(sub_val, dict) or hasattr(
+                                sub_val, "__dict__"
+                            ):
                                 section_dict[sub_key] = self._to_dict(sub_val)
                         regime_dict[section] = section_dict
                 normalized[regime_key] = regime_dict

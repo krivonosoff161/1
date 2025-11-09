@@ -38,7 +38,9 @@ class FundingRateFilter:
         self._cache: Dict[str, FundingSnapshot] = {}
         self._lock = asyncio.Lock()
 
-    async def is_signal_valid(self, symbol: str, side: str, overrides: Optional[Dict[str, float]] = None) -> bool:
+    async def is_signal_valid(
+        self, symbol: str, side: str, overrides: Optional[Dict[str, float]] = None
+    ) -> bool:
         """Возвращает True, если funding допускает вход по направлению side."""
         if not self.config.enabled:
             return True
@@ -79,15 +81,12 @@ class FundingRateFilter:
             )
             return False
 
-        if (
-            self.config.include_next_funding
-            and self._violates_threshold(
-                next_rate,
-                side,
-                thresholds["max_positive_rate"],
-                thresholds["max_negative_rate"],
-                thresholds["max_abs_rate"],
-            )
+        if self.config.include_next_funding and self._violates_threshold(
+            next_rate,
+            side,
+            thresholds["max_positive_rate"],
+            thresholds["max_negative_rate"],
+            thresholds["max_abs_rate"],
         ):
             logger.info(
                 f"⛔ FundingRateFilter: {symbol} {side} отклонён. Следующий funding={next_rate:.4%}"

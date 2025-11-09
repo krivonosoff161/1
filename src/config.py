@@ -234,9 +234,7 @@ class ScalpingConfig(BaseModel):
     balance_checker_enabled: bool = Field(default=False)
     balance_checker: Dict = Field(default_factory=dict)
     adaptive_regime_enabled: bool = Field(default=False)
-    adaptive_regime: AdaptiveRegimeConfig = Field(
-        default_factory=AdaptiveRegimeConfig
-    )
+    adaptive_regime: AdaptiveRegimeConfig = Field(default_factory=AdaptiveRegimeConfig)
 
 
 class TradingConfig(BaseModel):

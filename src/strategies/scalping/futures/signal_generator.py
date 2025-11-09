@@ -246,12 +246,16 @@ class FuturesSignalGenerator:
         return {}
 
     @staticmethod
-    def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    def _deep_merge_dict(
+        base: Dict[str, Any], override: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Рекурсивное объединение словарей без изменения исходников."""
         result = copy.deepcopy(base)
         for key, value in (override or {}).items():
             if isinstance(value, dict) and isinstance(result.get(key), dict):
-                result[key] = FuturesSignalGenerator._deep_merge_dict(result[key], value)
+                result[key] = FuturesSignalGenerator._deep_merge_dict(
+                    result[key], value
+                )
             else:
                 result[key] = copy.deepcopy(value)
         return result
@@ -270,10 +274,14 @@ class FuturesSignalGenerator:
                     continue
                 regime_dict = self._to_dict(regime_data)
                 for section, section_value in list(regime_dict.items()):
-                    if isinstance(section_value, dict) or hasattr(section_value, "__dict__"):
+                    if isinstance(section_value, dict) or hasattr(
+                        section_value, "__dict__"
+                    ):
                         section_dict = self._to_dict(section_value)
                         for sub_key, sub_val in list(section_dict.items()):
-                            if isinstance(sub_val, dict) or hasattr(sub_val, "__dict__"):
+                            if isinstance(sub_val, dict) or hasattr(
+                                sub_val, "__dict__"
+                            ):
                                 section_dict[sub_key] = self._to_dict(sub_val)
                         regime_dict[section] = section_dict
                 normalized[regime_key] = regime_dict
@@ -391,9 +399,7 @@ class FuturesSignalGenerator:
                             pivot_score_bonus_near_level=pivot_dict.get(
                                 "score_bonus_near_level", 1
                             ),
-                            pivot_use_last_n_days=pivot_dict.get(
-                                "use_last_n_days", 5
-                            ),
+                            pivot_use_last_n_days=pivot_dict.get("use_last_n_days", 5),
                             vp_score_bonus_in_value_area=vp_dict.get(
                                 "score_bonus_in_value_area", 1
                             ),
@@ -448,18 +454,14 @@ class FuturesSignalGenerator:
                     base_high_vol = detection_dict.get(
                         "high_volatility_threshold", 0.03
                     )
-                    base_low_vol = detection_dict.get(
-                        "low_volatility_threshold", 0.02
-                    )
+                    base_low_vol = detection_dict.get("low_volatility_threshold", 0.02)
                     base_trend_strength = detection_dict.get(
                         "trend_strength_percent", 2.0
                     )
                     base_min_duration = detection_dict.get(
                         "min_regime_duration_minutes", 15
                     )
-                    base_confirmations = detection_dict.get(
-                        "required_confirmations", 3
-                    )
+                    base_confirmations = detection_dict.get("required_confirmations", 3)
 
                     trending_params = create_regime_params("trending")
                     ranging_params = create_regime_params("ranging")
@@ -1752,7 +1754,9 @@ class FuturesSignalGenerator:
         indicators: Dict[str, Any],
         current_regime: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        if not self.impulse_config or not getattr(self.impulse_config, "enabled", False):
+        if not self.impulse_config or not getattr(
+            self.impulse_config, "enabled", False
+        ):
             return []
 
         config = self.impulse_config
@@ -1853,9 +1857,7 @@ class FuturesSignalGenerator:
         )
         meta = {
             "body_ratio_atr": round(body_ratio, 3),
-            "volume_ratio": round(
-                current_candle.volume / max(avg_volume, 1e-9), 3
-            ),
+            "volume_ratio": round(current_candle.volume / max(avg_volume, 1e-9), 3),
             "pivot_level": pivot_level,
             "close": current_candle.close,
             "high": current_candle.high,
@@ -1958,15 +1960,11 @@ class FuturesSignalGenerator:
                 regime_key = (current_regime_name or "ranging").lower()
                 regime_profile = symbol_profile.get(regime_key, {})
                 filters_profile = self._to_dict(regime_profile.get("filters", {}))
-                liquidity_override = self._to_dict(
-                    filters_profile.get("liquidity", {})
-                )
+                liquidity_override = self._to_dict(filters_profile.get("liquidity", {}))
                 order_flow_override = self._to_dict(
                     filters_profile.get("order_flow", {})
                 )
-                funding_override = self._to_dict(
-                    filters_profile.get("funding", {})
-                )
+                funding_override = self._to_dict(filters_profile.get("funding", {}))
                 volatility_override = self._to_dict(
                     filters_profile.get("volatility", {})
                 )

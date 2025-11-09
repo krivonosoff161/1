@@ -16,7 +16,12 @@ class VolatilityRegimeFilter:
     def __init__(self, config: VolatilityFilterConfig) -> None:
         self.config = config
 
-    def is_signal_valid(self, symbol: str, market_data: MarketData, overrides: Optional[Dict[str, float]] = None) -> bool:
+    def is_signal_valid(
+        self,
+        symbol: str,
+        market_data: MarketData,
+        overrides: Optional[Dict[str, float]] = None,
+    ) -> bool:
         if not self.config.enabled:
             return True
 
