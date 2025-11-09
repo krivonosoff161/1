@@ -98,13 +98,19 @@ class FastADX:
             self._smoothed_plus_dm = sum(self.plus_dm_history)
             self._smoothed_minus_dm = sum(self.minus_dm_history)
         else:
-            self._smoothed_tr = self._smoothed_tr - (self._smoothed_tr / self.period) + tr
-            self._smoothed_plus_dm = self._smoothed_plus_dm - (
-                self._smoothed_plus_dm / self.period
-            ) + plus_dm
-            self._smoothed_minus_dm = self._smoothed_minus_dm - (
-                self._smoothed_minus_dm / self.period
-            ) + minus_dm
+            self._smoothed_tr = (
+                self._smoothed_tr - (self._smoothed_tr / self.period) + tr
+            )
+            self._smoothed_plus_dm = (
+                self._smoothed_plus_dm
+                - (self._smoothed_plus_dm / self.period)
+                + plus_dm
+            )
+            self._smoothed_minus_dm = (
+                self._smoothed_minus_dm
+                - (self._smoothed_minus_dm / self.period)
+                + minus_dm
+            )
 
         if not self._smoothed_tr or self._smoothed_tr == 0:
             return

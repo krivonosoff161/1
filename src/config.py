@@ -101,7 +101,10 @@ class ScalpingConfig(BaseModel):
         default=None, ge=0.1, le=10.0, description="Stop Loss %"
     )
     signal_cooldown_seconds: float = Field(
-        default=0.0, ge=0.0, le=600.0, description="Минимальная задержка между сигналами на символ"
+        default=0.0,
+        ge=0.0,
+        le=600.0,
+        description="Минимальная задержка между сигналами на символ",
     )
 
     class Config:
@@ -149,7 +152,8 @@ class FundingFilterConfig(BaseModel):
         default=0.0006, description="Максимальный допустимый funding для шорта (доля)"
     )
     max_abs_rate: float = Field(
-        default=0.0008, description="Абсолютный порог funding вне зависимости от стороны"
+        default=0.0008,
+        description="Абсолютный порог funding вне зависимости от стороны",
     )
     include_next_funding: bool = Field(
         default=True, description="Учитывать прогноз следующего периода funding"
@@ -190,7 +194,10 @@ class LiquidityFilterConfig(BaseModel):
         default=500_000.0, description="Минимальная суммарная глубина стакана (USD)"
     )
     depth_levels: int = Field(
-        default=5, description="Количество уровней стакана для оценки глубины", ge=1, le=20
+        default=5,
+        description="Количество уровней стакана для оценки глубины",
+        ge=1,
+        le=20,
     )
     max_spread_percent: float = Field(
         default=0.25, description="Максимально допустимый спред в процентах"
@@ -203,10 +210,13 @@ class LiquidityFilterConfig(BaseModel):
         description="Индивидуальные пороги ликвидности по символам",
     )
     fail_open_enabled: bool = Field(
-        default=False, description="Включить временное ослабление порогов при серии блокировок"
+        default=False,
+        description="Включить временное ослабление порогов при серии блокировок",
     )
     max_consecutive_blocks: int = Field(
-        default=5, ge=1, description="Количество подряд блокировок перед ослаблением порогов"
+        default=5,
+        ge=1,
+        description="Количество подряд блокировок перед ослаблением порогов",
     )
     relax_multiplier: float = Field(
         default=0.5,
@@ -249,7 +259,9 @@ class OrderFlowFilterConfig(BaseModel):
         description="Включить временное ослабление порогов, если фильтр блокирует сигналы подряд",
     )
     max_consecutive_blocks: int = Field(
-        default=4, ge=1, description="Количество подряд блокировок до активации fail-open"
+        default=4,
+        ge=1,
+        description="Количество подряд блокировок до активации fail-open",
     )
     relax_multiplier: float = Field(
         default=0.5,
@@ -257,7 +269,9 @@ class OrderFlowFilterConfig(BaseModel):
         description="Множитель ослабления порогов order flow (значение <1 снижает требования)",
     )
     relax_duration_seconds: int = Field(
-        default=30, ge=1, description="Длительность ослабления порогов order flow (секунды)"
+        default=30,
+        ge=1,
+        description="Длительность ослабления порогов order flow (секунды)",
     )
     regime_profiles: Dict[str, OrderFlowRegimeProfile] = Field(
         default_factory=dict,
@@ -275,22 +289,33 @@ class VolatilityFilterConfig(BaseModel):
         default=3.5, description="Максимальный диапазон движения цены (проценты)"
     )
     min_atr_percent: float = Field(
-        default=0.05, description="Минимальное значение ATR относительно цены (проценты)"
+        default=0.05,
+        description="Минимальное значение ATR относительно цены (проценты)",
     )
     max_atr_percent: float = Field(
-        default=2.0, description="Максимальное значение ATR относительно цены (проценты)"
+        default=2.0,
+        description="Максимальное значение ATR относительно цены (проценты)",
     )
 
 
 class ImpulseTrailingConfig(BaseModel):
     initial_trail: float = Field(
-        default=0.003, ge=0.0, le=0.1, description="Стартовый трейл для импульсной сделки"
+        default=0.003,
+        ge=0.0,
+        le=0.1,
+        description="Стартовый трейл для импульсной сделки",
     )
     max_trail: float = Field(
-        default=0.02, ge=0.0, le=0.2, description="Максимальный трейл для импульсной сделки"
+        default=0.02,
+        ge=0.0,
+        le=0.2,
+        description="Максимальный трейл для импульсной сделки",
     )
     min_trail: float = Field(
-        default=0.001, ge=0.0, le=0.1, description="Минимальный трейл для импульсной сделки"
+        default=0.001,
+        ge=0.0,
+        le=0.1,
+        description="Минимальный трейл для импульсной сделки",
     )
     step_profit: float = Field(
         default=0.003,
@@ -395,14 +420,22 @@ class FuturesModulesConfig(BaseModel):
     """Конфигурация Futures-специфичных модулей"""
 
     slippage_guard: Optional[Dict] = Field(default_factory=dict)
-    order_flow: Optional[OrderFlowFilterConfig] = Field(default_factory=OrderFlowFilterConfig)
+    order_flow: Optional[OrderFlowFilterConfig] = Field(
+        default_factory=OrderFlowFilterConfig
+    )
     micro_pivot: Optional[Dict] = Field(default_factory=dict)
     trailing_sl: Optional[Dict] = Field(default_factory=dict)
     funding_monitor: Optional[Dict] = Field(default_factory=dict)
     max_size_limiter: Optional[Dict] = Field(default_factory=dict)
-    funding_filter: Optional[FundingFilterConfig] = Field(default_factory=FundingFilterConfig)
-    liquidity_filter: Optional[LiquidityFilterConfig] = Field(default_factory=LiquidityFilterConfig)
-    volatility_filter: Optional[VolatilityFilterConfig] = Field(default_factory=VolatilityFilterConfig)
+    funding_filter: Optional[FundingFilterConfig] = Field(
+        default_factory=FundingFilterConfig
+    )
+    liquidity_filter: Optional[LiquidityFilterConfig] = Field(
+        default_factory=LiquidityFilterConfig
+    )
+    volatility_filter: Optional[VolatilityFilterConfig] = Field(
+        default_factory=VolatilityFilterConfig
+    )
     impulse_trading: Optional[ImpulseTradingConfig] = Field(
         default_factory=ImpulseTradingConfig
     )

@@ -23,6 +23,7 @@ from src.strategies.modules.correlation_filter import CorrelationFilter
 from src.strategies.modules.multi_timeframe import MultiTimeframeFilter
 from src.strategies.modules.pivot_points import PivotPointsFilter
 from src.strategies.modules.volume_profile_filter import VolumeProfileFilter
+
 from .filters import (FundingRateFilter, LiquidityFilter, OrderFlowFilter,
                       VolatilityRegimeFilter)
 
@@ -213,7 +214,9 @@ class FuturesSignalGenerator:
                     self.volatility_filter = VolatilityRegimeFilter(
                         config=modules_config.volatility_filter
                     )
-                    self.impulse_config = getattr(modules_config, "impulse_trading", None)
+                    self.impulse_config = getattr(
+                        modules_config, "impulse_trading", None
+                    )
             except Exception as filter_exc:
                 logger.warning(
                     f"⚠️ Не удалось инициализировать futures-фильтры: {filter_exc}"
@@ -1706,14 +1709,19 @@ class FuturesSignalGenerator:
             return []
 
         avg_volume = sum(c.volume for c in prev_candles) / max(len(prev_candles), 1)
-        if avg_volume <= 0 or current_candle.volume < avg_volume * config.min_volume_ratio:
+        if (
+            avg_volume <= 0
+            or current_candle.volume < avg_volume * config.min_volume_ratio
+        ):
             return []
 
         if direction == "buy":
             upper_wick = current_candle.high - current_candle.close
             reference_highs = candles[-(config.pivot_lookback + 1) : -1]
             pivot_level = max(c.high for c in reference_highs)
-            breakout_ok = current_candle.close >= pivot_level * (1 + config.min_breakout_percent)
+            breakout_ok = current_candle.close >= pivot_level * (
+                1 + config.min_breakout_percent
+            )
             wick_ratio = (upper_wick / body_abs) if body_abs > 0 else 0
             if not breakout_ok or wick_ratio > config.max_wick_ratio:
                 return []
@@ -1721,7 +1729,9 @@ class FuturesSignalGenerator:
             upper_wick = current_candle.high - current_candle.open
             reference_lows = candles[-(config.pivot_lookback + 1) : -1]
             pivot_level = min(c.low for c in reference_lows)
-            breakout_ok = current_candle.close <= pivot_level * (1 - config.min_breakout_percent)
+            breakout_ok = current_candle.close <= pivot_level * (
+                1 - config.min_breakout_percent
+            )
             wick_ratio = (upper_wick / body_abs) if body_abs > 0 else 0
             if not breakout_ok or wick_ratio > config.max_wick_ratio:
                 return []
@@ -1856,9 +1866,8 @@ class FuturesSignalGenerator:
                                 regime_params = regime_manager.get_current_parameters()
                                 if regime_params and hasattr(regime_params, "modules"):
                                     # Обновляем параметры CorrelationFilter из текущего режима
-                                    from src.strategies.modules.correlation_filter import (
-                                        CorrelationFilterConfig,
-                                    )
+                                    from src.strategies.modules.correlation_filter import \
+                                        CorrelationFilterConfig
 
                                     corr_modules = regime_params.modules
                                     corr_new_config = CorrelationFilterConfig(
@@ -1895,9 +1904,8 @@ class FuturesSignalGenerator:
                                 regime_params = regime_manager.get_current_parameters()
                                 if regime_params and hasattr(regime_params, "modules"):
                                     # Обновляем параметры MTF из текущего режима
-                                    from src.strategies.modules.multi_timeframe import (
-                                        MTFConfig,
-                                    )
+                                    from src.strategies.modules.multi_timeframe import \
+                                        MTFConfig
 
                                     mtf_modules = regime_params.modules
                                     mtf_new_config = MTFConfig(
@@ -1984,7 +1992,10 @@ class FuturesSignalGenerator:
                 liquidity_snapshot = None
                 if self.liquidity_filter:
                     try:
-                        liquidity_ok, liquidity_snapshot = await self.liquidity_filter.evaluate(
+                        (
+                            liquidity_ok,
+                            liquidity_snapshot,
+                        ) = await self.liquidity_filter.evaluate(
                             symbol,
                             regime=current_regime_name,
                             relax_multiplier=liquidity_relax,
@@ -2025,7 +2036,9 @@ class FuturesSignalGenerator:
 
                 if self.volatility_filter:
                     try:
-                        if not self.volatility_filter.is_signal_valid(symbol, market_data):
+                        if not self.volatility_filter.is_signal_valid(
+                            symbol, market_data
+                        ):
                             continue
                     except Exception as e:
                         logger.debug(

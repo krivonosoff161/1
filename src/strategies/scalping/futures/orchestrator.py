@@ -640,7 +640,10 @@ class FuturesScalpingOrchestrator:
     async def _sync_positions_with_exchange(self, force: bool = False) -> None:
         """Синхронизирует локальные позиции и лимиты с фактическими данными биржи."""
         now = time.time()
-        if not force and (now - self._last_positions_sync) < self.positions_sync_interval:
+        if (
+            not force
+            and (now - self._last_positions_sync) < self.positions_sync_interval
+        ):
             return
 
         try:
@@ -719,11 +722,15 @@ class FuturesScalpingOrchestrator:
                 )
 
             if effective_price > 0:
-                self.max_size_limiter.position_sizes[symbol] = abs_size * effective_price
+                self.max_size_limiter.position_sizes[symbol] = (
+                    abs_size * effective_price
+                )
 
         stale_symbols = set(self.active_positions.keys()) - seen_symbols
         for symbol in list(stale_symbols):
-            logger.info(f"♻️ Позиция {symbol} отсутствует на бирже, очищаем локальное состояние")
+            logger.info(
+                f"♻️ Позиция {symbol} отсутствует на бирже, очищаем локальное состояние"
+            )
             self.active_positions.pop(symbol, None)
             if symbol in self.trailing_sl_by_symbol:
                 self.trailing_sl_by_symbol[symbol].reset()
@@ -1554,7 +1561,9 @@ class FuturesScalpingOrchestrator:
                 # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: Используем limit ордера для экономии комиссий
                 # Limit ордера дешевле в 2.5 раза (0.02% vs 0.05%), экономия $126/месяц при 180-200 сделках/день
                 # Если limit ордер не исполнится - следующий сигнал, это нормально для скальпинга
-                order_type = "limit"  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
+                order_type = (
+                    "limit"  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
+                )
 
                 # Проверяем конфиг, можно ли переопределить
                 try:
@@ -1667,7 +1676,8 @@ class FuturesScalpingOrchestrator:
             if result.get("success"):
                 order_id = result.get("order_id")
                 order_type = result.get(
-                    "order_type", "limit"  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
+                    "order_type",
+                    "limit",  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
                 )  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем кэш СРАЗУ после размещения ордера
@@ -1930,9 +1940,13 @@ class FuturesScalpingOrchestrator:
                 )  # 200% от base (номинальная стоимость)
 
             profile_max_positions = balance_profile.get("max_open_positions")
-            global_max_positions = getattr(self.risk_config, "max_open_positions", profile_max_positions)
+            global_max_positions = getattr(
+                self.risk_config, "max_open_positions", profile_max_positions
+            )
             if profile_max_positions:
-                allowed_positions = max(1, min(profile_max_positions, global_max_positions))
+                allowed_positions = max(
+                    1, min(profile_max_positions, global_max_positions)
+                )
                 if self.max_size_limiter.max_positions != allowed_positions:
                     logger.debug(
                         f"🔧 MaxSizeLimiter: обновляем max_positions {self.max_size_limiter.max_positions} → {allowed_positions}"

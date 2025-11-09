@@ -28,7 +28,11 @@ class LiquiditySnapshot:
 
     @property
     def spread_percent(self) -> float:
-        mid = (self.best_bid_price + self.best_ask_price) / 2 if self.best_bid_price and self.best_ask_price else 0
+        mid = (
+            (self.best_bid_price + self.best_ask_price) / 2
+            if self.best_bid_price and self.best_ask_price
+            else 0
+        )
         if mid == 0:
             return 0.0
         return (self.best_ask_price - self.best_bid_price) / mid * 100
@@ -145,7 +149,10 @@ class LiquidityFilter:
 
         async with self._lock:
             cached = self._cache.get(symbol)
-            if cached and (now - cached.timestamp) < self.config.refresh_interval_seconds:
+            if (
+                cached
+                and (now - cached.timestamp) < self.config.refresh_interval_seconds
+            ):
                 return cached
 
             try:
@@ -164,18 +171,20 @@ class LiquidityFilter:
             vol24h_base = float(ticker.get("vol24h", 0) or 0)
             daily_volume_usd = vol24h_base * last_price
 
-            best_bid_price = float(orderbook["bids"][0][0]) if orderbook["bids"] else 0.0
+            best_bid_price = (
+                float(orderbook["bids"][0][0]) if orderbook["bids"] else 0.0
+            )
             best_bid_size = float(orderbook["bids"][0][1]) if orderbook["bids"] else 0.0
-            best_ask_price = float(orderbook["asks"][0][0]) if orderbook["asks"] else 0.0
+            best_ask_price = (
+                float(orderbook["asks"][0][0]) if orderbook["asks"] else 0.0
+            )
             best_ask_size = float(orderbook["asks"][0][1]) if orderbook["asks"] else 0.0
 
             depth_bid_usd = sum(
-                float(price) * float(size)
-                for price, size, *_ in orderbook["bids"]
+                float(price) * float(size) for price, size, *_ in orderbook["bids"]
             )
             depth_ask_usd = sum(
-                float(price) * float(size)
-                for price, size, *_ in orderbook["asks"]
+                float(price) * float(size) for price, size, *_ in orderbook["asks"]
             )
 
             snapshot = LiquiditySnapshot(
@@ -260,13 +269,21 @@ class LiquidityFilter:
         symbol_override = overrides.get(symbol)
         if symbol_override:
             if symbol_override.min_daily_volume_usd is not None:
-                thresholds["min_daily_volume_usd"] = symbol_override.min_daily_volume_usd
+                thresholds[
+                    "min_daily_volume_usd"
+                ] = symbol_override.min_daily_volume_usd
             if symbol_override.min_best_bid_volume_usd is not None:
-                thresholds["min_best_bid_volume_usd"] = symbol_override.min_best_bid_volume_usd
+                thresholds[
+                    "min_best_bid_volume_usd"
+                ] = symbol_override.min_best_bid_volume_usd
             if symbol_override.min_best_ask_volume_usd is not None:
-                thresholds["min_best_ask_volume_usd"] = symbol_override.min_best_ask_volume_usd
+                thresholds[
+                    "min_best_ask_volume_usd"
+                ] = symbol_override.min_best_ask_volume_usd
             if symbol_override.min_orderbook_depth_usd is not None:
-                thresholds["min_orderbook_depth_usd"] = symbol_override.min_orderbook_depth_usd
+                thresholds[
+                    "min_orderbook_depth_usd"
+                ] = symbol_override.min_orderbook_depth_usd
             if symbol_override.max_spread_percent is not None:
                 thresholds["max_spread_percent"] = symbol_override.max_spread_percent
             source = "symbol"
@@ -286,7 +303,9 @@ class LiquidityFilter:
     ) -> Dict[str, float]:
         updated = thresholds.copy()
 
-        def apply_multiplier(key: str, multiplier: Optional[float], min_value: float = 0.0):
+        def apply_multiplier(
+            key: str, multiplier: Optional[float], min_value: float = 0.0
+        ):
             if multiplier is not None:
                 updated[key] = max(min_value, updated[key] * multiplier)
 

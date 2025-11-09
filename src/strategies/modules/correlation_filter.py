@@ -310,12 +310,10 @@ class CorrelationFilter:
             self._decision_history.popleft()
 
         total = len(self._decision_history)
-        if (
-            blocked
-            and total >= 5
-            and self._temporary_relax_signals_remaining == 0
-        ):
-            blocked_count = sum(1 for _, is_blocked in self._decision_history if is_blocked)
+        if blocked and total >= 5 and self._temporary_relax_signals_remaining == 0:
+            blocked_count = sum(
+                1 for _, is_blocked in self._decision_history if is_blocked
+            )
             block_rate = blocked_count / total if total else 0.0
             if block_rate >= 0.6:
                 self._temporary_relax_signals_remaining = 3

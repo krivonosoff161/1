@@ -148,12 +148,18 @@ class OrderFlowFilter:
         now = time.time()
         cache_key = (symbol, window)
         cached = self._cache.get(cache_key)
-        if cached and (now - cached["timestamp"]) < self.config.refresh_interval_seconds:
+        if (
+            cached
+            and (now - cached["timestamp"]) < self.config.refresh_interval_seconds
+        ):
             return cached
 
         async with self._lock:
             cached = self._cache.get(cache_key)
-            if cached and (now - cached["timestamp"]) < self.config.refresh_interval_seconds:
+            if (
+                cached
+                and (now - cached["timestamp"]) < self.config.refresh_interval_seconds
+            ):
                 return cached
 
             try:
@@ -164,8 +170,12 @@ class OrderFlowFilter:
                 )
                 return cached
 
-            depth_bid = sum(float(price) * float(size) for price, size, *_ in book["bids"])
-            depth_ask = sum(float(price) * float(size) for price, size, *_ in book["asks"])
+            depth_bid = sum(
+                float(price) * float(size) for price, size, *_ in book["bids"]
+            )
+            depth_ask = sum(
+                float(price) * float(size) for price, size, *_ in book["asks"]
+            )
 
             snapshot = {
                 "depth_bid_usd": depth_bid,
@@ -198,8 +208,8 @@ class OrderFlowFilter:
 
         book = data[0]
         return {
-            "bids": book.get("bids", [])[: window],
-            "asks": book.get("asks", [])[: window],
+            "bids": book.get("bids", [])[:window],
+            "asks": book.get("asks", [])[:window],
         }
 
     def _get_relax_factor(self, symbol: str) -> float:

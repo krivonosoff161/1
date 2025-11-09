@@ -81,7 +81,10 @@ class FundingRateFilter:
 
         async with self._lock:
             cached = self._cache.get(symbol)
-            if cached and (now - cached.timestamp) < self.config.refresh_interval_seconds:
+            if (
+                cached
+                and (now - cached.timestamp) < self.config.refresh_interval_seconds
+            ):
                 return cached
 
             try:
