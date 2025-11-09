@@ -60,6 +60,7 @@ class LiquidityFilter:
         symbol: str,
         regime: Optional[str] = None,
         relax_multiplier: float = 1.0,
+        thresholds_override: Optional[Dict[str, float]] = None,
     ) -> Tuple[bool, Optional[LiquiditySnapshot]]:
         if not self.config.enabled:
             return True, None
@@ -72,6 +73,15 @@ class LiquidityFilter:
             return True, None
 
         thresholds, override_source = self._get_thresholds(symbol, regime)
+        if thresholds_override:
+            for key, value in thresholds_override.items():
+                if value is None:
+                    continue
+                if key in thresholds:
+                    try:
+                        thresholds[key] = float(value)
+                    except (TypeError, ValueError):
+                        continue
         relax_factor = self._get_relax_factor(symbol)
         external_relax = 1.0
         if relax_multiplier is not None and relax_multiplier > 0:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Optional
 
 from loguru import logger
 
@@ -16,9 +16,23 @@ class VolatilityRegimeFilter:
     def __init__(self, config: VolatilityFilterConfig) -> None:
         self.config = config
 
-    def is_signal_valid(self, symbol: str, market_data: MarketData) -> bool:
+    def is_signal_valid(self, symbol: str, market_data: MarketData, overrides: Optional[Dict[str, float]] = None) -> bool:
         if not self.config.enabled:
             return True
+
+        thresholds = {
+            "min_range_percent": self.config.min_range_percent,
+            "max_range_percent": self.config.max_range_percent,
+            "min_atr_percent": self.config.min_atr_percent,
+            "max_atr_percent": self.config.max_atr_percent,
+        }
+        if overrides:
+            for key, value in overrides.items():
+                if key in thresholds and value is not None:
+                    try:
+                        thresholds[key] = float(value)
+                    except (TypeError, ValueError):
+                        continue
 
         candles = market_data.ohlcv_data
         if not candles or len(candles) < self.config.lookback_candles:
@@ -42,27 +56,27 @@ class VolatilityRegimeFilter:
         atr = self._calculate_atr(lookback)
         atr_pct = (atr / last_close) * 100 if atr else 0.0
 
-        if range_pct < self.config.min_range_percent:
+        if range_pct < thresholds["min_range_percent"]:
             logger.debug(
-                f"⛔ VolatilityRegimeFilter: {symbol} отклонён — диапазон {range_pct:.3f}% < {self.config.min_range_percent:.3f}%"
+                f"⛔ VolatilityRegimeFilter: {symbol} отклонён — диапазон {range_pct:.3f}% < {thresholds['min_range_percent']:.3f}%"
             )
             return False
 
-        if range_pct > self.config.max_range_percent:
+        if range_pct > thresholds["max_range_percent"]:
             logger.debug(
-                f"⛔ VolatilityRegimeFilter: {symbol} отклонён — диапазон {range_pct:.3f}% > {self.config.max_range_percent:.3f}%"
+                f"⛔ VolatilityRegimeFilter: {symbol} отклонён — диапазон {range_pct:.3f}% > {thresholds['max_range_percent']:.3f}%"
             )
             return False
 
-        if atr_pct < self.config.min_atr_percent:
+        if atr_pct < thresholds["min_atr_percent"]:
             logger.debug(
-                f"⛔ VolatilityRegimeFilter: {symbol} отклонён — ATR {atr_pct:.3f}% < {self.config.min_atr_percent:.3f}%"
+                f"⛔ VolatilityRegimeFilter: {symbol} отклонён — ATR {atr_pct:.3f}% < {thresholds['min_atr_percent']:.3f}%"
             )
             return False
 
-        if atr_pct > self.config.max_atr_percent:
+        if atr_pct > thresholds["max_atr_percent"]:
             logger.debug(
-                f"⛔ VolatilityRegimeFilter: {symbol} отклонён — ATR {atr_pct:.3f}% > {self.config.max_atr_percent:.3f}%"
+                f"⛔ VolatilityRegimeFilter: {symbol} отклонён — ATR {atr_pct:.3f}% > {thresholds['max_atr_percent']:.3f}%"
             )
             return False
 

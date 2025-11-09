@@ -35,11 +35,24 @@ class OrderFlowFilter:
         snapshot: Optional[Dict[str, float]] = None,
         regime: Optional[str] = None,
         relax_multiplier: float = 1.0,
+        overrides: Optional[Dict[str, float]] = None,
     ) -> bool:
         if not self.config.enabled:
             return True
 
         params = self._resolve_parameters(regime)
+        if overrides:
+            for key, value in overrides.items():
+                if value is None or key not in params:
+                    continue
+                try:
+                    if key == "window":
+                        params[key] = max(5, int(value))
+                    else:
+                        params[key] = float(value)
+                except (TypeError, ValueError):
+                    continue
+
         relax_factor = self._get_relax_factor(symbol)
         external_relax = 1.0
         if relax_multiplier is not None and relax_multiplier > 0:

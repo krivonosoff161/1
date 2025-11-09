@@ -9,6 +9,7 @@ Futures Signal Generator для скальпинг стратегии.
 """
 
 import asyncio
+import copy
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -182,6 +183,7 @@ class FuturesSignalGenerator:
             None  # Инициализируется в initialize() (общий для всех символов)
         )
         self.regime_managers = {}  # ✅ Отдельный ARM для каждого символа
+        self.symbol_profiles: Dict[str, Dict[str, Any]] = {}
         self.correlation_filter = None
         self.mtf_filter = None
         self.pivot_filter = None
@@ -229,6 +231,55 @@ class FuturesSignalGenerator:
 
         logger.info("FuturesSignalGenerator инициализирован")
 
+    @staticmethod
+    def _to_dict(raw: Any) -> Dict[str, Any]:
+        """Безопасное преобразование pydantic/объектов в dict."""
+        if isinstance(raw, dict):
+            return dict(raw)
+        if hasattr(raw, "dict"):
+            try:
+                return dict(raw.dict(by_alias=True))  # type: ignore[attr-defined]
+            except TypeError:
+                return dict(raw.dict())  # type: ignore[attr-defined]
+        if hasattr(raw, "__dict__"):
+            return dict(raw.__dict__)
+        return {}
+
+    @staticmethod
+    def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+        """Рекурсивное объединение словарей без изменения исходников."""
+        result = copy.deepcopy(base)
+        for key, value in (override or {}).items():
+            if isinstance(value, dict) and isinstance(result.get(key), dict):
+                result[key] = FuturesSignalGenerator._deep_merge_dict(result[key], value)
+            else:
+                result[key] = copy.deepcopy(value)
+        return result
+
+    def _normalize_symbol_profiles(
+        self, raw_profiles: Dict[str, Any]
+    ) -> Dict[str, Dict[str, Any]]:
+        profiles: Dict[str, Dict[str, Any]] = {}
+        for symbol, profile in (raw_profiles or {}).items():
+            normalized: Dict[str, Any] = {}
+            profile_dict = self._to_dict(profile)
+            for regime_name, regime_data in profile_dict.items():
+                regime_key = str(regime_name).lower()
+                if regime_key in {"__detection__", "detection"}:
+                    normalized["__detection__"] = self._to_dict(regime_data)
+                    continue
+                regime_dict = self._to_dict(regime_data)
+                for section, section_value in list(regime_dict.items()):
+                    if isinstance(section_value, dict) or hasattr(section_value, "__dict__"):
+                        section_dict = self._to_dict(section_value)
+                        for sub_key, sub_val in list(section_dict.items()):
+                            if isinstance(sub_val, dict) or hasattr(sub_val, "__dict__"):
+                                section_dict[sub_key] = self._to_dict(sub_val)
+                        regime_dict[section] = section_dict
+                normalized[regime_key] = regime_dict
+            profiles[symbol] = normalized
+        return profiles
+
     async def initialize(self, ohlcv_data: Dict[str, List[OHLCV]] = None):
         """
         Инициализация генератора сигналов.
@@ -262,61 +313,36 @@ class FuturesSignalGenerator:
 
             if adaptive_regime_config and enabled:
                 try:
-                    # ✅ Функция для извлечения параметров режима из конфига
-                    def extract_regime_params(regime_name: str) -> Optional[Dict]:
-                        """Извлекает параметры режима из конфига"""
-                        regime_data = None
-                        if isinstance(adaptive_regime_config, dict):
-                            regime_data = adaptive_regime_config.get(regime_name, {})
-                        elif hasattr(adaptive_regime_config, regime_name):
-                            regime_data = getattr(
-                                adaptive_regime_config, regime_name, {}
-                            )
-                            # Если это Pydantic модель, конвертируем в dict
-                            if hasattr(regime_data, "dict"):
-                                regime_data = regime_data.dict()
-                            elif hasattr(regime_data, "__dict__"):
-                                regime_data = regime_data.__dict__
-                        return regime_data if isinstance(regime_data, dict) else None
+                    adaptive_regime_dict = self._to_dict(adaptive_regime_config)
+                    detection_dict = self._to_dict(
+                        adaptive_regime_dict.get("detection", {})
+                    )
+                    symbol_profiles_raw = adaptive_regime_dict.get(
+                        "symbol_profiles", {}
+                    )
+                    self.symbol_profiles = self._normalize_symbol_profiles(
+                        symbol_profiles_raw
+                    )
 
-                    # Получаем detection секцию (может быть dict или атрибут)
-                    detection = None
-                    if isinstance(adaptive_regime_config, dict):
-                        detection = adaptive_regime_config.get("detection", {})
-                    elif hasattr(adaptive_regime_config, "detection"):
-                        detection = getattr(adaptive_regime_config, "detection", {})
-
-                    if isinstance(detection, dict):
-                        detection_dict = detection
-                    elif hasattr(detection, "__dict__"):
-                        detection_dict = (
-                            detection.__dict__ if hasattr(detection, "__dict__") else {}
+                    def extract_regime_params(regime_name: str) -> Dict[str, Any]:
+                        return self._to_dict(
+                            adaptive_regime_dict.get(regime_name, {}) or {}
                         )
-                    else:
-                        detection_dict = {}
 
-                    # ✅ Загружаем параметры режимов из конфига
                     from src.strategies.modules.adaptive_regime_manager import (
                         IndicatorParameters, ModuleParameters,
                         RegimeParameters)
 
-                    def create_regime_params(regime_name: str) -> RegimeParameters:
-                        """Создает RegimeParameters из конфига"""
-                        params_dict = extract_regime_params(regime_name) or {}
-                        # ✅ ЛОГИРОВАНИЕ: Проверяем что параметры найдены
-                        if not params_dict:
-                            logger.warning(
-                                f"⚠️ Параметры для режима '{regime_name}' не найдены в конфиге! "
-                                f"Используются дефолтные значения."
-                            )
-                        else:
-                            logger.debug(
-                                f"✅ Найдены параметры для '{regime_name}': {list(params_dict.keys())}"
-                            )
+                    def create_regime_params(
+                        regime_name: str,
+                        override: Optional[Dict[str, Any]] = None,
+                    ) -> RegimeParameters:
+                        params_dict = extract_regime_params(regime_name)
+                        if override:
+                            params_dict = self._deep_merge_dict(params_dict, override)
                         indicators_dict = params_dict.get("indicators", {})
                         modules_dict = params_dict.get("modules", {})
 
-                        # Создаем IndicatorParameters с дефолтами
                         indicators = IndicatorParameters(
                             rsi_overbought=indicators_dict.get("rsi_overbought", 70),
                             rsi_oversold=indicators_dict.get("rsi_oversold", 30),
@@ -333,7 +359,6 @@ class FuturesSignalGenerator:
                             ),
                         )
 
-                        # Создаем ModuleParameters с дефолтами
                         mtf_dict = modules_dict.get("multi_timeframe", {})
                         corr_dict = modules_dict.get("correlation_filter", {})
                         time_dict = modules_dict.get("time_filter", {})
@@ -366,7 +391,9 @@ class FuturesSignalGenerator:
                             pivot_score_bonus_near_level=pivot_dict.get(
                                 "score_bonus_near_level", 1
                             ),
-                            pivot_use_last_n_days=pivot_dict.get("use_last_n_days", 5),
+                            pivot_use_last_n_days=pivot_dict.get(
+                                "use_last_n_days", 5
+                            ),
                             vp_score_bonus_in_value_area=vp_dict.get(
                                 "score_bonus_in_value_area", 1
                             ),
@@ -377,77 +404,76 @@ class FuturesSignalGenerator:
                                 "poc_tolerance_percent", 0.25
                             ),
                             vp_lookback_candles=vp_dict.get("lookback_candles", 200),
-                            adx_threshold=adx_dict.get("adx_threshold", 25.0),
-                            adx_di_difference=adx_dict.get("adx_di_difference", 5.0),
-                            avoid_weekends=time_dict.get("avoid_weekends", True),
-                        )
-
-                        # Создаем RegimeParameters
-                        # ✅ ИСПРАВЛЕНИЕ: Используем более мягкие дефолты для ranging режима
-                        default_min_score = (
-                            2
-                            if regime_name == "ranging"
-                            else (3 if regime_name == "trending" else 5)
-                        )
-                        # ✅ Получаем min_score_threshold из конфига (обязательно!)
-                        min_score_threshold = params_dict.get(
-                            "min_score_threshold", default_min_score
-                        )
-                        logger.info(
-                            f"📋 Загружены параметры для {regime_name}: "
-                            f"min_score_threshold={min_score_threshold} "
-                            f"(из конфига: {params_dict.get('min_score_threshold') is not None})"
+                            adx_threshold=adx_dict.get("adx_threshold", 18.0),
+                            adx_di_difference=adx_dict.get("adx_di_difference", 1.5),
                         )
 
                         return RegimeParameters(
-                            min_score_threshold=min_score_threshold,
+                            min_score_threshold=params_dict.get(
+                                "min_score_threshold", 3.0
+                            ),
                             max_trades_per_hour=params_dict.get(
-                                "max_trades_per_hour", 10
+                                "max_trades_per_hour", 15
                             ),
                             position_size_multiplier=params_dict.get(
                                 "position_size_multiplier", 1.0
                             ),
-                            tp_atr_multiplier=params_dict.get("tp_atr_multiplier", 0.5),
-                            sl_atr_multiplier=params_dict.get(
-                                "sl_atr_multiplier", 0.35
-                            ),
+                            tp_atr_multiplier=params_dict.get("tp_atr_multiplier", 2.0),
+                            sl_atr_multiplier=params_dict.get("sl_atr_multiplier", 1.0),
                             max_holding_minutes=params_dict.get(
-                                "max_holding_minutes", 5
+                                "max_holding_minutes", 15
                             ),
                             cooldown_after_loss_minutes=params_dict.get(
-                                "cooldown_after_loss_minutes", 5
+                                "cooldown_after_loss_minutes", 3
                             ),
                             pivot_bonus_multiplier=params_dict.get(
-                                "pivot_bonus_multiplier", 1.5
+                                "pivot_bonus_multiplier", 1.0
                             ),
                             volume_profile_bonus_multiplier=params_dict.get(
-                                "volume_profile_bonus_multiplier", 1.5
+                                "volume_profile_bonus_multiplier", 1.0
                             ),
                             indicators=indicators,
                             modules=modules,
                             ph_enabled=params_dict.get("ph_enabled", True),
-                            ph_threshold=params_dict.get("ph_threshold", 0.50),
+                            ph_threshold=params_dict.get("ph_threshold", 0.20),
                             ph_time_limit=params_dict.get("ph_time_limit", 300),
                         )
 
-                    # Создаем параметры режимов из конфига
+                    base_trending_threshold = detection_dict.get(
+                        "trending_adx_threshold", 20.0
+                    )
+                    base_ranging_threshold = detection_dict.get(
+                        "ranging_adx_threshold", 15.0
+                    )
+                    base_high_vol = detection_dict.get(
+                        "high_volatility_threshold", 0.03
+                    )
+                    base_low_vol = detection_dict.get(
+                        "low_volatility_threshold", 0.02
+                    )
+                    base_trend_strength = detection_dict.get(
+                        "trend_strength_percent", 2.0
+                    )
+                    base_min_duration = detection_dict.get(
+                        "min_regime_duration_minutes", 15
+                    )
+                    base_confirmations = detection_dict.get(
+                        "required_confirmations", 3
+                    )
+
                     trending_params = create_regime_params("trending")
                     ranging_params = create_regime_params("ranging")
                     choppy_params = create_regime_params("choppy")
 
                     regime_config = RegimeConfig(
                         enabled=True,
-                        # Параметры детекции из конфига
-                        trending_adx_threshold=detection_dict.get(
-                            "trending_adx_threshold", 20.0
-                        ),
-                        ranging_adx_threshold=detection_dict.get(
-                            "ranging_adx_threshold", 15.0
-                        ),
-                        high_volatility_threshold=detection_dict.get(
-                            "high_volatility_threshold", 0.03
-                        ),
-                        # ✅ Параметры режимов из конфига
+                        trending_adx_threshold=base_trending_threshold,
+                        ranging_adx_threshold=base_ranging_threshold,
+                        high_volatility_threshold=base_high_vol,
+                        low_volatility_threshold=base_low_vol,
+                        trend_strength_percent=base_trend_strength,
+                        min_regime_duration_minutes=base_min_duration,
+                        required_confirmations=base_confirmations,
                         trending_params=trending_params,
                         ranging_params=ranging_params,
                         choppy_params=choppy_params,
@@ -457,15 +483,55 @@ class FuturesSignalGenerator:
                     if ohlcv_data:
                         await self.regime_manager.initialize(ohlcv_data)
 
-                    # ✅ Создаем отдельный ARM для каждого символа
                     for symbol in self.scalping_config.symbols:
-                        symbol_regime_config = (
-                            regime_config  # Можно настроить индивидуально
+                        symbol_profile = self.symbol_profiles.get(symbol, {})
+                        symbol_detection = self._deep_merge_dict(
+                            detection_dict,
+                            symbol_profile.get("__detection__", {}),
+                        )
+                        symbol_trending_params = create_regime_params(
+                            "trending",
+                            symbol_profile.get("trending", {}).get("arm"),
+                        )
+                        symbol_ranging_params = create_regime_params(
+                            "ranging",
+                            symbol_profile.get("ranging", {}).get("arm"),
+                        )
+                        symbol_choppy_params = create_regime_params(
+                            "choppy",
+                            symbol_profile.get("choppy", {}).get("arm"),
+                        )
+
+                        symbol_regime_config = RegimeConfig(
+                            enabled=True,
+                            trending_adx_threshold=symbol_detection.get(
+                                "trending_adx_threshold", base_trending_threshold
+                            ),
+                            ranging_adx_threshold=symbol_detection.get(
+                                "ranging_adx_threshold", base_ranging_threshold
+                            ),
+                            high_volatility_threshold=symbol_detection.get(
+                                "high_volatility_threshold", base_high_vol
+                            ),
+                            low_volatility_threshold=symbol_detection.get(
+                                "low_volatility_threshold", base_low_vol
+                            ),
+                            trend_strength_percent=symbol_detection.get(
+                                "trend_strength_percent", base_trend_strength
+                            ),
+                            min_regime_duration_minutes=symbol_detection.get(
+                                "min_regime_duration_minutes", base_min_duration
+                            ),
+                            required_confirmations=symbol_detection.get(
+                                "required_confirmations", base_confirmations
+                            ),
+                            trending_params=symbol_trending_params,
+                            ranging_params=symbol_ranging_params,
+                            choppy_params=symbol_choppy_params,
                         )
                         self.regime_managers[symbol] = AdaptiveRegimeManager(
                             symbol_regime_config
                         )
-                        # Инициализируем если есть данные
                         if ohlcv_data and symbol in ohlcv_data:
                             await self.regime_managers[symbol].initialize(
                                 {symbol: ohlcv_data[symbol]}
@@ -1172,16 +1238,16 @@ class FuturesSignalGenerator:
             ma_signals = await self._generate_ma_signals(
                 symbol, indicators, market_data
             )
-            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
-            # if ma_signals:
-            #     logger.debug(f"✅ Moving Average дал {len(ma_signals)} сигнал(ов) для {symbol}")
             signals.extend(ma_signals)
 
+            current_regime = None
+            regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+            if regime_manager:
+                current_regime = regime_manager.get_current_regime()
+
             impulse_signals = self._detect_impulse_signals(
-                symbol, market_data, indicators
+                symbol, market_data, indicators, current_regime
             )
-            if impulse_signals:
-                signals.extend(impulse_signals)
 
             # ✅ ОПТИМИЗАЦИЯ: Логируем только если есть сигналы (INFO уровень) или важная информация
             # logger.debug(f"📊 Всего базовых сигналов для {symbol}: {len(signals)}")
@@ -1680,66 +1746,116 @@ class FuturesSignalGenerator:
         return signals
 
     def _detect_impulse_signals(
-        self, symbol: str, market_data: MarketData, indicators: Dict[str, Any]
+        self,
+        symbol: str,
+        market_data: MarketData,
+        indicators: Dict[str, Any],
+        current_regime: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Детекция импульсных свечей (breakout) для мгновенных входов."""
+        if not self.impulse_config or not getattr(self.impulse_config, "enabled", False):
+            return []
 
         config = self.impulse_config
-        if not config or not getattr(config, "enabled", False):
-            return []
+        regime_key = (current_regime or "ranging").lower()
+        symbol_profile = self.symbol_profiles.get(symbol, {})
+        regime_profile = symbol_profile.get(regime_key, {})
+        impulse_profile = self._to_dict(regime_profile.get("impulse", {}))
 
-        candles = market_data.ohlcv_data or []
-        if len(candles) < max(config.lookback_candles + 1, config.pivot_lookback + 1):
-            return []
+        detection_keys = {
+            "lookback_candles",
+            "min_body_atr_ratio",
+            "min_volume_ratio",
+            "pivot_lookback",
+            "min_breakout_percent",
+            "max_wick_ratio",
+        }
+        detection_values = {
+            "lookback_candles": config.lookback_candles,
+            "min_body_atr_ratio": config.min_body_atr_ratio,
+            "min_volume_ratio": config.min_volume_ratio,
+            "pivot_lookback": config.pivot_lookback,
+            "min_breakout_percent": config.min_breakout_percent,
+            "max_wick_ratio": config.max_wick_ratio,
+        }
+        for key in detection_keys:
+            if impulse_profile.get(key) is not None:
+                detection_values[key] = impulse_profile[key]
 
-        atr_value = indicators.get("atr")
-        if not atr_value or atr_value <= 0:
+        candles = market_data.ohlcv_data
+        if not candles or len(candles) < detection_values["lookback_candles"]:
             return []
 
         current_candle = candles[-1]
-        prev_candles = candles[-(config.lookback_candles + 1) : -1]
+        prev_candles = candles[-(detection_values["lookback_candles"] + 1) : -1]
         if not prev_candles:
+            return []
+
+        def _calc_atr(candles_seq: List[OHLCV]) -> float:
+            if len(candles_seq) < 2:
+                return 0.0
+            trs: List[float] = []
+            prev_close = candles_seq[0].close
+            for candle in candles_seq[1:]:
+                high = candle.high
+                low = candle.low
+                tr = max(
+                    high - low,
+                    abs(high - prev_close),
+                    abs(low - prev_close),
+                )
+                trs.append(tr)
+                prev_close = candle.close
+            return sum(trs) / len(trs) if trs else 0.0
+
+        atr_period = 14
+        atr_slice = candles[-(atr_period + 1) :]
+        atr_value = _calc_atr(atr_slice) if atr_slice else 0.0
+        if atr_value <= 0:
             return []
 
         body = current_candle.close - current_candle.open
         direction = "buy" if body >= 0 else "sell"
         body_abs = abs(body)
         body_ratio = body_abs / atr_value
-        if body_ratio < config.min_body_atr_ratio:
-            return []
 
         avg_volume = sum(c.volume for c in prev_candles) / max(len(prev_candles), 1)
         if (
             avg_volume <= 0
-            or current_candle.volume < avg_volume * config.min_volume_ratio
+            or current_candle.volume < avg_volume * detection_values["min_volume_ratio"]
         ):
             return []
 
+        pivot_level = None
         if direction == "buy":
             upper_wick = current_candle.high - current_candle.close
-            reference_highs = candles[-(config.pivot_lookback + 1) : -1]
+            reference_highs = candles[-(detection_values["pivot_lookback"] + 1) : -1]
             pivot_level = max(c.high for c in reference_highs)
             breakout_ok = current_candle.close >= pivot_level * (
-                1 + config.min_breakout_percent
+                1 + detection_values["min_breakout_percent"]
             )
             wick_ratio = (upper_wick / body_abs) if body_abs > 0 else 0
-            if not breakout_ok or wick_ratio > config.max_wick_ratio:
+            if not breakout_ok or wick_ratio > detection_values["max_wick_ratio"]:
                 return []
         else:
             upper_wick = current_candle.high - current_candle.open
-            reference_lows = candles[-(config.pivot_lookback + 1) : -1]
+            reference_lows = candles[-(detection_values["pivot_lookback"] + 1) : -1]
             pivot_level = min(c.low for c in reference_lows)
             breakout_ok = current_candle.close <= pivot_level * (
-                1 - config.min_breakout_percent
+                1 - detection_values["min_breakout_percent"]
             )
             wick_ratio = (upper_wick / body_abs) if body_abs > 0 else 0
-            if not breakout_ok or wick_ratio > config.max_wick_ratio:
+            if not breakout_ok or wick_ratio > detection_values["max_wick_ratio"]:
                 return []
 
-        strength = min(1.0, body_ratio / config.min_body_atr_ratio)
+        strength = min(
+            1.0,
+            body_ratio / detection_values["min_body_atr_ratio"],
+        )
         meta = {
             "body_ratio_atr": round(body_ratio, 3),
-            "volume_ratio": round(current_candle.volume / max(avg_volume, 1e-9), 3),
+            "volume_ratio": round(
+                current_candle.volume / max(avg_volume, 1e-9), 3
+            ),
             "pivot_level": pivot_level,
             "close": current_candle.close,
             "high": current_candle.high,
@@ -1767,27 +1883,41 @@ class FuturesSignalGenerator:
             "impulse_meta": meta,
         }
 
+        relax_payload: Dict[str, float] = {}
         if relax_cfg:
-            signal["impulse_relax"] = {
+            relax_payload = {
                 "liquidity": getattr(relax_cfg, "liquidity_multiplier", 1.0),
                 "order_flow": getattr(relax_cfg, "order_flow_multiplier", 1.0),
                 "allow_mtf_bypass": getattr(relax_cfg, "allow_mtf_bypass", False),
                 "bypass_correlation": getattr(relax_cfg, "bypass_correlation", False),
             }
+        if "relax" in impulse_profile:
+            relax_overrides = self._to_dict(impulse_profile.get("relax", {}))
+            relax_payload.update(relax_overrides)
+        if relax_payload:
+            signal["impulse_relax"] = relax_payload
 
+        trailing_payload: Dict[str, float] = {}
         if trailing_cfg:
-            signal["impulse_trailing"] = {
-                "initial_trail": getattr(trailing_cfg, "initial_trail", None),
-                "max_trail": getattr(trailing_cfg, "max_trail", None),
-                "min_trail": getattr(trailing_cfg, "min_trail", None),
-                "step_profit": getattr(trailing_cfg, "step_profit", None),
-                "step_trail": getattr(trailing_cfg, "step_trail", None),
+            trailing_payload = {
+                "initial_trail": getattr(trailing_cfg, "initial_trail", 0.0),
+                "max_trail": getattr(trailing_cfg, "max_trail", 0.0),
+                "min_trail": getattr(trailing_cfg, "min_trail", 0.0),
+                "step_profit": getattr(trailing_cfg, "step_profit", 0.0),
+                "step_trail": getattr(trailing_cfg, "step_trail", 0.0),
                 "aggressive_max_trail": getattr(
                     trailing_cfg, "aggressive_max_trail", None
                 ),
                 "loss_cut_percent": getattr(trailing_cfg, "loss_cut_percent", None),
                 "timeout_minutes": getattr(trailing_cfg, "timeout_minutes", None),
             }
+        if "trailing" in impulse_profile:
+            trailing_overrides = self._to_dict(impulse_profile.get("trailing", {}))
+            trailing_payload = self._deep_merge_dict(
+                trailing_payload, trailing_overrides
+            )
+        if trailing_payload:
+            signal["impulse_trailing"] = trailing_payload
 
         return [signal]
 
@@ -1814,8 +1944,51 @@ class FuturesSignalGenerator:
                 if current_positions:
                     signal["current_positions"] = current_positions
 
-                is_impulse = signal.get("is_impulse", False)
                 impulse_relax = signal.get("impulse_relax") or {}
+                is_impulse = signal.get("is_impulse", False)
+
+                regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+                current_regime_name = (
+                    regime_manager.get_current_regime() if regime_manager else None
+                )
+                if current_regime_name:
+                    signal["regime"] = current_regime_name
+
+                symbol_profile = self.symbol_profiles.get(symbol, {})
+                regime_key = (current_regime_name or "ranging").lower()
+                regime_profile = symbol_profile.get(regime_key, {})
+                filters_profile = self._to_dict(regime_profile.get("filters", {}))
+                liquidity_override = self._to_dict(
+                    filters_profile.get("liquidity", {})
+                )
+                order_flow_override = self._to_dict(
+                    filters_profile.get("order_flow", {})
+                )
+                funding_override = self._to_dict(
+                    filters_profile.get("funding", {})
+                )
+                volatility_override = self._to_dict(
+                    filters_profile.get("volatility", {})
+                )
+
+                symbol_impulse_profile = self._to_dict(
+                    regime_profile.get("impulse", {})
+                )
+                if is_impulse and symbol_impulse_profile:
+                    override_relax = self._to_dict(
+                        symbol_impulse_profile.get("relax", {})
+                    )
+                    if override_relax:
+                        impulse_relax.update(override_relax)
+                    override_trailing = self._to_dict(
+                        symbol_impulse_profile.get("trailing", {})
+                    )
+                    if override_trailing:
+                        merged_trailing = self._deep_merge_dict(
+                            signal.get("impulse_trailing", {}), override_trailing
+                        )
+                        signal["impulse_trailing"] = merged_trailing
+
                 liquidity_relax = 1.0
                 order_flow_relax = 1.0
                 if is_impulse:
@@ -1999,6 +2172,7 @@ class FuturesSignalGenerator:
                             symbol,
                             regime=current_regime_name,
                             relax_multiplier=liquidity_relax,
+                            thresholds_override=liquidity_override,
                         )
                         if not liquidity_ok:
                             continue
@@ -2016,6 +2190,7 @@ class FuturesSignalGenerator:
                             snapshot=order_flow_snapshot,
                             regime=current_regime_name,
                             relax_multiplier=order_flow_relax,
+                            overrides=order_flow_override,
                         ):
                             continue
                     except Exception as e:
@@ -2026,7 +2201,9 @@ class FuturesSignalGenerator:
                 if self.funding_filter:
                     try:
                         if not await self.funding_filter.is_signal_valid(
-                            symbol, signal.get("side", "")
+                            symbol,
+                            signal.get("side", ""),
+                            overrides=funding_override,
                         ):
                             continue
                     except Exception as e:
@@ -2037,7 +2214,9 @@ class FuturesSignalGenerator:
                 if self.volatility_filter:
                     try:
                         if not self.volatility_filter.is_signal_valid(
-                            symbol, market_data
+                            symbol,
+                            market_data,
+                            overrides=volatility_override,
                         ):
                             continue
                     except Exception as e:

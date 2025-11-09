@@ -121,6 +121,8 @@ class FuturesScalpingOrchestrator:
         )
         self.performance_tracker = PerformanceTracker()
 
+        self.symbol_profiles: Dict[str, Dict[str, Any]] = self._load_symbol_profiles()
+
         # TrailingStopLoss для каждой позиции (словарь по символам)
         self.trailing_sl_by_symbol = {}
 
@@ -573,24 +575,23 @@ class FuturesScalpingOrchestrator:
             return None
 
         params = self._get_trailing_sl_params()
+        regime = signal.get("regime") if signal else None
+        if not regime and hasattr(self.signal_generator, "regime_managers") and symbol in getattr(self.signal_generator, "regime_managers", {}):
+            manager = self.signal_generator.regime_managers.get(symbol)
+            if manager:
+                regime = manager.get_current_regime()
+        regime_profile = self._get_symbol_regime_profile(symbol, regime)
+        trailing_overrides = self._to_dict(regime_profile.get("trailing_sl", {}))
+        if trailing_overrides:
+            for key, value in trailing_overrides.items():
+                if key in params and value is not None:
+                    params[key] = float(value)
         impulse_trailing = None
         if signal and signal.get("is_impulse"):
             impulse_trailing = signal.get("impulse_trailing") or {}
             if impulse_trailing:
                 params["initial_trail"] = impulse_trailing.get(
                     "initial_trail", params["initial_trail"]
-                )
-                params["max_trail"] = impulse_trailing.get(
-                    "max_trail", params["max_trail"]
-                )
-                params["min_trail"] = impulse_trailing.get(
-                    "min_trail", params["min_trail"]
-                )
-                params["loss_cut_percent"] = impulse_trailing.get(
-                    "loss_cut_percent", params["loss_cut_percent"]
-                )
-                params["timeout_minutes"] = impulse_trailing.get(
-                    "timeout_minutes", params["timeout_minutes"]
                 )
 
         # Сбрасываем предыдущий экземпляр, если он был
@@ -1919,27 +1920,56 @@ class FuturesScalpingOrchestrator:
     ) -> float:
         """Рассчитывает размер позиции с учетом Balance Profiles и режима рынка"""
         try:
-            # 1. Определяем профиль баланса
+            symbol = signal.get("symbol")
+            symbol_regime = signal.get("regime")
+            if (
+                symbol
+                and not symbol_regime
+                and hasattr(self.signal_generator, "regime_managers")
+            ):
+                manager = self.signal_generator.regime_managers.get(symbol)
+                if manager:
+                    symbol_regime = manager.get_current_regime()
+            if (
+                not symbol_regime
+                and hasattr(self.signal_generator, "regime_manager")
+                and self.signal_generator.regime_manager
+            ):
+                symbol_regime = (
+                    self.signal_generator.regime_manager.get_current_regime()
+                )
+
             balance_profile = self._get_balance_profile(balance)
 
-            # 2. Получаем базовый размер позиции
-            # ✅ base_position_usd это НОМИНАЛЬНАЯ стоимость (notional)
             base_usd_size = balance_profile["base_position_usd"]
-            # min/max_position_usd тоже в номинальной стоимости (будем пересчитывать в маржу позже)
             min_usd_size = balance_profile["min_position_usd"]
             max_usd_size = balance_profile["max_position_usd"]
 
-            # ✅ Если min/max не заданы в конфиге - рассчитываем из base (50% и 200%)
+            position_overrides: Dict[str, Any] = {}
+            if symbol:
+                regime_profile = self._get_symbol_regime_profile(symbol, symbol_regime)
+                position_overrides = self._to_dict(regime_profile.get("position", {}))
+
+            if position_overrides.get("base_position_usd") is not None:
+                base_usd_size = float(position_overrides["base_position_usd"])
+            if position_overrides.get("min_position_usd") is not None:
+                min_usd_size = float(position_overrides["min_position_usd"])
+            if position_overrides.get("max_position_usd") is not None:
+                max_usd_size = float(position_overrides["max_position_usd"])
+
+            if position_overrides.get("max_position_percent") is not None:
+                balance_profile["max_position_percent"] = float(
+                    position_overrides["max_position_percent"]
+                )
+
             if min_usd_size is None or min_usd_size <= 0:
-                min_usd_size = (
-                    base_usd_size * 0.5
-                )  # 50% от base (номинальная стоимость)
+                min_usd_size = base_usd_size * 0.5
             if max_usd_size is None or max_usd_size <= 0:
-                max_usd_size = (
-                    base_usd_size * 2.0
-                )  # 200% от base (номинальная стоимость)
+                max_usd_size = base_usd_size * 2.0
 
             profile_max_positions = balance_profile.get("max_open_positions")
+            if position_overrides.get("max_open_positions") is not None:
+                profile_max_positions = int(position_overrides["max_open_positions"])
             global_max_positions = getattr(
                 self.risk_config, "max_open_positions", profile_max_positions
             )
@@ -1952,7 +1982,6 @@ class FuturesScalpingOrchestrator:
                         f"🔧 MaxSizeLimiter: обновляем max_positions {self.max_size_limiter.max_positions} → {allowed_positions}"
                     )
                     self.max_size_limiter.max_positions = allowed_positions
-                # Обновляем max_total_size_usd на основе профиля
                 max_total_size = max_usd_size * allowed_positions
                 if self.max_size_limiter.max_total_size_usd != max_total_size:
                     logger.debug(
@@ -1960,30 +1989,23 @@ class FuturesScalpingOrchestrator:
                     )
                     self.max_size_limiter.max_total_size_usd = max_total_size
 
-            # 3. Адаптируем под режим рынка (если ARM активен)
             if (
                 hasattr(self.signal_generator, "regime_manager")
                 and self.signal_generator.regime_manager
             ):
                 try:
-                    regime = self.signal_generator.regime_manager.get_current_regime()
-
-                    # Получаем multiplier для текущего режима
-                    if regime:
-                        regime_params = self._get_regime_params(regime)
-                        if (
-                            regime_params
-                            and "position_size_multiplier" in regime_params
-                        ):
-                            base_usd_size *= regime_params["position_size_multiplier"]
+                    regime_key = symbol_regime or self.signal_generator.regime_manager.get_current_regime()
+                    if regime_key:
+                        regime_params = self._get_regime_params(regime_key, symbol)
+                        multiplier = regime_params.get("position_size_multiplier")
+                        if multiplier is not None:
+                            base_usd_size *= multiplier
                             logger.debug(
-                                f"Режим {regime}: multiplier={regime_params['position_size_multiplier']}"
+                                f"Режим {regime_key}: multiplier={multiplier}"
                             )
                 except Exception as e:
                     logger.warning(f"Ошибка адаптации под режим: {e}")
 
-            # 3.5 НОВОЕ: Адаптируем под силу сигнала (НО с ограничением max_usd_size!)
-            # ✅ ОБРАБОТКА КОНФЛИКТА RSI/EMA: Уменьшаем размер для быстрого скальпа
             has_conflict = signal.get("has_conflict", False)
             signal_strength = signal.get("strength", 0.5)
 
@@ -2247,16 +2269,14 @@ class FuturesScalpingOrchestrator:
             "max_position_percent": max_position_percent,
         }
 
-    def _get_regime_params(self, regime_name: str) -> dict:
+    def _get_regime_params(self, regime_name: str, symbol: Optional[str] = None) -> dict:
         """Получает параметры текущего режима из ARM"""
         try:
-            # ✅ ИСПРАВЛЕНИЕ: Используем scalping_config.adaptive_regime, а не config.adaptive_regime
             scalping_config = getattr(self.config, "scalping", None)
             if not scalping_config:
                 logger.warning("scalping_config не найден")
                 return {}
 
-            # Получаем adaptive_regime из scalping_config
             adaptive_regime = None
             if hasattr(scalping_config, "adaptive_regime"):
                 adaptive_regime = getattr(scalping_config, "adaptive_regime", None)
@@ -2267,28 +2287,19 @@ class FuturesScalpingOrchestrator:
                 logger.debug("adaptive_regime не найден в scalping_config")
                 return {}
 
-            # Получаем параметры режима (trending/ranging/choppy)
-            if isinstance(adaptive_regime, dict):
-                regime_params = adaptive_regime.get(regime_name, {})
-            elif hasattr(adaptive_regime, regime_name):
-                regime_params = getattr(adaptive_regime, regime_name)
-                # Если это Pydantic модель, конвертируем в dict
-                if hasattr(regime_params, "__dict__"):
-                    regime_params = regime_params.__dict__
-                elif hasattr(regime_params, "dict"):
-                    regime_params = regime_params.dict()
-            else:
-                logger.debug(f"Режим {regime_name} не найден в adaptive_regime")
-                return {}
-
-            # Если получили dict - возвращаем
-            if isinstance(regime_params, dict):
-                return regime_params
-
-            logger.debug(
-                f"Не удалось получить параметры режима {regime_name} в формате dict"
+            adaptive_dict = self._to_dict(adaptive_regime)
+            regime_params = self._to_dict(
+                adaptive_dict.get(regime_name, {})
             )
-            return {}
+
+            if symbol:
+                symbol_profile = self.symbol_profiles.get(symbol, {})
+                regime_profile = symbol_profile.get(regime_name.lower(), {})
+                arm_override = self._to_dict(regime_profile.get("arm", {}))
+                if arm_override:
+                    regime_params = self._deep_merge_dict(regime_params, arm_override)
+
+            return regime_params
 
         except Exception as e:
             logger.warning(f"Ошибка получения параметров режима {regime_name}: {e}")
@@ -2800,3 +2811,75 @@ class FuturesScalpingOrchestrator:
         except Exception as e:
             logger.error(f"Ошибка получения статуса: {e}")
             return {"error": str(e), "timestamp": datetime.now().isoformat()}
+
+    def _to_dict(self, raw: Any) -> Dict[str, Any]:
+        if isinstance(raw, dict):
+            return dict(raw)
+        if hasattr(raw, "dict"):
+            try:
+                return dict(raw.dict(by_alias=True))  # type: ignore[attr-defined]
+            except TypeError:
+                return dict(raw.dict())  # type: ignore[attr-defined]
+        if hasattr(raw, "__dict__"):
+            return dict(raw.__dict__)
+        return {}
+
+    def _deep_merge_dict(
+        self, base: Dict[str, Any], override: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        merged = dict(base)
+        for key, value in (override or {}).items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = self._deep_merge_dict(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
+    def _normalize_symbol_profiles(
+        self, raw_profiles: Dict[str, Any]
+    ) -> Dict[str, Dict[str, Any]]:
+        profiles: Dict[str, Dict[str, Any]] = {}
+        for symbol, profile in (raw_profiles or {}).items():
+            normalized: Dict[str, Any] = {}
+            profile_dict = self._to_dict(profile)
+            for regime_name, regime_data in profile_dict.items():
+                regime_key = str(regime_name).lower()
+                if regime_key in {"__detection__", "detection"}:
+                    normalized["__detection__"] = self._to_dict(regime_data)
+                    continue
+                regime_dict = self._to_dict(regime_data)
+                for section, section_value in list(regime_dict.items()):
+                    if isinstance(section_value, dict) or hasattr(section_value, "__dict__"):
+                        section_dict = self._to_dict(section_value)
+                        for sub_key, sub_val in list(section_dict.items()):
+                            if isinstance(sub_val, dict) or hasattr(sub_val, "__dict__"):
+                                section_dict[sub_key] = self._to_dict(sub_val)
+                        regime_dict[section] = section_dict
+                normalized[regime_key] = regime_dict
+            profiles[symbol] = normalized
+        return profiles
+
+    def _load_symbol_profiles(self) -> Dict[str, Dict[str, Any]]:
+        scalping_config = getattr(self.config, "scalping", None)
+        if not scalping_config:
+            return {}
+        adaptive_regime = None
+        if hasattr(scalping_config, "adaptive_regime"):
+            adaptive_regime = getattr(scalping_config, "adaptive_regime", None)
+        elif isinstance(scalping_config, dict):
+            adaptive_regime = scalping_config.get("adaptive_regime")
+        adaptive_dict = self._to_dict(adaptive_regime)
+        raw_profiles = adaptive_dict.get("symbol_profiles", {})
+        return self._normalize_symbol_profiles(raw_profiles)
+
+    def _get_symbol_regime_profile(
+        self, symbol: Optional[str], regime: Optional[str]
+    ) -> Dict[str, Any]:
+        if not symbol:
+            return {}
+        profile = self.symbol_profiles.get(symbol, {})
+        if not profile:
+            return {}
+        if regime:
+            return self._to_dict(profile.get(regime.lower(), {}))
+        return {}

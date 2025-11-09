@@ -80,6 +80,105 @@ class BalanceProfile(BaseModel):
         extra = "allow"  # Разрешаем дополнительные поля из YAML
 
 
+class ImpulseRelaxOverride(BaseModel):
+    liquidity: Optional[float] = None
+    order_flow: Optional[float] = None
+    allow_mtf_bypass: Optional[bool] = None
+    bypass_correlation: Optional[bool] = None
+
+
+class ImpulseTrailingOverride(BaseModel):
+    initial_trail: Optional[float] = None
+    max_trail: Optional[float] = None
+    min_trail: Optional[float] = None
+    step_profit: Optional[float] = None
+    step_trail: Optional[float] = None
+    aggressive_max_trail: Optional[float] = None
+    loss_cut_percent: Optional[float] = None
+    timeout_minutes: Optional[float] = None
+
+
+class ImpulseOverrides(BaseModel):
+    relax: Optional[ImpulseRelaxOverride] = None
+    trailing: Optional[ImpulseTrailingOverride] = None
+
+
+class PositionProfile(BaseModel):
+    base_position_usd: Optional[float] = None
+    min_position_usd: Optional[float] = None
+    max_position_usd: Optional[float] = None
+    max_open_positions: Optional[int] = None
+    max_position_percent: Optional[float] = None
+
+
+class LiquidityThresholdOverride(BaseModel):
+    min_daily_volume_usd: Optional[float] = None
+    min_best_bid_volume_usd: Optional[float] = None
+    min_best_ask_volume_usd: Optional[float] = None
+    min_orderbook_depth_usd: Optional[float] = None
+    max_spread_percent: Optional[float] = None
+
+
+class OrderFlowThresholdOverride(BaseModel):
+    window: Optional[int] = None
+    long_threshold: Optional[float] = None
+    short_threshold: Optional[float] = None
+    min_total_depth_usd: Optional[float] = None
+
+
+class FundingThresholdOverride(BaseModel):
+    max_positive_rate: Optional[float] = None
+    max_negative_rate: Optional[float] = None
+    max_abs_rate: Optional[float] = None
+
+
+class VolatilityThresholdOverride(BaseModel):
+    min_range_percent: Optional[float] = None
+    max_range_percent: Optional[float] = None
+    min_atr_percent: Optional[float] = None
+    max_atr_percent: Optional[float] = None
+
+
+class RegimeFilterOverrides(BaseModel):
+    liquidity: Optional[LiquidityThresholdOverride] = None
+    order_flow: Optional[OrderFlowThresholdOverride] = None
+    funding: Optional[FundingThresholdOverride] = None
+    volatility: Optional[VolatilityThresholdOverride] = None
+
+
+class SymbolRegimeConfig(BaseModel):
+    arm: Optional[Dict[str, Any]] = None
+    position: Optional[PositionProfile] = None
+    filters: Optional[RegimeFilterOverrides] = None
+    impulse: Optional[ImpulseOverrides] = None
+
+    class Config:
+        extra = "allow"
+
+
+class SymbolProfile(BaseModel):
+    detection: Optional[Dict[str, Any]] = Field(default=None, alias="__detection__")
+    trending: Optional[SymbolRegimeConfig] = None
+    ranging: Optional[SymbolRegimeConfig] = None
+    choppy: Optional[SymbolRegimeConfig] = None
+
+    class Config:
+        extra = "allow"
+        allow_population_by_field_name = True
+
+
+class AdaptiveRegimeConfig(BaseModel):
+    enabled: bool = True
+    detection: Dict[str, Any] = Field(default_factory=dict)
+    trending: Dict[str, Any] = Field(default_factory=dict)
+    ranging: Dict[str, Any] = Field(default_factory=dict)
+    choppy: Dict[str, Any] = Field(default_factory=dict)
+    symbol_profiles: Dict[str, SymbolProfile] = Field(default_factory=dict)
+
+    class Config:
+        extra = "allow"
+
+
 class ScalpingConfig(BaseModel):
     enabled: bool = Field(default=True)
     symbols: List[str] = Field(default=["BTC-USDT", "ETH-USDT"])
@@ -135,7 +234,9 @@ class ScalpingConfig(BaseModel):
     balance_checker_enabled: bool = Field(default=False)
     balance_checker: Dict = Field(default_factory=dict)
     adaptive_regime_enabled: bool = Field(default=False)
-    adaptive_regime: Dict = Field(default_factory=dict)
+    adaptive_regime: AdaptiveRegimeConfig = Field(
+        default_factory=AdaptiveRegimeConfig
+    )
 
 
 class TradingConfig(BaseModel):

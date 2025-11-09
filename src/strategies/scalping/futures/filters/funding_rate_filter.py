@@ -38,7 +38,7 @@ class FundingRateFilter:
         self._cache: Dict[str, FundingSnapshot] = {}
         self._lock = asyncio.Lock()
 
-    async def is_signal_valid(self, symbol: str, side: str) -> bool:
+    async def is_signal_valid(self, symbol: str, side: str, overrides: Optional[Dict[str, float]] = None) -> bool:
         """Возвращает True, если funding допускает вход по направлению side."""
         if not self.config.enabled:
             return True
@@ -51,17 +51,43 @@ class FundingRateFilter:
             )
             return True
 
+        thresholds = {
+            "max_positive_rate": self.config.max_positive_rate,
+            "max_negative_rate": self.config.max_negative_rate,
+            "max_abs_rate": self.config.max_abs_rate,
+        }
+        if overrides:
+            for key, value in overrides.items():
+                if key in thresholds and value is not None:
+                    try:
+                        thresholds[key] = float(value)
+                    except (TypeError, ValueError):
+                        continue
+
         rate = snapshot.funding_rate
         next_rate = snapshot.next_funding_rate
 
-        if self._violates_threshold(rate, side):
+        if self._violates_threshold(
+            rate,
+            side,
+            thresholds["max_positive_rate"],
+            thresholds["max_negative_rate"],
+            thresholds["max_abs_rate"],
+        ):
             logger.info(
                 f"⛔ FundingRateFilter: {symbol} {side} отклонён. Текущий funding={rate:.4%}"
             )
             return False
 
-        if self.config.include_next_funding and self._violates_threshold(
-            next_rate, side
+        if (
+            self.config.include_next_funding
+            and self._violates_threshold(
+                next_rate,
+                side,
+                thresholds["max_positive_rate"],
+                thresholds["max_negative_rate"],
+                thresholds["max_abs_rate"],
+            )
         ):
             logger.info(
                 f"⛔ FundingRateFilter: {symbol} {side} отклонён. Следующий funding={next_rate:.4%}"
@@ -132,15 +158,22 @@ class FundingRateFilter:
         data = response.get("data") or []
         return data[0] if data else None
 
-    def _violates_threshold(self, rate: float, side: str) -> bool:
+    def _violates_threshold(
+        self,
+        rate: float,
+        side: str,
+        max_positive: float,
+        max_negative: float,
+        max_abs: float,
+    ) -> bool:
         if rate is None:
             return False
         abs_rate = abs(rate)
-        if abs_rate > self.config.max_abs_rate:
+        if abs_rate > max_abs:
             return True
-        if side.lower() == "buy" and rate > self.config.max_positive_rate:
+        if side.lower() == "buy" and rate > max_positive:
             return True
-        if side.lower() == "sell" and rate < -self.config.max_negative_rate:
+        if side.lower() == "sell" and rate < -max_negative:
             return True
         return False
 
