@@ -690,6 +690,19 @@ class FuturesScalpingOrchestrator:
             side = "buy" if pos_size > 0 else "sell"
             abs_size = abs(pos_size)
 
+            # ✅ Получаем ctVal для корректного перевода контрактов в монеты
+            ct_val = 0.01
+            try:
+                details = await self.client.get_instrument_details(symbol)
+                if details:
+                    ct_val = float(details.get("ctVal", ct_val)) or ct_val
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Не удалось получить ctVal для {symbol} при синхронизации позиций: {e}"
+                )
+
+            size_in_coins = abs_size * ct_val
+
             margin_raw = pos.get("margin")
             try:
                 margin = float(margin_raw) if margin_raw is not None else 0.0
@@ -698,7 +711,7 @@ class FuturesScalpingOrchestrator:
 
             if margin <= 0 and entry_price > 0:
                 leverage = getattr(self.scalping_config, "leverage", 3) or 3
-                margin = (abs_size * entry_price) / max(leverage, 1e-6)
+                margin = (size_in_coins * entry_price) / max(leverage, 1e-6)
 
             total_margin += max(margin, 0.0)
 
@@ -711,7 +724,8 @@ class FuturesScalpingOrchestrator:
                 {
                     "instId": inst_id,
                     "side": side,
-                    "size": abs_size,
+                    "size": size_in_coins,
+                    "contracts": abs_size,
                     "entry_price": effective_price,
                     "margin": margin,
                     "timestamp": timestamp,
@@ -728,7 +742,7 @@ class FuturesScalpingOrchestrator:
 
             if effective_price > 0:
                 self.max_size_limiter.position_sizes[symbol] = (
-                    abs_size * effective_price
+                    size_in_coins * effective_price
                 )
 
         stale_symbols = set(self.active_positions.keys()) - seen_symbols
