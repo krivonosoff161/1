@@ -149,7 +149,14 @@ class LiquidationGuard:
             size = float(position.get("pos", "0"))
             entry_price = float(position.get("avgPx", "0"))
             current_price = float(position.get("markPx", "0"))
-            leverage = int(position.get("lever", "3"))
+            # ✅ ИСПРАВЛЕНИЕ: Используем leverage из margin_calculator (из конфига), а не из позиции на бирже
+            # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
+            leverage_from_position = int(position.get("lever", "0"))
+            leverage = self.margin_calculator.default_leverage or leverage_from_position or 3
+            if leverage_from_position != leverage:
+                logger.debug(
+                    f"📊 Leverage: биржа={leverage_from_position}x, конфиг={leverage}x, используем {leverage}x для расчетов"
+                )
 
             if size == 0:
                 return  # Нет позиции

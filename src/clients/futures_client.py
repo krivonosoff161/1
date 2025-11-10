@@ -212,6 +212,10 @@ class OKXFuturesClient:
             raise
 
     # ---------- Account & Margin ----------
+    async def get_account_config(self) -> dict:
+        """Получить настройки аккаунта (PosMode, уровень и т.д.)"""
+        return await self._make_request("GET", "/api/v5/account/config")
+    
     async def get_instrument_info(self, inst_type: str = "SWAP") -> dict:
         """Получает информацию об инструментах (lot size, min size и т.д.)"""
         data = await self._make_request(
@@ -514,18 +518,54 @@ class OKXFuturesClient:
             return {}
 
     # ---------- Leverage ----------
-    async def set_leverage(self, symbol: str, leverage: int) -> dict:
+    async def set_leverage(self, symbol: str, leverage: int, pos_side: Optional[str] = None) -> dict:
         """Установить плечо (1 раз на символ)"""
-        return await self._make_request(
-            "POST",
-            "/api/v5/account/set-leverage",
-            data={
-                "instId": f"{symbol}-SWAP",
-                "lever": str(leverage),
-                "mgnMode": "isolated",
-                "posSide": "net",  # Используем net позицию
-            },
-        )
+        # ✅ ИСПРАВЛЕНИЕ: Для isolated margin mode posSide может быть необязательным
+        # Но некоторые режимы (например, hedge mode) требуют posSide
+        # В sandbox режиме может потребоваться posSide даже для isolated mode
+        data = {
+            "instId": f"{symbol}-SWAP",
+            "lever": str(leverage),
+            "mgnMode": "isolated",
+        }
+        
+        # ✅ НОВОЕ: Пробуем установить leverage с posSide, если указан
+        # Это может потребоваться для sandbox или для некоторых режимов позиций
+        if pos_side:
+            data["posSide"] = pos_side
+        
+        # ✅ ИСПРАВЛЕНИЕ: Retry логика для обработки rate limit (429)
+        max_retries = 3
+        retry_delay = 0.5  # 500ms
+        
+        for attempt in range(max_retries):
+            try:
+                return await self._make_request(
+                    "POST",
+                    "/api/v5/account/set-leverage",
+                    data=data,
+                )
+            except RuntimeError as e:
+                # Проверяем, является ли это ошибкой rate limit (429)
+                error_str = str(e)
+                if "429" in error_str or "Too Many Requests" in error_str or "rate limit" in error_str.lower():
+                    if attempt < max_retries - 1:
+                        # Увеличиваем задержку с каждой попыткой (exponential backoff)
+                        delay = retry_delay * (2 ** attempt)
+                        logger.warning(
+                            f"⚠️ Rate limit (429) при установке leverage для {symbol}, "
+                            f"повторная попытка {attempt + 1}/{max_retries} через {delay:.1f}с..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        logger.error(
+                            f"❌ Не удалось установить leverage для {symbol} после {max_retries} попыток: {e}"
+                        )
+                        raise
+                else:
+                    # Это не ошибка rate limit, пробрасываем дальше
+                    raise
 
     # ---------- Orders ----------
     async def place_futures_order(

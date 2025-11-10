@@ -490,3 +490,4 @@ client_session: <aiohttp.client.ClientSession object at 0x0000012335F7D2D0>
    • OCO: Автоматическое управление рисками
    • PH: Быстрая фиксация прибыли
 
+89165085277
