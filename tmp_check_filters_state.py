@@ -11,7 +11,9 @@ print("🔍 ПРОВЕРКА СОСТОЯНИЯ ПРИ СТАРТЕ БОТА\n")
 
 # Ищем записи о старте и инициализации
 start_pattern = re.compile(r"Запуск|Start|Initialize|инициализац")
-filter_init_pattern = re.compile(r"(LiquidityFilter|OrderFlowFilter|CorrelationFilter|MaxSizeLimiter).*?(инициализ|init|reset|clear)")
+filter_init_pattern = re.compile(
+    r"(LiquidityFilter|OrderFlowFilter|CorrelationFilter|MaxSizeLimiter).*?(инициализ|init|reset|clear)"
+)
 position_sync_pattern = re.compile(r"Синхронизац.*?позиц|активных=|позиций.*?найдено")
 max_size_pattern = re.compile(r"MaxSizeLimiter.*?(позиций|positions|size)")
 
@@ -24,7 +26,7 @@ with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
 start_lines = []
 for i, line in enumerate(lines[:500]):  # Первые 500 строк
     if any(x in line.lower() for x in ["запуск", "start", "инициализац"]):
-        start_lines.append((i+1, line.strip()[:150]))
+        start_lines.append((i + 1, line.strip()[:150]))
 
 print("📊 ЗАПИСИ О СТАРТЕ И ИНИЦИАЛИЗАЦИИ:")
 for line_num, line_text in start_lines[:20]:
@@ -38,7 +40,7 @@ for i, line in enumerate(lines):
         print(f"   Строка {i+1}: {line.strip()}")
         sync_found = True
         # Проверяем следующие строки на предмет блокировок
-        for j in range(i+1, min(i+50, len(lines))):
+        for j in range(i + 1, min(i + 50, len(lines))):
             if "Уже открыто" in lines[j] or "позиций, лимит" in lines[j]:
                 print(f"   ⚠️ Строка {j+1}: {lines[j].strip()[:150]}")
                 break
@@ -51,7 +53,12 @@ if not sync_found:
 print(f"\n💰 ЗАПИСИ О MAXSIZELIMITER:")
 max_size_found = False
 for i, line in enumerate(lines[:1000]):
-    if "MaxSizeLimiter" in line and ("позиций" in line or "positions" in line or "очищен" in line or "reset" in line.lower()):
+    if "MaxSizeLimiter" in line and (
+        "позиций" in line
+        or "positions" in line
+        or "очищен" in line
+        or "reset" in line.lower()
+    ):
         print(f"   Строка {i+1}: {line.strip()[:150]}")
         max_size_found = True
 
@@ -69,9 +76,13 @@ for i, line in enumerate(lines):
 if first_sync_line:
     blocks_before_sync = []
     for i, line in enumerate(lines[:first_sync_line]):
-        if "Уже открыто" in line or "позиций, лимит" in line or "блокировк" in line.lower():
-            blocks_before_sync.append((i+1, line.strip()[:150]))
-    
+        if (
+            "Уже открыто" in line
+            or "позиций, лимит" in line
+            or "блокировк" in line.lower()
+        ):
+            blocks_before_sync.append((i + 1, line.strip()[:150]))
+
     if blocks_before_sync:
         print(f"   Найдено {len(blocks_before_sync)} блокировок до синхронизации:")
         for line_num, line_text in blocks_before_sync[:10]:
@@ -81,5 +92,4 @@ if first_sync_line:
 else:
     print("   ⚠️ Не найдена первая синхронизация")
 
-print("\n" + "="*60)
-
+print("\n" + "=" * 60)

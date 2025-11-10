@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """Анализ различий в TP для разных пар"""
 
-print("="*80)
+print("=" * 80)
 print("АНАЛИЗ: Различия в TP для разных пар")
-print("="*80)
+print("=" * 80)
 
 # Параметры
 balance = 1018.0
@@ -28,25 +28,27 @@ print(f"   Leverage: {leverage}x")
 print(f"   Базовый размер: ${base_size:.2f}")
 print(f"   TP (глобальный): {tp_percent_global}% от маржи\n")
 
-print("="*80)
+print("=" * 80)
 print("ТЕКУЩАЯ СИТУАЦИЯ (одинаковый TP 1.0% для всех пар)")
-print("="*80)
+print("=" * 80)
 
 results = []
 for symbol, multiplier in multipliers.items():
     position_size = base_size * multiplier
     margin = position_size / leverage
     tp_absolute = margin * (tp_percent_global / 100)
-    
-    results.append({
-        "symbol": symbol,
-        "multiplier": multiplier,
-        "position_size": position_size,
-        "margin": margin,
-        "tp_percent": tp_percent_global,
-        "tp_absolute": tp_absolute
-    })
-    
+
+    results.append(
+        {
+            "symbol": symbol,
+            "multiplier": multiplier,
+            "position_size": position_size,
+            "margin": margin,
+            "tp_percent": tp_percent_global,
+            "tp_absolute": tp_absolute,
+        }
+    )
+
     print(f"\n{symbol}:")
     print(f"   Multiplier: {multiplier}x")
     print(f"   Размер позиции: ${position_size:.2f}")
@@ -54,9 +56,9 @@ for symbol, multiplier in multipliers.items():
     print(f"   TP: {tp_percent_global}% = ${tp_absolute:.4f}")
     print(f"   Разница с BTC: ${tp_absolute - results[0]['tp_absolute']:.4f}")
 
-print("\n" + "="*80)
+print("\n" + "=" * 80)
 print("АНАЛИЗ РАЗЛИЧИЙ")
-print("="*80)
+print("=" * 80)
 
 btc_tp = results[0]["tp_absolute"]
 max_tp = max(r["tp_absolute"] for r in results)
@@ -65,12 +67,16 @@ min_tp = min(r["tp_absolute"] for r in results)
 print(f"\n📊 Статистика:")
 print(f"   Максимальный TP (BTC): ${max_tp:.4f}")
 print(f"   Минимальный TP (DOGE/XRP): ${min_tp:.4f}")
-print(f"   Разница: ${max_tp - min_tp:.4f} ({((max_tp / min_tp - 1) * 100):.1f}% больше)")
-print(f"\n   BTC vs SOL: ${results[0]['tp_absolute'] - results[2]['tp_absolute']:.4f} ({(results[0]['tp_absolute'] / results[2]['tp_absolute'] - 1) * 100:.1f}% больше)")
+print(
+    f"   Разница: ${max_tp - min_tp:.4f} ({((max_tp / min_tp - 1) * 100):.1f}% больше)"
+)
+print(
+    f"\n   BTC vs SOL: ${results[0]['tp_absolute'] - results[2]['tp_absolute']:.4f} ({(results[0]['tp_absolute'] / results[2]['tp_absolute'] - 1) * 100:.1f}% больше)"
+)
 
-print("\n" + "="*80)
+print("\n" + "=" * 80)
 print("ВАРИАНТ 1: Одинаковая абсолютная прибыль для всех пар")
-print("="*80)
+print("=" * 80)
 
 # Целевая абсолютная прибыль (например, средняя)
 target_absolute_tp = sum(r["tp_absolute"] for r in results) / len(results)
@@ -81,12 +87,14 @@ for r in results:
     required_tp_percent = (target_absolute_tp / r["margin"]) * 100
     print(f"\n{r['symbol']}:")
     print(f"   Маржа: ${r['margin']:.2f}")
-    print(f"   Требуемый TP: {required_tp_percent:.2f}% (для ${target_absolute_tp:.4f})")
+    print(
+        f"   Требуемый TP: {required_tp_percent:.2f}% (для ${target_absolute_tp:.4f})"
+    )
     print(f"   Текущий TP: {r['tp_percent']:.2f}% (дает ${r['tp_absolute']:.4f})")
 
-print("\n" + "="*80)
+print("\n" + "=" * 80)
 print("ВАРИАНТ 2: Пропорциональный TP (больше для больших позиций)")
-print("="*80)
+print("=" * 80)
 
 # TP пропорционален размеру позиции (например, 1.0% для BTC, 0.9% для SOL)
 print("\n📊 Предложение:")
@@ -112,9 +120,9 @@ for r in results:
     print(f"   TP: {tp_pct:.2f}% = ${tp_abs:.4f}")
     print(f"   Разница с текущим: ${tp_abs - r['tp_absolute']:.4f}")
 
-print("\n" + "="*80)
+print("\n" + "=" * 80)
 print("ВАРИАНТ 3: Обратно пропорциональный TP (меньше для больших позиций)")
-print("="*80)
+print("=" * 80)
 
 # Меньше TP для больших позиций (меньше риск, больше стабильность)
 print("\n📊 Предложение:")
@@ -140,9 +148,9 @@ for r in results:
     print(f"   TP: {tp_pct:.2f}% = ${tp_abs:.4f}")
     print(f"   Разница с текущим: ${tp_abs - r['tp_absolute']:.4f}")
 
-print("\n" + "="*80)
+print("\n" + "=" * 80)
 print("РЕКОМЕНДАЦИИ")
-print("="*80)
+print("=" * 80)
 
 print("\n✅ ВАРИАНТ 2 (Пропорциональный) - РЕКОМЕНДУЕТСЯ:")
 print("   - Больше TP для больших позиций (BTC, ETH)")
@@ -158,4 +166,3 @@ print("   - Более агрессивный подход для маленьк
 print("\n⚠️ ВАРИАНТ 1 (Одинаковая абсолютная прибыль) - НЕ РЕКОМЕНДУЕТСЯ:")
 print("   - Слишком разные проценты для разных пар")
 print("   - Может быть неоптимально для скальпинга")
-

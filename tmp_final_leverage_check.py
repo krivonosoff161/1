@@ -21,7 +21,9 @@ print(f"   - Ожидалось: 10 (5 символов × 2 направлен�
 print(f"   - Статус: {'✅ УСПЕШНО' if len(init_leverage) == 10 else '⚠️ НЕПОЛНО'}")
 
 # Проверяем реальные ошибки 429
-real_errors = re.findall(r"ERROR.*429|ERROR.*Too Many|WARNING.*429.*leverage", log, re.IGNORECASE)
+real_errors = re.findall(
+    r"ERROR.*429|ERROR.*Too Many|WARNING.*429.*leverage", log, re.IGNORECASE
+)
 print(f"\n❌ Реальные ошибки 429: {len(real_errors)}")
 if real_errors:
     for i, err in enumerate(real_errors[:3], 1):
@@ -47,7 +49,9 @@ if calc_leverage:
         print(f"   - {lev}x: используется в {count} расчетах")
 
 # Проверяем позиции
-opened_positions = re.findall(r"Позиция.*открыта.*(ETH-USDT|BTC-USDT|SOL-USDT|DOGE-USDT|XRP-USDT)", log)
+opened_positions = re.findall(
+    r"Позиция.*открыта.*(ETH-USDT|BTC-USDT|SOL-USDT|DOGE-USDT|XRP-USDT)", log
+)
 if opened_positions:
     print(f"\n📈 Открытые позиции:")
     for pos in set(opened_positions):
@@ -63,4 +67,3 @@ if len(real_errors) == 0 and len(init_leverage) == 10:
 else:
     print("⚠️ ИТОГОВЫЙ СТАТУС: ТРЕБУЕТСЯ ВНИМАНИЕ")
 print("=" * 60)
-

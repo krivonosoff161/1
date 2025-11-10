@@ -55,7 +55,7 @@ with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
             if not stats["start_time"]:
                 stats["start_time"] = time_str
             stats["end_time"] = time_str
-        
+
         # Сигналы
         if "✅" in line and "сигнал" in line:
             stats["signals_generated"] += 1
@@ -63,7 +63,7 @@ with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
             if match:
                 symbol = match.group(1)
                 stats["signals_blocked"][symbol] += 0  # Инициализация
-        
+
         # Блокировки
         if "⛔" in line:
             match = block_pattern.search(line)
@@ -72,32 +72,32 @@ with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
                 symbol = match.group(2) if len(match.groups()) > 1 else "unknown"
                 stats["blocks_by_filter"][filter_name] += 1
                 stats["blocks_by_symbol"][symbol][filter_name] += 1
-                
+
                 if "MTF" in filter_name or "multi_timeframe" in line.lower():
                     stats["mtf_blocks"] += 1
                 if "OrderFlow" in filter_name or "order_flow" in line.lower():
                     stats["orderflow_blocks"] += 1
                 if "Liquidity" in filter_name or "liquidity" in line.lower():
                     stats["liquidity_blocks"] += 1
-        
+
         # Позиции
         if "📈" in line and "Открыта" in line:
             stats["positions_opened"] += 1
         if "📉" in line and "Закрыта" in line:
             stats["positions_closed"] += 1
-        
+
         # Ордера
         if "📝" in line and "Ордер" in line:
             stats["orders_placed"] += 1
         if "✅" in line and "исполнен" in line.lower():
             stats["orders_filled"] += 1
-        
+
         # Режимы
         match = regime_pattern.search(line)
         if match:
             regime = match.group(1)
             stats["regime_detections"][regime] += 1
-        
+
         # Fail-open
         match = fail_open_pattern.search(line)
         if match:
@@ -106,9 +106,9 @@ with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
             stats["fail_open_activations"][f"{filter_name}:{symbol}"] += 1
 
 # Вывод результатов
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("📈 СТАТИСТИКА ТОРГОВОЙ СЕССИИ")
-print("="*60)
+print("=" * 60)
 
 if stats["start_time"] and stats["end_time"]:
     try:
@@ -127,7 +127,9 @@ print(f"📝 Ордеров размещено: {stats['orders_placed']}")
 print(f"✅ Ордеров исполнено: {stats['orders_filled']}")
 
 print(f"\n🚫 БЛОКИРОВКИ ПО ФИЛЬТРАМ:")
-for filter_name, count in sorted(stats["blocks_by_filter"].items(), key=lambda x: -x[1]):
+for filter_name, count in sorted(
+    stats["blocks_by_filter"].items(), key=lambda x: -x[1]
+):
     print(f"   {filter_name}: {count}")
 
 print(f"\n🚫 БЛОКИРОВКИ ПО СИМВОЛАМ:")
@@ -143,7 +145,9 @@ for regime, count in sorted(stats["regime_detections"].items(), key=lambda x: -x
 
 print(f"\n🔓 FAIL-OPEN АКТИВАЦИИ:")
 if stats["fail_open_activations"]:
-    for key, count in sorted(stats["fail_open_activations"].items(), key=lambda x: -x[1]):
+    for key, count in sorted(
+        stats["fail_open_activations"].items(), key=lambda x: -x[1]
+    ):
         print(f"   {key}: {count}")
 else:
     print("   Нет активаций")
@@ -153,5 +157,4 @@ print(f"   MTF блокировки: {stats['mtf_blocks']}")
 print(f"   OrderFlow блокировки: {stats['orderflow_blocks']}")
 print(f"   Liquidity блокировки: {stats['liquidity_blocks']}")
 
-print("\n" + "="*60)
-
+print("\n" + "=" * 60)

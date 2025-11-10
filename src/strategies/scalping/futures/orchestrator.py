@@ -124,9 +124,9 @@ class FuturesScalpingOrchestrator:
         self.performance_tracker = PerformanceTracker()
 
         self.symbol_profiles: Dict[str, Dict[str, Any]] = self._load_symbol_profiles()
-        
+
         # ✅ НОВОЕ: Передаем symbol_profiles в position_manager для per-symbol TP
-        if hasattr(self.position_manager, 'set_symbol_profiles'):
+        if hasattr(self.position_manager, "set_symbol_profiles"):
             self.position_manager.set_symbol_profiles(self.symbol_profiles)
 
         # TrailingStopLoss для каждой позиции (словарь по символам)
@@ -286,7 +286,7 @@ class FuturesScalpingOrchestrator:
                     f"⚠️ leverage не указан в конфиге, используем 3 (fallback)"
                 )
                 leverage_config = 3
-            
+
             # ✅ НОВОЕ: Проверяем режим позиций на бирже
             try:
                 account_config = await self.client.get_account_config()
@@ -297,16 +297,18 @@ class FuturesScalpingOrchestrator:
                     logger.info(f"📊 Режим позиций на бирже: {pos_mode}")
             except Exception as e:
                 logger.warning(f"⚠️ Не удалось получить режим позиций: {e}")
-            
+
             # ✅ Устанавливаем leverage для каждого символа
             for symbol in self.scalping_config.symbols:
                 leverage_set = False
-                
+
                 # Если режим long_short_mode (hedge), устанавливаем leverage для обоих направлений
                 if pos_mode == "long_short_mode":
                     try:
                         # Устанавливаем leverage для long позиций
-                        await self.client.set_leverage(symbol, leverage_config, pos_side="long")
+                        await self.client.set_leverage(
+                            symbol, leverage_config, pos_side="long"
+                        )
                         logger.info(
                             f"✅ Плечо {leverage_config}x установлено для {symbol} (long) "
                             f"(hedge mode, sandbox={self.client.sandbox})"
@@ -316,13 +318,15 @@ class FuturesScalpingOrchestrator:
                         logger.warning(
                             f"⚠️ Не удалось установить leverage для {symbol} (long): {e}"
                         )
-                    
+
                     # ✅ ИСПРАВЛЕНИЕ: Задержка для избежания rate limit (429)
                     await asyncio.sleep(0.3)  # 300ms задержка между запросами
-                    
+
                     try:
                         # Устанавливаем leverage для short позиций
-                        await self.client.set_leverage(symbol, leverage_config, pos_side="short")
+                        await self.client.set_leverage(
+                            symbol, leverage_config, pos_side="short"
+                        )
                         logger.info(
                             f"✅ Плечо {leverage_config}x установлено для {symbol} (short) "
                             f"(hedge mode, sandbox={self.client.sandbox})"
@@ -350,7 +354,9 @@ class FuturesScalpingOrchestrator:
                             logger.debug(
                                 f"⚠️ Попытка 1 не удалась для {symbol}, пробуем с posSide='long': {e}"
                             )
-                            await self.client.set_leverage(symbol, leverage_config, pos_side="long")
+                            await self.client.set_leverage(
+                                symbol, leverage_config, pos_side="long"
+                            )
                             logger.info(
                                 f"✅ Плечо {leverage_config}x установлено для {symbol} с posSide='long' "
                                 f"(sandbox={self.client.sandbox})"
@@ -361,7 +367,9 @@ class FuturesScalpingOrchestrator:
                             await asyncio.sleep(0.3)
                             # ✅ Попытка 3: С posSide="short"
                             try:
-                                await self.client.set_leverage(symbol, leverage_config, pos_side="short")
+                                await self.client.set_leverage(
+                                    symbol, leverage_config, pos_side="short"
+                                )
                                 logger.info(
                                     f"✅ Плечо {leverage_config}x установлено для {symbol} с posSide='short' "
                                     f"(sandbox={self.client.sandbox})"
@@ -371,10 +379,10 @@ class FuturesScalpingOrchestrator:
                                 logger.warning(
                                     f"⚠️ Не удалось установить плечо {leverage_config}x для {symbol}: {e3}"
                                 )
-                
+
                 # ✅ ИСПРАВЛЕНИЕ: Задержка между символами для избежания rate limit
                 await asyncio.sleep(0.2)  # 200ms задержка между символами
-                
+
                 if not leverage_set:
                     if self.client.sandbox:
                         logger.info(
@@ -536,7 +544,10 @@ class FuturesScalpingOrchestrator:
             logger.debug("✅ last_orders_cache очищен")
 
             # Очищаем состояние фильтров в signal_generator (если есть методы reset)
-            if hasattr(self.signal_generator, "liquidity_filter") and self.signal_generator.liquidity_filter:
+            if (
+                hasattr(self.signal_generator, "liquidity_filter")
+                and self.signal_generator.liquidity_filter
+            ):
                 if hasattr(self.signal_generator.liquidity_filter, "_relax_state"):
                     self.signal_generator.liquidity_filter._relax_state.clear()
                     logger.debug("✅ LiquidityFilter _relax_state очищен")
@@ -544,7 +555,10 @@ class FuturesScalpingOrchestrator:
                     self.signal_generator.liquidity_filter._cache.clear()
                     logger.debug("✅ LiquidityFilter _cache очищен")
 
-            if hasattr(self.signal_generator, "order_flow_filter") and self.signal_generator.order_flow_filter:
+            if (
+                hasattr(self.signal_generator, "order_flow_filter")
+                and self.signal_generator.order_flow_filter
+            ):
                 if hasattr(self.signal_generator.order_flow_filter, "_relax_state"):
                     self.signal_generator.order_flow_filter._relax_state.clear()
                     logger.debug("✅ OrderFlowFilter _relax_state очищен")
@@ -1760,14 +1774,16 @@ class FuturesScalpingOrchestrator:
                     f"⚠️ leverage не указан в конфиге для {symbol}, используем 3 (fallback)"
                 )
                 leverage_config = 3
-            
+
             # Определяем posSide на основе стороны сигнала
             signal_side = signal.get("side", "").lower()
             pos_side = "long" if signal_side == "buy" else "short"
-            
+
             try:
                 # ✅ Устанавливаем leverage с posSide (для hedge mode это обязательно)
-                await self.client.set_leverage(symbol, leverage_config, pos_side=pos_side)
+                await self.client.set_leverage(
+                    symbol, leverage_config, pos_side=pos_side
+                )
                 logger.debug(
                     f"✅ Плечо {leverage_config}x установлено для {symbol} с posSide='{pos_side}' перед открытием"
                 )
@@ -2085,7 +2101,7 @@ class FuturesScalpingOrchestrator:
                     manager = self.signal_generator.regime_managers.get(symbol)
                     if manager:
                         regime = manager.get_current_regime()
-                
+
                 self.active_positions[symbol].update(
                     {
                         "order_id": result.get("order_id"),
@@ -2161,9 +2177,13 @@ class FuturesScalpingOrchestrator:
                 symbol_profile = self.symbol_profiles.get(symbol, {})
                 if symbol_profile:
                     # position_multiplier находится на верхнем уровне символа, не в режиме
-                    symbol_dict = self._to_dict(symbol_profile) if not isinstance(symbol_profile, dict) else symbol_profile
+                    symbol_dict = (
+                        self._to_dict(symbol_profile)
+                        if not isinstance(symbol_profile, dict)
+                        else symbol_profile
+                    )
                     position_multiplier = symbol_dict.get("position_multiplier")
-                    
+
                     if position_multiplier is not None:
                         original_size = base_usd_size
                         if position_multiplier != 1.0:
@@ -2184,7 +2204,9 @@ class FuturesScalpingOrchestrator:
                             f"(используем базовый размер ${base_usd_size:.2f})"
                         )
                 else:
-                    logger.debug(f"⚠️ symbol_profile не найден для {symbol} в symbol_profiles")
+                    logger.debug(
+                        f"⚠️ symbol_profile не найден для {symbol} в symbol_profiles"
+                    )
 
             # Применяем position overrides (если указаны, они имеют приоритет для точной настройки)
             position_overrides: Dict[str, Any] = {}
@@ -2211,7 +2233,7 @@ class FuturesScalpingOrchestrator:
                     logger.debug(
                         f"📊 Используем position override для {symbol}: ${base_usd_size:.2f}"
                     )
-            
+
             if position_overrides.get("min_position_usd") is not None:
                 min_usd_size = float(position_overrides["min_position_usd"])
             if position_overrides.get("max_position_usd") is not None:
@@ -2450,20 +2472,30 @@ class FuturesScalpingOrchestrator:
                     min_balance = getattr(profile_config, "min_balance", None)
                     size_at_min = getattr(profile_config, "size_at_min", None)
                     size_at_max = getattr(profile_config, "size_at_max", None)
-                    
-                    if min_balance is not None and size_at_min is not None and size_at_max is not None:
+
+                    if (
+                        min_balance is not None
+                        and size_at_min is not None
+                        and size_at_max is not None
+                    ):
                         threshold = profile_config.threshold
-                        
+
                         # Для профиля 'large' используется max_balance вместо threshold
                         if profile_name == "large":
-                            max_balance = getattr(profile_config, "max_balance", threshold)
+                            max_balance = getattr(
+                                profile_config, "max_balance", threshold
+                            )
                             if balance <= min_balance:
                                 base_pos_usd = size_at_min
                             elif balance >= max_balance:
                                 base_pos_usd = size_at_max
                             else:
-                                progress = (balance - min_balance) / (max_balance - min_balance)
-                                base_pos_usd = size_at_min + (size_at_max - size_at_min) * progress
+                                progress = (balance - min_balance) / (
+                                    max_balance - min_balance
+                                )
+                                base_pos_usd = (
+                                    size_at_min + (size_at_max - size_at_min) * progress
+                                )
                         else:
                             # Для других профилей
                             if balance <= min_balance:
@@ -2471,9 +2503,13 @@ class FuturesScalpingOrchestrator:
                             elif balance >= threshold:
                                 base_pos_usd = size_at_max
                             else:
-                                progress = (balance - min_balance) / (threshold - min_balance)
-                                base_pos_usd = size_at_min + (size_at_max - size_at_min) * progress
-                        
+                                progress = (balance - min_balance) / (
+                                    threshold - min_balance
+                                )
+                                base_pos_usd = (
+                                    size_at_min + (size_at_max - size_at_min) * progress
+                                )
+
                         logger.debug(
                             f"📊 Прогрессивная адаптация для {profile_name}: "
                             f"баланс ${balance:.2f} → размер ${base_pos_usd:.2f} "
@@ -2482,7 +2518,9 @@ class FuturesScalpingOrchestrator:
                         )
                     else:
                         # Если параметры прогрессивной адаптации не указаны, используем base_position_usd
-                        base_pos_usd = getattr(profile_config, "base_position_usd", None)
+                        base_pos_usd = getattr(
+                            profile_config, "base_position_usd", None
+                        )
                         if base_pos_usd is None or base_pos_usd <= 0:
                             logger.error(
                                 f"❌ Профиль {profile_name}: base_position_usd не указан или <= 0 в конфиге!"
@@ -2555,8 +2593,12 @@ class FuturesScalpingOrchestrator:
             min_balance = getattr(profile_config, "min_balance", None)
             size_at_min = getattr(profile_config, "size_at_min", None)
             size_at_max = getattr(profile_config, "size_at_max", None)
-            
-            if min_balance is not None and size_at_min is not None and size_at_max is not None:
+
+            if (
+                min_balance is not None
+                and size_at_min is not None
+                and size_at_max is not None
+            ):
                 # Для профиля 'large' используется max_balance
                 if profile_name == "large":
                     max_balance = getattr(profile_config, "max_balance", 999999.0)
@@ -2566,7 +2608,9 @@ class FuturesScalpingOrchestrator:
                         base_pos_usd = size_at_max
                     else:
                         progress = (balance - min_balance) / (max_balance - min_balance)
-                        base_pos_usd = size_at_min + (size_at_max - size_at_min) * progress
+                        base_pos_usd = (
+                            size_at_min + (size_at_max - size_at_min) * progress
+                        )
                 else:
                     threshold = profile_config.threshold
                     if balance <= min_balance:
@@ -2575,8 +2619,10 @@ class FuturesScalpingOrchestrator:
                         base_pos_usd = size_at_max
                     else:
                         progress = (balance - min_balance) / (threshold - min_balance)
-                        base_pos_usd = size_at_min + (size_at_max - size_at_min) * progress
-                
+                        base_pos_usd = (
+                            size_at_min + (size_at_max - size_at_min) * progress
+                        )
+
                 logger.debug(
                     f"📊 Прогрессивная адаптация для {profile_name}: "
                     f"баланс ${balance:.2f} → размер ${base_pos_usd:.2f}"
@@ -3192,11 +3238,11 @@ class FuturesScalpingOrchestrator:
         for symbol, profile in (raw_profiles or {}).items():
             normalized: Dict[str, Any] = {}
             profile_dict = self._to_dict(profile)
-            
+
             # ✅ ВАРИАНТ B: Сохраняем position_multiplier на верхнем уровне символа
             if "position_multiplier" in profile_dict:
                 normalized["position_multiplier"] = profile_dict["position_multiplier"]
-            
+
             # ✅ НОВОЕ: Сохраняем tp_percent на верхнем уровне символа (если есть)
             if "tp_percent" in profile_dict:
                 tp_value = profile_dict["tp_percent"]
@@ -3207,8 +3253,10 @@ class FuturesScalpingOrchestrator:
                     try:
                         normalized["tp_percent"] = float(tp_value)
                     except (ValueError, TypeError):
-                        logger.warning(f"⚠️ Не удалось конвертировать tp_percent в float для {symbol}: {tp_value}")
-            
+                        logger.warning(
+                            f"⚠️ Не удалось конвертировать tp_percent в float для {symbol}: {tp_value}"
+                        )
+
             for regime_name, regime_data in profile_dict.items():
                 regime_key = str(regime_name).lower()
                 # Пропускаем position_multiplier и tp_percent, так как они уже сохранены выше
@@ -3232,8 +3280,10 @@ class FuturesScalpingOrchestrator:
                                 normalized[regime_key] = {}
                             normalized[regime_key]["tp_percent"] = float(tp_value)
                         except (ValueError, TypeError):
-                            logger.warning(f"⚠️ Не удалось конвертировать tp_percent в float для {symbol} ({regime_key}): {tp_value}")
-                
+                            logger.warning(
+                                f"⚠️ Не удалось конвертировать tp_percent в float для {symbol} ({regime_key}): {tp_value}"
+                            )
+
                 for section, section_value in list(regime_dict.items()):
                     # Пропускаем tp_percent, так как он уже обработан выше
                     if section == "tp_percent":

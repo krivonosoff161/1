@@ -152,7 +152,9 @@ class LiquidationGuard:
             # ✅ ИСПРАВЛЕНИЕ: Используем leverage из margin_calculator (из конфига), а не из позиции на бирже
             # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
             leverage_from_position = int(position.get("lever", "0"))
-            leverage = self.margin_calculator.default_leverage or leverage_from_position or 3
+            leverage = (
+                self.margin_calculator.default_leverage or leverage_from_position or 3
+            )
             if leverage_from_position != leverage:
                 logger.debug(
                     f"📊 Leverage: биржа={leverage_from_position}x, конфиг={leverage}x, используем {leverage}x для расчетов"

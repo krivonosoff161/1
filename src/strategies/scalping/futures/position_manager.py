@@ -48,7 +48,9 @@ class FuturesPositionManager:
         self.scalping_config = config.scalping
         self.client = client
         self.margin_calculator = margin_calculator
-        self.symbol_profiles: Dict[str, Dict[str, Any]] = {}  # ✅ НОВОЕ: Для per-symbol TP
+        self.symbol_profiles: Dict[
+            str, Dict[str, Any]
+        ] = {}  # ✅ НОВОЕ: Для per-symbol TP
 
         # Состояние
         self.is_initialized = False
@@ -64,11 +66,13 @@ class FuturesPositionManager:
         }
 
         logger.info("FuturesPositionManager инициализирован")
-        
+
     def set_symbol_profiles(self, symbol_profiles: Dict[str, Dict[str, Any]]):
         """✅ НОВОЕ: Устанавливает symbol_profiles для per-symbol TP"""
         self.symbol_profiles = symbol_profiles
-        logger.debug(f"✅ symbol_profiles установлен в position_manager ({len(symbol_profiles)} символов)")
+        logger.debug(
+            f"✅ symbol_profiles установлен в position_manager ({len(symbol_profiles)} символов)"
+        )
 
     async def initialize(self):
         """Инициализация менеджера позиций"""
@@ -141,7 +145,11 @@ class FuturesPositionManager:
             # ✅ ИСПРАВЛЕНИЕ: Используем leverage из конфига, а не из позиции на бирже
             # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
             leverage_from_position = int(position.get("lever", "0"))
-            leverage = getattr(self.scalping_config, "leverage", None) or leverage_from_position or 3
+            leverage = (
+                getattr(self.scalping_config, "leverage", None)
+                or leverage_from_position
+                or 3
+            )
             if leverage_from_position != leverage:
                 logger.debug(
                     f"📊 Leverage: биржа={leverage_from_position}x, конфиг={leverage}x, используем {leverage}x для расчетов"
@@ -307,7 +315,11 @@ class FuturesPositionManager:
             # ✅ ИСПРАВЛЕНИЕ: Используем leverage из конфига, а не из позиции на бирже
             # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
             leverage_from_position = int(position.get("lever", "0"))
-            leverage = getattr(self.scalping_config, "leverage", None) or leverage_from_position or 3
+            leverage = (
+                getattr(self.scalping_config, "leverage", None)
+                or leverage_from_position
+                or 3
+            )
             if leverage_from_position != leverage:
                 logger.debug(
                     f"📊 Leverage: биржа={leverage_from_position}x, конфиг={leverage}x, используем {leverage}x для расчетов"
@@ -444,10 +456,12 @@ class FuturesPositionManager:
 
             # ✅ НОВОЕ: Проверка Take Profit с поддержкой per-symbol и per-regime TP
             tp_percent = self.scalping_config.tp_percent  # Глобальный (fallback)
-            
+
             # Получаем режим из позиции (сохранен при открытии)
-            regime = position.get("regime") or self.active_positions.get(symbol, {}).get("regime")
-            
+            regime = position.get("regime") or self.active_positions.get(
+                symbol, {}
+            ).get("regime")
+
             # Получаем tp_percent для символа и режима (если есть в symbol_profiles)
             if symbol and self.symbol_profiles:
                 symbol_profile = self.symbol_profiles.get(symbol, {})
@@ -455,29 +469,33 @@ class FuturesPositionManager:
                     # Конвертируем в dict если нужно
                     if not isinstance(symbol_profile, dict):
                         # Если это Pydantic модель или другой объект, пробуем разные способы
-                        if hasattr(symbol_profile, 'dict'):
+                        if hasattr(symbol_profile, "dict"):
                             symbol_dict = symbol_profile.dict()
-                        elif hasattr(symbol_profile, '__dict__'):
+                        elif hasattr(symbol_profile, "__dict__"):
                             symbol_dict = dict(symbol_profile.__dict__)
                         else:
                             symbol_dict = {}
                     else:
                         symbol_dict = symbol_profile
-                    
+
                     # 1. ✅ ПРИОРИТЕТ 1: Per-regime TP (если режим определен)
                     if regime:
-                        regime_lower = regime.lower() if isinstance(regime, str) else str(regime).lower()
+                        regime_lower = (
+                            regime.lower()
+                            if isinstance(regime, str)
+                            else str(regime).lower()
+                        )
                         regime_profile = symbol_dict.get(regime_lower, {})
-                        
+
                         # Конвертируем regime_profile в dict если нужно
                         if not isinstance(regime_profile, dict):
-                            if hasattr(regime_profile, 'dict'):
+                            if hasattr(regime_profile, "dict"):
                                 regime_profile = regime_profile.dict()
-                            elif hasattr(regime_profile, '__dict__'):
+                            elif hasattr(regime_profile, "__dict__"):
                                 regime_profile = dict(regime_profile.__dict__)
                             else:
                                 regime_profile = {}
-                        
+
                         regime_tp_percent = regime_profile.get("tp_percent")
                         if regime_tp_percent is not None:
                             # ✅ ИСПРАВЛЕНИЕ: Проверяем тип перед конвертацией в float
@@ -502,7 +520,7 @@ class FuturesPositionManager:
                                 logger.warning(
                                     f"⚠️ regime_tp_percent для {symbol} ({regime}) имеет неожиданный тип: {type(regime_tp_percent)}, значение: {regime_tp_percent}"
                                 )
-                    
+
                     # 2. ✅ ПРИОРИТЕТ 2: Per-symbol TP (fallback, если режим не определен)
                     if tp_percent == self.scalping_config.tp_percent:
                         symbol_tp_percent = symbol_dict.get("tp_percent")
@@ -529,7 +547,7 @@ class FuturesPositionManager:
                                 logger.warning(
                                     f"⚠️ symbol_tp_percent для {symbol} имеет неожиданный тип: {type(symbol_tp_percent)}, значение: {symbol_tp_percent}"
                                 )
-            
+
             if pnl_percent >= tp_percent:
                 logger.info(
                     f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}% "
