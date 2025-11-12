@@ -94,6 +94,9 @@ class TrailingStopLoss:
         self.aggressive_mode = False
         self.aggressive_step_profit = 0.0
         self.aggressive_step_trail = 0.0
+        # ✅ НОВОЕ: Множители режимов из конфига (устанавливаются в orchestrator)
+        self.regime_multiplier = None  # Будет установлено из конфига
+        self.trend_strength_boost = None  # Будет установлено из конфига
         self.aggressive_max_trail: Optional[float] = max_trail
         self._next_trail_profit_target: Optional[float] = None
 
@@ -266,15 +269,29 @@ class TrailingStopLoss:
                 else self.entry_price
             )
             return effective_highest * (1 - self.current_trail)
-        else:
-            # Для шорта стоп-лосс выше минимальной цены
-            # Используем min(lowest_price, entry_price) для безопасности
-            effective_lowest = (
-                min(self.lowest_price, self.entry_price)
-                if self.lowest_price < float("inf")
-                else self.entry_price
-            )
-            return effective_lowest * (1 + self.current_trail)
+        else:  # short
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для SHORT стоп должен быть ВЫШЕ entry при инициализации (защита от роста)
+            # При инициализации: lowest_price = entry_price, стоп = entry_price * (1 + trail%) (выше entry)
+            # После обновления: если цена упала (lowest_price < entry_price), стоп следует за минимальной ценой (опускается)
+            # Стоп может опускаться ниже entry, когда позиция в прибыли (это правильно для trailing stop!)
+            
+            if self.lowest_price < float("inf") and self.lowest_price < self.entry_price:
+                # Цена упала ниже entry (позиция в прибыли) - стоп следует за минимальной ценой (опускается)
+                # Стоп = lowest_price * (1 + trail%) (защита от отскока)
+                # ✅ Стоп может быть ниже entry * (1 + trail%) - это правильно, потому что позиция в прибыли!
+                stop_loss = self.lowest_price * (1 + self.current_trail)
+                # ✅ ЗАЩИТА: стоп не должен быть ниже entry (базовая защита)
+                # Но если цена упала значительно ниже entry, стоп может быть ниже entry * (1 + trail%)
+                if stop_loss < self.entry_price:
+                    # Если стоп опустился ниже entry, используем entry как минимальный стоп
+                    # Это защищает от случая, когда trail очень маленький
+                    stop_loss = max(stop_loss, self.entry_price * (1 + self.initial_trail))
+            else:
+                # Цена еще не упала ниже entry или это инициализация - стоп выше entry
+                # Стоп = entry_price * (1 + trail%) (защита от роста)
+                stop_loss = self.entry_price * (1 + self.current_trail)
+            
+            return stop_loss
 
     def get_profit_pct(self, current_price: float, include_fees: bool = True) -> float:
         """
@@ -442,22 +459,30 @@ class TrailingStopLoss:
                 return False
 
         # ⚠️ АДАПТИВНАЯ ЛОГИКА: Если позиция в прибыли и идет тренд/режим - даем больше места
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем множители из конфига (передаются из orchestrator)
         if profit_pct > 0:
-            # Определяем множитель адаптации на основе режима и тренда
-            regime_multiplier = 1.0
-            if market_regime == "trending":
-                # В тренде даем больше места для отката
-                regime_multiplier = 1.5
-            elif market_regime == "ranging":
-                # В боковике стандартно
-                regime_multiplier = 1.0
-            elif market_regime == "choppy":
-                # В хаосе даем меньше места (строже)
-                regime_multiplier = 0.8
+            # Получаем множители из параметров (передаются из orchestrator через _get_trailing_sl_params)
+            # Fallback значения (если не переданы из конфига)
+            regime_multiplier = getattr(self, "regime_multiplier", None) or 1.0
+            trend_strength_boost = getattr(self, "trend_strength_boost", None) or 1.0
+            
+            # Если множители не установлены, используем старую логику (для обратной совместимости)
+            if regime_multiplier == 1.0 and not hasattr(self, "regime_multiplier"):
+                if market_regime == "trending":
+                    regime_multiplier = 1.5  # Fallback: в тренде больше места
+                elif market_regime == "ranging":
+                    regime_multiplier = 1.0  # Fallback: в боковике стандартно
+                elif market_regime == "choppy":
+                    regime_multiplier = 0.8  # Fallback: в хаосе меньше места
 
-            # Если есть сильный тренд - дополнительный буст
+            # Если есть сильный тренд - дополнительный буст из конфига
             if trend_strength and trend_strength > 0.7:
-                regime_multiplier *= 1.3  # Дополнительный буст при сильном тренде
+                # Используем trend_strength_boost из конфига, если установлен
+                if trend_strength_boost != 1.0:
+                    regime_multiplier *= trend_strength_boost
+                else:
+                    # Fallback: старый буст (для обратной совместимости)
+                    regime_multiplier *= 1.3
 
             # Позиция в прибыли и (сильный тренд или trending режим) - даем больше места
             if regime_multiplier > 1.0 or (trend_strength and trend_strength > 0.7):
@@ -484,13 +509,21 @@ class TrailingStopLoss:
                         )
                         return False
                 else:  # short
-                    effective_lowest = (
-                        min(self.lowest_price, self.entry_price)
-                        if self.lowest_price < float("inf")
-                        else self.entry_price
-                    )
-                    adjusted_stop = effective_lowest * (1 + adjusted_trail)
-                    # Не закрываем если цена ниже скорректированного стопа
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для SHORT используем ту же логику, что и в get_stop_loss()
+                    # При инициализации: стоп = entry_price * (1 + trail%) (выше entry)
+                    # После обновления: стоп = lowest_price * (1 + trail%) (следует за минимальной ценой)
+                    # Стоп может опускаться ниже entry, когда позиция в прибыли (это правильно для trailing stop!)
+                    if self.lowest_price < float("inf") and self.lowest_price < self.entry_price:
+                        # Цена упала ниже entry (позиция в прибыли) - стоп следует за минимальной ценой (опускается)
+                        adjusted_stop = self.lowest_price * (1 + adjusted_trail)
+                        # ✅ ЗАЩИТА: стоп не должен быть ниже entry (базовая защита)
+                        if adjusted_stop < self.entry_price:
+                            adjusted_stop = max(adjusted_stop, self.entry_price * (1 + self.initial_trail))
+                    else:
+                        # Цена еще не упала ниже entry или это инициализация - стоп выше entry
+                        adjusted_stop = self.entry_price * (1 + adjusted_trail)
+                    
+                    # Не закрываем если цена ниже скорректированного стопа (для SHORT цена должна подняться до стопа)
                     if current_price < adjusted_stop:
                         profit_gross = self.get_profit_pct(
                             current_price, include_fees=False

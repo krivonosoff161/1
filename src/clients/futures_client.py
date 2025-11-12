@@ -306,91 +306,101 @@ class OKXFuturesClient:
     async def get_price_limits(self, symbol: str) -> dict:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получает лимиты цены биржи для символа
+        Использует лучшие цены из стакана для более точного расчета
 
         Returns:
-            dict с ключами: max_buy_price, min_sell_price, или None при ошибке
+            dict с ключами: max_buy_price, min_sell_price, best_bid, best_ask, current_price
         """
         try:
             inst_id = f"{symbol}-SWAP"
-            # Получаем информацию об инструменте через публичный API
-            url = f"https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId={inst_id}"
             import aiohttp
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("code") == "0" and data.get("data"):
-                            inst = data["data"][0]
-                            # Получаем лимиты цены из ticker (более актуальные)
-                            ticker_url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
-                            async with session.get(ticker_url) as ticker_resp:
-                                if ticker_resp.status == 200:
-                                    ticker_data = await ticker_resp.json()
-                                    if ticker_data.get(
-                                        "code"
-                                    ) == "0" and ticker_data.get("data"):
-                                        ticker = ticker_data["data"][0]
-                                        # Получаем текущую цену и спред
-                                        current_price = float(ticker.get("last", "0"))
-                                        # Лимиты цены: обычно ±5% от текущей цены
-                                        # Но OKX API может вернуть более точные значения
-                                        max_buy_price = (
-                                            current_price * 1.05
-                                        )  # +5% от текущей
-                                        min_sell_price = (
-                                            current_price * 0.95
-                                        )  # -5% от текущей
-
-                                        # Попробуем получить более точные лимиты из order book
-                                        orderbook_url = f"https://www.okx.com/api/v5/market/books?instId={inst_id}&sz=1"
-                                        async with session.get(
-                                            orderbook_url
-                                        ) as book_resp:
-                                            if book_resp.status == 200:
-                                                book_data = await book_resp.json()
-                                                if book_data.get(
-                                                    "code"
-                                                ) == "0" and book_data.get("data"):
-                                                    book = book_data["data"][0]
-                                                    asks = book.get("asks", [])
-                                                    bids = book.get("bids", [])
-                                                    if asks and bids:
-                                                        # Берем лучшие цены из стакана
-                                                        best_ask = float(asks[0][0])
-                                                        best_bid = float(bids[0][0])
-                                                        # Более консервативные лимиты: ±2% от лучших цен
-                                                        max_buy_price = best_ask * 1.02
-                                                        min_sell_price = best_bid * 0.98
-
-                                        return {
-                                            "max_buy_price": max_buy_price,
-                                            "min_sell_price": min_sell_price,
-                                            "current_price": current_price,
-                                        }
-        except Exception as e:
-            logger.warning(f"⚠️ Не удалось получить лимиты цены для {symbol}: {e}")
-
-        # Fallback: используем ±3% от текущей цены
-        try:
-            import aiohttp
-
-            inst_id = f"{symbol}-SWAP"
-            url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("code") == "0" and data.get("data"):
-                            ticker = data["data"][0]
+                # ✅ ПРИОРИТЕТ 1: Получаем лучшие цены из стакана (самые актуальные)
+                orderbook_url = f"https://www.okx.com/api/v5/market/books?instId={inst_id}&sz=5"
+                async with session.get(orderbook_url) as book_resp:
+                    if book_resp.status == 200:
+                        book_data = await book_resp.json()
+                        if book_data.get("code") == "0" and book_data.get("data"):
+                            book = book_data["data"][0]
+                            asks = book.get("asks", [])
+                            bids = book.get("bids", [])
+                            if asks and bids:
+                                # Берем лучшие цены из стакана
+                                best_ask = float(asks[0][0])
+                                best_bid = float(bids[0][0])
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем более консервативные лимиты
+                                # Проблема: реальные лимиты биржи могут быть более строгими, чем ±1%
+                                # Решение: используем более консервативные лимиты (±0.5% от лучших цен)
+                                # Это уменьшает вероятность выхода за лимиты биржи
+                                # ✅ ИСПРАВЛЕНО: Уменьшены лимиты для большей безопасности
+                                max_buy_price = best_ask * 1.005  # +0.5% от best ask (было 1.01)
+                                min_sell_price = best_bid * 0.995  # -0.5% от best bid (было 0.99)
+                                
+                                # Получаем текущую цену из тикера
+                                ticker_url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                                async with session.get(ticker_url) as ticker_resp:
+                                    if ticker_resp.status == 200:
+                                        ticker_data = await ticker_resp.json()
+                                        if ticker_data.get("code") == "0" and ticker_data.get("data"):
+                                            ticker = ticker_data["data"][0]
+                                            current_price = float(ticker.get("last", "0"))
+                                            
+                                            logger.debug(
+                                                f"💰 Лимиты цены для {symbol}: "
+                                                f"best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, "
+                                                f"current={current_price:.2f}, "
+                                                f"min_sell={min_sell_price:.2f}, max_buy={max_buy_price:.2f}"
+                                            )
+                                            
+                                            return {
+                                                "max_buy_price": max_buy_price,
+                                                "min_sell_price": min_sell_price,
+                                                "best_bid": best_bid,
+                                                "best_ask": best_ask,
+                                                "current_price": current_price,
+                                            }
+                                
+                                # Если не получили текущую цену, используем среднюю из стакана
+                                current_price = (best_ask + best_bid) / 2
+                                return {
+                                    "max_buy_price": max_buy_price,
+                                    "min_sell_price": min_sell_price,
+                                    "best_bid": best_bid,
+                                    "best_ask": best_ask,
+                                    "current_price": current_price,
+                                }
+                
+                # ✅ FALLBACK: Если не получили стакан, используем тикер
+                ticker_url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                async with session.get(ticker_url) as ticker_resp:
+                    if ticker_resp.status == 200:
+                        ticker_data = await ticker_resp.json()
+                        if ticker_data.get("code") == "0" and ticker_data.get("data"):
+                            ticker = ticker_data["data"][0]
                             current_price = float(ticker.get("last", "0"))
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем более консервативные лимиты
+                            # Проблема: реальные лимиты биржи могут быть более строгими
+                            # Решение: используем более консервативные лимиты (±1% от текущей цены)
+                            # ✅ ИСПРАВЛЕНО: Уменьшены лимиты для большей безопасности
+                            max_buy_price = current_price * 1.01  # +1% от текущей цены (было 1.02)
+                            min_sell_price = current_price * 0.99  # -1% от текущей цены (было 0.98)
+                            
+                            logger.debug(
+                                f"💰 Лимиты цены для {symbol} (fallback): "
+                                f"current={current_price:.2f}, "
+                                f"min_sell={min_sell_price:.2f}, max_buy={max_buy_price:.2f}"
+                            )
+                            
                             return {
-                                "max_buy_price": current_price * 1.03,
-                                "min_sell_price": current_price * 0.97,
+                                "max_buy_price": max_buy_price,
+                                "min_sell_price": min_sell_price,
+                                "best_bid": current_price * 0.999,  # Примерно
+                                "best_ask": current_price * 1.001,  # Примерно
                                 "current_price": current_price,
                             }
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось получить лимиты цены для {symbol}: {e}")
 
         return None
 
