@@ -39,6 +39,14 @@ class TrailingStopLoss:
         loss_cut_percent: Optional[float] = None,
         timeout_loss_percent: Optional[float] = None,
         timeout_minutes: Optional[float] = None,
+        min_holding_minutes: Optional[
+            float
+        ] = None,  # ✅ ЭТАП 4.4: Минимальное время удержания
+        min_profit_to_close: Optional[
+            float
+        ] = None,  # ✅ ЭТАП 4.1: Минимальный профит для закрытия
+        extend_time_on_profit: bool = False,  # ✅ ЭТАП 4.3: Продлевать время для прибыльных позиций
+        extend_time_multiplier: float = 1.0,  # ✅ ЭТАП 4.3: Множитель продления времени
     ):
         """
         Инициализация Trailing Stop Loss.
@@ -65,6 +73,23 @@ class TrailingStopLoss:
         self.timeout_loss_percent = self._normalize_percent(timeout_loss_percent)
         self.timeout_minutes = (
             timeout_minutes if timeout_minutes and timeout_minutes > 0 else None
+        )
+        # ✅ ЭТАП 4.4: Минимальное время удержания позиции
+        self.min_holding_minutes = (
+            min_holding_minutes
+            if min_holding_minutes and min_holding_minutes > 0
+            else None
+        )
+        # ✅ ЭТАП 4.1: Минимальный профит для закрытия (нормализуем если нужно)
+        self.min_profit_to_close = (
+            self._normalize_percent(min_profit_to_close)
+            if min_profit_to_close and min_profit_to_close > 0
+            else None
+        )
+        # ✅ ЭТАП 4.3: Продлевание времени для прибыльных позиций
+        self.extend_time_on_profit = extend_time_on_profit
+        self.extend_time_multiplier = (
+            extend_time_multiplier if extend_time_multiplier > 1.0 else 1.0
         )
         self.aggressive_mode = False
         self.aggressive_step_profit = 0.0
@@ -336,6 +361,41 @@ class TrailingStopLoss:
             f"trail={self.current_trail:.3%}"
         )
 
+        # ✅ ЭТАП 4.4: Проверка минимального времени удержания
+        effective_min_holding = self.min_holding_minutes
+        # ✅ ЭТАП 4.3: Продлеваем время удержания для прибыльных позиций
+        if (
+            self.extend_time_on_profit
+            and profit_pct > 0
+            and effective_min_holding is not None
+        ):
+            # Применяем множитель продления времени для прибыльных позиций
+            effective_min_holding = effective_min_holding * self.extend_time_multiplier
+
+        # ✅ ЭТАП 4.4: Не закрываем позицию, если не прошло минимальное время удержания
+        if (
+            effective_min_holding is not None
+            and minutes_in_position < effective_min_holding
+        ):
+            # Исключение: жёсткое ограничение убытка применяется всегда
+            if (
+                self.loss_cut_percent is not None
+                and profit_pct <= -self.loss_cut_percent
+            ):
+                logger.warning(
+                    f"⚠️ Loss-cut (превышен лимит): прибыль {profit_pct:.2%} <= -{self.loss_cut_percent:.2%}, "
+                    f"позиция будет закрыта несмотря на минимальное время удержания "
+                    f"(time_in_position={minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
+                    f"entry_time={entry_iso}, branch=loss_cut_override)"
+                )
+                return True
+            # Для остальных случаев не закрываем раньше минимального времени
+            logger.debug(
+                f"⏱️ Минимальное время удержания: позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
+                f"не закрываем (profit={profit_pct:.2%}, entry_time={entry_iso}, branch=min_holding)"
+            )
+            return False
+
         # ✅ Жёсткое ограничение убытка
         if self.loss_cut_percent is not None and profit_pct <= -self.loss_cut_percent:
             logger.warning(
@@ -370,6 +430,16 @@ class TrailingStopLoss:
 
         if not price_hit_sl:
             return False  # Цена не достигла стоп-лосса - не закрываем
+
+        # ✅ ЭТАП 4.1: Проверка минимального профита для закрытия
+        if profit_pct > 0 and self.min_profit_to_close is not None:
+            # Не закрываем позицию, если профит меньше минимального
+            if profit_pct < self.min_profit_to_close:
+                logger.debug(
+                    f"💰 Минимальный профит: позиция в прибыли {profit_pct:.2%} < {self.min_profit_to_close:.2%}, "
+                    f"не закрываем (time_in_position={minutes_in_position:.2f} мин, entry_time={entry_iso}, branch=min_profit)"
+                )
+                return False
 
         # ⚠️ АДАПТИВНАЯ ЛОГИКА: Если позиция в прибыли и идет тренд/режим - даем больше места
         if profit_pct > 0:

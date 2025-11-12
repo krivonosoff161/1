@@ -51,6 +51,7 @@ class FuturesPositionManager:
         self.symbol_profiles: Dict[
             str, Dict[str, Any]
         ] = {}  # ✅ НОВОЕ: Для per-symbol TP
+        self.orchestrator = None  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ссылка на orchestrator для доступа к trailing_sl_by_symbol
 
         # Состояние
         self.is_initialized = False
@@ -73,6 +74,11 @@ class FuturesPositionManager:
         logger.debug(
             f"✅ symbol_profiles установлен в position_manager ({len(symbol_profiles)} символов)"
         )
+
+    def set_orchestrator(self, orchestrator):
+        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливает ссылку на orchestrator для доступа к trailing_sl_by_symbol"""
+        self.orchestrator = orchestrator
+        logger.debug("✅ Orchestrator установлен в position_manager")
 
     async def initialize(self):
         """Инициализация менеджера позиций"""
@@ -454,6 +460,39 @@ class FuturesPositionManager:
                     f"⚠️ Fallback: PnL% для {symbol} считаем от цены: {pnl_percent:.2f}%"
                 )
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка трейлинг стоп-лосс ПЕРЕД TP
+            # Если трейлинг стоп-лосс активен (позиция в прибыли и достиг min_profit_to_close),
+            # то TP отключен (трейлинг стоп-лосс имеет приоритет)
+            commission_rate = 0.0009  # 0.09% на круг (0.045% вход + 0.045% выход)
+            trailing_sl_active = False
+            min_profit_to_close = None
+
+            # Получаем трейлинг стоп-лосс из orchestrator (если доступен)
+            if hasattr(self, "orchestrator") and self.orchestrator:
+                trailing_sl_by_symbol = getattr(
+                    self.orchestrator, "trailing_sl_by_symbol", {}
+                )
+                if symbol in trailing_sl_by_symbol:
+                    tsl = trailing_sl_by_symbol[symbol]
+                    # Получаем текущую прибыль (net с комиссией)
+                    profit_pct_net = tsl.get_profit_pct(
+                        current_price, include_fees=True
+                    )
+                    min_profit_to_close = getattr(tsl, "min_profit_to_close", None)
+
+                    # Если позиция в прибыли и достиг минимального профита для трейлинга
+                    # ⚠️ ВАЖНО: profit_pct_net и min_profit_to_close оба в долях (0.001 = 0.1%)
+                    if profit_pct_net > 0 and min_profit_to_close is not None:
+                        if profit_pct_net >= min_profit_to_close:
+                            # Трейлинг стоп-лосс активен - TP отключен (трейлинг стоп-лосс имеет приоритет)
+                            trailing_sl_active = True
+                            logger.debug(
+                                f"📊 {symbol} трейлинг стоп-лосс активен "
+                                f"(profit={profit_pct_net:.3%} >= {min_profit_to_close:.3%}), "
+                                f"TP отключен (трейлинг стоп-лосс имеет приоритет)"
+                            )
+                            return  # Не проверяем TP, трейлинг стоп-лосс имеет приоритет
+
             # ✅ НОВОЕ: Проверка Take Profit с поддержкой per-symbol и per-regime TP
             tp_percent = self.scalping_config.tp_percent  # Глобальный (fallback)
 
@@ -548,17 +587,57 @@ class FuturesPositionManager:
                                     f"⚠️ symbol_tp_percent для {symbol} имеет неожиданный тип: {type(symbol_tp_percent)}, значение: {symbol_tp_percent}"
                                 )
 
-            if pnl_percent >= tp_percent:
-                logger.info(
-                    f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}% "
-                    f"(TP={tp_percent:.2f}%, PnL=${unrealized_pnl:.2f}, margin=${margin_used:.2f})"
-                )
-                await self._close_position_by_reason(position, "tp")
-                return
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: TP должен быть выше минимального профита трейлинг стоп-лосс + комиссия
+            # Если трейлинг стоп-лосс еще не активен (не достиг min_profit_to_close), то TP может сработать,
+            # но должен быть выше min_profit_to_close + комиссия + buffer
+            # ⚠️ ВАЖНО: min_profit_to_close в долях (0.001 = 0.1%), tp_percent в процентах (1.0 = 1%)
+            if (
+                not trailing_sl_active
+                and min_profit_to_close is not None
+                and pnl_percent > 0
+            ):
+                min_profit_to_close_pct = (
+                    min_profit_to_close * 100
+                )  # Конвертируем в проценты для сравнения с tp_percent
+                commission_pct = commission_rate * 100  # Комиссия в процентах (0.09%)
+                buffer_pct = 0.1  # Запас 0.1% (для безопасности)
+                min_tp_percent = min_profit_to_close_pct + commission_pct + buffer_pct
+
+                if tp_percent < min_tp_percent:
+                    # TP слишком низкий - поднимаем до минимума
+                    original_tp = tp_percent
+                    tp_percent = min_tp_percent
+                    logger.debug(
+                        f"📊 {symbol} TP поднят с {original_tp:.2f}% до {tp_percent:.2f}% "
+                        f"(минимум для трейлинга: min_profit={min_profit_to_close_pct:.2f}% + комиссия={commission_pct:.2f}% + запас={buffer_pct:.2f}% = {min_tp_percent:.2f}%)"
+                    )
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Учитываем комиссию при проверке TP
+            # TP должен быть достаточно высоким, чтобы покрыть комиссию и дать прибыль
+            tp_percent_with_commission = tp_percent + (commission_rate * 100)
+
+            if pnl_percent >= tp_percent_with_commission:
+                # Учитываем комиссию при закрытии
+                net_pnl_percent = pnl_percent - (commission_rate * 100)
+                if net_pnl_percent > 0:
+                    logger.info(
+                        f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}% "
+                        f"(TP={tp_percent:.2f}%, net после комиссии: {net_pnl_percent:.2f}%, "
+                        f"PnL=${unrealized_pnl:.2f}, margin=${margin_used:.2f})"
+                    )
+                    await self._close_position_by_reason(position, "tp")
+                    return
+                else:
+                    # После комиссии убыток - не закрываем по TP
+                    logger.debug(
+                        f"📊 {symbol} TP достигнут, но после комиссии убыток: "
+                        f"{pnl_percent:.2f}% - {commission_rate * 100:.2f}% = {net_pnl_percent:.2f}%, "
+                        f"не закрываем"
+                    )
             else:
                 logger.debug(
                     f"📊 {symbol} PnL={pnl_percent:.2f}% < TP={tp_percent:.2f}% "
-                    f"(нужно еще {tp_percent - pnl_percent:.2f}%)"
+                    f"(с комиссией: {tp_percent_with_commission:.2f}%, нужно еще {tp_percent_with_commission - pnl_percent:.2f}%)"
                 )
 
             # ⚠️ Stop Loss отключен - используется TrailingSL из orchestrator
@@ -644,6 +723,24 @@ class FuturesPositionManager:
                 # Удаление из активных позиций
                 if symbol in self.active_positions:
                     del self.active_positions[symbol]
+                    logger.debug(
+                        f"✅ Позиция {symbol} удалена из active_positions (position_manager)"
+                    )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Удаляем позицию из orchestrator.active_positions и trailing_sl_by_symbol
+                # для синхронизации состояния после закрытия по TP
+                if hasattr(self, "orchestrator") and self.orchestrator:
+                    if symbol in self.orchestrator.active_positions:
+                        del self.orchestrator.active_positions[symbol]
+                        logger.debug(
+                            f"✅ Позиция {symbol} удалена из orchestrator.active_positions"
+                        )
+                    if symbol in self.orchestrator.trailing_sl_by_symbol:
+                        self.orchestrator.trailing_sl_by_symbol[symbol].reset()
+                        del self.orchestrator.trailing_sl_by_symbol[symbol]
+                        logger.debug(
+                            f"✅ TrailingStopLoss для {symbol} удален из orchestrator"
+                        )
             else:
                 error_msg = result.get("msg", "Неизвестная ошибка")
                 logger.error(f"❌ Ошибка закрытия позиции {symbol}: {error_msg}")

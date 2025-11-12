@@ -46,6 +46,31 @@ scalping:
   adaptive_tp_sl: true  # Адаптивные TP/SL на основе волатильности
   volatility_multiplier: 1.2  # Меньший множитель для Futures
   
+  # ✅ НОВОЕ: Параметры синхронизации позиций - АДАПТИВНЫЕ
+  positions_sync:
+    base_interval_min: 5.0  # ✅ МОДЕРНИЗАЦИЯ: Минимум 5 секунд (было 15) - для высокочастотного скальпинга
+    base_interval_multiplier: 1.0  # ✅ МОДЕРНИЗАЦИЯ: Множитель 1.0 (было 3.0) - более частое обновление
+    
+    # Адаптация по режиму рынка (ПРИОРИТЕТ 1)
+    by_regime:
+      trending:
+        interval_multiplier: 1.0  # Быстрее в тренде (1.0x = каждые 5 секунд)
+      ranging:
+        interval_multiplier: 1.2  # Стандартная скорость (1.2x = каждые 6 секунд)
+      choppy:
+        interval_multiplier: 1.5  # Медленнее в хаосе (1.5x = каждые 7.5 секунд)
+    
+    # Адаптация по балансу (ПРИОРИТЕТ 2)
+    by_balance:
+      micro:
+        interval_multiplier: 1.0  # Быстрее для малого баланса (1.0x = каждые 5 секунд)
+      small:
+        interval_multiplier: 1.0  # Стандартная скорость (1.0x = каждые 5 секунд)
+      medium:
+        interval_multiplier: 1.2  # Медленнее для большого баланса (1.2x = каждые 6 секунд)
+      large:
+        interval_multiplier: 1.5  # Медленнее для очень большого баланса (1.5x = каждые 7.5 секунд)
+  
   # Balance Profiles - адаптация под размер баланса (ОПТИМИЗИРОВАНО для использования баланса 800-900 USD)
   balance_profiles:
     micro:  # $100 - $500 - НОВЫЙ ПРОФИЛЬ ДЛЯ МАЛЫХ БАЛАНСОВ
@@ -285,22 +310,22 @@ scalping:
             max_position_usd: 65.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 400
-              min_best_ask_volume_usd: 400
-              min_orderbook_depth_usd: 3500
-              max_spread_percent: 0.8
+              min_best_bid_volume_usd: 160  # ✅ СНИЖЕНО на 60% (было 400)
+              min_best_ask_volume_usd: 160  # ✅ СНИЖЕНО на 60% (было 400)
+              min_orderbook_depth_usd: 1400  # ✅ СНИЖЕНО на 60% (было 3500)
+              max_spread_percent: 1.34  # ✅ УВЕЛИЧЕНО на 67% (было 0.8) - менее строго
             order_flow:
-              long_threshold: 0.018
-              short_threshold: -0.018
-              min_total_depth_usd: 5200
+              long_threshold: 0.0072  # ✅ СНИЖЕНО на 60% (было 0.018) - менее строго
+              short_threshold: -0.0072  # ✅ СНИЖЕНО на 60% (было -0.018) - менее строго
+              min_total_depth_usd: 2080  # ✅ СНИЖЕНО на 60% (было 5200)
             funding:
-              max_positive_rate: 0.0065
-              max_negative_rate: 0.0060
-              max_abs_rate: 0.0075
+              max_positive_rate: 0.0109  # ✅ УВЕЛИЧЕНО на 67% (было 0.0065) - менее строго
+              max_negative_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
+              max_abs_rate: 0.0125  # ✅ УВЕЛИЧЕНО на 67% (было 0.0075) - менее строго
             volatility:
-              min_range_percent: 0.08
-              max_range_percent: 4.5
-              min_atr_percent: 0.015
+              min_range_percent: 0.032  # ✅ СНИЖЕНО на 60% (было 0.08)
+              max_range_percent: 7.52  # ✅ УВЕЛИЧЕНО на 67% (было 4.5)
+              min_atr_percent: 0.006  # ✅ СНИЖЕНО на 60% (было 0.015)
           impulse:
             relax:
               liquidity: 0.45
@@ -320,22 +345,22 @@ scalping:
             max_position_usd: 58.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 320
-              min_best_ask_volume_usd: 320
-              min_orderbook_depth_usd: 2800
-              max_spread_percent: 1.0
+              min_best_bid_volume_usd: 128  # ✅ СНИЖЕНО на 60% (было 320)
+              min_best_ask_volume_usd: 128  # ✅ СНИЖЕНО на 60% (было 320)
+              min_orderbook_depth_usd: 1120  # ✅ СНИЖЕНО на 60% (было 2800)
+              max_spread_percent: 1.67  # ✅ УВЕЛИЧЕНО на 67% (было 1.0) - менее строго
             order_flow:
-              long_threshold: -0.050
-              short_threshold: -0.014
-              min_total_depth_usd: 3200
+              long_threshold: -0.020  # ✅ СНИЖЕНО на 60% (было -0.050) - менее строго
+              short_threshold: -0.0056  # ✅ СНИЖЕНО на 60% (было -0.014) - менее строго
+              min_total_depth_usd: 1280  # ✅ СНИЖЕНО на 60% (было 3200)
             funding:
-              max_positive_rate: 0.0060
-              max_negative_rate: 0.0055
-              max_abs_rate: 0.0070
+              max_positive_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
+              max_negative_rate: 0.0092  # ✅ УВЕЛИЧЕНО на 67% (было 0.0055) - менее строго
+              max_abs_rate: 0.0117  # ✅ УВЕЛИЧЕНО на 67% (было 0.0070) - менее строго
             volatility:
-              min_range_percent: 0.07
-              max_range_percent: 4.8
-              min_atr_percent: 0.012
+              min_range_percent: 0.028  # ✅ СНИЖЕНО на 60% (было 0.07)
+              max_range_percent: 8.02  # ✅ УВЕЛИЧЕНО на 67% (было 4.8)
+              min_atr_percent: 0.0048  # ✅ СНИЖЕНО на 60% (было 0.012)
           modules:
             multi_timeframe:
               block_opposite: false
@@ -363,22 +388,22 @@ scalping:
             max_position_usd: 50.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 260
-              min_best_ask_volume_usd: 260
-              min_orderbook_depth_usd: 2400
-              max_spread_percent: 1.2
+              min_best_bid_volume_usd: 104  # ✅ СНИЖЕНО на 60% (было 260)
+              min_best_ask_volume_usd: 104  # ✅ СНИЖЕНО на 60% (было 260)
+              min_orderbook_depth_usd: 960  # ✅ СНИЖЕНО на 60% (было 2400)
+              max_spread_percent: 2.00  # ✅ УВЕЛИЧЕНО на 67% (было 1.2) - менее строго
             order_flow:
-              long_threshold: 0.012
-              short_threshold: -0.012
-              min_total_depth_usd: 3600
+              long_threshold: 0.0048  # ✅ СНИЖЕНО на 60% (было 0.012) - менее строго
+              short_threshold: -0.0048  # ✅ СНИЖЕНО на 60% (было -0.012) - менее строго
+              min_total_depth_usd: 1440  # ✅ СНИЖЕНО на 60% (было 3600)
             funding:
-              max_positive_rate: 0.0055
-              max_negative_rate: 0.0050
-              max_abs_rate: 0.0065
+              max_positive_rate: 0.0092  # ✅ УВЕЛИЧЕНО на 67% (было 0.0055) - менее строго
+              max_negative_rate: 0.0084  # ✅ УВЕЛИЧЕНО на 67% (было 0.0050) - менее строго
+              max_abs_rate: 0.0109  # ✅ УВЕЛИЧЕНО на 67% (было 0.0065) - менее строго
             volatility:
-              min_range_percent: 0.06
-              max_range_percent: 5.0
-              min_atr_percent: 0.010
+              min_range_percent: 0.024  # ✅ СНИЖЕНО на 60% (было 0.06)
+              max_range_percent: 8.35  # ✅ УВЕЛИЧЕНО на 67% (было 5.0)
+              min_atr_percent: 0.004  # ✅ СНИЖЕНО на 60% (было 0.010)
       ETH-USDT:
         position_multiplier: 1.0  # ✅ ВАРИАНТ B: Per-symbol множитель (стандарт)
         tp_percent: 0.95  # ✅ НОВОЕ: Per-symbol TP (стандарт)
@@ -395,22 +420,22 @@ scalping:
             max_position_usd: 58.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 260
-              min_best_ask_volume_usd: 260
-              min_orderbook_depth_usd: 2500
-              max_spread_percent: 0.9
+              min_best_bid_volume_usd: 104  # ✅ СНИЖЕНО на 60% (было 260)
+              min_best_ask_volume_usd: 104  # ✅ СНИЖЕНО на 60% (было 260)
+              min_orderbook_depth_usd: 1000  # ✅ СНИЖЕНО на 60% (было 2500)
+              max_spread_percent: 1.50  # ✅ УВЕЛИЧЕНО на 67% (было 0.9) - менее строго
             order_flow:
-              long_threshold: 0.016
-              short_threshold: -0.016
-              min_total_depth_usd: 4200
+              long_threshold: 0.0064  # ✅ СНИЖЕНО на 60% (было 0.016) - менее строго
+              short_threshold: -0.0064  # ✅ СНИЖЕНО на 60% (было -0.016) - менее строго
+              min_total_depth_usd: 1680  # ✅ СНИЖЕНО на 60% (было 4200)
             funding:
-              max_positive_rate: 0.0060
-              max_negative_rate: 0.0055
-              max_abs_rate: 0.0070
+              max_positive_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
+              max_negative_rate: 0.0092  # ✅ УВЕЛИЧЕНО на 67% (было 0.0055) - менее строго
+              max_abs_rate: 0.0117  # ✅ УВЕЛИЧЕНО на 67% (было 0.0070) - менее строго
             volatility:
-              min_range_percent: 0.07
-              max_range_percent: 4.6
-              min_atr_percent: 0.014
+              min_range_percent: 0.028  # ✅ СНИЖЕНО на 60% (было 0.07)
+              max_range_percent: 7.68  # ✅ УВЕЛИЧЕНО на 67% (было 4.6)
+              min_atr_percent: 0.0056  # ✅ СНИЖЕНО на 60% (было 0.014)
           impulse:
             relax:
               liquidity: 0.40
@@ -430,22 +455,22 @@ scalping:
             max_position_usd: 52.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 220
-              min_best_ask_volume_usd: 220
-              min_orderbook_depth_usd: 2000
-              max_spread_percent: 1.1
+              min_best_bid_volume_usd: 88  # ✅ СНИЖЕНО на 60% (было 220)
+              min_best_ask_volume_usd: 88  # ✅ СНИЖЕНО на 60% (было 220)
+              min_orderbook_depth_usd: 800  # ✅ СНИЖЕНО на 60% (было 2000)
+              max_spread_percent: 1.84  # ✅ УВЕЛИЧЕНО на 67% (было 1.1) - менее строго
             order_flow:
-              long_threshold: -0.070
-              short_threshold: -0.013
-              min_total_depth_usd: 2400
+              long_threshold: -0.028  # ✅ СНИЖЕНО на 60% (было -0.070) - менее строго
+              short_threshold: -0.0052  # ✅ СНИЖЕНО на 60% (было -0.013) - менее строго
+              min_total_depth_usd: 960  # ✅ СНИЖЕНО на 60% (было 2400)
             funding:
-              max_positive_rate: 0.0055
-              max_negative_rate: 0.0050
-              max_abs_rate: 0.0065
+              max_positive_rate: 0.0092  # ✅ УВЕЛИЧЕНО на 67% (было 0.0055) - менее строго
+              max_negative_rate: 0.0084  # ✅ УВЕЛИЧЕНО на 67% (было 0.0050) - менее строго
+              max_abs_rate: 0.0109  # ✅ УВЕЛИЧЕНО на 67% (было 0.0065) - менее строго
             volatility:
-              min_range_percent: 0.06
-              max_range_percent: 4.9
-              min_atr_percent: 0.011
+              min_range_percent: 0.024  # ✅ СНИЖЕНО на 60% (было 0.06)
+              max_range_percent: 8.18  # ✅ УВЕЛИЧЕНО на 67% (было 4.9)
+              min_atr_percent: 0.0044  # ✅ СНИЖЕНО на 60% (было 0.011)
           modules:
             multi_timeframe:
               block_opposite: false
@@ -467,22 +492,22 @@ scalping:
             max_position_usd: 46.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 200
-              min_best_ask_volume_usd: 200
-              min_orderbook_depth_usd: 1800
-              max_spread_percent: 1.3
+              min_best_bid_volume_usd: 80  # ✅ СНИЖЕНО на 60% (было 200)
+              min_best_ask_volume_usd: 80  # ✅ СНИЖЕНО на 60% (было 200)
+              min_orderbook_depth_usd: 720  # ✅ СНИЖЕНО на 60% (было 1800)
+              max_spread_percent: 2.17  # ✅ УВЕЛИЧЕНО на 67% (было 1.3) - менее строго
             order_flow:
-              long_threshold: 0.011
-              short_threshold: -0.011
-              min_total_depth_usd: 2800
+              long_threshold: 0.0044  # ✅ СНИЖЕНО на 60% (было 0.011) - менее строго
+              short_threshold: -0.0044  # ✅ СНИЖЕНО на 60% (было -0.011) - менее строго
+              min_total_depth_usd: 1120  # ✅ СНИЖЕНО на 60% (было 2800)
             funding:
-              max_positive_rate: 0.0050
-              max_negative_rate: 0.0045
-              max_abs_rate: 0.0060
+              max_positive_rate: 0.0084  # ✅ УВЕЛИЧЕНО на 67% (было 0.0050) - менее строго
+              max_negative_rate: 0.0075  # ✅ УВЕЛИЧЕНО на 67% (было 0.0045) - менее строго
+              max_abs_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
             volatility:
-              min_range_percent: 0.05
-              max_range_percent: 5.2
-              min_atr_percent: 0.009
+              min_range_percent: 0.020  # ✅ СНИЖЕНО на 60% (было 0.05)
+              max_range_percent: 8.68  # ✅ УВЕЛИЧЕНО на 67% (было 5.2)
+              min_atr_percent: 0.0036  # ✅ СНИЖЕНО на 60% (было 0.009)
       SOL-USDT:
         position_multiplier: 0.9  # ✅ ВАРИАНТ B: Per-symbol множитель (средняя ликвидность)
         tp_percent: 0.9  # ✅ НОВОЕ: Per-symbol TP (средняя ликвидность)
@@ -499,22 +524,22 @@ scalping:
             max_position_usd: 48.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 160
-              min_best_ask_volume_usd: 160
-              min_orderbook_depth_usd: 1500
-              max_spread_percent: 1.1
+              min_best_bid_volume_usd: 64  # ✅ СНИЖЕНО на 60% (было 160)
+              min_best_ask_volume_usd: 64  # ✅ СНИЖЕНО на 60% (было 160)
+              min_orderbook_depth_usd: 600  # ✅ СНИЖЕНО на 60% (было 1500)
+              max_spread_percent: 1.84  # ✅ УВЕЛИЧЕНО на 67% (было 1.1) - менее строго
             order_flow:
-              long_threshold: 0.012
-              short_threshold: -0.012
-              min_total_depth_usd: 2500
+              long_threshold: 0.0048  # ✅ СНИЖЕНО на 60% (было 0.012) - менее строго
+              short_threshold: -0.0048  # ✅ СНИЖЕНО на 60% (было -0.012) - менее строго
+              min_total_depth_usd: 1000  # ✅ СНИЖЕНО на 60% (было 2500)
             funding:
-              max_positive_rate: 0.0065
-              max_negative_rate: 0.0060
-              max_abs_rate: 0.0075
+              max_positive_rate: 0.0109  # ✅ УВЕЛИЧЕНО на 67% (было 0.0065) - менее строго
+              max_negative_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
+              max_abs_rate: 0.0125  # ✅ УВЕЛИЧЕНО на 67% (было 0.0075) - менее строго
             volatility:
-              min_range_percent: 0.10
-              max_range_percent: 5.0
-              min_atr_percent: 0.018
+              min_range_percent: 0.040  # ✅ СНИЖЕНО на 60% (было 0.10)
+              max_range_percent: 8.35  # ✅ УВЕЛИЧЕНО на 67% (было 5.0)
+              min_atr_percent: 0.0072  # ✅ СНИЖЕНО на 60% (было 0.018)
         ranging:
           tp_percent: 0.9  # ✅ НОВОЕ: Per-regime TP для ranging
           arm:
@@ -528,22 +553,22 @@ scalping:
             max_position_usd: 44.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 140
-              min_best_ask_volume_usd: 140
-              min_orderbook_depth_usd: 1200
-              max_spread_percent: 1.3
+              min_best_bid_volume_usd: 56  # ✅ СНИЖЕНО на 60% (было 140)
+              min_best_ask_volume_usd: 56  # ✅ СНИЖЕНО на 60% (было 140)
+              min_orderbook_depth_usd: 480  # ✅ СНИЖЕНО на 60% (было 1200)
+              max_spread_percent: 2.17  # ✅ УВЕЛИЧЕНО на 67% (было 1.3) - менее строго
             order_flow:
-              long_threshold: -0.100
-              short_threshold: -0.010
-              min_total_depth_usd: 1500
+              long_threshold: -0.040  # ✅ СНИЖЕНО на 60% (было -0.100) - менее строго
+              short_threshold: -0.004  # ✅ СНИЖЕНО на 60% (было -0.010) - менее строго
+              min_total_depth_usd: 600  # ✅ СНИЖЕНО на 60% (было 1500)
             funding:
-              max_positive_rate: 0.0060
-              max_negative_rate: 0.0055
-              max_abs_rate: 0.0070
+              max_positive_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
+              max_negative_rate: 0.0092  # ✅ УВЕЛИЧЕНО на 67% (было 0.0055) - менее строго
+              max_abs_rate: 0.0117  # ✅ УВЕЛИЧЕНО на 67% (было 0.0070) - менее строго
             volatility:
-              min_range_percent: 0.08
-              max_range_percent: 5.3
-              min_atr_percent: 0.015
+              min_range_percent: 0.032  # ✅ СНИЖЕНО на 60% (было 0.08)
+              max_range_percent: 8.85  # ✅ УВЕЛИЧЕНО на 67% (было 5.3)
+              min_atr_percent: 0.006  # ✅ СНИЖЕНО на 60% (было 0.015)
           modules:
             multi_timeframe:
               block_opposite: false
@@ -565,22 +590,22 @@ scalping:
             max_position_usd: 38.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 120
-              min_best_ask_volume_usd: 120
-              min_orderbook_depth_usd: 900
-              max_spread_percent: 1.5
+              min_best_bid_volume_usd: 48  # ✅ СНИЖЕНО на 60% (было 120)
+              min_best_ask_volume_usd: 48  # ✅ СНИЖЕНО на 60% (было 120)
+              min_orderbook_depth_usd: 360  # ✅ СНИЖЕНО на 60% (было 900)
+              max_spread_percent: 2.50  # ✅ УВЕЛИЧЕНО на 67% (было 1.5) - менее строго
             order_flow:
-              long_threshold: 0.008
-              short_threshold: -0.008
-              min_total_depth_usd: 1600
+              long_threshold: 0.0032  # ✅ СНИЖЕНО на 60% (было 0.008) - менее строго
+              short_threshold: -0.0032  # ✅ СНИЖЕНО на 60% (было -0.008) - менее строго
+              min_total_depth_usd: 640  # ✅ СНИЖЕНО на 60% (было 1600)
             funding:
-              max_positive_rate: 0.0055
-              max_negative_rate: 0.0050
-              max_abs_rate: 0.0065
+              max_positive_rate: 0.0092  # ✅ УВЕЛИЧЕНО на 67% (было 0.0055) - менее строго
+              max_negative_rate: 0.0084  # ✅ УВЕЛИЧЕНО на 67% (было 0.0050) - менее строго
+              max_abs_rate: 0.0109  # ✅ УВЕЛИЧЕНО на 67% (было 0.0065) - менее строго
             volatility:
-              min_range_percent: 0.07
-              max_range_percent: 5.5
-              min_atr_percent: 0.012
+              min_range_percent: 0.028  # ✅ СНИЖЕНО на 60% (было 0.07)
+              max_range_percent: 9.18  # ✅ УВЕЛИЧЕНО на 67% (было 5.5)
+              min_atr_percent: 0.0048  # ✅ СНИЖЕНО на 60% (было 0.012)
       DOGE-USDT:
         position_multiplier: 0.8  # ✅ ВАРИАНТ B: Per-symbol множитель (низкая ликвидность)
         tp_percent: 0.85  # ✅ НОВОЕ: Per-symbol TP (низкая ликвидность, fallback)
@@ -597,22 +622,22 @@ scalping:
             max_position_usd: 40.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 40
-              min_best_ask_volume_usd: 40
-              min_orderbook_depth_usd: 600
-              max_spread_percent: 1.3
+              min_best_bid_volume_usd: 16  # ✅ СНИЖЕНО на 60% (было 40)
+              min_best_ask_volume_usd: 16  # ✅ СНИЖЕНО на 60% (было 40)
+              min_orderbook_depth_usd: 240  # ✅ СНИЖЕНО на 60% (было 600)
+              max_spread_percent: 2.17  # ✅ УВЕЛИЧЕНО на 67% (было 1.3) - менее строго
             order_flow:
-              long_threshold: 0.006
-              short_threshold: -0.006
-              min_total_depth_usd: 900
+              long_threshold: 0.0024  # ✅ СНИЖЕНО на 60% (было 0.006) - менее строго
+              short_threshold: -0.0024  # ✅ СНИЖЕНО на 60% (было -0.006) - менее строго
+              min_total_depth_usd: 360  # ✅ СНИЖЕНО на 60% (было 900)
             funding:
-              max_positive_rate: 0.0070
-              max_negative_rate: 0.0065
-              max_abs_rate: 0.0080
+              max_positive_rate: 0.0117  # ✅ УВЕЛИЧЕНО на 67% (было 0.0070) - менее строго
+              max_negative_rate: 0.0109  # ✅ УВЕЛИЧЕНО на 67% (было 0.0065) - менее строго
+              max_abs_rate: 0.0134  # ✅ УВЕЛИЧЕНО на 67% (было 0.0080) - менее строго
             volatility:
-              min_range_percent: 0.12
-              max_range_percent: 6.0
-              min_atr_percent: 0.020
+              min_range_percent: 0.048  # ✅ СНИЖЕНО на 60% (было 0.12)
+              max_range_percent: 10.02  # ✅ УВЕЛИЧЕНО на 67% (было 6.0)
+              min_atr_percent: 0.008  # ✅ СНИЖЕНО на 60% (было 0.020)
           impulse:
             relax:
               liquidity: 0.35
@@ -632,22 +657,22 @@ scalping:
             max_position_usd: 36.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 25
-              min_best_ask_volume_usd: 25
-              min_orderbook_depth_usd: 450
-              max_spread_percent: 1.6
+              min_best_bid_volume_usd: 10  # ✅ СНИЖЕНО на 60% (было 25)
+              min_best_ask_volume_usd: 10  # ✅ СНИЖЕНО на 60% (было 25)
+              min_orderbook_depth_usd: 180  # ✅ СНИЖЕНО на 60% (было 450)
+              max_spread_percent: 2.67  # ✅ УВЕЛИЧЕНО на 67% (было 1.6) - менее строго
             order_flow:
-              long_threshold: -0.060
-              short_threshold: -0.004
-              min_total_depth_usd: 500
+              long_threshold: -0.024  # ✅ СНИЖЕНО на 60% (было -0.060) - менее строго
+              short_threshold: -0.0016  # ✅ СНИЖЕНО на 60% (было -0.004) - менее строго
+              min_total_depth_usd: 200  # ✅ СНИЖЕНО на 60% (было 500)
             funding:
-              max_positive_rate: 0.0065
-              max_negative_rate: 0.0060
-              max_abs_rate: 0.0075
+              max_positive_rate: 0.0109  # ✅ УВЕЛИЧЕНО на 67% (было 0.0065) - менее строго
+              max_negative_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
+              max_abs_rate: 0.0125  # ✅ УВЕЛИЧЕНО на 67% (было 0.0075) - менее строго
             volatility:
-              min_range_percent: 0.10
-              max_range_percent: 6.3
-              min_atr_percent: 0.017
+              min_range_percent: 0.040  # ✅ СНИЖЕНО на 60% (было 0.10)
+              max_range_percent: 10.52  # ✅ УВЕЛИЧЕНО на 67% (было 6.3)
+              min_atr_percent: 0.0068  # ✅ СНИЖЕНО на 60% (было 0.017)
           modules:
             multi_timeframe:
               block_opposite: false
@@ -675,22 +700,22 @@ scalping:
             max_position_usd: 30.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 15
-              min_best_ask_volume_usd: 15
-              min_orderbook_depth_usd: 320
-              max_spread_percent: 1.9
+              min_best_bid_volume_usd: 6  # ✅ СНИЖЕНО на 60% (было 15)
+              min_best_ask_volume_usd: 6  # ✅ СНИЖЕНО на 60% (было 15)
+              min_orderbook_depth_usd: 128  # ✅ СНИЖЕНО на 60% (было 320)
+              max_spread_percent: 3.17  # ✅ УВЕЛИЧЕНО на 67% (было 1.9) - менее строго
             order_flow:
-              long_threshold: 0.003
-              short_threshold: -0.003
-              min_total_depth_usd: 400
+              long_threshold: 0.0012  # ✅ СНИЖЕНО на 60% (было 0.003) - менее строго
+              short_threshold: -0.0012  # ✅ СНИЖЕНО на 60% (было -0.003) - менее строго
+              min_total_depth_usd: 160  # ✅ СНИЖЕНО на 60% (было 400)
             funding:
-              max_positive_rate: 0.0060
-              max_negative_rate: 0.0055
-              max_abs_rate: 0.0070
+              max_positive_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
+              max_negative_rate: 0.0092  # ✅ УВЕЛИЧЕНО на 67% (было 0.0055) - менее строго
+              max_abs_rate: 0.0117  # ✅ УВЕЛИЧЕНО на 67% (было 0.0070) - менее строго
             volatility:
-              min_range_percent: 0.09
-              max_range_percent: 6.5
-              min_atr_percent: 0.015
+              min_range_percent: 0.036  # ✅ СНИЖЕНО на 60% (было 0.09)
+              max_range_percent: 10.86  # ✅ УВЕЛИЧЕНО на 67% (было 6.5)
+              min_atr_percent: 0.006  # ✅ СНИЖЕНО на 60% (было 0.015)
           impulse:
             relax:
               liquidity: 0.35
@@ -713,22 +738,22 @@ scalping:
             max_position_usd: 36.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 45
-              min_best_ask_volume_usd: 45
-              min_orderbook_depth_usd: 700
-              max_spread_percent: 1.2
+              min_best_bid_volume_usd: 18  # ✅ СНИЖЕНО на 60% (было 45)
+              min_best_ask_volume_usd: 18  # ✅ СНИЖЕНО на 60% (было 45)
+              min_orderbook_depth_usd: 280  # ✅ СНИЖЕНО на 60% (было 700)
+              max_spread_percent: 2.00  # ✅ УВЕЛИЧЕНО на 67% (было 1.2) - менее строго
             order_flow:
-              long_threshold: 0.007
-              short_threshold: -0.007
-              min_total_depth_usd: 850
+              long_threshold: 0.0028  # ✅ СНИЖЕНО на 60% (было 0.007) - менее строго
+              short_threshold: -0.0028  # ✅ СНИЖЕНО на 60% (было -0.007) - менее строго
+              min_total_depth_usd: 340  # ✅ СНИЖЕНО на 60% (было 850)
             funding:
-              max_positive_rate: 0.0065
-              max_negative_rate: 0.0060
-              max_abs_rate: 0.0075
+              max_positive_rate: 0.0109  # ✅ УВЕЛИЧЕНО на 67% (было 0.0065) - менее строго
+              max_negative_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
+              max_abs_rate: 0.0125  # ✅ УВЕЛИЧЕНО на 67% (было 0.0075) - менее строго
             volatility:
-              min_range_percent: 0.11
-              max_range_percent: 5.8
-              min_atr_percent: 0.019
+              min_range_percent: 0.044  # ✅ СНИЖЕНО на 60% (было 0.11)
+              max_range_percent: 9.69  # ✅ УВЕЛИЧЕНО на 67% (было 5.8)
+              min_atr_percent: 0.0076  # ✅ СНИЖЕНО на 60% (было 0.019)
           impulse:
             relax:
               liquidity: 0.38
@@ -748,22 +773,22 @@ scalping:
             max_position_usd: 32.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 30
-              min_best_ask_volume_usd: 30
-              min_orderbook_depth_usd: 480
-              max_spread_percent: 1.5
+              min_best_bid_volume_usd: 12  # ✅ СНИЖЕНО на 60% (было 30)
+              min_best_ask_volume_usd: 12  # ✅ СНИЖЕНО на 60% (было 30)
+              min_orderbook_depth_usd: 192  # ✅ СНИЖЕНО на 60% (было 480)
+              max_spread_percent: 2.50  # ✅ УВЕЛИЧЕНО на 67% (было 1.5) - менее строго
             order_flow:
-              long_threshold: -0.060
-              short_threshold: -0.005
-              min_total_depth_usd: 450
+              long_threshold: -0.024  # ✅ СНИЖЕНО на 60% (было -0.060) - менее строго
+              short_threshold: -0.002  # ✅ СНИЖЕНО на 60% (было -0.005) - менее строго
+              min_total_depth_usd: 180  # ✅ СНИЖЕНО на 60% (было 450)
             funding:
-              max_positive_rate: 0.0060
-              max_negative_rate: 0.0055
-              max_abs_rate: 0.0070
+              max_positive_rate: 0.0100  # ✅ УВЕЛИЧЕНО на 67% (было 0.0060) - менее строго
+              max_negative_rate: 0.0092  # ✅ УВЕЛИЧЕНО на 67% (было 0.0055) - менее строго
+              max_abs_rate: 0.0117  # ✅ УВЕЛИЧЕНО на 67% (было 0.0070) - менее строго
             volatility:
-              min_range_percent: 0.09
-              max_range_percent: 6.1
-              min_atr_percent: 0.016
+              min_range_percent: 0.036  # ✅ СНИЖЕНО на 60% (было 0.09)
+              max_range_percent: 10.19  # ✅ УВЕЛИЧЕНО на 67% (было 6.1)
+              min_atr_percent: 0.0064  # ✅ СНИЖЕНО на 60% (было 0.016)
           modules:
             multi_timeframe:
               block_opposite: false
@@ -791,22 +816,22 @@ scalping:
             max_position_usd: 28.0
           filters:
             liquidity:
-              min_best_bid_volume_usd: 12
-              min_best_ask_volume_usd: 12
-              min_orderbook_depth_usd: 320
-              max_spread_percent: 1.8
+              min_best_bid_volume_usd: 5  # ✅ СНИЖЕНО на 60% (было 12)
+              min_best_ask_volume_usd: 5  # ✅ СНИЖЕНО на 60% (было 12)
+              min_orderbook_depth_usd: 128  # ✅ СНИЖЕНО на 60% (было 320)
+              max_spread_percent: 3.01  # ✅ УВЕЛИЧЕНО на 67% (было 1.8) - менее строго
             order_flow:
-              long_threshold: 0.004
-              short_threshold: -0.004
-              min_total_depth_usd: 380
+              long_threshold: 0.0016  # ✅ СНИЖЕНО на 60% (было 0.004) - менее строго
+              short_threshold: -0.0016  # ✅ СНИЖЕНО на 60% (было -0.004) - менее строго
+              min_total_depth_usd: 152  # ✅ СНИЖЕНО на 60% (было 380)
             funding:
-              max_positive_rate: 0.0055
-              max_negative_rate: 0.0050
-              max_abs_rate: 0.0065
+              max_positive_rate: 0.0092  # ✅ УВЕЛИЧЕНО на 67% (было 0.0055) - менее строго
+              max_negative_rate: 0.0084  # ✅ УВЕЛИЧЕНО на 67% (было 0.0050) - менее строго
+              max_abs_rate: 0.0109  # ✅ УВЕЛИЧЕНО на 67% (было 0.0065) - менее строго
             volatility:
-              min_range_percent: 0.08
-              max_range_percent: 6.4
-              min_atr_percent: 0.014
+              min_range_percent: 0.032  # ✅ СНИЖЕНО на 60% (было 0.08)
+              max_range_percent: 10.69  # ✅ УВЕЛИЧЕНО на 67% (было 6.4)
+              min_atr_percent: 0.0056  # ✅ СНИЖЕНО на 60% (было 0.014)
           impulse:
             relax:
               liquidity: 0.35
@@ -838,14 +863,15 @@ scalping:
   ma_fast: 10  # Более быстрые MA для Futures
   ma_slow: 21
 
-# Риск-менеджмент для Futures
+# Риск-менеджмент для Futures - АДАПТИВНЫЙ
 risk:
+  # Базовые параметры (для обратной совместимости)
   max_position_size_percent: 20.0  # ✅ ВАРИАНТ B: Увеличено с 3.0 до 20.0 (позволяет позиции $100-200 при балансе $1018)
   max_daily_loss_percent: 5.0  # Максимальная дневная потеря в % от баланса (строже для Futures)
   risk_per_trade_percent: 1.5  # Риск на сделку в % от баланса
   max_open_positions: 5  # Максимальное количество одновременных позиций (по одной на каждую пару)
   
-  # Адаптивное управление риском
+  # Адаптивное управление риском (для обратной совместимости)
   adaptive_risk: true
   balance_threshold: 0.8  # Порог для снижения риска (80% от начального баланса)
   risk_reduction_factor: 0.5  # Коэффициент снижения риска
@@ -861,9 +887,159 @@ risk:
     large:  # $2300+
       balance_threshold: 999999.0  # Большое число для "от"
       minimum_order_usd: 15.0  # Больше для большого баланса
+  
+  # ✅ НОВОЕ: Адаптивные параметры риска (ПРИОРИТЕТ над базовыми)
+  # Базовые параметры (по умолчанию, используются как fallback)
+  base:
+    max_loss_per_trade_percent: 2.0  # 2% макс потеря на сделку
+    max_margin_percent: 80.0  # 80% макс маржа
+    max_drawdown_percent: 5.0  # 5% макс просадка
+    max_margin_safety_percent: 90.0  # 90% безопасности (финальная проверка)
+    min_balance_usd: 20.0  # Минимум $20 баланса
+    min_time_between_orders_seconds: 30  # Минимум 30 секунд между ордерами
+    position_override_tolerance_percent: 50.0  # 50% разница для игнорирования override
+  
+  # Адаптация по режиму рынка (ARM) - ПРИОРИТЕТ 1
+  by_regime:
+    trending:
+      # Параметры риска для тренда (меньше риск, больше уверенности)
+      max_loss_per_trade_percent: 1.5  # Меньше риск в тренде (1.5% вместо 2.0%)
+      max_margin_percent: 85.0  # Больше маржи в тренде (85% вместо 80%)
+      max_drawdown_percent: 4.0  # Меньше просадка в тренде (4% вместо 5%)
+      max_margin_safety_percent: 90.0  # 90% безопасности
+      min_time_between_orders_seconds: 20  # Быстрее в тренде (20 секунд вместо 30)
+      
+      # Strength multipliers для тренда (более агрессивные)
+      strength_multipliers:
+        conflict: 0.6  # Конфликт: 60% (было 50%)
+        very_strong: 1.6  # Сильный сигнал: 160% (было 150%)
+        strong: 1.3  # Хороший сигнал: 130% (было 120%)
+        medium: 1.1  # Средний сигнал: 110% (было 100%)
+        weak: 0.9  # Слабый сигнал: 90% (было 80%)
+      
+      # Пороги силы сигнала для тренда
+      strength_thresholds:
+        very_strong: 0.8  # Порог для сильного сигнала
+        strong: 0.6  # Порог для хорошего сигнала
+        medium: 0.4  # Порог для среднего сигнала
+    
+    ranging:
+      # Параметры риска для флэта (стандартные)
+      max_loss_per_trade_percent: 2.0  # Стандартный риск во флэте (2.0%)
+      max_margin_percent: 80.0  # Стандартная маржа во флэте (80%)
+      max_drawdown_percent: 5.0  # Стандартная просадка во флэте (5%)
+      max_margin_safety_percent: 90.0  # 90% безопасности
+      min_time_between_orders_seconds: 30  # Стандартная скорость (30 секунд)
+      
+      # Strength multipliers для флэта (стандартные)
+      strength_multipliers:
+        conflict: 0.5  # Конфликт: 50%
+        very_strong: 1.5  # Сильный сигнал: 150%
+        strong: 1.2  # Хороший сигнал: 120%
+        medium: 1.0  # Средний сигнал: 100%
+        weak: 0.8  # Слабый сигнал: 80%
+      
+      # Пороги силы сигнала для флэта
+      strength_thresholds:
+        very_strong: 0.8  # Порог для сильного сигнала
+        strong: 0.6  # Порог для хорошего сигнала
+        medium: 0.4  # Порог для среднего сигнала
+    
+    choppy:
+      # Параметры риска для хаоса (больше риск, меньше уверенности)
+      max_loss_per_trade_percent: 2.5  # Больше риск в хаосе (2.5% вместо 2.0%)
+      max_margin_percent: 75.0  # Меньше маржи в хаосе (75% вместо 80%)
+      max_drawdown_percent: 6.0  # Больше просадка в хаосе (6% вместо 5%)
+      max_margin_safety_percent: 85.0  # 85% безопасности (строже в хаосе)
+      min_time_between_orders_seconds: 45  # Медленнее в хаосе (45 секунд вместо 30)
+      
+      # Strength multipliers для хаоса (более консервативные)
+      strength_multipliers:
+        conflict: 0.4  # Конфликт: 40% (меньше риск в хаосе)
+        very_strong: 1.4  # Сильный сигнал: 140% (меньше размер в хаосе)
+        strong: 1.1  # Хороший сигнал: 110% (меньше размер в хаосе)
+        medium: 0.9  # Средний сигнал: 90% (меньше размер в хаосе)
+        weak: 0.7  # Слабый сигнал: 70% (меньше размер в хаосе)
+      
+      # Пороги силы сигнала для хаоса (выше пороги)
+      strength_thresholds:
+        very_strong: 0.85  # Порог для сильного сигнала (выше в хаосе)
+        strong: 0.65  # Порог для хорошего сигнала (выше в хаосе)
+        medium: 0.45  # Порог для среднего сигнала (выше в хаосе)
+  
+  # Адаптация по балансу (Balance Profiles) - ПРИОРИТЕТ 2
+  by_balance:
+    micro:  # $100 - $500
+      # Параметры риска для малого баланса (больше агрессивности)
+      max_loss_per_trade_percent: 2.5  # Больше риск для малого баланса (2.5% вместо 2.0%)
+      max_margin_percent: 85.0  # Больше маржи для малого баланса (85% вместо 80%)
+      max_drawdown_percent: 6.0  # Больше просадка для малого баланса (6% вместо 5%)
+      max_margin_safety_percent: 90.0  # 90% безопасности
+      min_balance_usd: 10.0  # Минимум $10 баланса (меньше для малого баланса)
+      min_time_between_orders_seconds: 25  # Быстрее для малого баланса (25 секунд вместо 30)
+    
+    small:  # $500 - $1500
+      # Параметры риска для среднего баланса (стандартные)
+      max_loss_per_trade_percent: 2.0  # Стандартный риск для среднего баланса (2.0%)
+      max_margin_percent: 80.0  # Стандартная маржа для среднего баланса (80%)
+      max_drawdown_percent: 5.0  # Стандартная просадка для среднего баланса (5%)
+      max_margin_safety_percent: 90.0  # 90% безопасности
+      min_balance_usd: 20.0  # Минимум $20 баланса
+      min_time_between_orders_seconds: 30  # Стандартная скорость (30 секунд)
+    
+    medium:  # $1500 - $3000
+      # Параметры риска для большого баланса (больше консервативности)
+      max_loss_per_trade_percent: 1.8  # Меньше риск для большого баланса (1.8% вместо 2.0%)
+      max_margin_percent: 75.0  # Меньше маржи для большого баланса (75% вместо 80%)
+      max_drawdown_percent: 4.0  # Меньше просадка для большого баланса (4% вместо 5%)
+      max_margin_safety_percent: 85.0  # 85% безопасности (строже для большого баланса)
+      min_balance_usd: 30.0  # Минимум $30 баланса (больше для большого баланса)
+      min_time_between_orders_seconds: 35  # Медленнее для большого баланса (35 секунд вместо 30)
+    
+    large:  # $3000+
+      # Параметры риска для очень большого баланса (больше консервативности)
+      max_loss_per_trade_percent: 1.5  # Меньше риск для очень большого баланса (1.5% вместо 2.0%)
+      max_margin_percent: 70.0  # Меньше маржи для очень большого баланса (70% вместо 80%)
+      max_drawdown_percent: 3.0  # Меньше просадка для очень большого баланса (3% вместо 5%)
+      max_margin_safety_percent: 80.0  # 80% безопасности (строже для очень большого баланса)
+      min_balance_usd: 50.0  # Минимум $50 баланса (больше для очень большого баланса)
+      min_time_between_orders_seconds: 40  # Медленнее для очень большого баланса (40 секунд вместо 30)
 
 # Параметры Futures-специфичных модулей
 futures_modules:
+  # ✅ НОВОЕ: Параметры маржи - АДАПТИВНЫЕ
+  margin:
+    base:
+      maintenance_margin_ratio: 0.01  # 1%
+      initial_margin_ratio: 0.1  # 10% (для leverage 5x)
+    # Адаптация по балансу (может быть разной для разных балансов)
+    by_balance:
+      micro:
+        maintenance_margin_ratio: 0.01  # 1%
+        initial_margin_ratio: 0.1  # 10%
+      small:
+        maintenance_margin_ratio: 0.01  # 1%
+        initial_margin_ratio: 0.1  # 10%
+      medium:
+        maintenance_margin_ratio: 0.01  # 1%
+        initial_margin_ratio: 0.1  # 10%
+      large:
+        maintenance_margin_ratio: 0.01  # 1%
+        initial_margin_ratio: 0.1  # 10%
+  
+  # ✅ НОВОЕ: Параметры фандинга - АДАПТИВНЫЕ
+  funding_rate:
+    base:
+      max_funding_rate: 0.05  # 0.05% (базовый максимум)
+    # Адаптация по режиму рынка (может быть разной для разных режимов)
+    by_regime:
+      trending:
+        max_funding_rate: 0.06  # Больше толерантности в тренде (0.06% вместо 0.05%)
+      ranging:
+        max_funding_rate: 0.05  # Стандартная толерантность (0.05%)
+      choppy:
+        max_funding_rate: 0.04  # Меньше толерантности в хаосе (0.04% вместо 0.05%)
+  
   # Slippage Guard
   slippage_guard:
     max_slippage_percent: 0.1  # Максимальное проскальзывание (0.1%)
@@ -873,8 +1049,8 @@ futures_modules:
   # Order Flow Indicator
   order_flow:
     window: 100  # Размер окна для анализа
-    long_threshold: 0.1  # Порог для благоприятности лонга (10%)
-    short_threshold: -0.1  # Порог для благоприятности шорта (-10%)
+    long_threshold: 0.04  # ✅ СНИЖЕНО на 60% (было 0.1) - менее строго (4%)
+    short_threshold: -0.04  # ✅ СНИЖЕНО на 60% (было -0.1) - менее строго (-4%)
   
   # Micro Pivot Calculator
   micro_pivot:
@@ -890,6 +1066,24 @@ futures_modules:
     loss_cut_percent: 1.5  # ✅ Жёсткое закрытие, если убыток достигает -1.5% (net, с учётом комиссии)
     timeout_loss_percent: 0.5  # ✅ Закрывать, если позиция остаётся в убытке -0.5% после таймаута
     timeout_minutes: 3  # ✅ Таймаут (в минутах) перед принудительным закрытием убыточной позиции
+    min_holding_minutes: 0.5  # ✅ ЭТАП 4.4: Минимальное время удержания позиции (0.5 мин = 30 сек) - не закрываем раньше
+    min_profit_to_close: 0.001  # ✅ ЭТАП 4.1: Минимальный профит для закрытия (0.1% net) - не закрываем с микропрофитом
+    extend_time_on_profit: true  # ✅ ЭТАП 4.3: Продлевать время удержания для прибыльных позиций
+    extend_time_multiplier: 1.5  # ✅ ЭТАП 4.3: Множитель продления времени (1.5x для прибыльных позиций)
+    # Адаптация под режим рынка (ЭТАП 4.5)
+    by_regime:
+      trending:
+        min_profit_to_close: 0.002  # ✅ Минимальный профит 0.2% для trending (больше терпения)
+        min_holding_minutes: 1.0  # ✅ Минимальное время 1 мин для trending
+        extend_time_multiplier: 2.0  # ✅ Больше времени для trending (2x)
+      ranging:
+        min_profit_to_close: 0.001  # ✅ Минимальный профит 0.1% для ranging (стандарт)
+        min_holding_minutes: 0.5  # ✅ Минимальное время 0.5 мин для ranging
+        extend_time_multiplier: 1.5  # ✅ Стандартное продление (1.5x)
+      choppy:
+        min_profit_to_close: 0.0005  # ✅ Минимальный профит 0.05% для choppy (быстрее выход)
+        min_holding_minutes: 0.3  # ✅ Минимальное время 0.3 мин для choppy (быстрее)
+        extend_time_multiplier: 1.2  # ✅ Меньше продления для choppy (1.2x)
   impulse_trading:
     enabled: true
     lookback_candles: 8
@@ -920,21 +1114,21 @@ futures_modules:
   # Funding Rate Filter (проверка текущего и следующего funding перед входом)
   funding_filter:
     enabled: true
-    max_positive_rate: 0.0075  # 0.75% для лонгов
-    max_negative_rate: 0.0050  # 0.50% для шортов (по модулю)
-    max_abs_rate: 0.0080  # Абсолютный максимум 0.80%
+    max_positive_rate: 0.0125  # ✅ УВЕЛИЧЕНО на 67% (было 0.0075) - менее строго (1.25% для лонгов)
+    max_negative_rate: 0.0084  # ✅ УВЕЛИЧЕНО на 67% (было 0.0050) - менее строго (0.84% для шортов)
+    max_abs_rate: 0.0134  # ✅ УВЕЛИЧЕНО на 67% (было 0.0080) - менее строго (1.34% абсолютный максимум)
     include_next_funding: true
     refresh_interval_seconds: 300
 
   # Liquidity Filter (минимальные требования к объёму и глубине стакана)
   liquidity_filter:
     enabled: true
-    min_daily_volume_usd: 2000000
-    min_best_bid_volume_usd: 30
-    min_best_ask_volume_usd: 30
-    min_orderbook_depth_usd: 400
+    min_daily_volume_usd: 800000  # ✅ СНИЖЕНО на 60% (было 2000000)
+    min_best_bid_volume_usd: 12  # ✅ СНИЖЕНО на 60% (было 30)
+    min_best_ask_volume_usd: 12  # ✅ СНИЖЕНО на 60% (было 30)
+    min_orderbook_depth_usd: 160  # ✅ СНИЖЕНО на 60% (было 400)
     depth_levels: 5
-    max_spread_percent: 1.5
+    max_spread_percent: 2.50  # ✅ УВЕЛИЧЕНО на 67% (было 1.5) - менее строго
     refresh_interval_seconds: 20
     fail_open_enabled: true
     max_consecutive_blocks: 5
@@ -961,40 +1155,40 @@ futures_modules:
         max_spread_multiplier: 1.5
     symbol_overrides:
       BTC-USDT:
-        min_best_bid_volume_usd: 280
-        min_best_ask_volume_usd: 280
-        min_orderbook_depth_usd: 2500
-        max_spread_percent: 0.7
+        min_best_bid_volume_usd: 112  # ✅ СНИЖЕНО на 60% (было 280)
+        min_best_ask_volume_usd: 112  # ✅ СНИЖЕНО на 60% (было 280)
+        min_orderbook_depth_usd: 1000  # ✅ СНИЖЕНО на 60% (было 2500)
+        max_spread_percent: 1.17  # ✅ УВЕЛИЧЕНО на 67% (было 0.7) - менее строго
       ETH-USDT:
-        min_best_bid_volume_usd: 180
-        min_best_ask_volume_usd: 180
-        min_orderbook_depth_usd: 1500
-        max_spread_percent: 1.0
+        min_best_bid_volume_usd: 72  # ✅ СНИЖЕНО на 60% (было 180)
+        min_best_ask_volume_usd: 72  # ✅ СНИЖЕНО на 60% (было 180)
+        min_orderbook_depth_usd: 600  # ✅ СНИЖЕНО на 60% (было 1500)
+        max_spread_percent: 1.67  # ✅ УВЕЛИЧЕНО на 67% (было 1.0) - менее строго
       SOL-USDT:
-        min_best_bid_volume_usd: 90
-        min_best_ask_volume_usd: 90
-        min_orderbook_depth_usd: 1200
-        max_spread_percent: 1.3
+        min_best_bid_volume_usd: 36  # ✅ СНИЖЕНО на 60% (было 90)
+        min_best_ask_volume_usd: 36  # ✅ СНИЖЕНО на 60% (было 90)
+        min_orderbook_depth_usd: 480  # ✅ СНИЖЕНО на 60% (было 1200)
+        max_spread_percent: 2.17  # ✅ УВЕЛИЧЕНО на 67% (было 1.3) - менее строго
       DOGE-USDT:
-        min_daily_volume_usd: 800000
-        min_best_bid_volume_usd: 35
-        min_best_ask_volume_usd: 35
-        min_orderbook_depth_usd: 600
-        max_spread_percent: 1.6
+        min_daily_volume_usd: 800000  # ✅ СНИЖЕНО на 60% (было 2000000)
+        min_best_bid_volume_usd: 14  # ✅ СНИЖЕНО на 60% (было 35)
+        min_best_ask_volume_usd: 14  # ✅ СНИЖЕНО на 60% (было 35)
+        min_orderbook_depth_usd: 240  # ✅ СНИЖЕНО на 60% (было 600)
+        max_spread_percent: 2.67  # ✅ УВЕЛИЧЕНО на 67% (было 1.6) - менее строго
       XRP-USDT:
-        min_daily_volume_usd: 1000000
-        min_best_bid_volume_usd: 30
-        min_best_ask_volume_usd: 30
-        min_orderbook_depth_usd: 500
-        max_spread_percent: 1.6
+        min_daily_volume_usd: 800000  # ✅ СНИЖЕНО на 60% (было 1000000)
+        min_best_bid_volume_usd: 12  # ✅ СНИЖЕНО на 60% (было 30)
+        min_best_ask_volume_usd: 12  # ✅ СНИЖЕНО на 60% (было 30)
+        min_orderbook_depth_usd: 200  # ✅ СНИЖЕНО на 60% (было 500)
+        max_spread_percent: 2.67  # ✅ УВЕЛИЧЕНО на 67% (было 1.6) - менее строго
 
   # Order Flow Filter (соотношение bid/ask объёмов)
   order_flow:
     enabled: true
     window: 20
-    long_threshold: 0.01
-    short_threshold: -0.01
-    min_total_depth_usd: 2500
+    long_threshold: 0.004  # ✅ СНИЖЕНО на 60% (было 0.01) - менее строго
+    short_threshold: -0.004  # ✅ СНИЖЕНО на 60% (было -0.01) - менее строго
+    min_total_depth_usd: 1000  # ✅ СНИЖЕНО на 60% (было 2500)
     refresh_interval_seconds: 15
     fail_open_enabled: true
     max_consecutive_blocks: 4
@@ -1003,19 +1197,19 @@ futures_modules:
     regime_profiles:
       trending:
         window: 30
-        long_threshold: 0.012
-        short_threshold: -0.012
-        min_total_depth_usd: 4000
+        long_threshold: 0.0048  # ✅ СНИЖЕНО на 60% (было 0.012) - менее строго
+        short_threshold: -0.0048  # ✅ СНИЖЕНО на 60% (было -0.012) - менее строго
+        min_total_depth_usd: 1600  # ✅ СНИЖЕНО на 60% (было 4000)
       ranging:
         window: 20
-        long_threshold: 0.01
-        short_threshold: -0.01
-        min_total_depth_usd: 2500
+        long_threshold: 0.004  # ✅ СНИЖЕНО на 60% (было 0.01) - менее строго
+        short_threshold: -0.004  # ✅ СНИЖЕНО на 60% (было -0.01) - менее строго
+        min_total_depth_usd: 1000  # ✅ СНИЖЕНО на 60% (было 2500)
       choppy:
         window: 15
-        long_threshold: 0.008
-        short_threshold: -0.008
-        min_total_depth_usd: 1500
+        long_threshold: 0.0032  # ✅ СНИЖЕНО на 60% (было 0.008) - менее строго
+        short_threshold: -0.0032  # ✅ СНИЖЕНО на 60% (было -0.008) - менее строго
+        min_total_depth_usd: 600  # ✅ СНИЖЕНО на 60% (было 1500)
 
   # Max Size Limiter
   max_size_limiter:

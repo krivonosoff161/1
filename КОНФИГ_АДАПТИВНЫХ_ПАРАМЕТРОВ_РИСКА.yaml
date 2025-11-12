@@ -1,0 +1,187 @@
+# Конфигурация адаптивных параметров риска для Futures
+# Все параметры адаптируются под ARM (режим рынка) и Balance Profiles (размер баланса)
+
+# Риск-менеджмент для Futures - АДАПТИВНЫЙ
+risk:
+  # Базовые параметры (по умолчанию, используются как fallback)
+  base:
+    max_loss_per_trade_percent: 2.0  # 2% макс потеря на сделку
+    max_margin_percent: 80.0  # 80% макс маржа
+    max_drawdown_percent: 5.0  # 5% макс просадка
+    max_margin_safety_percent: 90.0  # 90% безопасности (финальная проверка)
+    min_balance_usd: 20.0  # Минимум $20 баланса
+    min_time_between_orders_seconds: 30  # Минимум 30 секунд между ордерами
+    position_override_tolerance_percent: 50.0  # 50% разница для игнорирования override
+  
+  # Адаптация по режиму рынка (ARM) - ПРИОРИТЕТ 1
+  by_regime:
+    trending:
+      # Параметры риска для тренда (меньше риск, больше уверенности)
+      max_loss_per_trade_percent: 1.5  # Меньше риск в тренде (1.5% вместо 2.0%)
+      max_margin_percent: 85.0  # Больше маржи в тренде (85% вместо 80%)
+      max_drawdown_percent: 4.0  # Меньше просадка в тренде (4% вместо 5%)
+      max_margin_safety_percent: 90.0  # 90% безопасности
+      min_time_between_orders_seconds: 20  # Быстрее в тренде (20 секунд вместо 30)
+      
+      # Strength multipliers для тренда (более агрессивные)
+      strength_multipliers:
+        conflict: 0.6  # Конфликт: 60% (было 50%)
+        very_strong: 1.6  # Сильный сигнал: 160% (было 150%)
+        strong: 1.3  # Хороший сигнал: 130% (было 120%)
+        medium: 1.1  # Средний сигнал: 110% (было 100%)
+        weak: 0.9  # Слабый сигнал: 90% (было 80%)
+      
+      # Пороги силы сигнала для тренда
+      strength_thresholds:
+        very_strong: 0.8  # Порог для сильного сигнала
+        strong: 0.6  # Порог для хорошего сигнала
+        medium: 0.4  # Порог для среднего сигнала
+    
+    ranging:
+      # Параметры риска для флэта (стандартные)
+      max_loss_per_trade_percent: 2.0  # Стандартный риск во флэте (2.0%)
+      max_margin_percent: 80.0  # Стандартная маржа во флэте (80%)
+      max_drawdown_percent: 5.0  # Стандартная просадка во флэте (5%)
+      max_margin_safety_percent: 90.0  # 90% безопасности
+      min_time_between_orders_seconds: 30  # Стандартная скорость (30 секунд)
+      
+      # Strength multipliers для флэта (стандартные)
+      strength_multipliers:
+        conflict: 0.5  # Конфликт: 50%
+        very_strong: 1.5  # Сильный сигнал: 150%
+        strong: 1.2  # Хороший сигнал: 120%
+        medium: 1.0  # Средний сигнал: 100%
+        weak: 0.8  # Слабый сигнал: 80%
+      
+      # Пороги силы сигнала для флэта
+      strength_thresholds:
+        very_strong: 0.8  # Порог для сильного сигнала
+        strong: 0.6  # Порог для хорошего сигнала
+        medium: 0.4  # Порог для среднего сигнала
+    
+    choppy:
+      # Параметры риска для хаоса (больше риск, меньше уверенности)
+      max_loss_per_trade_percent: 2.5  # Больше риск в хаосе (2.5% вместо 2.0%)
+      max_margin_percent: 75.0  # Меньше маржи в хаосе (75% вместо 80%)
+      max_drawdown_percent: 6.0  # Больше просадка в хаосе (6% вместо 5%)
+      max_margin_safety_percent: 85.0  # 85% безопасности (строже в хаосе)
+      min_time_between_orders_seconds: 45  # Медленнее в хаосе (45 секунд вместо 30)
+      
+      # Strength multipliers для хаоса (более консервативные)
+      strength_multipliers:
+        conflict: 0.4  # Конфликт: 40% (меньше риск в хаосе)
+        very_strong: 1.4  # Сильный сигнал: 140% (меньше размер в хаосе)
+        strong: 1.1  # Хороший сигнал: 110% (меньше размер в хаосе)
+        medium: 0.9  # Средний сигнал: 90% (меньше размер в хаосе)
+        weak: 0.7  # Слабый сигнал: 70% (меньше размер в хаосе)
+      
+      # Пороги силы сигнала для хаоса (выше пороги)
+      strength_thresholds:
+        very_strong: 0.85  # Порог для сильного сигнала (выше в хаосе)
+        strong: 0.65  # Порог для хорошего сигнала (выше в хаосе)
+        medium: 0.45  # Порог для среднего сигнала (выше в хаосе)
+  
+  # Адаптация по балансу (Balance Profiles) - ПРИОРИТЕТ 2
+  by_balance:
+    micro:  # $100 - $500
+      # Параметры риска для малого баланса (больше агрессивности)
+      max_loss_per_trade_percent: 2.5  # Больше риск для малого баланса (2.5% вместо 2.0%)
+      max_margin_percent: 85.0  # Больше маржи для малого баланса (85% вместо 80%)
+      max_drawdown_percent: 6.0  # Больше просадка для малого баланса (6% вместо 5%)
+      max_margin_safety_percent: 90.0  # 90% безопасности
+      min_balance_usd: 10.0  # Минимум $10 баланса (меньше для малого баланса)
+      min_time_between_orders_seconds: 25  # Быстрее для малого баланса (25 секунд вместо 30)
+    
+    small:  # $500 - $1500
+      # Параметры риска для среднего баланса (стандартные)
+      max_loss_per_trade_percent: 2.0  # Стандартный риск для среднего баланса (2.0%)
+      max_margin_percent: 80.0  # Стандартная маржа для среднего баланса (80%)
+      max_drawdown_percent: 5.0  # Стандартная просадка для среднего баланса (5%)
+      max_margin_safety_percent: 90.0  # 90% безопасности
+      min_balance_usd: 20.0  # Минимум $20 баланса
+      min_time_between_orders_seconds: 30  # Стандартная скорость (30 секунд)
+    
+    medium:  # $1500 - $3000
+      # Параметры риска для большого баланса (больше консервативности)
+      max_loss_per_trade_percent: 1.8  # Меньше риск для большого баланса (1.8% вместо 2.0%)
+      max_margin_percent: 75.0  # Меньше маржи для большого баланса (75% вместо 80%)
+      max_drawdown_percent: 4.0  # Меньше просадка для большого баланса (4% вместо 5%)
+      max_margin_safety_percent: 85.0  # 85% безопасности (строже для большого баланса)
+      min_balance_usd: 30.0  # Минимум $30 баланса (больше для большого баланса)
+      min_time_between_orders_seconds: 35  # Медленнее для большого баланса (35 секунд вместо 30)
+    
+    large:  # $3000+
+      # Параметры риска для очень большого баланса (больше консервативности)
+      max_loss_per_trade_percent: 1.5  # Меньше риск для очень большого баланса (1.5% вместо 2.0%)
+      max_margin_percent: 70.0  # Меньше маржи для очень большого баланса (70% вместо 80%)
+      max_drawdown_percent: 3.0  # Меньше просадка для очень большого баланса (3% вместо 5%)
+      max_margin_safety_percent: 80.0  # 80% безопасности (строже для очень большого баланса)
+      min_balance_usd: 50.0  # Минимум $50 баланса (больше для очень большого баланса)
+      min_time_between_orders_seconds: 40  # Медленнее для очень большого баланса (40 секунд вместо 30)
+
+# Параметры синхронизации - АДАПТИВНЫЕ
+scalping:
+  positions_sync:
+    base_interval_min: 15.0  # Минимум 15 секунд
+    base_interval_multiplier: 3.0  # Множитель (check_interval * multiplier)
+    
+    # Адаптация по режиму рынка (ПРИОРИТЕТ 1)
+    by_regime:
+      trending:
+        interval_multiplier: 2.5  # Быстрее в тренде (2.5x вместо 3.0x)
+      ranging:
+        interval_multiplier: 3.0  # Стандартная скорость (3.0x)
+      choppy:
+        interval_multiplier: 3.5  # Медленнее в хаосе (3.5x вместо 3.0x)
+    
+    # Адаптация по балансу (ПРИОРИТЕТ 2)
+    by_balance:
+      micro:
+        interval_multiplier: 2.5  # Быстрее для малого баланса (2.5x вместо 3.0x)
+      small:
+        interval_multiplier: 3.0  # Стандартная скорость (3.0x)
+      medium:
+        interval_multiplier: 3.5  # Медленнее для большого баланса (3.5x вместо 3.0x)
+      large:
+        interval_multiplier: 4.0  # Медленнее для очень большого баланса (4.0x вместо 3.0x)
+
+# Параметры других модулей - АДАПТИВНЫЕ
+futures_modules:
+  margin:
+    base:
+      maintenance_margin_ratio: 0.01  # 1%
+      initial_margin_ratio: 0.1  # 10%
+    # Адаптация по балансу (может быть разной для разных балансов)
+    by_balance:
+      micro:
+        maintenance_margin_ratio: 0.01  # 1%
+        initial_margin_ratio: 0.1  # 10%
+      small:
+        maintenance_margin_ratio: 0.01  # 1%
+        initial_margin_ratio: 0.1  # 10%
+      medium:
+        maintenance_margin_ratio: 0.01  # 1%
+        initial_margin_ratio: 0.1  # 10%
+      large:
+        maintenance_margin_ratio: 0.01  # 1%
+        initial_margin_ratio: 0.1  # 10%
+  
+  funding_rate:
+    base:
+      max_funding_rate: 0.05  # 0.05%
+    # Адаптация по режиму рынка (может быть разной для разных режимов)
+    by_regime:
+      trending:
+        max_funding_rate: 0.06  # Больше толерантности в тренде (0.06% вместо 0.05%)
+      ranging:
+        max_funding_rate: 0.05  # Стандартная толерантность (0.05%)
+      choppy:
+        max_funding_rate: 0.04  # Меньше толерантности в хаосе (0.04% вместо 0.05%)
+  
+  adx:
+    base:
+      period: 9  # Период ADX
+      threshold: 20.0  # Порог ADX
+    # Адаптация по режиму рынка (уже есть в adaptive_regime.detection)
+    # Используем значения из adaptive_regime.detection
+

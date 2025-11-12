@@ -62,9 +62,11 @@ class FuturesScalpingOrchestrator:
         # 🛡️ Защиты риска
         self.initial_balance = None  # Для drawdown расчета
         self.total_margin_used = 0.0  # Для max margin проверки
-        self.max_loss_per_trade = 0.02  # 2% макс потеря на сделку
-        self.max_margin_percent = 0.80  # 80% макс маржа
-        self.max_drawdown_percent = 0.05  # 5% макс просадка
+        # ✅ МОДЕРНИЗАЦИЯ: Параметры риска теперь адаптивные, читаются из конфига динамически
+        # Используем fallback значения только для инициализации (будут переопределены при первом использовании)
+        self.max_loss_per_trade = 0.02  # Fallback: 2% макс потеря на сделку
+        self.max_margin_percent = 0.80  # Fallback: 80% макс маржа
+        self.max_drawdown_percent = 0.05  # Fallback: 5% макс просадка
 
         # Получение API конфигурации
         okx_config = config.get_okx_config()
@@ -119,6 +121,10 @@ class FuturesScalpingOrchestrator:
         self.position_manager = FuturesPositionManager(
             config, self.client, self.margin_calculator
         )
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем ссылку на orchestrator в position_manager
+        # для доступа к trailing_sl_by_symbol при проверке TP
+        if hasattr(self.position_manager, "set_orchestrator"):
+            self.position_manager.set_orchestrator(self)
         # ✅ НОВОЕ: Передаем symbol_profiles в position_manager для per-symbol TP
         # (инициализируем после создания symbol_profiles)
         self.performance_tracker = PerformanceTracker()
@@ -199,9 +205,24 @@ class FuturesScalpingOrchestrator:
         # Блокировка обработки сигналов по символам: {symbol: asyncio.Lock}
         self.signal_locks = {}  # Будет создаваться по требованию
 
-        # ✅ Параметры синхронизации состояния с биржей
+        # ✅ МОДЕРНИЗАЦИЯ: Параметры синхронизации состояния с биржей (адаптивные)
         check_interval = getattr(self.scalping_config, "check_interval", 5.0) or 5.0
-        self.positions_sync_interval = max(15.0, check_interval * 3)
+        # ✅ МОДЕРНИЗАЦИЯ: Читаем параметры синхронизации из конфига (будет обновляться динамически)
+        positions_sync_config = getattr(self.scalping_config, "positions_sync", None)
+        if positions_sync_config:
+            base_interval_min = (
+                getattr(positions_sync_config, "base_interval_min", 5.0) or 5.0
+            )
+            base_interval_multiplier = (
+                getattr(positions_sync_config, "base_interval_multiplier", 1.0) or 1.0
+            )
+            # Базовый интервал: base_interval_min * base_interval_multiplier
+            self.positions_sync_interval = base_interval_min * base_interval_multiplier
+        else:
+            # Fallback: используем старое поведение (будет обновляться динамически)
+            self.positions_sync_interval = max(
+                5.0, check_interval * 1.0
+            )  # ✅ МОДЕРНИЗАЦИЯ: 5 секунд вместо 15
         self._last_positions_sync = 0.0
 
         logger.info("FuturesScalpingOrchestrator инициализирован")
@@ -665,9 +686,9 @@ class FuturesScalpingOrchestrator:
             return source.get(key, default)
         return getattr(source, key, default) if hasattr(source, key) else default
 
-    def _get_trailing_sl_params(self) -> Dict[str, Optional[float]]:
-        """Возвращает параметры Trailing SL с учетом конфига и fallback значений."""
-        params: Dict[str, Optional[float]] = {
+    def _get_trailing_sl_params(self, regime: Optional[str] = None) -> Dict[str, Any]:
+        """✅ ЭТАП 4: Возвращает параметры Trailing SL с учетом конфига, fallback значений и адаптацией под режим рынка."""
+        params: Dict[str, Any] = {
             "trading_fee_rate": 0.0009,
             "initial_trail": 0.05,
             "max_trail": 0.2,
@@ -675,6 +696,10 @@ class FuturesScalpingOrchestrator:
             "loss_cut_percent": None,
             "timeout_loss_percent": None,
             "timeout_minutes": None,
+            "min_holding_minutes": None,  # ✅ ЭТАП 4.4
+            "min_profit_to_close": None,  # ✅ ЭТАП 4.1
+            "extend_time_on_profit": False,  # ✅ ЭТАП 4.3
+            "extend_time_multiplier": 1.0,  # ✅ ЭТАП 4.3
         }
 
         trailing_sl_config = None
@@ -707,13 +732,122 @@ class FuturesScalpingOrchestrator:
             params["timeout_minutes"] = self._get_config_value(
                 trailing_sl_config, "timeout_minutes", params["timeout_minutes"]
             )
+            # ✅ ЭТАП 4.4: Минимальное время удержания
+            params["min_holding_minutes"] = self._get_config_value(
+                trailing_sl_config, "min_holding_minutes", params["min_holding_minutes"]
+            )
+            # ✅ ЭТАП 4.1: Минимальный профит для закрытия
+            params["min_profit_to_close"] = self._get_config_value(
+                trailing_sl_config, "min_profit_to_close", params["min_profit_to_close"]
+            )
+            # ✅ ЭТАП 4.3: Продлевание времени для прибыльных позиций
+            params["extend_time_on_profit"] = self._get_config_value(
+                trailing_sl_config,
+                "extend_time_on_profit",
+                params["extend_time_on_profit"],
+            )
+            params["extend_time_multiplier"] = self._get_config_value(
+                trailing_sl_config,
+                "extend_time_multiplier",
+                params["extend_time_multiplier"],
+            )
+
+            # ✅ ЭТАП 4.5: Адаптация под режим рынка
+            if regime:
+                regime_lower = regime.lower() if isinstance(regime, str) else None
+                by_regime = self._get_config_value(
+                    trailing_sl_config, "by_regime", None
+                )
+                if by_regime and regime_lower:
+                    # Преобразуем by_regime в словарь, если это объект
+                    by_regime_dict = (
+                        self._to_dict(by_regime)
+                        if not isinstance(by_regime, dict)
+                        else by_regime
+                    )
+                    if regime_lower in by_regime_dict:
+                        regime_params = by_regime_dict[regime_lower]
+                        # Преобразуем regime_params в словарь, если это объект
+                        regime_params_dict = (
+                            self._to_dict(regime_params)
+                            if not isinstance(regime_params, dict)
+                            else regime_params
+                        )
+                        # Переопределяем параметры для режима
+                        if "min_profit_to_close" in regime_params_dict:
+                            params["min_profit_to_close"] = regime_params_dict[
+                                "min_profit_to_close"
+                            ]
+                        if "min_holding_minutes" in regime_params_dict:
+                            params["min_holding_minutes"] = regime_params_dict[
+                                "min_holding_minutes"
+                            ]
+                        if "extend_time_multiplier" in regime_params_dict:
+                            params["extend_time_multiplier"] = regime_params_dict[
+                                "extend_time_multiplier"
+                            ]
 
         # Нормализуем числовые значения
         if params["trading_fee_rate"] is not None:
-            params["trading_fee_rate"] = max(0.0, float(params["trading_fee_rate"]))
-        for key in ("initial_trail", "max_trail", "min_trail"):
+            try:
+                params["trading_fee_rate"] = max(0.0, float(params["trading_fee_rate"]))
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"⚠️ Не удалось преобразовать trading_fee_rate в float: {params['trading_fee_rate']}"
+                )
+                params["trading_fee_rate"] = 0.0009
+
+        # Нормализуем числовые параметры трейлинга
+        for key in (
+            "initial_trail",
+            "max_trail",
+            "min_trail",
+            "loss_cut_percent",
+            "timeout_loss_percent",
+            "timeout_minutes",
+            "min_holding_minutes",
+            "min_profit_to_close",
+            "extend_time_multiplier",
+        ):
             if params[key] is not None:
-                params[key] = max(0.0, float(params[key]))
+                try:
+                    params[key] = float(params[key])
+                    if key in (
+                        "min_holding_minutes",
+                        "extend_time_multiplier",
+                        "timeout_minutes",
+                    ):
+                        params[key] = max(0.0, params[key])
+                    else:
+                        params[key] = (
+                            max(0.0, params[key]) if params[key] >= 0 else None
+                        )
+                except (TypeError, ValueError):
+                    logger.warning(
+                        f"⚠️ Не удалось преобразовать {key} в float: {params[key]}"
+                    )
+                    params[key] = (
+                        None
+                        if key
+                        in (
+                            "loss_cut_percent",
+                            "timeout_loss_percent",
+                            "timeout_minutes",
+                            "min_holding_minutes",
+                            "min_profit_to_close",
+                        )
+                        else 1.0
+                    )
+
+        # ✅ Нормализуем boolean значение extend_time_on_profit
+        if isinstance(params["extend_time_on_profit"], str):
+            params["extend_time_on_profit"] = params[
+                "extend_time_on_profit"
+            ].lower() in ("true", "1", "yes", "on")
+        elif params["extend_time_on_profit"] is None:
+            params["extend_time_on_profit"] = False
+        else:
+            params["extend_time_on_profit"] = bool(params["extend_time_on_profit"])
 
         return params
 
@@ -731,7 +865,7 @@ class FuturesScalpingOrchestrator:
         if entry_price <= 0:
             return None
 
-        params = self._get_trailing_sl_params()
+        # ✅ ЭТАП 4.5: Получаем режим рынка для адаптации параметров
         regime = signal.get("regime") if signal else None
         if (
             not regime
@@ -741,12 +875,48 @@ class FuturesScalpingOrchestrator:
             manager = self.signal_generator.regime_managers.get(symbol)
             if manager:
                 regime = manager.get_current_regime()
+
+        # ✅ ЭТАП 4: Получаем параметры с адаптацией под режим рынка
+        params = self._get_trailing_sl_params(regime=regime)
+
+        # Получаем дополнительные переопределения из профиля символа (если есть)
         regime_profile = self._get_symbol_regime_profile(symbol, regime)
-        trailing_overrides = self._to_dict(regime_profile.get("trailing_sl", {}))
+        trailing_overrides = (
+            self._to_dict(regime_profile.get("trailing_sl", {}))
+            if regime_profile
+            else {}
+        )
         if trailing_overrides:
             for key, value in trailing_overrides.items():
                 if key in params and value is not None:
-                    params[key] = float(value)
+                    # ✅ Безопасное преобразование типов
+                    try:
+                        if key == "extend_time_on_profit":
+                            # Boolean значение
+                            if isinstance(value, str):
+                                params[key] = value.lower() in (
+                                    "true",
+                                    "1",
+                                    "yes",
+                                    "on",
+                                )
+                            else:
+                                params[key] = bool(value)
+                        elif key in (
+                            "min_holding_minutes",
+                            "extend_time_multiplier",
+                            "timeout_minutes",
+                        ):
+                            # Float значения для времени
+                            params[key] = float(value) if value is not None else None
+                        else:
+                            # Остальные числовые значения
+                            params[key] = float(value)
+                    except (TypeError, ValueError) as e:
+                        logger.warning(
+                            f"⚠️ Не удалось преобразовать {key}={value} в правильный тип: {e}"
+                        )
+                        # Оставляем значение по умолчанию
         impulse_trailing = None
         if signal and signal.get("is_impulse"):
             impulse_trailing = signal.get("impulse_trailing") or {}
@@ -765,6 +935,7 @@ class FuturesScalpingOrchestrator:
         min_trail = params["min_trail"] or 0.0
         trading_fee_rate = params["trading_fee_rate"] or 0.0
 
+        # ✅ ЭТАП 4: Создаем TrailingStopLoss с новыми параметрами
         tsl = TrailingStopLoss(
             initial_trail=initial_trail,
             max_trail=max_trail,
@@ -773,6 +944,10 @@ class FuturesScalpingOrchestrator:
             loss_cut_percent=params["loss_cut_percent"],
             timeout_loss_percent=params["timeout_loss_percent"],
             timeout_minutes=params["timeout_minutes"],
+            min_holding_minutes=params["min_holding_minutes"],  # ✅ ЭТАП 4.4
+            min_profit_to_close=params["min_profit_to_close"],  # ✅ ЭТАП 4.1
+            extend_time_on_profit=params["extend_time_on_profit"],  # ✅ ЭТАП 4.3
+            extend_time_multiplier=params["extend_time_multiplier"],  # ✅ ЭТАП 4.3
         )
         tsl.initialize(entry_price=entry_price, side=side)
         if impulse_trailing:
@@ -800,12 +975,68 @@ class FuturesScalpingOrchestrator:
         return tsl
 
     async def _sync_positions_with_exchange(self, force: bool = False) -> None:
-        """Синхронизирует локальные позиции и лимиты с фактическими данными биржи."""
+        """
+        ✅ МОДЕРНИЗАЦИЯ: Синхронизирует локальные позиции и лимиты с фактическими данными биржи.
+
+        Обновляет:
+        - active_positions
+        - total_margin_used (используя _get_used_margin())
+        - max_size_limiter.position_sizes
+        - trailing_sl_by_symbol
+        """
         now = time.time()
-        if (
-            not force
-            and (now - self._last_positions_sync) < self.positions_sync_interval
-        ):
+        # ✅ МОДЕРНИЗАЦИЯ: Адаптивный интервал синхронизации из конфига
+        # Получаем параметры синхронизации из конфига (адаптивные)
+        positions_sync_config = getattr(self.scalping_config, "positions_sync", None)
+        if positions_sync_config:
+            base_interval_min = (
+                getattr(positions_sync_config, "base_interval_min", 5.0) or 5.0
+            )
+            base_interval_multiplier = (
+                getattr(positions_sync_config, "base_interval_multiplier", 1.0) or 1.0
+            )
+
+            # Определяем режим и баланс для адаптивного интервала
+            regime = None
+            if (
+                hasattr(self.signal_generator, "regime_manager")
+                and self.signal_generator.regime_manager
+            ):
+                regime = self.signal_generator.regime_manager.get_current_regime()
+
+            balance = await self.client.get_balance()
+            balance_profile = self._get_balance_profile(balance)
+            profile_name = balance_profile.get("name", "small")
+
+            # Получаем множитель интервала по режиму (ПРИОРИТЕТ 1)
+            by_regime = self._to_dict(getattr(positions_sync_config, "by_regime", {}))
+            regime_multiplier = 1.0
+            if regime:
+                regime_config = self._to_dict(by_regime.get(regime.lower(), {}))
+                regime_multiplier = regime_config.get("interval_multiplier", 1.0) or 1.0
+
+            # Получаем множитель интервала по балансу (ПРИОРИТЕТ 2, если режим не переопределил)
+            by_balance = self._to_dict(getattr(positions_sync_config, "by_balance", {}))
+            balance_multiplier = 1.0
+            if profile_name:
+                balance_config = self._to_dict(by_balance.get(profile_name, {}))
+                balance_multiplier = (
+                    balance_config.get("interval_multiplier", 1.0) or 1.0
+                )
+
+            # Применяем множитель (приоритет: режим > баланс)
+            interval_multiplier = (
+                regime_multiplier if regime_multiplier != 1.0 else balance_multiplier
+            )
+            sync_interval = base_interval_min * interval_multiplier
+        else:
+            # Fallback: используем старое поведение
+            check_interval = getattr(self.scalping_config, "check_interval", 5.0) or 5.0
+            sync_interval = max(
+                5.0, check_interval * 1.0
+            )  # ✅ МОДЕРНИЗАЦИЯ: 5 секунд вместо 15
+
+        if not force and (now - self._last_positions_sync) < sync_interval:
             return
 
         try:
@@ -917,7 +1148,19 @@ class FuturesScalpingOrchestrator:
             if normalized_symbol in self.last_orders_cache:
                 self.last_orders_cache[normalized_symbol]["status"] = "closed"
 
-        self.total_margin_used = total_margin
+        # ✅ ЭТАП 6.3: Обновляем total_margin_used с актуальными данными с биржи
+        # Используем _get_used_margin() для получения точной маржи с биржи
+        try:
+            used_margin = await self._get_used_margin()
+            self.total_margin_used = used_margin
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Не удалось получить использованную маржу с биржи: {e}, используем расчетную: {total_margin:.2f}"
+            )
+            self.total_margin_used = total_margin
+
+        # ✅ ЭТАП 5.3: MaxSizeLimiter уже обновлен выше (строки 1004-1006, 1018)
+        # Позиции добавляются/удаляются из MaxSizeLimiter сразу после синхронизации
         logger.debug(
             f"🔁 Синхронизация позиций завершена: активных={len(seen_symbols)}, "
             f"маржа={self.total_margin_used:.2f}"
@@ -1340,21 +1583,14 @@ class FuturesScalpingOrchestrator:
                 # Теперь разрешаем несколько позиций по одному символу (например, 3 на BTC и 3 на ETH)
                 # Проверяем только общий лимит позиций
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 1: Проверка задержки между сигналами (используем нормализованный символ)
-                import time
-
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Определяем current_time в начале блока
                 current_time = time.time()
-                if normalized_symbol in self.last_signal_time:
-                    time_since_last = (
-                        current_time - self.last_signal_time[normalized_symbol]
-                    )
-                    if time_since_last < self.signal_cooldown_seconds:
-                        logger.debug(
-                            f"⏱️ Задержка между сигналами для {symbol}: {time_since_last:.1f}s < {self.signal_cooldown_seconds}s, пропускаем"
-                        )
-                        return
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 2: Проверка последнего ордера через кэш (используем нормализованный символ)
+                # ✅ ЭТАП 3.4: УБРАН cooldown между сигналами для увеличения частоты сделок
+                # Проверка задержки между сигналами удалена - теперь сигналы генерируются без задержки
+                # Это позволяет боту работать в режиме высокочастотного скальпинга (80-120 сделок/час)
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка последнего ордера через кэш (используем нормализованный символ)
                 if normalized_symbol in self.last_orders_cache:
                     last_order = self.last_orders_cache[normalized_symbol]
                     order_time = last_order.get("timestamp", 0)
@@ -1515,9 +1751,23 @@ class FuturesScalpingOrchestrator:
 
                     # 🔥 СКАЛЬПИНГ: Проверяем реальный баланс на бирже
                     # get_balance() возвращает equity (общий баланс с учетом PnL)
-                    if balance < 20.0:  # Минимум $20 баланса для открытия позиции
+                    # ✅ МОДЕРНИЗАЦИЯ: Используем адаптивный min_balance_usd из конфига
+                    regime = None
+                    if (
+                        hasattr(self.signal_generator, "regime_manager")
+                        and self.signal_generator.regime_manager
+                    ):
+                        regime = (
+                            self.signal_generator.regime_manager.get_current_regime()
+                        )
+                    adaptive_risk_params = self._get_adaptive_risk_params(
+                        balance, regime
+                    )
+                    min_balance_usd = adaptive_risk_params.get("min_balance_usd", 20.0)
+
+                    if balance < min_balance_usd:
                         logger.debug(
-                            f"⚠️ Недостаточно баланса на бирже: ${balance:.2f} < $20.00. "
+                            f"⚠️ Недостаточно баланса на бирже: ${balance:.2f} < ${min_balance_usd:.2f}. "
                             f"Пропускаем открытие {symbol}"
                         )
                         return
@@ -1576,9 +1826,7 @@ class FuturesScalpingOrchestrator:
                             f"(сила={strength:.2f})"
                         )
 
-                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем время последнего сигнала СРАЗУ (с нормализованным символом)
-                        # Это предотвращает повторную обработку сигнала
-                        self.last_signal_time[normalized_symbol] = current_time
+                        # ✅ ЭТАП 3.4: УБРАНО обновление времени последнего сигнала (cooldown удален)
 
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Дополнительная проверка перед выполнением
                         # Проверяем, не был ли уже размещен ордер за последние 2 секунды (с нормализованным символом)
@@ -2062,6 +2310,35 @@ class FuturesScalpingOrchestrator:
                         f"📦 Обновлен кэш последнего ордера для {symbol}: {order_id} (status=filled)"
                     )
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Синхронизация entry price с биржей после открытия позиции
+                # Получаем реальную цену входа (avgPx) с биржи и обновляем trailing stop loss
+                real_entry_price = price  # Fallback на цену сигнала
+                try:
+                    # Ждем немного для синхронизации позиций на бирже (2-3 секунды)
+                    await asyncio.sleep(2)
+                    # Получаем позицию с биржи
+                    positions = await self.client.get_positions()
+                    inst_id = f"{symbol}-SWAP"
+                    for pos in positions:
+                        pos_inst_id = pos.get("instId", "")
+                        pos_size = abs(float(pos.get("pos", "0")))
+                        if (
+                            pos_inst_id == inst_id or pos_inst_id == symbol
+                        ) and pos_size > 0.000001:
+                            # Получаем реальную цену входа (avgPx) с биржи
+                            avg_px = pos.get("avgPx")
+                            if avg_px:
+                                real_entry_price = float(avg_px)
+                                logger.info(
+                                    f"✅ Entry price синхронизирован для {symbol}: {price:.2f} → {real_entry_price:.2f} (avgPx с биржи)"
+                                )
+                            break
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ Не удалось синхронизировать entry price для {symbol} с биржи: {e}, "
+                        f"используем цену сигнала: {price:.2f}"
+                    )
+
                 # 🛡️ Обновляем total_margin_used
                 # ⚠️ ИСПРАВЛЕНИЕ: Правильный расчет margin из position_size (монеты)
                 # position_size в МОНЕТАХ, price в USD, leverage из конфига
@@ -2076,19 +2353,39 @@ class FuturesScalpingOrchestrator:
                     logger.warning(
                         f"⚠️ Используем fallback leverage={leverage}, но это не должно происходить!"
                     )
-                notional = position_size * price  # Номинальная стоимость позиции
+                notional = (
+                    position_size * real_entry_price
+                )  # Номинальная стоимость позиции (используем реальную цену входа)
                 margin_used = notional / leverage  # Маржа = notional / leverage
+                # ✅ МОДЕРНИЗАЦИЯ: Обновляем total_margin_used (будет пересчитано при следующей синхронизации)
+                # Временно обновляем локально для быстрого доступа
                 self.total_margin_used += margin_used
                 logger.debug(
                     f"💼 Общая маржа: ${self.total_margin_used:.2f} "
                     f"(notional=${notional:.2f}, margin=${margin_used:.2f}, leverage={leverage}x)"
                 )
+                # ✅ МОДЕРНИЗАЦИЯ: После открытия позиции синхронизируем маржу с биржей
+                # Это гарантирует, что total_margin_used всегда актуален
+                try:
+                    # Быстрая синхронизация маржи (без полной синхронизации позиций)
+                    updated_margin = await self._get_used_margin()
+                    self.total_margin_used = updated_margin
+                    logger.debug(
+                        f"💼 Обновлена маржа с биржи: ${self.total_margin_used:.2f} (после открытия позиции)"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ Не удалось обновить маржу с биржи после открытия позиции: {e}"
+                    )
 
                 # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавляем позицию в MaxSizeLimiter!
                 # Без этого лимитер не отслеживает открытые позиции и разрешает открывать больше!
-                self.max_size_limiter.add_position(symbol, size_usd)
+                size_usd_real = (
+                    position_size * real_entry_price
+                )  # Используем реальную цену входа
+                self.max_size_limiter.add_position(symbol, size_usd_real)
                 logger.debug(
-                    f"✅ Позиция {symbol} добавлена в MaxSizeLimiter: ${size_usd:.2f} (всего: ${self.max_size_limiter.get_total_size():.2f})"
+                    f"✅ Позиция {symbol} добавлена в MaxSizeLimiter: ${size_usd_real:.2f} (всего: ${self.max_size_limiter.get_total_size():.2f})"
                 )
 
                 # Сохраняем в active_positions
@@ -2107,7 +2404,7 @@ class FuturesScalpingOrchestrator:
                         "order_id": result.get("order_id"),
                         "side": signal["side"],
                         "size": position_size,
-                        "entry_price": price,
+                        "entry_price": real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа с биржи
                         "margin": margin_used,  # margin для этой позиции
                         "entry_time": entry_time,  # ✅ НОВОЕ: Время открытия позиции
                         "timestamp": entry_time,  # Для совместимости
@@ -2117,19 +2414,22 @@ class FuturesScalpingOrchestrator:
                     }
                 )
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Переинициализируем trailing stop loss с правильной ценой входа
                 tsl = self._initialize_trailing_stop(
                     symbol=symbol,
-                    entry_price=price,
+                    entry_price=real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа с биржи
                     side=signal["side"],
-                    current_price=price,
+                    current_price=real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа
                     signal=signal,
                 )
                 if tsl:
                     self.trailing_sl_by_symbol[symbol] = tsl
-                    logger.info(f"🎯 Позиция {symbol} открыта с TrailingSL")
+                    logger.info(
+                        f"🎯 Позиция {symbol} открыта с TrailingSL (entry={real_entry_price:.2f})"
+                    )
                 else:
                     logger.warning(
-                        f"⚠️ TrailingStopLoss не был инициализирован для {symbol} (entry={price})"
+                        f"⚠️ TrailingStopLoss не был инициализирован для {symbol} (entry={real_entry_price:.2f})"
                     )
                 return True
             else:
@@ -2244,12 +2544,35 @@ class FuturesScalpingOrchestrator:
                     position_overrides["max_position_percent"]
                 )
 
+            # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
             if min_usd_size is None or min_usd_size <= 0:
-                min_usd_size = base_usd_size * 0.5
+                logger.error(
+                    f"❌ min_position_usd не указан в конфиге для профиля {balance_profile.get('name', 'unknown')}! "
+                    f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {balance_profile.get('name', 'unknown')} -> min_position_usd"
+                )
+                raise ValueError(
+                    f"min_position_usd должен быть указан в конфиге для профиля {balance_profile.get('name', 'unknown')}"
+                )
             if max_usd_size is None or max_usd_size <= 0:
-                max_usd_size = base_usd_size * 2.0
+                logger.error(
+                    f"❌ max_position_usd не указан в конфиге для профиля {balance_profile.get('name', 'unknown')}! "
+                    f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {balance_profile.get('name', 'unknown')} -> max_position_usd"
+                )
+                raise ValueError(
+                    f"max_position_usd должен быть указан в конфиге для профиля {balance_profile.get('name', 'unknown')}"
+                )
 
+            # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
             profile_max_positions = balance_profile.get("max_open_positions")
+            if profile_max_positions is None or profile_max_positions <= 0:
+                logger.error(
+                    f"❌ max_open_positions не указан в конфиге для профиля {balance_profile.get('name', 'unknown')}! "
+                    f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {balance_profile.get('name', 'unknown')} -> max_open_positions"
+                )
+                raise ValueError(
+                    f"max_open_positions должен быть указан в конфиге для профиля {balance_profile.get('name', 'unknown')}"
+                )
+
             if position_overrides.get("max_open_positions") is not None:
                 profile_max_positions = int(position_overrides["max_open_positions"])
             global_max_positions = getattr(
@@ -2270,6 +2593,13 @@ class FuturesScalpingOrchestrator:
                         f"🔧 MaxSizeLimiter: обновляем max_total_size_usd {self.max_size_limiter.max_total_size_usd:.2f} → {max_total_size:.2f}"
                     )
                     self.max_size_limiter.max_total_size_usd = max_total_size
+            else:
+                logger.error(
+                    f"❌ max_open_positions не указан или равен 0 для профиля {balance_profile.get('name', 'unknown')}!"
+                )
+                raise ValueError(
+                    f"max_open_positions должен быть указан и > 0 в конфиге для профиля {balance_profile.get('name', 'unknown')}"
+                )
 
             if (
                 hasattr(self.signal_generator, "regime_manager")
@@ -2292,36 +2622,44 @@ class FuturesScalpingOrchestrator:
             has_conflict = signal.get("has_conflict", False)
             signal_strength = signal.get("strength", 0.5)
 
+            # ✅ МОДЕРНИЗАЦИЯ: Получаем адаптивные параметры риска с учетом режима и баланса
+            adaptive_risk_params = self._get_adaptive_risk_params(
+                balance, symbol_regime, symbol
+            )
+            strength_multipliers = adaptive_risk_params.get("strength_multipliers", {})
+            strength_thresholds = adaptive_risk_params.get("strength_thresholds", {})
+
+            # ✅ МОДЕРНИЗАЦИЯ: Используем адаптивные strength_multipliers из конфига
             if has_conflict:
-                # При конфликте: уменьшенный размер (50% от стандартного) для снижения риска
-                strength_multiplier = 0.5
+                # При конфликте: уменьшенный размер для снижения риска
+                strength_multiplier = strength_multipliers.get("conflict", 0.5)
                 logger.debug(
                     f"⚡ Конфликт RSI/EMA: уменьшенный размер для быстрого скальпа "
-                    f"(strength={signal_strength:.2f}, multiplier=0.5)"
+                    f"(strength={signal_strength:.2f}, multiplier={strength_multiplier})"
                 )
-            elif signal_strength > 0.8:
+            elif signal_strength > strength_thresholds.get("very_strong", 0.8):
                 # Очень сильный сигнал → увеличиваем размер
-                strength_multiplier = 1.5  # +50% для очень сильного
+                strength_multiplier = strength_multipliers.get("very_strong", 1.5)
                 logger.debug(
-                    f"Сильный сигнал (strength={signal_strength:.2f}): multiplier=1.5"
+                    f"Очень сильный сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
                 )
-            elif signal_strength > 0.6:
+            elif signal_strength > strength_thresholds.get("strong", 0.6):
                 # Хороший сигнал → стандартный размер
-                strength_multiplier = 1.2  # +20% для хорошего
+                strength_multiplier = strength_multipliers.get("strong", 1.2)
                 logger.debug(
-                    f"Хороший сигнал (strength={signal_strength:.2f}): multiplier=1.2"
+                    f"Хороший сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
                 )
-            elif signal_strength > 0.4:
+            elif signal_strength > strength_thresholds.get("medium", 0.4):
                 # Средний сигнал → стандартный размер
-                strength_multiplier = 1.0  # Стандарт
+                strength_multiplier = strength_multipliers.get("medium", 1.0)
                 logger.debug(
-                    f"Средний сигнал (strength={signal_strength:.2f}): multiplier=1.0"
+                    f"Средний сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
                 )
             else:
                 # Слабый сигнал → минимум
-                strength_multiplier = 0.8  # -20% для слабого
+                strength_multiplier = strength_multipliers.get("weak", 0.8)
                 logger.debug(
-                    f"Слабый сигнал (strength={signal_strength:.2f}): multiplier=0.8"
+                    f"Слабый сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
                 )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем multiplier, но ограничиваем max_usd_size!
@@ -2350,21 +2688,63 @@ class FuturesScalpingOrchestrator:
             min_margin_usd = min_usd_size / leverage  # min в марже
             max_margin_usd = max_usd_size / leverage  # max в марже
 
-            # 5. 🛡️ ЗАЩИТА: Max Margin Used (80%)
-            max_margin_allowed = balance * self.max_margin_percent  # 80%
-            if self.total_margin_used + margin_required > max_margin_allowed:
+            # ✅ МОДЕРНИЗАЦИЯ: Получаем использованную маржу с биржи (актуальные данные)
+            used_margin = await self._get_used_margin()
+            # Обновляем total_margin_used для использования в дальнейших расчетах
+            self.total_margin_used = used_margin
+
+            # ✅ МОДЕРНИЗАЦИЯ: Получаем адаптивные параметры риска с учетом режима и баланса
+            adaptive_risk_params = self._get_adaptive_risk_params(
+                balance, symbol_regime, symbol
+            )
+            max_margin_percent = (
+                adaptive_risk_params.get("max_margin_percent", 80.0) / 100.0
+            )  # Конвертируем в доли
+            max_loss_per_trade_percent = (
+                adaptive_risk_params.get("max_loss_per_trade_percent", 2.0) / 100.0
+            )  # Конвертируем в доли
+            max_margin_safety_percent = (
+                adaptive_risk_params.get("max_margin_safety_percent", 90.0) / 100.0
+            )  # Конвертируем в доли
+
+            # ✅ МОДЕРНИЗАЦИЯ: Используем использованную маржу с биржи (актуальные данные)
+            # 5. 🛡️ ЗАЩИТА: Max Margin Used (адаптивный процент из конфига)
+            max_margin_allowed = balance * max_margin_percent
+            available_margin = (
+                balance - used_margin
+            )  # Доступная маржа = баланс - использованная маржа
+
+            if used_margin + margin_required > max_margin_allowed:
                 logger.warning(
-                    f"⚠️ Достигнут лимит маржи: {self.total_margin_used + margin_required:.2f} > {max_margin_allowed:.2f}"
+                    f"⚠️ Достигнут лимит маржи: {used_margin + margin_required:.2f} > {max_margin_allowed:.2f} "
+                    f"(использовано: ${used_margin:.2f}, требуется: ${margin_required:.2f}, "
+                    f"max_margin_percent={max_margin_percent*100:.1f}%)"
                 )
-                margin_required = max(0, max_margin_allowed - self.total_margin_used)
+                margin_required = max(0, max_margin_allowed - used_margin)
                 if margin_required < min_margin_usd:
                     logger.error(
-                        f"❌ Недостаточно свободной маржи для открытия позиции (требуется минимум ${min_margin_usd:.2f} маржи)"
+                        f"❌ Недостаточно свободной маржи для открытия позиции "
+                        f"(использовано: ${used_margin:.2f}, доступно: ${available_margin:.2f}, "
+                        f"требуется минимум: ${min_margin_usd:.2f} маржи)"
                     )
                     return 0.0
 
-            # 6. 🛡️ ЗАЩИТА: Max Loss per Trade (2%)
-            max_loss_usd = balance * self.max_loss_per_trade  # 2% макс потеря
+            # ✅ МОДЕРНИЗАЦИЯ: Дополнительная проверка на доступную маржу
+            if margin_required > available_margin:
+                logger.warning(
+                    f"⚠️ Недостаточно доступной маржи: ${margin_required:.2f} > ${available_margin:.2f} "
+                    f"(баланс: ${balance:.2f}, использовано: ${used_margin:.2f})"
+                )
+                margin_required = max(0, available_margin)
+                if margin_required < min_margin_usd:
+                    logger.error(
+                        f"❌ Недостаточно доступной маржи для открытия позиции "
+                        f"(доступно: ${available_margin:.2f}, требуется минимум: ${min_margin_usd:.2f} маржи)"
+                    )
+                    return 0.0
+
+            # 6. 🛡️ ЗАЩИТА: Max Loss per Trade (адаптивный процент из конфига)
+            max_loss_usd = balance * max_loss_per_trade_percent
             sl_percent = getattr(self.scalping_config, "sl_percent", 0.2)
 
             # ⚠️ sl_percent в конфиге может быть как в долях (0.2 = 20%) или в процентах (20)
@@ -2385,16 +2765,19 @@ class FuturesScalpingOrchestrator:
 
             if margin_required > max_safe_margin:
                 logger.warning(
-                    f"⚠️ Позиция слишком большая для max loss: {margin_required:.2f} > {max_safe_margin:.2f}"
+                    f"⚠️ Позиция слишком большая для max loss: {margin_required:.2f} > {max_safe_margin:.2f} "
+                    f"(max_loss_per_trade_percent={max_loss_per_trade_percent*100:.1f}%)"
                 )
                 margin_required = max_safe_margin
 
-            # 7. Проверка маржи (90% безопасности - финальная проверка)
-            if margin_required > balance * 0.9:
+            # 7. Проверка маржи (адаптивный процент безопасности из конфига - финальная проверка)
+            max_margin_safety = balance * max_margin_safety_percent
+            if margin_required > max_margin_safety:
                 logger.warning(
-                    f"⚠️ Недостаточно маржи: {margin_required:.2f} > {balance * 0.9:.2f}"
+                    f"⚠️ Недостаточно маржи: {margin_required:.2f} > {max_margin_safety:.2f} "
+                    f"(max_margin_safety_percent={max_margin_safety_percent*100:.1f}%)"
                 )
-                margin_required = balance * 0.9
+                margin_required = max_margin_safety
 
             # 8. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем ограничения к МАРЖЕ (не к notional!)
             # margin_usd = маржа (то что блокируется), используем min/max_margin_usd
@@ -2539,36 +2922,49 @@ class FuturesScalpingOrchestrator:
                             f"base_position_usd должен быть указан в конфиге для профиля {profile_name}"
                         )
 
+                # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
                 min_pos_usd = getattr(profile_config, "min_position_usd", None)
                 max_pos_usd = getattr(profile_config, "max_position_usd", None)
 
-                # ✅ Если min/max не заданы - рассчитываем из base (50% и 200% номинальной стоимости)
                 if min_pos_usd is None or min_pos_usd <= 0:
-                    min_pos_usd = base_pos_usd * 0.5  # 50% от base
-                    logger.debug(
-                        f"📊 Профиль {profile_name}: min_position_usd рассчитан из base ({min_pos_usd:.2f})"
+                    logger.error(
+                        f"❌ min_position_usd не указан в конфиге для профиля {profile_name}! "
+                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> min_position_usd"
+                    )
+                    raise ValueError(
+                        f"min_position_usd должен быть указан в конфиге для профиля {profile_name}"
                     )
                 if max_pos_usd is None or max_pos_usd <= 0:
-                    max_pos_usd = base_pos_usd * 2.0  # 200% от base
-                    logger.debug(
-                        f"📊 Профиль {profile_name}: max_position_usd рассчитан из base ({max_pos_usd:.2f})"
+                    logger.error(
+                        f"❌ max_position_usd не указан в конфиге для профиля {profile_name}! "
+                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_usd"
+                    )
+                    raise ValueError(
+                        f"max_position_usd должен быть указан в конфиге для профиля {profile_name}"
                     )
 
                 max_open_positions = getattr(profile_config, "max_open_positions", None)
-                if max_open_positions is None:
-                    logger.warning(
-                        f"⚠️ Профиль {profile_name}: max_open_positions не указан, используем 2"
+                if max_open_positions is None or max_open_positions <= 0:
+                    logger.error(
+                        f"❌ max_open_positions не указан в конфиге для профиля {profile_name}! "
+                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_open_positions"
                     )
-                    max_open_positions = 2
+                    raise ValueError(
+                        f"max_open_positions должен быть указан в конфиге для профиля {profile_name}"
+                    )
 
+                # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
                 max_position_percent = getattr(
                     profile_config, "max_position_percent", None
                 )
-                if max_position_percent is None:
-                    logger.warning(
-                        f"⚠️ Профиль {profile_name}: max_position_percent не указан, используем 8.0"
+                if max_position_percent is None or max_position_percent <= 0:
+                    logger.error(
+                        f"❌ max_position_percent не указан в конфиге для профиля {profile_name}! "
+                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_percent"
                     )
-                    max_position_percent = 8.0
+                    raise ValueError(
+                        f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
+                    )
 
                 return {
                     "name": profile_name,
@@ -2646,15 +3042,45 @@ class FuturesScalpingOrchestrator:
                     f"base_position_usd должен быть указан в конфиге для профиля {profile_name}"
                 )
 
+        # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
         min_pos_usd = getattr(profile_config, "min_position_usd", None)
         max_pos_usd = getattr(profile_config, "max_position_usd", None)
         if min_pos_usd is None or min_pos_usd <= 0:
-            min_pos_usd = base_pos_usd * 0.5
+            logger.error(
+                f"❌ min_position_usd не указан в конфиге для профиля {profile_name}! "
+                f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> min_position_usd"
+            )
+            raise ValueError(
+                f"min_position_usd должен быть указан в конфиге для профиля {profile_name}"
+            )
         if max_pos_usd is None or max_pos_usd <= 0:
-            max_pos_usd = base_pos_usd * 2.0
+            logger.error(
+                f"❌ max_position_usd не указан в конфиге для профиля {profile_name}! "
+                f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_usd"
+            )
+            raise ValueError(
+                f"max_position_usd должен быть указан в конфиге для профиля {profile_name}"
+            )
 
-        max_open_positions = getattr(profile_config, "max_open_positions", 2)
-        max_position_percent = getattr(profile_config, "max_position_percent", 8.0)
+        max_open_positions = getattr(profile_config, "max_open_positions", None)
+        if max_open_positions is None or max_open_positions <= 0:
+            logger.error(
+                f"❌ max_open_positions не указан в конфиге для профиля {profile_name}! "
+                f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_open_positions"
+            )
+            raise ValueError(
+                f"max_open_positions должен быть указан в конфиге для профиля {profile_name}"
+            )
+
+        max_position_percent = getattr(profile_config, "max_position_percent", None)
+        if max_position_percent is None or max_position_percent <= 0:
+            logger.error(
+                f"❌ max_position_percent не указан в конфиге для профиля {profile_name}! "
+                f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_percent"
+            )
+            raise ValueError(
+                f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
+            )
 
         return {
             "name": profile_name,
@@ -2701,6 +3127,341 @@ class FuturesScalpingOrchestrator:
             logger.warning(f"Ошибка получения параметров режима {regime_name}: {e}")
             return {}
 
+    def _get_adaptive_risk_params(
+        self, balance: float, regime: Optional[str] = None, symbol: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        ✅ НОВОЕ: Получает адаптивные параметры риска с учетом режима рынка и баланса.
+
+        Приоритет параметров:
+        1. Режим рынка (ARM) - ПРИОРИТЕТ 1
+        2. Баланс профиль (Balance Profiles) - ПРИОРИТЕТ 2
+        3. Базовые параметры (fallback) - ПРИОРИТЕТ 3
+
+        Args:
+            balance: Текущий баланс
+            regime: Режим рынка (trending, ranging, choppy). Если None, определяется автоматически.
+            symbol: Символ для торговли (опционально)
+
+        Returns:
+            Словарь с адаптивными параметрами риска:
+            - max_loss_per_trade_percent: Максимальная потеря на сделку (%)
+            - max_margin_percent: Максимальная маржа (%)
+            - max_drawdown_percent: Максимальная просадка (%)
+            - max_margin_safety_percent: Максимальная маржа безопасности (%)
+            - min_balance_usd: Минимальный баланс (USD)
+            - min_time_between_orders_seconds: Минимальное время между ордерами (сек)
+            - position_override_tolerance_percent: Толерантность для override (%)
+            - strength_multipliers: Множители силы сигнала (dict)
+            - strength_thresholds: Пороги силы сигнала (dict)
+        """
+        try:
+            # 1. Получаем базовые параметры из конфига
+            risk_config = getattr(self.config, "risk", None)
+            if not risk_config:
+                logger.warning(
+                    "⚠️ risk конфигурация не найдена, используем fallback значения"
+                )
+                return self._get_fallback_risk_params()
+
+            # Конвертируем в словарь если нужно
+            risk_dict = self._to_dict(risk_config)
+
+            # ✅ ОТЛАДКА: Проверяем наличие полей в risk_dict
+            if (
+                not risk_dict.get("base")
+                and not risk_dict.get("by_regime")
+                and not risk_dict.get("by_balance")
+            ):
+                logger.warning(
+                    f"⚠️ Поля base, by_regime, by_balance не найдены в risk_config. "
+                    f"Доступные поля: {list(risk_dict.keys())}. "
+                    f"Используем fallback значения."
+                )
+                # Пытаемся получить напрямую из объекта
+                if hasattr(risk_config, "base"):
+                    risk_dict["base"] = self._to_dict(risk_config.base)
+                if hasattr(risk_config, "by_regime"):
+                    risk_dict["by_regime"] = self._to_dict(risk_config.by_regime)
+                if hasattr(risk_config, "by_balance"):
+                    risk_dict["by_balance"] = self._to_dict(risk_config.by_balance)
+
+            # Базовые параметры (fallback)
+            base_params = self._to_dict(risk_dict.get("base", {}))
+
+            # 2. Определяем баланс профиль
+            balance_profile = self._get_balance_profile(balance)
+            profile_name = balance_profile.get("name", "small")
+
+            # Параметры по балансу
+            by_balance = self._to_dict(risk_dict.get("by_balance", {}))
+            balance_params = self._to_dict(by_balance.get(profile_name, {}))
+
+            # 3. Определяем режим рынка (если не указан)
+            if not regime:
+                if (
+                    hasattr(self.signal_generator, "regime_manager")
+                    and self.signal_generator.regime_manager
+                ):
+                    regime = self.signal_generator.regime_manager.get_current_regime()
+                else:
+                    regime = "ranging"  # Fallback режим
+
+            # Нормализуем режим (может быть uppercase или lowercase)
+            regime = regime.lower() if regime else "ranging"
+
+            # Параметры по режиму (ПРИОРИТЕТ 1)
+            by_regime = self._to_dict(risk_dict.get("by_regime", {}))
+            regime_params = self._to_dict(by_regime.get(regime, {}))
+
+            # 4. Объединяем параметры с приоритетом: режим > баланс > базовые
+            # Начинаем с базовых параметров
+            adaptive_params = base_params.copy()
+
+            # Применяем параметры баланса (перезаписывают базовые)
+            adaptive_params.update(balance_params)
+
+            # Применяем параметры режима (перезаписывают баланс и базовые) - ПРИОРИТЕТ 1
+            adaptive_params.update(regime_params)
+
+            # 5. Обрабатываем вложенные словари (strength_multipliers, strength_thresholds)
+            if "strength_multipliers" in adaptive_params:
+                adaptive_params["strength_multipliers"] = self._to_dict(
+                    adaptive_params["strength_multipliers"]
+                )
+            else:
+                # Fallback strength_multipliers
+                adaptive_params["strength_multipliers"] = {
+                    "conflict": 0.5,
+                    "very_strong": 1.5,
+                    "strong": 1.2,
+                    "medium": 1.0,
+                    "weak": 0.8,
+                }
+
+            if "strength_thresholds" in adaptive_params:
+                adaptive_params["strength_thresholds"] = self._to_dict(
+                    adaptive_params["strength_thresholds"]
+                )
+            else:
+                # Fallback strength_thresholds
+                adaptive_params["strength_thresholds"] = {
+                    "very_strong": 0.8,
+                    "strong": 0.6,
+                    "medium": 0.4,
+                }
+
+            # 6. Валидация параметров
+            adaptive_params = self._validate_risk_params(
+                adaptive_params, regime, profile_name
+            )
+
+            logger.debug(
+                f"📊 Адаптивные параметры риска: режим={regime}, профиль={profile_name}, "
+                f"max_loss={adaptive_params.get('max_loss_per_trade_percent', 2.0)}%, "
+                f"max_margin={adaptive_params.get('max_margin_percent', 80.0)}%"
+            )
+
+            return adaptive_params
+
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка получения адаптивных параметров риска: {e}", exc_info=True
+            )
+            return self._get_fallback_risk_params()
+
+    def _get_fallback_risk_params(self) -> Dict[str, Any]:
+        """Возвращает fallback параметры риска (если конфиг недоступен)"""
+        return {
+            "max_loss_per_trade_percent": 2.0,
+            "max_margin_percent": 80.0,
+            "max_drawdown_percent": 5.0,
+            "max_margin_safety_percent": 90.0,
+            "min_balance_usd": 20.0,
+            "min_time_between_orders_seconds": 30,
+            "position_override_tolerance_percent": 50.0,
+            "strength_multipliers": {
+                "conflict": 0.5,
+                "very_strong": 1.5,
+                "strong": 1.2,
+                "medium": 1.0,
+                "weak": 0.8,
+            },
+            "strength_thresholds": {
+                "very_strong": 0.8,
+                "strong": 0.6,
+                "medium": 0.4,
+            },
+        }
+
+    def _validate_risk_params(
+        self, params: Dict[str, Any], regime: str, profile_name: str
+    ) -> Dict[str, Any]:
+        """
+        Валидация параметров риска из конфига.
+
+        Args:
+            params: Параметры для валидации
+            regime: Режим рынка
+            profile_name: Имя баланс профиля
+
+        Returns:
+            Валидированные параметры
+        """
+        validated = params.copy()
+
+        # Валидация обязательных параметров
+        required_params = [
+            "max_loss_per_trade_percent",
+            "max_margin_percent",
+            "max_drawdown_percent",
+            "max_margin_safety_percent",
+            "min_balance_usd",
+            "min_time_between_orders_seconds",
+        ]
+
+        fallback_params = self._get_fallback_risk_params()
+
+        for param in required_params:
+            if param not in validated or validated[param] is None:
+                logger.warning(
+                    f"⚠️ Параметр {param} не найден в конфиге для режима={regime}, профиль={profile_name}, "
+                    f"используем fallback значение: {fallback_params[param]}"
+                )
+                validated[param] = fallback_params[param]
+            elif (
+                not isinstance(validated[param], (int, float)) or validated[param] <= 0
+            ):
+                logger.error(
+                    f"❌ Параметр {param} имеет недопустимое значение: {validated[param]}, "
+                    f"используем fallback значение: {fallback_params[param]}"
+                )
+                validated[param] = fallback_params[param]
+
+        # Валидация strength_multipliers
+        if "strength_multipliers" not in validated or not isinstance(
+            validated["strength_multipliers"], dict
+        ):
+            logger.warning(
+                f"⚠️ strength_multipliers не найден в конфиге, используем fallback значения"
+            )
+            validated["strength_multipliers"] = fallback_params["strength_multipliers"]
+        else:
+            # Валидация каждого множителя
+            sm = validated["strength_multipliers"]
+            fallback_sm = fallback_params["strength_multipliers"]
+            for key in ["conflict", "very_strong", "strong", "medium", "weak"]:
+                if (
+                    key not in sm
+                    or not isinstance(sm[key], (int, float))
+                    or sm[key] <= 0
+                ):
+                    logger.warning(
+                        f"⚠️ strength_multipliers[{key}] не найден или невалиден, "
+                        f"используем fallback: {fallback_sm[key]}"
+                    )
+                    sm[key] = fallback_sm[key]
+
+        # Валидация strength_thresholds
+        if "strength_thresholds" not in validated or not isinstance(
+            validated["strength_thresholds"], dict
+        ):
+            logger.warning(
+                f"⚠️ strength_thresholds не найден в конфиге, используем fallback значения"
+            )
+            validated["strength_thresholds"] = fallback_params["strength_thresholds"]
+        else:
+            # Валидация каждого порога
+            st = validated["strength_thresholds"]
+            fallback_st = fallback_params["strength_thresholds"]
+            for key in ["very_strong", "strong", "medium"]:
+                if (
+                    key not in st
+                    or not isinstance(st[key], (int, float))
+                    or st[key] <= 0
+                ):
+                    logger.warning(
+                        f"⚠️ strength_thresholds[{key}] не найден или невалиден, "
+                        f"используем fallback: {fallback_st[key]}"
+                    )
+                    st[key] = fallback_st[key]
+
+        return validated
+
+    async def _get_used_margin(self) -> float:
+        """
+        ✅ НОВОЕ: Получает использованную маржу из всех открытых позиций на бирже.
+
+        Returns:
+            Использованная маржа в USD (сумма маржи всех открытых позиций)
+        """
+        try:
+            # Получаем все позиции с биржи
+            exchange_positions = await self.client.get_positions()
+            if not exchange_positions:
+                return 0.0
+
+            total_margin = 0.0
+
+            for pos in exchange_positions:
+                try:
+                    pos_size = float(pos.get("pos", "0") or 0)
+                except (TypeError, ValueError):
+                    pos_size = 0.0
+
+                # Пропускаем закрытые позиции
+                if abs(pos_size) < 1e-8:
+                    continue
+
+                inst_id = pos.get("instId", "")
+                if not inst_id:
+                    continue
+
+                symbol = inst_id.replace("-SWAP", "")
+
+                # Получаем маржу из позиции
+                margin_raw = pos.get("margin")
+                try:
+                    margin = float(margin_raw) if margin_raw is not None else 0.0
+                except (TypeError, ValueError):
+                    margin = 0.0
+
+                # Если маржа не указана в позиции, рассчитываем её
+                if margin <= 0:
+                    try:
+                        entry_price = float(pos.get("avgPx", 0) or 0)
+                    except (TypeError, ValueError):
+                        entry_price = 0.0
+
+                    if entry_price > 0:
+                        # Получаем ctVal для корректного перевода контрактов в монеты
+                        ct_val = 0.01
+                        try:
+                            details = await self.client.get_instrument_details(symbol)
+                            if details:
+                                ct_val = float(details.get("ctVal", ct_val)) or ct_val
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Не удалось получить ctVal для {symbol} при расчете маржи: {e}"
+                            )
+
+                        abs_size = abs(pos_size)
+                        size_in_coins = abs_size * ct_val
+
+                        # Рассчитываем маржу: (size_in_coins * entry_price) / leverage
+                        leverage = getattr(self.scalping_config, "leverage", 3) or 3
+                        margin = (size_in_coins * entry_price) / max(leverage, 1e-6)
+
+                total_margin += max(margin, 0.0)
+
+            logger.debug(f"📊 Использованная маржа с биржи: ${total_margin:.2f}")
+            return total_margin
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения использованной маржи: {e}", exc_info=True)
+            # Возвращаем текущее значение total_margin_used как fallback
+            return self.total_margin_used
+
     async def _check_drawdown_protection(self) -> bool:
         """
         🛡️ Защита от drawdown
@@ -2718,10 +3479,27 @@ class FuturesScalpingOrchestrator:
             current_balance = await self.client.get_balance()
             drawdown = (self.initial_balance - current_balance) / self.initial_balance
 
-            if drawdown > self.max_drawdown_percent:
+            # ✅ МОДЕРНИЗАЦИЯ: Получаем адаптивный max_drawdown_percent из конфига
+            # Определяем режим и баланс профиль для получения адаптивных параметров
+            regime = None
+            if (
+                hasattr(self.signal_generator, "regime_manager")
+                and self.signal_generator.regime_manager
+            ):
+                regime = self.signal_generator.regime_manager.get_current_regime()
+
+            adaptive_risk_params = self._get_adaptive_risk_params(
+                current_balance, regime
+            )
+            max_drawdown_percent = (
+                adaptive_risk_params.get("max_drawdown_percent", 5.0) / 100.0
+            )  # Конвертируем в доли
+
+            if drawdown > max_drawdown_percent:
                 logger.critical(
                     f"🚨 DRAWDOWN ЗАЩИТА! "
-                    f"Просадка: {drawdown*100:.2f}% > {self.max_drawdown_percent*100:.0f}%"
+                    f"Просадка: {drawdown*100:.2f}% > {max_drawdown_percent*100:.1f}% "
+                    f"(режим={regime or 'unknown'})"
                 )
 
                 # 🛑 Emergency Stop
@@ -2729,8 +3507,11 @@ class FuturesScalpingOrchestrator:
 
                 return False
 
-            elif drawdown > self.max_drawdown_percent * 0.7:  # 70% от лимита
-                logger.warning(f"⚠️ Близко к drawdown: {drawdown*100:.2f}%")
+            elif drawdown > max_drawdown_percent * 0.7:  # 70% от лимита
+                logger.warning(
+                    f"⚠️ Близко к drawdown: {drawdown*100:.2f}% "
+                    f"(лимит: {max_drawdown_percent*100:.1f}%, режим={regime or 'unknown'})"
+                )
 
             return True
 
@@ -3156,10 +3937,25 @@ class FuturesScalpingOrchestrator:
                 # 🛡️ Обновляем маржу и лимит позиций
                 position_margin = position.get("margin", 0)
                 if position_margin > 0:
+                    # ✅ МОДЕРНИЗАЦИЯ: Обновляем total_margin_used (будет пересчитано при следующей синхронизации)
+                    # Временно обновляем локально для быстрого доступа
                     self.total_margin_used -= position_margin
                     logger.debug(
                         f"💼 Общая маржа после закрытия: ${self.total_margin_used:.2f}"
                     )
+                    # ✅ МОДЕРНИЗАЦИЯ: После закрытия позиции синхронизируем маржу с биржей
+                    # Это гарантирует, что total_margin_used всегда актуален
+                    try:
+                        # Быстрая синхронизация маржи (без полной синхронизации позиций)
+                        updated_margin = await self._get_used_margin()
+                        self.total_margin_used = updated_margin
+                        logger.debug(
+                            f"💼 Обновлена маржа с биржи: ${self.total_margin_used:.2f} (после закрытия позиции)"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Не удалось обновить маржу с биржи после закрытия позиции: {e}"
+                        )
 
                 position_size = position.get("size", 0)
                 entry_price = position.get("entry_price", 0)
@@ -3209,13 +4005,27 @@ class FuturesScalpingOrchestrator:
             return {"error": str(e), "timestamp": datetime.now().isoformat()}
 
     def _to_dict(self, raw: Any) -> Dict[str, Any]:
+        """Преобразует объект в словарь, поддерживая Pydantic модели и обычные объекты"""
+        if raw is None:
+            return {}
         if isinstance(raw, dict):
             return dict(raw)
+        # ✅ Поддержка Pydantic v2 (model_dump)
+        if hasattr(raw, "model_dump"):
+            try:
+                return raw.model_dump()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        # ✅ Поддержка Pydantic v1 (dict)
         if hasattr(raw, "dict"):
             try:
                 return dict(raw.dict(by_alias=True))  # type: ignore[attr-defined]
             except TypeError:
-                return dict(raw.dict())  # type: ignore[attr-defined]
+                try:
+                    return dict(raw.dict())  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+        # ✅ Поддержка обычных объектов (__dict__)
         if hasattr(raw, "__dict__"):
             return dict(raw.__dict__)
         return {}

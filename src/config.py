@@ -27,6 +27,14 @@ class RiskConfig(BaseModel):
     max_open_positions: int = Field(default=3, ge=1, le=10)
     # Адаптивные минимумы для разных размеров баланса
     adaptive_minimums: Optional[Dict] = Field(default=None)
+    # ✅ НОВОЕ: Адаптивные параметры риска (base, by_regime, by_balance)
+    base: Optional[Dict] = Field(default_factory=dict)
+    by_regime: Optional[Dict] = Field(default_factory=dict)
+    by_balance: Optional[Dict] = Field(default_factory=dict)
+    # Для обратной совместимости
+    adaptive_risk: Optional[bool] = Field(default=False)
+    balance_threshold: Optional[float] = Field(default=None)
+    risk_reduction_factor: Optional[float] = Field(default=None)
 
 
 class IndicatorConfig(BaseModel):
