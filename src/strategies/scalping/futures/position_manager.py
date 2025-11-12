@@ -843,7 +843,7 @@ class FuturesPositionManager:
                         f"✅ Позиция {symbol} удалена из active_positions (position_manager)"
                     )
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Удаляем позицию из orchestrator.active_positions и trailing_sl_by_symbol
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Удаляем позицию из orchestrator.active_positions, trailing_sl_by_symbol и max_size_limiter
                 # для синхронизации состояния после закрытия по TP
                 if hasattr(self, "orchestrator") and self.orchestrator:
                     if symbol in self.orchestrator.active_positions:
@@ -856,6 +856,34 @@ class FuturesPositionManager:
                         del self.orchestrator.trailing_sl_by_symbol[symbol]
                         logger.debug(
                             f"✅ TrailingStopLoss для {symbol} удален из orchestrator"
+                        )
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Удаляем позицию из max_size_limiter при закрытии
+                    if hasattr(self.orchestrator, "max_size_limiter"):
+                        if symbol in self.orchestrator.max_size_limiter.position_sizes:
+                            self.orchestrator.max_size_limiter.remove_position(symbol)
+                            logger.debug(
+                                f"✅ Позиция {symbol} удалена из max_size_limiter.position_sizes"
+                            )
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем last_orders_cache для предотвращения блокировки
+                    if hasattr(self.orchestrator, "last_orders_cache"):
+                        normalized_symbol = self.orchestrator._normalize_symbol(symbol)
+                        if normalized_symbol in self.orchestrator.last_orders_cache:
+                            self.orchestrator.last_orders_cache[normalized_symbol]["status"] = "closed"
+                            logger.debug(
+                                f"✅ Статус ордера для {symbol} обновлен на 'closed' в last_orders_cache"
+                            )
+                    
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Немедленная синхронизация после закрытия позиции
+                    # Это гарантирует, что состояние обновится сразу после закрытия, и новая позиция сможет открыться
+                    try:
+                        if hasattr(self.orchestrator, "_sync_positions_with_exchange"):
+                            await self.orchestrator._sync_positions_with_exchange(force=True)
+                            logger.debug(
+                                f"✅ Выполнена немедленная синхронизация позиций после закрытия {symbol}"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Ошибка синхронизации позиций после закрытия {symbol}: {e}"
                         )
             else:
                 error_msg = result.get("msg", "Неизвестная ошибка")

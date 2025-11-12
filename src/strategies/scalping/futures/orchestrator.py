@@ -1456,12 +1456,45 @@ class FuturesScalpingOrchestrator:
                         pos_size = abs(
                             float(position_in_signal_direction.get("pos", "0"))
                         )
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем max_size_limiter с реальными данными с биржи
+                        # Это гарантирует, что если позиция есть на бирже, она будет отражена в max_size_limiter
+                        if symbol not in self.max_size_limiter.position_sizes:
+                            # Позиция есть на бирже, но не в max_size_limiter - добавляем
+                            try:
+                                entry_price = float(position_in_signal_direction.get("avgPx", "0")) or float(
+                                    position_in_signal_direction.get("markPx", "0")
+                                )
+                                if entry_price > 0:
+                                    # Получаем ctVal для конвертации
+                                    if hasattr(self.client, "get_instrument_details"):
+                                        try:
+                                            details = await self.client.get_instrument_details(symbol)
+                                            ct_val = float(details.get("ctVal", "1.0"))
+                                            size_in_coins = pos_size * ct_val
+                                            size_usd = size_in_coins * entry_price
+                                            self.max_size_limiter.add_position(symbol, size_usd)
+                                            logger.debug(
+                                                f"🔄 Позиция {symbol} добавлена в max_size_limiter из реальных данных биржи: {size_usd:.2f} USD"
+                                            )
+                                        except Exception as detail_error:
+                                            logger.debug(f"⚠️ Не удалось получить детали инструмента для {symbol}: {detail_error}")
+                            except Exception as e:
+                                logger.debug(f"⚠️ Не удалось обновить max_size_limiter для {symbol}: {e}")
+                        
                         logger.warning(
-                            f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
+                            f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
                             f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
                             f"(на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!)"
                         )
                         continue
+                    elif len(symbol_positions) == 0:
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Позиции нет на бирже - очищаем max_size_limiter если там есть устаревшие данные
+                        if symbol in self.max_size_limiter.position_sizes:
+                            logger.debug(
+                                f"🔄 Позиция {symbol} отсутствует на бирже, но есть в max_size_limiter, "
+                                f"очищаем устаревшие данные перед открытием новой позиции"
+                            )
+                            self.max_size_limiter.remove_position(symbol)
                     elif len(symbol_positions) > 0:
                         # Есть позиции в ДРУГОМ направлении
                         if not allow_concurrent:
@@ -2170,6 +2203,62 @@ class FuturesScalpingOrchestrator:
             if position_size <= 0:
                 logger.warning(f"Размер позиции слишком мал: {position_size}")
                 return False
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала проверяем реальные позиции на бирже перед проверкой MaxSizeLimiter
+            # Это гарантирует, что мы не блокируем открытие позиции из-за устаревших данных в max_size_limiter
+            try:
+                all_positions = await self.client.get_positions()
+                symbol_positions = [
+                    p
+                    for p in all_positions
+                    if (
+                        p.get("instId", "").replace("-SWAP", "") == symbol
+                        or p.get("instId", "") == symbol
+                    )
+                    and abs(float(p.get("pos", "0"))) > 0.000001
+                ]
+                
+                # Если позиция действительно есть на бирже - проверяем направление
+                if len(symbol_positions) > 0:
+                    signal_side = signal.get("side", "").lower() if signal else "buy"
+                    signal_position_side = "long" if signal_side == "buy" else "short"
+                    
+                    # Проверяем, есть ли позиция в направлении сигнала
+                    position_in_signal_direction = None
+                    for pos in symbol_positions:
+                        pos_size = float(pos.get("pos", "0"))
+                        actual_side = "long" if pos_size > 0 else "short"
+                        
+                        if actual_side == signal_position_side:
+                            position_in_signal_direction = pos
+                            break
+                    
+                    if position_in_signal_direction:
+                        # Позиция действительно есть на бирже - блокируем
+                        pos_size = abs(float(position_in_signal_direction.get("pos", "0")))
+                        logger.warning(
+                            f"⚠️ Позиция {symbol} {signal_position_side.upper()} действительно открыта на бирже (size={pos_size}), "
+                            f"БЛОКИРУЕМ новый {signal_side.upper()} ордер"
+                        )
+                        return False
+                    else:
+                        # Позиция есть, но в другом направлении - очищаем max_size_limiter для корректной проверки
+                        if symbol in self.max_size_limiter.position_sizes:
+                            logger.debug(
+                                f"🔄 Позиция {symbol} есть на бирже, но в другом направлении, "
+                                f"очищаем max_size_limiter для корректной проверки"
+                            )
+                            self.max_size_limiter.remove_position(symbol)
+                else:
+                    # Позиции нет на бирже - очищаем max_size_limiter если там есть устаревшие данные
+                    if symbol in self.max_size_limiter.position_sizes:
+                        logger.debug(
+                            f"🔄 Позиция {symbol} отсутствует на бирже, но есть в max_size_limiter, "
+                            f"очищаем устаревшие данные"
+                        )
+                        self.max_size_limiter.remove_position(symbol)
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка проверки позиций на бирже для {symbol}: {e}, продолжаем проверку через MaxSizeLimiter")
 
             # Проверка через MaxSizeLimiter
             # ⚠️ ИСПРАВЛЕНИЕ: size_usd = notional (номинальная стоимость), а не маржа!
