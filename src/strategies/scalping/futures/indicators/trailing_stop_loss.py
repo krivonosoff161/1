@@ -274,8 +274,11 @@ class TrailingStopLoss:
             # При инициализации: lowest_price = entry_price, стоп = entry_price * (1 + trail%) (выше entry)
             # После обновления: если цена упала (lowest_price < entry_price), стоп следует за минимальной ценой (опускается)
             # Стоп может опускаться ниже entry, когда позиция в прибыли (это правильно для trailing stop!)
-            
-            if self.lowest_price < float("inf") and self.lowest_price < self.entry_price:
+
+            if (
+                self.lowest_price < float("inf")
+                and self.lowest_price < self.entry_price
+            ):
                 # Цена упала ниже entry (позиция в прибыли) - стоп следует за минимальной ценой (опускается)
                 # Стоп = lowest_price * (1 + trail%) (защита от отскока)
                 # ✅ Стоп может быть ниже entry * (1 + trail%) - это правильно, потому что позиция в прибыли!
@@ -285,12 +288,14 @@ class TrailingStopLoss:
                 if stop_loss < self.entry_price:
                     # Если стоп опустился ниже entry, используем entry как минимальный стоп
                     # Это защищает от случая, когда trail очень маленький
-                    stop_loss = max(stop_loss, self.entry_price * (1 + self.initial_trail))
+                    stop_loss = max(
+                        stop_loss, self.entry_price * (1 + self.initial_trail)
+                    )
             else:
                 # Цена еще не упала ниже entry или это инициализация - стоп выше entry
                 # Стоп = entry_price * (1 + trail%) (защита от роста)
                 stop_loss = self.entry_price * (1 + self.current_trail)
-            
+
             return stop_loss
 
     def get_profit_pct(self, current_price: float, include_fees: bool = True) -> float:
@@ -465,7 +470,7 @@ class TrailingStopLoss:
             # Fallback значения (если не переданы из конфига)
             regime_multiplier = getattr(self, "regime_multiplier", None) or 1.0
             trend_strength_boost = getattr(self, "trend_strength_boost", None) or 1.0
-            
+
             # Если множители не установлены, используем старую логику (для обратной совместимости)
             if regime_multiplier == 1.0 and not hasattr(self, "regime_multiplier"):
                 if market_regime == "trending":
@@ -513,16 +518,22 @@ class TrailingStopLoss:
                     # При инициализации: стоп = entry_price * (1 + trail%) (выше entry)
                     # После обновления: стоп = lowest_price * (1 + trail%) (следует за минимальной ценой)
                     # Стоп может опускаться ниже entry, когда позиция в прибыли (это правильно для trailing stop!)
-                    if self.lowest_price < float("inf") and self.lowest_price < self.entry_price:
+                    if (
+                        self.lowest_price < float("inf")
+                        and self.lowest_price < self.entry_price
+                    ):
                         # Цена упала ниже entry (позиция в прибыли) - стоп следует за минимальной ценой (опускается)
                         adjusted_stop = self.lowest_price * (1 + adjusted_trail)
                         # ✅ ЗАЩИТА: стоп не должен быть ниже entry (базовая защита)
                         if adjusted_stop < self.entry_price:
-                            adjusted_stop = max(adjusted_stop, self.entry_price * (1 + self.initial_trail))
+                            adjusted_stop = max(
+                                adjusted_stop,
+                                self.entry_price * (1 + self.initial_trail),
+                            )
                     else:
                         # Цена еще не упала ниже entry или это инициализация - стоп выше entry
                         adjusted_stop = self.entry_price * (1 + adjusted_trail)
-                    
+
                     # Не закрываем если цена ниже скорректированного стопа (для SHORT цена должна подняться до стопа)
                     if current_price < adjusted_stop:
                         profit_gross = self.get_profit_pct(

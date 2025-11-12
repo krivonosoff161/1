@@ -317,7 +317,9 @@ class OKXFuturesClient:
 
             async with aiohttp.ClientSession() as session:
                 # ✅ ПРИОРИТЕТ 1: Получаем лучшие цены из стакана (самые актуальные)
-                orderbook_url = f"https://www.okx.com/api/v5/market/books?instId={inst_id}&sz=5"
+                orderbook_url = (
+                    f"https://www.okx.com/api/v5/market/books?instId={inst_id}&sz=5"
+                )
                 async with session.get(orderbook_url) as book_resp:
                     if book_resp.status == 200:
                         book_data = await book_resp.json()
@@ -334,25 +336,33 @@ class OKXFuturesClient:
                                 # Решение: используем более консервативные лимиты (±0.5% от лучших цен)
                                 # Это уменьшает вероятность выхода за лимиты биржи
                                 # ✅ ИСПРАВЛЕНО: Уменьшены лимиты для большей безопасности
-                                max_buy_price = best_ask * 1.005  # +0.5% от best ask (было 1.01)
-                                min_sell_price = best_bid * 0.995  # -0.5% от best bid (было 0.99)
-                                
+                                max_buy_price = (
+                                    best_ask * 1.005
+                                )  # +0.5% от best ask (было 1.01)
+                                min_sell_price = (
+                                    best_bid * 0.995
+                                )  # -0.5% от best bid (было 0.99)
+
                                 # Получаем текущую цену из тикера
                                 ticker_url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
                                 async with session.get(ticker_url) as ticker_resp:
                                     if ticker_resp.status == 200:
                                         ticker_data = await ticker_resp.json()
-                                        if ticker_data.get("code") == "0" and ticker_data.get("data"):
+                                        if ticker_data.get(
+                                            "code"
+                                        ) == "0" and ticker_data.get("data"):
                                             ticker = ticker_data["data"][0]
-                                            current_price = float(ticker.get("last", "0"))
-                                            
+                                            current_price = float(
+                                                ticker.get("last", "0")
+                                            )
+
                                             logger.debug(
                                                 f"💰 Лимиты цены для {symbol}: "
                                                 f"best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, "
                                                 f"current={current_price:.2f}, "
                                                 f"min_sell={min_sell_price:.2f}, max_buy={max_buy_price:.2f}"
                                             )
-                                            
+
                                             return {
                                                 "max_buy_price": max_buy_price,
                                                 "min_sell_price": min_sell_price,
@@ -360,7 +370,7 @@ class OKXFuturesClient:
                                                 "best_ask": best_ask,
                                                 "current_price": current_price,
                                             }
-                                
+
                                 # Если не получили текущую цену, используем среднюю из стакана
                                 current_price = (best_ask + best_bid) / 2
                                 return {
@@ -370,9 +380,11 @@ class OKXFuturesClient:
                                     "best_ask": best_ask,
                                     "current_price": current_price,
                                 }
-                
+
                 # ✅ FALLBACK: Если не получили стакан, используем тикер
-                ticker_url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                ticker_url = (
+                    f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                )
                 async with session.get(ticker_url) as ticker_resp:
                     if ticker_resp.status == 200:
                         ticker_data = await ticker_resp.json()
@@ -383,15 +395,19 @@ class OKXFuturesClient:
                             # Проблема: реальные лимиты биржи могут быть более строгими
                             # Решение: используем более консервативные лимиты (±1% от текущей цены)
                             # ✅ ИСПРАВЛЕНО: Уменьшены лимиты для большей безопасности
-                            max_buy_price = current_price * 1.01  # +1% от текущей цены (было 1.02)
-                            min_sell_price = current_price * 0.99  # -1% от текущей цены (было 0.98)
-                            
+                            max_buy_price = (
+                                current_price * 1.01
+                            )  # +1% от текущей цены (было 1.02)
+                            min_sell_price = (
+                                current_price * 0.99
+                            )  # -1% от текущей цены (было 0.98)
+
                             logger.debug(
                                 f"💰 Лимиты цены для {symbol} (fallback): "
                                 f"current={current_price:.2f}, "
                                 f"min_sell={min_sell_price:.2f}, max_buy={max_buy_price:.2f}"
                             )
-                            
+
                             return {
                                 "max_buy_price": max_buy_price,
                                 "min_sell_price": min_sell_price,

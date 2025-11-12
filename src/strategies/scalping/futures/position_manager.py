@@ -378,32 +378,44 @@ class FuturesPositionManager:
                             # Используем position_side из active_positions, если доступен, иначе определяем по side
                             position_side = None
                             if hasattr(self, "orchestrator") and self.orchestrator:
-                                active_positions = getattr(self.orchestrator, "active_positions", {})
+                                active_positions = getattr(
+                                    self.orchestrator, "active_positions", {}
+                                )
                                 if symbol in active_positions:
-                                    position_side = active_positions[symbol].get("position_side")
-                            
+                                    position_side = active_positions[symbol].get(
+                                        "position_side"
+                                    )
+
                             # Определяем направление позиции
                             if position_side:
                                 # Используем position_side из active_positions (надежнее)
                                 if position_side.lower() == "long":
                                     pnl_percent = (
-                                        (current_price - entry_price) / entry_price * 100
+                                        (current_price - entry_price)
+                                        / entry_price
+                                        * 100
                                     )
                                 else:  # short
                                     pnl_percent = (
-                                        (entry_price - current_price) / entry_price * 100
+                                        (entry_price - current_price)
+                                        / entry_price
+                                        * 100
                                     )
                             else:
                                 # Fallback: определяем по side
                                 if side.lower() in ["long", "buy"]:
                                     pnl_percent = (
-                                        (current_price - entry_price) / entry_price * 100
+                                        (current_price - entry_price)
+                                        / entry_price
+                                        * 100
                                     )
                                 else:  # short или sell
                                     pnl_percent = (
-                                        (entry_price - current_price) / entry_price * 100
+                                        (entry_price - current_price)
+                                        / entry_price
+                                        * 100
                                     )
-                            
+
                             logger.warning(
                                 f"⚠️ Используем fallback расчет PnL% для {symbol}: {pnl_percent:.2f}% (от цены, а не от маржи) "
                                 f"(side={side}, position_side={position_side or 'N/A'})"
@@ -442,10 +454,14 @@ class FuturesPositionManager:
                             # Используем position_side из active_positions, если доступен, иначе определяем по side
                             position_side = None
                             if hasattr(self, "orchestrator") and self.orchestrator:
-                                active_positions = getattr(self.orchestrator, "active_positions", {})
+                                active_positions = getattr(
+                                    self.orchestrator, "active_positions", {}
+                                )
                                 if symbol in active_positions:
-                                    position_side = active_positions[symbol].get("position_side")
-                            
+                                    position_side = active_positions[symbol].get(
+                                        "position_side"
+                                    )
+
                             # Определяем направление позиции
                             if position_side:
                                 # Используем position_side из active_positions (надежнее)
@@ -473,32 +489,44 @@ class FuturesPositionManager:
                             # Используем position_side из active_positions, если доступен, иначе определяем по side
                             position_side = None
                             if hasattr(self, "orchestrator") and self.orchestrator:
-                                active_positions = getattr(self.orchestrator, "active_positions", {})
+                                active_positions = getattr(
+                                    self.orchestrator, "active_positions", {}
+                                )
                                 if symbol in active_positions:
-                                    position_side = active_positions[symbol].get("position_side")
-                            
+                                    position_side = active_positions[symbol].get(
+                                        "position_side"
+                                    )
+
                             # Определяем направление позиции
                             if position_side:
                                 # Используем position_side из active_positions (надежнее)
                                 if position_side.lower() == "long":
                                     pnl_percent = (
-                                        (current_price - entry_price) / entry_price * 100
+                                        (current_price - entry_price)
+                                        / entry_price
+                                        * 100
                                     )
                                 else:  # short
                                     pnl_percent = (
-                                        (entry_price - current_price) / entry_price * 100
+                                        (entry_price - current_price)
+                                        / entry_price
+                                        * 100
                                     )
                             else:
                                 # Fallback: определяем по side
                                 if side.lower() in ["long", "buy"]:
                                     pnl_percent = (
-                                        (current_price - entry_price) / entry_price * 100
+                                        (current_price - entry_price)
+                                        / entry_price
+                                        * 100
                                     )
                                 else:  # short или sell
                                     pnl_percent = (
-                                        (entry_price - current_price) / entry_price * 100
+                                        (entry_price - current_price)
+                                        / entry_price
+                                        * 100
                                     )
-                            
+
                             logger.warning(
                                 f"⚠️ Fallback расчет PnL% для {symbol}: {pnl_percent:.2f}% "
                                 f"(side={side}, position_side={position_side or 'N/A'})"
@@ -523,10 +551,12 @@ class FuturesPositionManager:
                 # Используем position_side из active_positions, если доступен, иначе определяем по side
                 position_side = None
                 if hasattr(self, "orchestrator") and self.orchestrator:
-                    active_positions = getattr(self.orchestrator, "active_positions", {})
+                    active_positions = getattr(
+                        self.orchestrator, "active_positions", {}
+                    )
                     if symbol in active_positions:
                         position_side = active_positions[symbol].get("position_side")
-                
+
                 # Определяем направление позиции
                 if position_side:
                     # Используем position_side из active_positions (надежнее)
@@ -540,7 +570,7 @@ class FuturesPositionManager:
                         pnl_percent = (current_price - entry_price) / entry_price * 100
                     else:  # short или sell
                         pnl_percent = (entry_price - current_price) / entry_price * 100
-                
+
                 logger.warning(
                     f"⚠️ Fallback: PnL% для {symbol} считаем от цены: {pnl_percent:.2f}% "
                     f"(side={side}, position_side={position_side or 'N/A'})"

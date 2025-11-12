@@ -235,7 +235,9 @@ class FuturesOrderExecutor:
                                     # ✅ ИСПРАВЛЕНО: Используем более безопасный offset 0.1% (вместо 0.05%)
                                     # Для обоих случаев (BUY и SELL) используем -0.1% от текущей цены
                                     # Это гарантирует исполнение и не выходит за лимиты биржи
-                                    limit_price = current_price * 0.999  # -0.1% от текущей цены
+                                    limit_price = (
+                                        current_price * 0.999
+                                    )  # -0.1% от текущей цены
                                     logger.debug(
                                         f"💰 Лимитная цена (fallback) для {symbol} {side}: {limit_price:.2f}"
                                     )
@@ -265,11 +267,13 @@ class FuturesOrderExecutor:
                 else:
                     # Fallback: используем текущую цену - 0.1%
                     limit_price = current_price * 0.999
-                
+
                 # ✅ КРИТИЧЕСКОЕ: Проверяем лимит биржи
                 if limit_price > max_buy_price:
                     # Если превышаем лимит - используем лимит минус небольшой запас
-                    limit_price = max_buy_price * 0.999  # 0.1% ниже лимита для безопасности
+                    limit_price = (
+                        max_buy_price * 0.999
+                    )  # 0.1% ниже лимита для безопасности
                     logger.warning(
                         f"⚠️ Лимитная цена для {symbol} BUY превышает лимит биржи ({max_buy_price:.2f}), "
                         f"используем скорректированную цену: {limit_price:.2f}"
@@ -279,7 +283,7 @@ class FuturesOrderExecutor:
                 # Проблема: min_sell_price из get_price_limits может быть неточным
                 # Решение: используем max(min_sell_price, best_bid * 0.995) для более безопасного лимита
                 # И устанавливаем цену выше этого лимита
-                
+
                 # ✅ ИСПРАВЛЕНО: Используем более консервативный лимит для SELL
                 # Берем максимальное значение из min_sell_price и best_bid * 0.995
                 # Это гарантирует, что мы не выйдем за реальные лимиты биржи
@@ -288,13 +292,17 @@ class FuturesOrderExecutor:
                     # ✅ ИСПРАВЛЕНО: Используем более консервативный лимит: best_bid * 0.995 (как в get_price_limits)
                     conservative_min_sell = best_bid * 0.995
                     # Берем максимальное значение для безопасности
-                    safe_min_sell_price = max(min_sell_price, conservative_min_sell) if min_sell_price > 0 else conservative_min_sell
+                    safe_min_sell_price = (
+                        max(min_sell_price, conservative_min_sell)
+                        if min_sell_price > 0
+                        else conservative_min_sell
+                    )
                     logger.debug(
                         f"📊 Консервативный min_sell_price для {symbol}: "
                         f"min_sell={min_sell_price:.2f}, conservative={conservative_min_sell:.2f}, "
                         f"safe={safe_min_sell_price:.2f}"
                     )
-                
+
                 # ✅ ИСПРАВЛЕНО: Используем best_ask * 0.999, но не ниже safe_min_sell_price
                 if best_ask > 0:
                     # Используем best ask - 0.1% (ниже best ask для гарантии исполнения)
@@ -302,11 +310,13 @@ class FuturesOrderExecutor:
                 else:
                     # Fallback: используем текущую цену - 0.1%
                     limit_price = current_price * 0.999
-                
+
                 # ✅ КРИТИЧЕСКОЕ: Проверяем лимит биржи (используем безопасный лимит)
                 if limit_price < safe_min_sell_price:
                     # Если ниже лимита - используем лимит плюс небольшой запас (0.2% для безопасности)
-                    limit_price = safe_min_sell_price * 1.002  # 0.2% выше лимита для безопасности
+                    limit_price = (
+                        safe_min_sell_price * 1.002
+                    )  # 0.2% выше лимита для безопасности
                     logger.warning(
                         f"⚠️ Лимитная цена для {symbol} SELL ({limit_price:.2f}) ниже безопасного лимита ({safe_min_sell_price:.2f}), "
                         f"используем скорректированную цену: {safe_min_sell_price * 1.002:.2f}"
@@ -322,8 +332,12 @@ class FuturesOrderExecutor:
                     # ✅ ИСПРАВЛЕНО: Используем более консервативный лимит: best_ask * 1.005 (как в get_price_limits)
                     conservative_max_buy = best_ask * 1.005
                     # Берем минимальное значение для безопасности
-                    safe_max_buy_price = min(max_buy_price, conservative_max_buy) if max_buy_price > 0 else conservative_max_buy
-                
+                    safe_max_buy_price = (
+                        min(max_buy_price, conservative_max_buy)
+                        if max_buy_price > 0
+                        else conservative_max_buy
+                    )
+
                 if limit_price > safe_max_buy_price:
                     limit_price = safe_max_buy_price * 0.999
                     logger.warning(
@@ -337,10 +351,16 @@ class FuturesOrderExecutor:
                     # ✅ ИСПРАВЛЕНО: Используем более консервативный лимит: best_bid * 0.995 (как в get_price_limits)
                     conservative_min_sell = best_bid * 0.995
                     # Берем максимальное значение для безопасности
-                    safe_min_sell_price = max(min_sell_price, conservative_min_sell) if min_sell_price > 0 else conservative_min_sell
-                
+                    safe_min_sell_price = (
+                        max(min_sell_price, conservative_min_sell)
+                        if min_sell_price > 0
+                        else conservative_min_sell
+                    )
+
                 if limit_price < safe_min_sell_price:
-                    limit_price = safe_min_sell_price * 1.002  # 0.2% выше лимита для безопасности
+                    limit_price = (
+                        safe_min_sell_price * 1.002
+                    )  # 0.2% выше лимита для безопасности
                     logger.warning(
                         f"⚠️ Финальная проверка: лимитная цена для {symbol} SELL все еще ниже безопасного лимита ({safe_min_sell_price:.2f}), "
                         f"используем: {limit_price:.2f}"
@@ -424,28 +444,40 @@ class FuturesOrderExecutor:
                 error_msg = result.get("msg", "Неизвестная ошибка")
                 error_code = result.get("code", "")
                 error_data = result.get("data", [])
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Парсим лимиты из ошибки API (51006)
                 parsed_min_sell = None
                 parsed_max_buy = None
-                
+
                 if error_data and len(error_data) > 0:
                     s_msg = error_data[0].get("sMsg", "")
                     # ✅ Парсим лимиты из сообщения: "Order price is not within the price limit (max buy price: 103,155.9, min sell price: 101,133.2)"
-                    max_buy_match = re.search(r"max buy price:\s*([\d,]+\.?\d*)", s_msg, re.IGNORECASE)
-                    min_sell_match = re.search(r"min sell price:\s*([\d,]+\.?\d*)", s_msg, re.IGNORECASE)
-                    
+                    max_buy_match = re.search(
+                        r"max buy price:\s*([\d,]+\.?\d*)", s_msg, re.IGNORECASE
+                    )
+                    min_sell_match = re.search(
+                        r"min sell price:\s*([\d,]+\.?\d*)", s_msg, re.IGNORECASE
+                    )
+
                     if max_buy_match:
                         try:
-                            parsed_max_buy = float(max_buy_match.group(1).replace(",", ""))
-                            logger.info(f"📊 Парсирован max buy price из ошибки: {parsed_max_buy:.2f}")
+                            parsed_max_buy = float(
+                                max_buy_match.group(1).replace(",", "")
+                            )
+                            logger.info(
+                                f"📊 Парсирован max buy price из ошибки: {parsed_max_buy:.2f}"
+                            )
                         except Exception as e:
                             logger.debug(f"Не удалось парсить max buy price: {e}")
-                    
+
                     if min_sell_match:
                         try:
-                            parsed_min_sell = float(min_sell_match.group(1).replace(",", ""))
-                            logger.info(f"📊 Парсирован min sell price из ошибки: {parsed_min_sell:.2f}")
+                            parsed_min_sell = float(
+                                min_sell_match.group(1).replace(",", "")
+                            )
+                            logger.info(
+                                f"📊 Парсирован min sell price из ошибки: {parsed_min_sell:.2f}"
+                            )
                         except Exception as e:
                             logger.debug(f"Не удалось парсить min sell price: {e}")
 
@@ -460,7 +492,7 @@ class FuturesOrderExecutor:
                     logger.warning(
                         f"⚠️ Лимитный ордер отклонен из-за лимита цены (51006): {error_msg}"
                     )
-                    
+
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если получили лимиты из ошибки, пробуем скорректировать цену
                     # Используем более консервативный offset (0.2% вместо 0.1%) для гарантии прохождения
                     if side.lower() == "sell" and parsed_min_sell:
@@ -475,11 +507,17 @@ class FuturesOrderExecutor:
                         )
                         # Пробуем разместить ордер с скорректированной ценой
                         retry_result = await self.client.place_futures_order(
-                            symbol=symbol, side=side, size=size, price=corrected_price, order_type="limit"
+                            symbol=symbol,
+                            side=side,
+                            size=size,
+                            price=corrected_price,
+                            order_type="limit",
                         )
                         if retry_result.get("code") == "0":
                             order_id = retry_result.get("data", [{}])[0].get("ordId")
-                            logger.info(f"✅ Лимитный ордер размещен с скорректированной ценой: {order_id}")
+                            logger.info(
+                                f"✅ Лимитный ордер размещен с скорректированной ценой: {order_id}"
+                            )
                             return {
                                 "success": True,
                                 "order_id": order_id,
@@ -508,11 +546,17 @@ class FuturesOrderExecutor:
                         )
                         # Пробуем разместить ордер с скорректированной ценой
                         retry_result = await self.client.place_futures_order(
-                            symbol=symbol, side=side, size=size, price=corrected_price, order_type="limit"
+                            symbol=symbol,
+                            side=side,
+                            size=size,
+                            price=corrected_price,
+                            order_type="limit",
                         )
                         if retry_result.get("code") == "0":
                             order_id = retry_result.get("data", [{}])[0].get("ordId")
-                            logger.info(f"✅ Лимитный ордер размещен с скорректированной ценой: {order_id}")
+                            logger.info(
+                                f"✅ Лимитный ордер размещен с скорректированной ценой: {order_id}"
+                            )
                             return {
                                 "success": True,
                                 "order_id": order_id,
@@ -529,7 +573,7 @@ class FuturesOrderExecutor:
                                 f"⚠️ Скорректированная цена ({corrected_price:.2f}) также не прошла, "
                                 f"пробуем рыночный ордер"
                             )
-                    
+
                     # ✅ Fallback: Если не удалось скорректировать цену, используем рыночный ордер
                     logger.warning(
                         f"⚠️ Не удалось скорректировать цену, пробуем рыночный ордер как fallback"

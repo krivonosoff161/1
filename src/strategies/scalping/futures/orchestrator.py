@@ -168,10 +168,14 @@ class FuturesScalpingOrchestrator:
         max_size_limiter_config = None
         if futures_modules:
             max_size_limiter_config = getattr(futures_modules, "max_size_limiter", None)
-        
+
         if max_size_limiter_config:
-            max_single_size_usd = getattr(max_size_limiter_config, "max_single_size_usd", 150.0)
-            max_total_size_usd = getattr(max_size_limiter_config, "max_total_size_usd", 600.0)
+            max_single_size_usd = getattr(
+                max_size_limiter_config, "max_single_size_usd", 150.0
+            )
+            max_total_size_usd = getattr(
+                max_size_limiter_config, "max_total_size_usd", 600.0
+            )
             max_positions = getattr(max_size_limiter_config, "max_positions", 5)
             logger.info(
                 f"✅ MaxSizeLimiter инициализирован из конфига: "
@@ -190,7 +194,7 @@ class FuturesScalpingOrchestrator:
                 f"max_total=${max_total_size_usd:.2f}, "
                 f"max_positions={max_positions}"
             )
-        
+
         self.max_size_limiter = MaxSizeLimiter(
             max_single_size_usd=max_single_size_usd,
             max_total_size_usd=max_total_size_usd,
@@ -647,7 +651,9 @@ class FuturesScalpingOrchestrator:
                 if pos_side_raw in ["long", "short"]:
                     # Используем posSide из API (надежнее)
                     position_side = pos_side_raw  # "long" или "short"
-                    side = "buy" if position_side == "long" else "sell"  # Для внутреннего использования
+                    side = (
+                        "buy" if position_side == "long" else "sell"
+                    )  # Для внутреннего использования
                 else:
                     # Fallback: определяем по знаку pos
                     if pos_size > 0:
@@ -1003,7 +1009,7 @@ class FuturesScalpingOrchestrator:
             extend_time_on_profit=params["extend_time_on_profit"],  # ✅ ЭТАП 4.3
             extend_time_multiplier=params["extend_time_multiplier"],  # ✅ ЭТАП 4.3
         )
-        
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Конвертируем side в position_side ("long"/"short")
         # side может быть "buy"/"sell" или "long"/"short", нормализуем до "long"/"short"
         side_lower = side.lower()
@@ -1016,7 +1022,7 @@ class FuturesScalpingOrchestrator:
                 f"❌ Неизвестная сторона позиции: {side} для {symbol}. Используем 'long' по умолчанию."
             )
             position_side = "long"
-        
+
         # ✅ ЭТАП 4.4: Инициализируем с правильной стороной (long/short)
         tsl.initialize(entry_price=entry_price, side=position_side)
         if impulse_trailing:
@@ -1149,7 +1155,9 @@ class FuturesScalpingOrchestrator:
             pos_side_raw = pos.get("posSide", "").lower()
             if pos_side_raw in ["long", "short"]:
                 position_side = pos_side_raw  # "long" или "short"
-                side = "buy" if position_side == "long" else "sell"  # Для внутреннего использования
+                side = (
+                    "buy" if position_side == "long" else "sell"
+                )  # Для внутреннего использования
             else:
                 # Fallback: определяем по знаку pos
                 if pos_size > 0:
@@ -1158,7 +1166,7 @@ class FuturesScalpingOrchestrator:
                 else:
                     position_side = "short"
                     side = "sell"  # SHORT
-            
+
             abs_size = abs(pos_size)
 
             # ✅ Получаем ctVal для корректного перевода контрактов в монеты
@@ -1207,7 +1215,11 @@ class FuturesScalpingOrchestrator:
             if symbol not in self.trailing_sl_by_symbol:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем position_side ("long"/"short") в _initialize_trailing_stop
                 # Используем position_side из active_positions, если доступен, иначе конвертируем side
-                trailing_side = position_side if position_side else ("long" if side == "buy" else "short")
+                trailing_side = (
+                    position_side
+                    if position_side
+                    else ("long" if side == "buy" else "short")
+                )
                 self._initialize_trailing_stop(
                     symbol=symbol,
                     entry_price=effective_price,
@@ -2495,12 +2507,16 @@ class FuturesScalpingOrchestrator:
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем position_side ("long"/"short") для правильного расчета PnL
                 signal_side = signal.get("side", "").lower()
-                position_side_for_storage = "long" if signal_side == "buy" else "short"  # Конвертируем buy/sell в long/short
-                
+                position_side_for_storage = (
+                    "long" if signal_side == "buy" else "short"
+                )  # Конвертируем buy/sell в long/short
+
                 self.active_positions[symbol].update(
                     {
                         "order_id": result.get("order_id"),
-                        "side": signal["side"],  # "buy" или "sell" для внутреннего использования
+                        "side": signal[
+                            "side"
+                        ],  # "buy" или "sell" для внутреннего использования
                         "position_side": position_side_for_storage,  # "long" или "short" для правильного расчета PnL
                         "size": position_size,
                         "entry_price": real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа с биржи
@@ -2638,7 +2654,9 @@ class FuturesScalpingOrchestrator:
             # Используем значения из symbol_profiles только если они больше/равны значениям из balance_profile
             if position_overrides.get("min_position_usd") is not None:
                 symbol_min = float(position_overrides["min_position_usd"])
-                balance_min = min_usd_size  # Сохраняем оригинальное значение для логирования
+                balance_min = (
+                    min_usd_size  # Сохраняем оригинальное значение для логирования
+                )
                 # Используем максимальное значение (более либеральное ограничение)
                 # Это гарантирует, что значения из balance_profile не будут уменьшены
                 if symbol_min > min_usd_size:
@@ -2652,7 +2670,7 @@ class FuturesScalpingOrchestrator:
                         f"📊 Min position size из symbol_profiles (${symbol_min:.2f}) меньше или равно "
                         f"balance_profile (${balance_min:.2f}), игнорируем (используем ${balance_min:.2f})"
                     )
-                    
+
             if position_overrides.get("max_position_usd") is not None:
                 symbol_max = float(position_overrides["max_position_usd"])
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если symbol_max меньше base_usd_size из balance_profile,
@@ -2830,7 +2848,9 @@ class FuturesScalpingOrchestrator:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: base_usd_size это НОМИНАЛЬНАЯ стоимость (notional)
             # Маржа = номинальная стоимость / леверидж
             # Например: notional=$25, leverage=3x → margin=$8.33
-            margin_required_initial = base_usd_size / leverage  # Требуемая маржа (в USD)
+            margin_required_initial = (
+                base_usd_size / leverage
+            )  # Требуемая маржа (в USD)
             margin_required = margin_required_initial  # Текущая требуемая маржа (будет изменяться при ограничениях)
 
             # ✅ Пересчитываем min/max из номинальной стоимости в маржу для проверок
@@ -2857,9 +2877,7 @@ class FuturesScalpingOrchestrator:
             )  # Конвертируем в доли
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем все ограничения размера позиции
-            logger.info(
-                f"📊 ДЕТАЛЬНЫЙ РАСЧЕТ РАЗМЕРА ПОЗИЦИИ для {symbol}:"
-            )
+            logger.info(f"📊 ДЕТАЛЬНЫЙ РАСЧЕТ РАЗМЕРА ПОЗИЦИИ для {symbol}:")
             logger.info(
                 f"  1. Балансовый профиль: {balance_profile['name']}, баланс=${balance:.2f}"
             )
@@ -2901,9 +2919,7 @@ class FuturesScalpingOrchestrator:
                     return 0.0
 
             # ✅ МОДЕРНИЗАЦИЯ: Дополнительная проверка на доступную маржу
-            logger.info(
-                f"  7. Доступная маржа: ${available_margin:.2f}"
-            )
+            logger.info(f"  7. Доступная маржа: ${available_margin:.2f}")
             if margin_required > available_margin:
                 margin_required_before = margin_required
                 margin_required = max(0, available_margin)
@@ -2966,12 +2982,20 @@ class FuturesScalpingOrchestrator:
                 f"  10. Финальные лимиты: min_margin=${min_margin_usd:.2f}, max_margin=${max_margin_usd:.2f}"
             )
             margin_usd = max(min_margin_usd, min(margin_required, max_margin_usd))
-            
+
             logger.info(
                 f"  11. ИТОГО: margin=${margin_usd:.2f} (начальная: ${margin_required_initial:.2f}, после ограничений: ${margin_before_final:.2f})"
             )
             if margin_usd < margin_required_initial:
-                reduction_pct = ((margin_required_initial - margin_usd) / margin_required_initial * 100) if margin_required_initial > 0 else 0
+                reduction_pct = (
+                    (
+                        (margin_required_initial - margin_usd)
+                        / margin_required_initial
+                        * 100
+                    )
+                    if margin_required_initial > 0
+                    else 0
+                )
                 logger.warning(
                     f"     ⚠️ РАЗМЕР УМЕНЬШЕН: ${margin_required_initial:.2f} → ${margin_usd:.2f} (на ${margin_required_initial - margin_usd:.2f} или {reduction_pct:.1f}%)"
                 )
@@ -2988,36 +3012,36 @@ class FuturesScalpingOrchestrator:
             lot_sz = None
             min_sz = None
             round_to_step = None
-            
+
             try:
                 instrument_details = await self.client.get_instrument_details(symbol)
                 ct_val = instrument_details.get("ctVal", 0.01)
                 lot_sz = instrument_details.get("lotSz", 0.01)
                 min_sz = instrument_details.get("minSz", 0.01)
-                
+
                 # Импортируем round_to_step
                 from src.clients.futures_client import round_to_step
-                
+
                 # Конвертируем в контракты
                 size_in_contracts = position_size / ct_val
-                
+
                 # Округляем до lotSz (как в place_futures_order)
                 rounded_size_in_contracts = round_to_step(size_in_contracts, lot_sz)
-                
+
                 # Проверяем минимальный размер
                 if rounded_size_in_contracts < min_sz:
                     rounded_size_in_contracts = min_sz
                     logger.warning(
                         f"⚠️ Размер после округления меньше минимума, используем минимум: {min_sz}"
                     )
-                
+
                 # Конвертируем обратно в монеты (реальный размер после округления)
                 real_position_size = rounded_size_in_contracts * ct_val
-                
+
                 # Вычисляем реальную номинальную стоимость
                 real_notional_usd = real_position_size * price
                 real_margin_usd = real_notional_usd / leverage
-                
+
                 # ✅ КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем, что реальный размер после округления >= min_margin_usd
                 # Если реальный размер слишком маленький, увеличиваем до минимума
                 if real_margin_usd < min_margin_usd:
@@ -3030,23 +3054,25 @@ class FuturesScalpingOrchestrator:
                     real_margin_usd = min_margin_usd
                     real_notional_usd = real_margin_usd * leverage
                     real_position_size = real_notional_usd / price
-                    
+
                     # Пересчитываем в контрактах и округляем
                     real_size_in_contracts = real_position_size / ct_val
-                    real_rounded_size_in_contracts = round_to_step(real_size_in_contracts, lot_sz)
+                    real_rounded_size_in_contracts = round_to_step(
+                        real_size_in_contracts, lot_sz
+                    )
                     if real_rounded_size_in_contracts < min_sz:
                         real_rounded_size_in_contracts = min_sz
                     real_position_size = real_rounded_size_in_contracts * ct_val
                     real_notional_usd = real_position_size * price
                     real_margin_usd = real_notional_usd / leverage
-                    
+
                     logger.info(
                         f"✅ Размер позиции увеличен до минимума: "
                         f"margin=${real_margin_usd:.2f}, "
                         f"notional=${real_notional_usd:.2f}, "
                         f"position_size={real_position_size:.6f} монет"
                     )
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем лимиты ПОСЛЕ округления
                 # Если реальный размер после округления превышает лимиты, уменьшаем его
                 if real_notional_usd > max_usd_size:
@@ -3060,16 +3086,19 @@ class FuturesScalpingOrchestrator:
                     target_notional_usd = max_usd_size
                     target_margin_usd = target_notional_usd / leverage
                     target_position_size = target_notional_usd / price
-                    
+
                     # Пересчитываем в контрактах
                     target_size_in_contracts = target_position_size / ct_val
-                    
+
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Округляем ВНИЗ до ближайшего шага
                     # Используем floor округление, чтобы гарантировать, что размер не превысит лимит
                     import math
+
                     # Округляем ВНИЗ: floor(x / step) * step
-                    target_rounded_size_in_contracts = math.floor(target_size_in_contracts / lot_sz) * lot_sz
-                    
+                    target_rounded_size_in_contracts = (
+                        math.floor(target_size_in_contracts / lot_sz) * lot_sz
+                    )
+
                     # Проверяем минимальный размер
                     if target_rounded_size_in_contracts < min_sz:
                         # Если после уменьшения размер стал меньше минимума - проверяем, не превышает ли минимум лимит
@@ -3085,12 +3114,12 @@ class FuturesScalpingOrchestrator:
                         else:
                             # Минимум не превышает лимит - используем минимум
                             target_rounded_size_in_contracts = min_sz
-                    
+
                     # Вычисляем реальный размер после округления
                     real_position_size = target_rounded_size_in_contracts * ct_val
                     real_notional_usd = real_position_size * price
                     real_margin_usd = real_notional_usd / leverage
-                    
+
                     # ✅ Финальная проверка: если после округления размер все еще превышает лимит
                     if real_notional_usd > max_usd_size:
                         # Если минимум превышает лимит - логируем ошибку и возвращаем 0
@@ -3100,17 +3129,21 @@ class FuturesScalpingOrchestrator:
                             f"Проверьте конфигурацию: min_position_usd и max_position_usd в config_futures.yaml"
                         )
                         return 0.0
-                    
+
                     logger.info(
                         f"✅ Размер позиции уменьшен до лимита: "
                         f"margin=${real_margin_usd:.2f}, "
                         f"notional=${real_notional_usd:.2f}, "
                         f"position_size={real_position_size:.6f} монет"
                     )
-                
+
                 # Логируем округление
                 if abs(real_position_size - position_size) > 1e-8:
-                    reduction_pct = ((position_size - real_position_size) / position_size * 100) if position_size > 0 else 0
+                    reduction_pct = (
+                        ((position_size - real_position_size) / position_size * 100)
+                        if position_size > 0
+                        else 0
+                    )
                     logger.warning(
                         f"⚠️ Размер позиции изменен из-за округления/минимума: "
                         f"{position_size:.6f} → {real_position_size:.6f} монет "
@@ -3125,7 +3158,7 @@ class FuturesScalpingOrchestrator:
                         f"notional=${real_notional_usd:.2f}, "
                         f"margin=${real_margin_usd:.2f}"
                     )
-                
+
                 # ✅ ИСПРАВЛЕНИЕ: Используем реальный размер после округления
                 # Обновляем все значения на реальные после округления
                 position_size = real_position_size
@@ -3133,7 +3166,7 @@ class FuturesScalpingOrchestrator:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем margin_usd на реальную маржу после округления
                 # Это важно, так как margin_usd используется для дальнейших расчетов и обновления total_margin_used
                 margin_usd = real_margin_usd
-                
+
             except Exception as e:
                 logger.warning(
                     f"⚠️ Не удалось учесть округление при расчете размера позиции для {symbol}: {e}, "
@@ -3141,7 +3174,7 @@ class FuturesScalpingOrchestrator:
                 )
                 # Используем расчетный размер без округления (будет округлен в place_futures_order)
                 notional_usd = margin_usd * leverage
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем лимиты даже без учета округления
                 if notional_usd > max_usd_size:
                     logger.warning(
