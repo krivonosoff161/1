@@ -35,7 +35,7 @@ class TrailingStopLoss:
         initial_trail: float = 0.05,
         max_trail: float = 0.2,
         min_trail: float = 0.02,
-        trading_fee_rate: float = 0.0009,  # 0.09% на круг (0.045% вход + 0.045% выход для maker на OKX)
+        trading_fee_rate: float = 0.0010,  # ✅ ОБНОВЛЕНО: 0.10% на круг (0.05% вход + 0.05% выход для taker на OKX)
         loss_cut_percent: Optional[float] = None,
         timeout_loss_percent: Optional[float] = None,
         timeout_minutes: Optional[float] = None,
@@ -47,6 +47,7 @@ class TrailingStopLoss:
         ] = None,  # ✅ ЭТАП 4.1: Минимальный профит для закрытия
         extend_time_on_profit: bool = False,  # ✅ ЭТАП 4.3: Продлевать время для прибыльных позиций
         extend_time_multiplier: float = 1.0,  # ✅ ЭТАП 4.3: Множитель продления времени
+        leverage: float = 1.0,  # ✅ КРИТИЧЕСКОЕ: Leverage для правильного расчета loss_cut от маржи
     ):
         """
         Инициализация Trailing Stop Loss.
@@ -55,7 +56,8 @@ class TrailingStopLoss:
             initial_trail: Начальный трейлинг в % (по умолчанию 0.05%)
             max_trail: Максимальный трейлинг в % (по умолчанию 0.2%)
             min_trail: Минимальный трейлинг в % (по умолчанию 0.02%)
-            trading_fee_rate: Комиссия на круг (открытие + закрытие) в долях (0.0009 = 0.09% для Limit/Maker, 0.001 = 0.1% для Market/Taker)
+            trading_fee_rate: Комиссия на круг (открытие + закрытие) в долях (0.0010 = 0.10% для Market/Taker на OKX, проверено по реальным сделкам)
+            leverage: Leverage позиции (по умолчанию 1.0) - используется для правильного расчета loss_cut от маржи
         """
         self.initial_trail = initial_trail
         self.max_trail = max_trail
@@ -69,6 +71,8 @@ class TrailingStopLoss:
         self.entry_price = 0.0
         self.side = None
         self.entry_timestamp = 0.0
+        # ✅ КРИТИЧЕСКОЕ: Сохраняем leverage для правильного расчета loss_cut от маржи
+        self.leverage = max(1.0, float(leverage)) if leverage and leverage > 0 else 1.0
         self.loss_cut_percent = self._normalize_percent(loss_cut_percent)
         self.timeout_loss_percent = self._normalize_percent(timeout_loss_percent)
         self.timeout_minutes = (
@@ -400,17 +404,25 @@ class TrailingStopLoss:
             and minutes_in_position < effective_min_holding
         ):
             # Исключение: жёсткое ограничение убытка применяется всегда
-            if (
-                self.loss_cut_percent is not None
-                and profit_pct <= -self.loss_cut_percent
-            ):
-                logger.warning(
-                    f"⚠️ Loss-cut (превышен лимит): прибыль {profit_pct:.2%} <= -{self.loss_cut_percent:.2%}, "
-                    f"позиция будет закрыта несмотря на минимальное время удержания "
-                    f"(time_in_position={minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
-                    f"entry_time={entry_iso}, branch=loss_cut_override)"
-                )
-                return True
+            # ✅ КРИТИЧЕСКОЕ: Учитываем leverage при сравнении loss_cut_percent
+            # loss_cut_percent в конфиге указан как % от маржи (1.5% от маржи)
+            # profit_pct рассчитывается от цены, поэтому нужно умножить на leverage для сравнения с loss_cut_percent от маржи
+            # Или разделить loss_cut_percent на leverage для сравнения с profit_pct от цены
+            if self.loss_cut_percent is not None:
+                # Приводим loss_cut_percent к процентам от цены (делим на leverage)
+                loss_cut_from_price = self.loss_cut_percent / self.leverage
+                # profit_pct уже учитывает комиссию, поэтому сравниваем напрямую
+                if profit_pct <= -loss_cut_from_price:
+                    loss_from_margin = abs(profit_pct) * self.leverage
+                    logger.warning(
+                        f"⚠️ Loss-cut (превышен лимит): прибыль {profit_pct:.2%} от цены "
+                        f"({loss_from_margin:.2%} от маржи) <= -{loss_cut_from_price:.2%} от цены "
+                        f"(-{self.loss_cut_percent:.2%} от маржи, leverage={self.leverage}x), "
+                        f"позиция будет закрыта несмотря на минимальное время удержания "
+                        f"(time_in_position={minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
+                        f"entry_time={entry_iso}, branch=loss_cut_override)"
+                    )
+                    return True
             # Для остальных случаев не закрываем раньше минимального времени
             logger.debug(
                 f"⏱️ Минимальное время удержания: позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
@@ -419,28 +431,46 @@ class TrailingStopLoss:
             return False
 
         # ✅ Жёсткое ограничение убытка
-        if self.loss_cut_percent is not None and profit_pct <= -self.loss_cut_percent:
-            logger.warning(
-                f"⚠️ Loss-cut: прибыль {profit_pct:.2%} <= -{self.loss_cut_percent:.2%}, позиция будет закрыта "
-                f"(time_in_position={minutes_in_position:.2f} мин, entry_time={entry_iso}, branch=loss_cut)"
-            )
-            return True
+        # ✅ КРИТИЧЕСКОЕ: Учитываем leverage при сравнении loss_cut_percent
+        # loss_cut_percent в конфиге указан как % от маржи (1.5% от маржи)
+        # profit_pct рассчитывается от цены, поэтому нужно разделить loss_cut_percent на leverage для сравнения
+        if self.loss_cut_percent is not None:
+            # Приводим loss_cut_percent к процентам от цены (делим на leverage)
+            loss_cut_from_price = self.loss_cut_percent / self.leverage
+            # profit_pct уже учитывает комиссию, поэтому сравниваем напрямую
+            if profit_pct <= -loss_cut_from_price:
+                loss_from_margin = abs(profit_pct) * self.leverage
+                logger.warning(
+                    f"⚠️ Loss-cut: прибыль {profit_pct:.2%} от цены "
+                    f"({loss_from_margin:.2%} от маржи) <= -{loss_cut_from_price:.2%} от цены "
+                    f"(-{self.loss_cut_percent:.2%} от маржи, leverage={self.leverage}x), "
+                    f"позиция будет закрыта "
+                    f"(time_in_position={minutes_in_position:.2f} мин, entry_time={entry_iso}, branch=loss_cut)"
+                )
+                return True
 
         # ✅ Таймаут для убыточных позиций
+        # ✅ КРИТИЧЕСКОЕ: Учитываем leverage при сравнении timeout_loss_percent
+        # timeout_loss_percent в конфиге указан как % от маржи (1.0% от маржи)
+        # profit_pct рассчитывается от цены, поэтому нужно разделить timeout_loss_percent на leverage для сравнения
         if (
             self.timeout_loss_percent is not None
             and self.timeout_minutes is not None
             and self.entry_timestamp > 0
         ):
             minutes_in_position = (time.time() - self.entry_timestamp) / 60.0
+            # Приводим timeout_loss_percent к процентам от цены (делим на leverage)
+            timeout_loss_from_price = self.timeout_loss_percent / self.leverage
             if (
                 minutes_in_position >= self.timeout_minutes
-                and profit_pct <= -self.timeout_loss_percent
+                and profit_pct <= -timeout_loss_from_price
             ):
+                loss_from_margin = abs(profit_pct) * self.leverage
                 logger.warning(
                     f"⚠️ Timeout loss-cut: позиция держится {minutes_in_position:.2f} минут, "
-                    f"прибыль {profit_pct:.2%} ≤ -{self.timeout_loss_percent:.2%}, закрываем "
-                    f"(entry_time={entry_iso}, branch=timeout)"
+                    f"прибыль {profit_pct:.2%} от цены ({loss_from_margin:.2%} от маржи) "
+                    f"≤ -{timeout_loss_from_price:.2%} от цены (-{self.timeout_loss_percent:.2%} от маржи, leverage={self.leverage}x), "
+                    f"закрываем (entry_time={entry_iso}, branch=timeout)"
                 )
                 return True
 

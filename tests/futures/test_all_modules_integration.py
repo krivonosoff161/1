@@ -47,7 +47,7 @@ class TestAllModulesIntegration:
         )
 
         self.trailing_sl = TrailingStopLoss(
-            initial_trail=0.05, max_trail=0.2, min_trail=0.02
+            initial_trail=0.05, max_trail=0.2, min_trail=0.02, leverage=3
         )
 
         self.order_flow = OrderFlowIndicator(

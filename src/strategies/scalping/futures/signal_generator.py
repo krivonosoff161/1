@@ -25,8 +25,8 @@ from src.strategies.modules.multi_timeframe import MultiTimeframeFilter
 from src.strategies.modules.pivot_points import PivotPointsFilter
 from src.strategies.modules.volume_profile_filter import VolumeProfileFilter
 
-from .filters import (FundingRateFilter, LiquidityFilter, OrderFlowFilter,
-                      VolatilityRegimeFilter)
+from .filters import (FundingRateFilter, LiquidityFilter, MomentumFilter,
+                      OrderFlowFilter, VolatilityRegimeFilter)
 
 
 class FuturesSignalGenerator:
@@ -192,6 +192,7 @@ class FuturesSignalGenerator:
         self.liquidity_filter = None
         self.order_flow_filter = None
         self.volatility_filter = None
+        self.momentum_filter = None  # ✅ НОВОЕ: Momentum Filter
         self.impulse_config = None
 
         modules_config = getattr(self.config, "futures_modules", None)
@@ -1659,10 +1660,25 @@ class FuturesSignalGenerator:
                 f"направление_цены={price_direction}"
             )
 
+            # ✅ УЛУЧШЕНИЕ: Проверка минимальной разницы EMA для генерации сигнала
+            # Избегаем ложных сигналов при минимальной разнице EMA
+            ma_difference_pct = (
+                abs(ma_fast - ma_slow) / ma_slow * 100 if ma_slow > 0 else 0
+            )
+            min_ma_difference_pct = (
+                0.1  # Минимальная разница EMA 0.1% для генерации сигнала
+            )
+
             # Пересечение быстрой и медленной MA
             if ma_fast > ma_slow and current_price > ma_fast and ma_slow > 0:
+                # ✅ УЛУЧШЕНИЕ: Проверяем минимальную разницу EMA
+                if ma_difference_pct < min_ma_difference_pct:
+                    logger.debug(
+                        f"⚠️ MA BULLISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"разница EMA слишком мала ({ma_difference_pct:.3f}% < {min_ma_difference_pct}%)"
+                    )
                 # ✅ УЛУЧШЕНИЕ: Не даем bullish сигнал если цена падает
-                if price_direction == "down":
+                elif price_direction == "down":
                     logger.debug(
                         f"⚠️ MA BULLISH сигнал ОТМЕНЕН для {symbol}: "
                         f"EMA показывает bullish, но цена падает (направление={price_direction})"
@@ -1702,8 +1718,14 @@ class FuturesSignalGenerator:
                     )
 
             elif ma_fast < ma_slow and current_price < ma_fast and ma_slow > 0:
+                # ✅ УЛУЧШЕНИЕ: Проверяем минимальную разницу EMA
+                if ma_difference_pct < min_ma_difference_pct:
+                    logger.debug(
+                        f"⚠️ MA BEARISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"разница EMA слишком мала ({ma_difference_pct:.3f}% < {min_ma_difference_pct}%)"
+                    )
                 # ✅ УЛУЧШЕНИЕ: Не даем bearish сигнал если цена растет
-                if price_direction == "up":
+                elif price_direction == "up":
                     logger.debug(
                         f"⚠️ MA BEARISH сигнал ОТМЕНЕН для {symbol}: "
                         f"EMA показывает bearish, но цена растет (направление={price_direction})"
@@ -1942,6 +1964,26 @@ class FuturesSignalGenerator:
             filtered_signals = []
 
             for signal in signals:
+                # ✅ КОНФИГУРИРУЕМАЯ Блокировка SHORT/LONG сигналов по конфигу (по умолчанию разрешены обе стороны)
+                signal_side = signal.get("side", "").lower()
+                allow_short = getattr(
+                    self.config.scalping, "allow_short_positions", True
+                )
+                allow_long = getattr(self.config.scalping, "allow_long_positions", True)
+
+                if signal_side == "sell" and not allow_short:
+                    logger.debug(
+                        f"⛔ SHORT сигнал заблокирован для {symbol}: "
+                        f"allow_short_positions={allow_short} (только LONG стратегия)"
+                    )
+                    continue
+                elif signal_side == "buy" and not allow_long:
+                    logger.debug(
+                        f"⛔ LONG сигнал заблокирован для {symbol}: "
+                        f"allow_long_positions={allow_long} (только SHORT стратегия)"
+                    )
+                    continue
+
                 # ✅ Добавляем текущие позиции в сигнал для CorrelationFilter
                 if current_positions:
                     signal["current_positions"] = current_positions
@@ -2083,6 +2125,9 @@ class FuturesSignalGenerator:
                                         confirmation_timeframe=mtf_modules.mtf_confirmation_timeframe,
                                         score_bonus=mtf_modules.mtf_score_bonus,
                                         block_opposite=mtf_modules.mtf_block_opposite,  # ✅ Используем из режима
+                                        block_neutral=getattr(
+                                            mtf_modules, "mtf_block_neutral", False
+                                        ),  # ✅ НОВОЕ: Блокировка NEUTRAL трендов
                                         ema_fast_period=8,
                                         ema_slow_period=21,
                                         cache_ttl_seconds=30,
@@ -2220,6 +2265,40 @@ class FuturesSignalGenerator:
                     except Exception as e:
                         logger.debug(
                             f"⚠️ VolatilityRegimeFilter ошибка для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                # ✅ НОВОЕ: Проверка Momentum Filter (из статьи Momentum Trading Strategy)
+                if self.momentum_filter:
+                    try:
+                        # Получаем candles из market_data
+                        candles = (
+                            market_data.ohlcv_data
+                            if market_data and market_data.ohlcv_data
+                            else []
+                        )
+                        current_price = signal.get("price", 0.0)
+                        if not current_price and candles:
+                            current_price = candles[-1].close
+
+                        # Получаем уровень из сигнала (если есть pivot или другой уровень)
+                        level = signal.get("pivot_level") or signal.get("level")
+
+                        # Проверяем критерии Momentum Trading
+                        is_valid, reason = await self.momentum_filter.evaluate(
+                            symbol=symbol,
+                            candles=candles,
+                            current_price=current_price,
+                            level=level,
+                        )
+
+                        if not is_valid:
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован MomentumFilter: {reason}"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ MomentumFilter ошибка для {symbol}: {e}, пропускаем фильтр"
                         )
 
                 # Адаптация под Futures специфику

@@ -259,9 +259,21 @@ class FuturesPositionManager:
                 )
 
                 # 🛡️ КРИТИЧЕСКАЯ ЗАЩИТА от ложных срабатываний (как в LiquidationGuard):
-                # Если margin_ratio <= 1.5 и PnL небольшой - это ошибка расчета, а не реальный риск
+                # ✅ ИСПРАВЛЕНО: Параметры из конфига
+                protection_config = getattr(
+                    self.scalping_config, "position_manager", {}
+                ).get("false_trigger_protection", {})
+                margin_ratio_threshold = protection_config.get(
+                    "margin_ratio_threshold", 1.5
+                )
+                pnl_threshold = protection_config.get("pnl_threshold", 10.0)
+                margin_ratio_minimum = protection_config.get(
+                    "margin_ratio_minimum", 0.5
+                )
+
+                # Если margin_ratio <= threshold и PnL небольшой - это ошибка расчета, а не реальный риск
                 # Это особенно часто происходит сразу после открытия позиции
-                if margin_ratio <= 1.5 and abs(pnl) < 10:
+                if margin_ratio <= margin_ratio_threshold and abs(pnl) < pnl_threshold:
                     logger.warning(
                         f"⚠️ ПОДОЗРИТЕЛЬНОЕ состояние для {symbol} в PositionManager: "
                         f"margin_ratio={margin_ratio:.2f}, available_margin={available_margin:.2f}, "
@@ -271,7 +283,7 @@ class FuturesPositionManager:
                     return  # Пропускаем автозакрытие
 
                 # 🛡️ ЗАЩИТА 2: Если margin_ratio = 0.0 или очень близок к нулю - это почти всегда ошибка
-                if margin_ratio <= 0.5 and equity > 0:
+                if margin_ratio <= margin_ratio_minimum and equity > 0:
                     logger.warning(
                         f"⚠️ ПОДОЗРИТЕЛЬНОЕ состояние для {symbol} в PositionManager: "
                         f"margin_ratio={margin_ratio:.2f} слишком низкий для реальной позиции. "
@@ -579,7 +591,11 @@ class FuturesPositionManager:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка трейлинг стоп-лосс ПЕРЕД TP
             # Если трейлинг стоп-лосс активен (позиция в прибыли и достиг min_profit_to_close),
             # то TP отключен (трейлинг стоп-лосс имеет приоритет)
-            commission_rate = 0.0009  # 0.09% на круг (0.045% вход + 0.045% выход)
+            # ✅ ИСПРАВЛЕНО: Комиссия из конфига
+            commission_config = getattr(self.scalping_config, "commission", {})
+            commission_rate = commission_config.get(
+                "trading_fee_rate", 0.0010
+            )  # ✅ ОБНОВЛЕНО: 0.10% на круг
             trailing_sl_active = False
             min_profit_to_close = None
 
@@ -716,7 +732,8 @@ class FuturesPositionManager:
                     min_profit_to_close * 100
                 )  # Конвертируем в проценты для сравнения с tp_percent
                 commission_pct = commission_rate * 100  # Комиссия в процентах (0.09%)
-                buffer_pct = 0.1  # Запас 0.1% (для безопасности)
+                # ✅ ИСПРАВЛЕНО: Buffer из конфига
+                buffer_pct = commission_config.get("tp_buffer_percent", 0.1)
                 min_tp_percent = min_profit_to_close_pct + commission_pct + buffer_pct
 
                 if tp_percent < min_tp_percent:
@@ -727,6 +744,39 @@ class FuturesPositionManager:
                         f"📊 {symbol} TP поднят с {original_tp:.2f}% до {tp_percent:.2f}% "
                         f"(минимум для трейлинга: min_profit={min_profit_to_close_pct:.2f}% + комиссия={commission_pct:.2f}% + запас={buffer_pct:.2f}% = {min_tp_percent:.2f}%)"
                     )
+
+            # ✅ НОВОЕ: Продление TP в тренде (из конфига)
+            tp_extension_config = getattr(
+                self.scalping_config, "position_manager", {}
+            ).get("tp_extension", {})
+            if tp_extension_config.get("enabled", False) and pnl_percent > 0:
+                # Получаем силу тренда из orchestrator
+                trend_strength = await self._get_trend_strength(symbol, current_price)
+                min_trend_strength = tp_extension_config.get("min_trend_strength", 0.7)
+
+                if trend_strength >= min_trend_strength:
+                    # Продлеваем TP вместо закрытия
+                    extension_step = tp_extension_config.get("extension_step", 0.5)
+                    max_tp = tp_extension_config.get("max_tp_percent", 5.0)
+
+                    # Получаем текущий TP из позиции или символа
+                    current_tp = tp_percent
+                    new_tp = min(current_tp + extension_step, max_tp)
+
+                    if new_tp > current_tp:
+                        logger.info(
+                            f"📈 Продление TP для {symbol}: {current_tp:.2f}% → {new_tp:.2f}% "
+                            f"(тренд: {trend_strength:.2f}, PnL: {pnl_percent:.2f}%)"
+                        )
+                        # Обновляем TP в позиции (вместо закрытия)
+                        # ВАЖНО: Это требует обновления TP на бирже или сохранения нового TP для проверки
+                        # Пока что пропускаем закрытие по TP, если можем продлить
+                        if pnl_percent < new_tp + (commission_rate * 100):
+                            logger.debug(
+                                f"📊 {symbol} продлеваем TP до {new_tp:.2f}%, "
+                                f"текущий PnL {pnl_percent:.2f}% < нового TP {new_tp:.2f}%, не закрываем"
+                            )
+                            return  # Не закрываем, продлеваем TP
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Учитываем комиссию при проверке TP
             # TP должен быть достаточно высоким, чтобы покрыть комиссию и дать прибыль
@@ -761,6 +811,40 @@ class FuturesPositionManager:
 
         except Exception as e:
             logger.error(f"Ошибка проверки TP: {e}")
+
+    async def _get_trend_strength(self, symbol: str, current_price: float) -> float:
+        """
+        ✅ НОВОЕ: Получение силы тренда для продления TP
+
+        Returns:
+            Сила тренда от 0.0 до 1.0 (0.7+ = сильный тренд)
+        """
+        try:
+            # Получаем FastADX из orchestrator
+            if hasattr(self, "orchestrator") and self.orchestrator:
+                fast_adx = getattr(self.orchestrator, "fast_adx", None)
+                if fast_adx:
+                    # Получаем ADX значение
+                    # FastADX требует свечи, получаем их через signal_generator или client
+                    if hasattr(self.orchestrator, "signal_generator"):
+                        signal_gen = self.orchestrator.signal_generator
+                        if signal_gen:
+                            market_data = await signal_gen._get_market_data(symbol)
+                            if market_data and market_data.ohlcv_data:
+                                # Вычисляем ADX через FastADX
+                                adx_value = fast_adx.calculate(market_data.ohlcv_data)
+                                if adx_value:
+                                    # Нормализуем ADX к 0-1 (ADX обычно 0-100)
+                                    # Сильный тренд = ADX > 25, очень сильный = ADX > 50
+                                    trend_strength = min(
+                                        adx_value / 50.0, 1.0
+                                    )  # 50+ ADX = 1.0 сила
+                                    return trend_strength
+        except Exception as e:
+            logger.debug(f"⚠️ Не удалось получить силу тренда для {symbol}: {e}")
+
+        # Fallback: возвращаем 0.5 (средняя сила тренда)
+        return 0.5
 
     async def _close_position_by_reason(self, position: Dict[str, Any], reason: str):
         """Закрытие позиции по причине"""
@@ -868,16 +952,20 @@ class FuturesPositionManager:
                     if hasattr(self.orchestrator, "last_orders_cache"):
                         normalized_symbol = self.orchestrator._normalize_symbol(symbol)
                         if normalized_symbol in self.orchestrator.last_orders_cache:
-                            self.orchestrator.last_orders_cache[normalized_symbol]["status"] = "closed"
+                            self.orchestrator.last_orders_cache[normalized_symbol][
+                                "status"
+                            ] = "closed"
                             logger.debug(
                                 f"✅ Статус ордера для {symbol} обновлен на 'closed' в last_orders_cache"
                             )
-                    
+
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Немедленная синхронизация после закрытия позиции
                     # Это гарантирует, что состояние обновится сразу после закрытия, и новая позиция сможет открыться
                     try:
                         if hasattr(self.orchestrator, "_sync_positions_with_exchange"):
-                            await self.orchestrator._sync_positions_with_exchange(force=True)
+                            await self.orchestrator._sync_positions_with_exchange(
+                                force=True
+                            )
                             logger.debug(
                                 f"✅ Выполнена немедленная синхронизация позиций после закрытия {symbol}"
                             )
