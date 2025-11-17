@@ -195,11 +195,19 @@ class TrailingStopLoss:
             # Для лонга отслеживаем максимальную цену
             if current_price > self.highest_price:
                 self.highest_price = current_price
-                # Увеличиваем трейл при росте цены
-                # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ для расчета трейла!
-                self.current_trail = min(
-                    self.initial_trail + max(profit_pct_total, 0.0) * 2, self.max_trail
-                )
+                # Армирование: до достижения min_profit_to_close не усиливаем трейл
+                if (
+                    getattr(self, "min_profit_to_close", None) is not None
+                    and profit_pct_total < self.min_profit_to_close
+                ):
+                    self.current_trail = max(self.current_trail, self.initial_trail)
+                else:
+                    # Увеличиваем трейл при росте цены
+                    # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ для расчета трейла!
+                    self.current_trail = min(
+                        self.initial_trail + max(profit_pct_total, 0.0) * 2,
+                        self.max_trail,
+                    )
                 logger.debug(
                     f"Long: новая максимальная цена={current_price:.2f}, "
                     f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией)"
@@ -208,11 +216,19 @@ class TrailingStopLoss:
             # Для шорта отслеживаем минимальную цену
             if current_price < self.lowest_price:
                 self.lowest_price = current_price
-                # Увеличиваем трейл при падении цены
-                # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ для расчета трейла!
-                self.current_trail = min(
-                    self.initial_trail + max(profit_pct_total, 0.0) * 2, self.max_trail
-                )
+                # Армирование: до достижения min_profit_to_close не усиливаем трейл
+                if (
+                    getattr(self, "min_profit_to_close", None) is not None
+                    and profit_pct_total < self.min_profit_to_close
+                ):
+                    self.current_trail = max(self.current_trail, self.initial_trail)
+                else:
+                    # Увеличиваем трейл при падении цены
+                    # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ для расчета трейла!
+                    self.current_trail = min(
+                        self.initial_trail + max(profit_pct_total, 0.0) * 2,
+                        self.max_trail,
+                    )
                 logger.debug(
                     f"Short: новая минимальная цена={current_price:.2f}, "
                     f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией)"
@@ -403,26 +419,61 @@ class TrailingStopLoss:
             effective_min_holding is not None
             and minutes_in_position < effective_min_holding
         ):
-            # Исключение: жёсткое ограничение убытка применяется всегда
-            # ✅ КРИТИЧЕСКОЕ: Учитываем leverage при сравнении loss_cut_percent
-            # loss_cut_percent в конфиге указан как % от маржи (1.5% от маржи)
-            # profit_pct рассчитывается от цены, поэтому нужно умножить на leverage для сравнения с loss_cut_percent от маржи
-            # Или разделить loss_cut_percent на leverage для сравнения с profit_pct от цены
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Защита от слишком быстрого закрытия
+            # Не закрываем позицию сразу после открытия из-за проскальзывания или кратковременных флуктуаций
+            # Критический убыток должен быть в 2 раза больше обычного loss_cut_percent
+            # И позиция должна держаться хотя бы 10-15 секунд (0.25 минуты)
+            seconds_in_position = minutes_in_position * 60.0
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: min_critical_hold_seconds должен быть НЕ БОЛЬШЕ половины min_holding_minutes
+            # Если min_holding_minutes = 2.0 мин (120 сек), то min_critical_hold_seconds = min(60, половина от min_holding_minutes)
+            if effective_min_holding is not None:
+                min_critical_hold_seconds = min(
+                    60.0, (effective_min_holding * 60.0) / 2.0
+                )  # Половина min_holding_minutes, но не больше 60 сек
+            else:
+                min_critical_hold_seconds = 30.0  # По умолчанию 30 секунд
+
             if self.loss_cut_percent is not None:
                 # Приводим loss_cut_percent к процентам от цены (делим на leverage)
                 loss_cut_from_price = self.loss_cut_percent / self.leverage
-                # profit_pct уже учитывает комиссию, поэтому сравниваем напрямую
-                if profit_pct <= -loss_cut_from_price:
-                    loss_from_margin = abs(profit_pct) * self.leverage
-                    logger.warning(
-                        f"⚠️ Loss-cut (превышен лимит): прибыль {profit_pct:.2%} от цены "
-                        f"({loss_from_margin:.2%} от маржи) <= -{loss_cut_from_price:.2%} от цены "
-                        f"(-{self.loss_cut_percent:.2%} от маржи, leverage={self.leverage}x), "
-                        f"позиция будет закрыта несмотря на минимальное время удержания "
-                        f"(time_in_position={minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
-                        f"entry_time={entry_iso}, branch=loss_cut_override)"
-                    )
-                    return True
+                # ✅ КРИТИЧЕСКОЕ: Для слишком быстрого закрытия (менее min_critical_hold_seconds) требуем 2x убыток
+                critical_loss_cut_from_price = (
+                    self.loss_cut_percent * 2.0
+                ) / self.leverage
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем loss_cut ТОЛЬКО если прошло min_critical_hold_seconds
+                # НО не закрываем по обычному loss_cut, если не прошло min_holding_minutes
+                # Закрываем только по критическому 2x loss_cut, если прошло min_critical_hold_seconds но меньше min_holding_minutes
+                if seconds_in_position >= min_critical_hold_seconds:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если прошло min_critical_hold_seconds, но меньше min_holding_minutes,
+                    # закрываем ТОЛЬКО по критическому 2x loss_cut, НЕ по обычному loss_cut
+                    if profit_pct <= -critical_loss_cut_from_price:
+                        loss_from_margin = abs(profit_pct) * self.leverage
+                        logger.warning(
+                            f"⚠️ Loss-cut КРИТИЧЕСКИЙ (2x): прибыль {profit_pct:.2%} от цены "
+                            f"({loss_from_margin:.2%} от маржи) <= -{critical_loss_cut_from_price:.2%} от цены "
+                            f"(-{self.loss_cut_percent * 2.0:.2%} от маржи, leverage={self.leverage}x), "
+                            f"позиция будет закрыта ДАЖЕ ЕСЛИ прошло меньше min_holding_minutes "
+                            f"(time_in_position={minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
+                            f"но прошло {seconds_in_position:.1f} сек >= {min_critical_hold_seconds:.1f} сек, "
+                            f"entry_time={entry_iso}, branch=critical_loss_cut_override)"
+                        )
+                        return True  # Закрываем позицию по критическому loss_cut (2x) даже до min_holding_minutes
+                    # ✅ НЕ закрываем по обычному loss_cut до достижения min_holding_minutes
+                    # Ждем, пока пройдет min_holding_minutes, или достигнем критического 2x loss_cut
+                else:
+                    # Позиция держится менее 15 секунд - не закрываем даже при большом убытке
+                    # (это может быть проскальзывание или кратковременная флуктуация)
+                    if profit_pct <= -loss_cut_from_price:
+                        loss_from_margin = abs(profit_pct) * self.leverage
+                        logger.debug(
+                            f"⏱️ Loss-cut ИГНОРИРУЕТСЯ (слишком рано): прибыль {profit_pct:.2%} от цены "
+                            f"({loss_from_margin:.2%} от маржи) <= -{loss_cut_from_price:.2%} от цены, "
+                            f"но позиция держится всего {seconds_in_position:.1f} сек < {min_critical_hold_seconds:.1f} сек "
+                            f"(это может быть проскальзывание или кратковременная флуктуация), "
+                            f"не закрываем (time_in_position={minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
+                            f"entry_time={entry_iso}, branch=min_holding_protection)"
+                        )
             # Для остальных случаев не закрываем раньше минимального времени
             logger.debug(
                 f"⏱️ Минимальное время удержания: позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
@@ -483,6 +534,28 @@ class TrailingStopLoss:
         if not price_hit_sl:
             return False  # Цена не достигла стоп-лосса - не закрываем
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем min_holding_minutes ПЕРЕД закрытием по стоп-лоссу
+        # (кроме loss_cut, который уже проверен выше)
+        effective_min_holding = self.min_holding_minutes
+        if (
+            self.extend_time_on_profit
+            and profit_pct > 0
+            and effective_min_holding is not None
+        ):
+            effective_min_holding = effective_min_holding * self.extend_time_multiplier
+
+        if (
+            effective_min_holding is not None
+            and minutes_in_position < effective_min_holding
+        ):
+            # Не закрываем по стоп-лоссу, если не прошло минимальное время удержания
+            # (loss_cut уже проверен выше и имеет приоритет)
+            logger.debug(
+                f"⏱️ Минимальное время удержания: позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
+                f"не закрываем по стоп-лоссу (profit={profit_pct:.2%}, entry_time={entry_iso}, branch=min_holding_before_sl)"
+            )
+            return False
+
         # ✅ ЭТАП 4.1: Проверка минимального профита для закрытия
         if profit_pct > 0 and self.min_profit_to_close is not None:
             # Не закрываем позицию, если профит меньше минимального
@@ -519,11 +592,50 @@ class TrailingStopLoss:
                     # Fallback: старый буст (для обратной совместимости)
                     regime_multiplier *= 1.3
 
+            # ✅ АДАПТИВНО: Приоритет закрытия при хорошей прибыли (параметры из конфига)
+            # Если прибыль превышает порог, уменьшаем regime_multiplier для более быстрого закрытия
+            high_profit_threshold = getattr(
+                self, "high_profit_threshold", 0.01
+            )  # ✅ АДАПТИВНО: Из конфига
+            high_profit_max_factor = getattr(
+                self, "high_profit_max_factor", 2.0
+            )  # ✅ АДАПТИВНО: Из конфига
+            high_profit_reduction_percent = getattr(
+                self, "high_profit_reduction_percent", 30
+            )  # ✅ АДАПТИВНО: Из конфига
+            high_profit_min_reduction = getattr(
+                self, "high_profit_min_reduction", 0.5
+            )  # ✅ АДАПТИВНО: Из конфига
+
+            effective_regime_multiplier = regime_multiplier
+
+            if profit_pct > high_profit_threshold:
+                # При высокой прибыли уменьшаем multiplier для более быстрого закрытия
+                # Чем выше прибыль, тем меньше multiplier (но не меньше 1.0)
+                profit_factor = min(
+                    profit_pct / high_profit_threshold, high_profit_max_factor
+                )  # ✅ АДАПТИВНО: Из конфига
+                reduction_factor = max(
+                    high_profit_min_reduction,
+                    1.0
+                    - (profit_factor - 1.0) * (high_profit_reduction_percent / 100.0),
+                )  # ✅ АДАПТИВНО: Из конфига
+                effective_regime_multiplier = max(
+                    1.0, regime_multiplier * reduction_factor
+                )
+                logger.debug(
+                    f"💰 Высокая прибыль {profit_pct:.2%} > {high_profit_threshold:.2%}: "
+                    f"regime_multiplier {regime_multiplier:.2f} → {effective_regime_multiplier:.2f} "
+                    f"(reduction_factor={reduction_factor:.2f}, threshold={high_profit_threshold:.2%})"
+                )
+
             # Позиция в прибыли и (сильный тренд или trending режим) - даем больше места
-            if regime_multiplier > 1.0 or (trend_strength and trend_strength > 0.7):
-                # Даем больше места для отката
+            if effective_regime_multiplier > 1.0 or (
+                trend_strength and trend_strength > 0.7
+            ):
+                # Даем больше места для отката (но с учетом приоритета закрытия при высокой прибыли)
                 adjusted_trail = min(
-                    self.current_trail * regime_multiplier, self.max_trail
+                    self.current_trail * effective_regime_multiplier, self.max_trail
                 )
                 if self.side == "long":
                     effective_highest = (
@@ -540,7 +652,8 @@ class TrailingStopLoss:
                         logger.debug(
                             f"📈 LONG: Позиция в прибыли (net={profit_pct:.2%}, gross={profit_gross:.2%}), "
                             f"режим={market_regime or 'N/A'}, тренд={trend_strength:.2f if trend_strength else 'N/A'} - "
-                            f"даем больше места: stop={adjusted_stop:.2f} vs текущий={current_price:.2f}"
+                            f"даем больше места: stop={adjusted_stop:.2f} vs текущий={current_price:.2f} "
+                            f"(effective_multiplier={effective_regime_multiplier:.2f})"
                         )
                         return False
                 else:  # short
@@ -572,7 +685,8 @@ class TrailingStopLoss:
                         logger.debug(
                             f"📈 SHORT: Позиция в прибыли (net={profit_pct:.2%}, gross={profit_gross:.2%}), "
                             f"режим={market_regime or 'N/A'}, тренд={trend_strength:.2f if trend_strength else 'N/A'} - "
-                            f"даем больше места: stop={adjusted_stop:.2f} vs текущий={current_price:.2f}"
+                            f"даем больше места: stop={adjusted_stop:.2f} vs текущий={current_price:.2f} "
+                            f"(effective_multiplier={effective_regime_multiplier:.2f})"
                         )
                         return False
 

@@ -31,7 +31,7 @@ class MTFConfig(BaseModel):
     confirmation_timeframe: str = Field(
         default="5m", description="Таймфрейм для подтверждения (5m, 15m, 1H)"
     )
-    score_bonus: int = Field(
+    score_bonus: Union[int, float] = Field(
         default=2, ge=0, le=5, description="Бонус к score при подтверждении"
     )
     block_opposite: bool = Field(

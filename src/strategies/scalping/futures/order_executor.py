@@ -56,6 +56,12 @@ class FuturesOrderExecutor:
             "successful_orders": 0,
             "failed_orders": 0,
             "cancelled_orders": 0,
+            # ✅ Метрики исполнения
+            "market_orders": 0,
+            "limit_orders_maker": 0,
+            "limit_orders_other": 0,
+            "total_slippage_bps": 0.0,
+            "slippage_samples": 0,
         }
 
         logger.info("FuturesOrderExecutor инициализирован")
@@ -165,8 +171,10 @@ class FuturesOrderExecutor:
             if order_type == "market":
                 result = await self._place_market_order(symbol, side, position_size)
             elif order_type == "limit":
+                # ✅ ИСПРАВЛЕНО: Передаем regime в _place_limit_order для применения режимных параметров
+                regime = signal.get("regime", None)
                 result = await self._place_limit_order(
-                    symbol, side, position_size, price
+                    symbol, side, position_size, price, regime=regime
                 )
             elif order_type == "oco":
                 result = await self._place_oco_order(signal, position_size)
@@ -291,11 +299,27 @@ class FuturesOrderExecutor:
             if side.lower() == "buy":
                 # ✅ ИСПРАВЛЕНО: Для BUY используем best ask + offset
                 # Offset может быть положительным (выше best ask для гарантии) или нулевым (по best ask)
+                # ✅ КРИТИЧЕСКОЕ: Если offset=0 и best_bid=best_ask, используем минимальный offset 0.01% для гарантии исполнения
                 if best_ask > 0:
-                    limit_price = best_ask * (1 + offset_percent / 100.0)
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если offset=0 и best_bid=best_ask, используем минимальный offset
+                    if (
+                        offset_percent == 0.0
+                        and best_bid > 0
+                        and abs(best_bid - best_ask) < current_price * 0.0001
+                    ):
+                        # Спред очень маленький или равен 0, используем минимальный offset 0.01% для гарантии исполнения
+                        min_offset = 0.01  # Минимальный offset 0.01%
+                        limit_price = best_ask * (1 + min_offset / 100.0)
+                        logger.debug(
+                            f"💰 Для {symbol} BUY: offset=0 и спред=0, используем минимальный offset {min_offset}% "
+                            f"для гарантии исполнения (best_ask={best_ask:.6f} → limit_price={limit_price:.6f})"
+                        )
+                    else:
+                        limit_price = best_ask * (1 + offset_percent / 100.0)
                 else:
-                    # Fallback: используем текущую цену + offset
-                    limit_price = current_price * (1 + offset_percent / 100.0)
+                    # Fallback: используем текущую цену + offset (минимум 0.01%)
+                    min_offset = max(offset_percent, 0.01)  # Минимальный offset 0.01%
+                    limit_price = current_price * (1 + min_offset / 100.0)
 
                 # ✅ КРИТИЧЕСКОЕ: Проверяем лимит биржи
                 # Для BUY: цена должна быть <= max_buy_price
@@ -332,15 +356,14 @@ class FuturesOrderExecutor:
 
                 # ✅ КРИТИЧЕСКОЕ: Проверяем лимит биржи
                 # Для SELL: цена должна быть >= min_sell_price
-                # ✅ ИСПРАВЛЕНО: Используем более консервативный подход
-                # Проблема: наши расчеты min_sell_price могут быть неточными
-                # Решение: для SELL используем best_ask * 0.999 (немного ниже best_ask для гарантии)
-                # Это гарантирует, что цена будет выше min_sell_price в большинстве случаев
-                if best_ask > 0:
-                    # Для SELL: используем best_ask * 0.999 (немного ниже best_ask)
-                    # Это гарантирует, что цена будет внутри спреда и выше min_sell_price
-                    safe_sell_price = best_ask * 0.999
-                    limit_price = max(limit_price, safe_sell_price, min_sell_price)
+                # ✅ ИСПРАВЛЕНО: НЕ используем best_ask (это далеко от цены для SELL!)
+                # Для SELL нужна лучшая цена покупки = best_bid (не best_ask!)
+                # best_ask * 0.999 ставит ордер далеко от рынка, если спред большой
+                # Решение: используем только best_bid (уже рассчитан выше) и min_sell_price
+                if best_bid > 0:
+                    # ✅ ИСПРАВЛЕНО: Используем best_bid (лучшая цена покупки), а НЕ best_ask
+                    # limit_price уже рассчитан от best_bid выше, проверяем только min_sell_price
+                    limit_price = max(limit_price, min_sell_price)
                 else:
                     # Fallback: используем min_sell_price
                     limit_price = max(limit_price, min_sell_price)
@@ -372,6 +395,25 @@ class FuturesOrderExecutor:
         try:
             logger.info(f"📈 Размещение рыночного ордера: {symbol} {side} {size:.6f}")
 
+            # Для метрик: зафиксируем лучшие цены до отправки
+            best_bid = best_ask = None
+            try:
+                limits = await self.client.get_price_limits(symbol)
+                best_bid = (
+                    float(limits.get("best_bid"))
+                    if limits and limits.get("best_bid")
+                    else None
+                )
+                best_ask = (
+                    float(limits.get("best_ask"))
+                    if limits and limits.get("best_ask")
+                    else None
+                )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить лучшие цены перед market-ордером {symbol}: {e}"
+                )
+
             result = await self.client.place_futures_order(
                 symbol=symbol, side=side, size=size, order_type="market"
             )
@@ -379,6 +421,37 @@ class FuturesOrderExecutor:
             if result.get("code") == "0":
                 order_id = result.get("data", [{}])[0].get("ordId")
                 logger.info(f"✅ Рыночный ордер размещен: {order_id}")
+
+                # Метрики: учёт market-ордеров и проскальзывания (если есть fill price)
+                try:
+                    self.execution_stats["market_orders"] += 1
+                    data0 = (result.get("data") or [{}])[0]
+                    fill_px = None
+                    for key in ("avgPx", "fillPx", "fillPrice"):
+                        if key in data0 and data0.get(key):
+                            try:
+                                fill_px = float(data0.get(key))
+                                break
+                            except (TypeError, ValueError):
+                                continue
+                    if fill_px and best_bid and best_ask:
+                        if side.lower() in ("buy", "long"):
+                            ref = best_ask
+                            slippage_bps = (fill_px - ref) / ref * 1e4
+                        else:
+                            ref = best_bid
+                            slippage_bps = (ref - fill_px) / ref * 1e4
+                        self.execution_stats["total_slippage_bps"] += float(
+                            slippage_bps
+                        )
+                        self.execution_stats["slippage_samples"] += 1
+                        logger.debug(
+                            f"📏 Slippage {symbol} {side}: {slippage_bps:.2f} bps (ref={ref:.4f}, fill={fill_px:.4f})"
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Не удалось обновить метрики slippage для {symbol}: {e}"
+                    )
 
                 return {
                     "success": True,
@@ -400,16 +473,31 @@ class FuturesOrderExecutor:
             return {"success": False, "error": str(e)}
 
     async def _place_limit_order(
-        self, symbol: str, side: str, size: float, price: float
+        self,
+        symbol: str,
+        side: str,
+        size: float,
+        price: float,
+        regime: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Размещение лимитного ордера с fallback на рыночный
         """
         try:
-            # ✅ НОВОЕ: Получаем post_only из конфига
+            # ✅ ИСПРАВЛЕНО: Получаем post_only из конфига с учетом режима
             order_executor_config = getattr(self.scalping_config, "order_executor", {})
             limit_order_config = order_executor_config.get("limit_order", {})
-            post_only = limit_order_config.get("post_only", False)
+
+            # Получаем post_only по режиму
+            if regime:
+                regime_config = limit_order_config.get("by_regime", {}).get(
+                    regime.lower(), {}
+                )
+                post_only = regime_config.get(
+                    "post_only", limit_order_config.get("post_only", False)
+                )
+            else:
+                post_only = limit_order_config.get("post_only", False)
 
             logger.info(
                 f"📊 Размещение лимитного ордера: {symbol} {side} {size:.6f} @ {price:.2f} "
@@ -428,6 +516,15 @@ class FuturesOrderExecutor:
             if result.get("code") == "0":
                 order_id = result.get("data", [{}])[0].get("ordId")
                 logger.info(f"✅ Лимитный ордер размещен: {order_id}")
+
+                # Метрики: учитываем тип лимитного ордера как maker/other по флагу post_only
+                try:
+                    if post_only:
+                        self.execution_stats["limit_orders_maker"] += 1
+                    else:
+                        self.execution_stats["limit_orders_other"] += 1
+                except Exception:
+                    pass
 
                 return {
                     "success": True,
@@ -920,6 +1017,11 @@ class FuturesOrderExecutor:
                     errors.append(f"{order_id}: {result.get('error')}")
 
             logger.info(f"✅ Отменено ордеров: {cancelled_count}")
+            # ✅ Обновляем метрики отменённых ордеров
+            try:
+                self.execution_stats["cancelled_orders"] += cancelled_count
+            except Exception:
+                pass
 
             return {
                 "success": True,
@@ -981,6 +1083,7 @@ class FuturesOrderExecutor:
             total = self.execution_stats["total_orders"]
             successful = self.execution_stats["successful_orders"]
             failed = self.execution_stats["failed_orders"]
+            cancelled = self.execution_stats.get("cancelled_orders", 0)
 
             success_rate = (successful / total * 100) if total > 0 else 0
 
@@ -988,12 +1091,23 @@ class FuturesOrderExecutor:
                 "total_orders": total,
                 "successful_orders": successful,
                 "failed_orders": failed,
-                "cancelled_orders": self.execution_stats["cancelled_orders"],
+                "cancelled_orders": cancelled,
+                "cancel_ratio": (cancelled / total * 100) if total > 0 else 0.0,
                 "success_rate": success_rate,
                 "active_orders_count": len(self.active_orders),
                 "last_order_time": self.order_history[-1]["timestamp"]
                 if self.order_history
                 else None,
+                # Доп. метрики
+                "market_orders": self.execution_stats.get("market_orders", 0),
+                "limit_orders_maker": self.execution_stats.get("limit_orders_maker", 0),
+                "limit_orders_other": self.execution_stats.get("limit_orders_other", 0),
+                "avg_slippage_bps": (
+                    self.execution_stats["total_slippage_bps"]
+                    / self.execution_stats["slippage_samples"]
+                    if self.execution_stats.get("slippage_samples", 0) > 0
+                    else 0.0
+                ),
             }
 
         except Exception as e:

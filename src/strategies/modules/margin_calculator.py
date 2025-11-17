@@ -161,7 +161,8 @@ class MarginCalculator:
         entry_price: float,
         side: str,
         leverage: Optional[int] = None,
-        safety_threshold: float = 1.5,
+        safety_threshold: Optional[float] = None,
+        regime: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         Проверка безопасности позиции
@@ -180,6 +181,43 @@ class MarginCalculator:
         """
         if leverage is None:
             leverage = self.default_leverage
+
+        # ✅ АДАПТИВНО: Получаем safety_threshold из конфига по режиму
+        # ПРИОРИТЕТ: конфиг -> fallback (сначала пытаемся из конфига, только если нет - fallback)
+        if safety_threshold is None:
+            try:
+                if hasattr(self, "margin_config") and self.margin_config:
+                    if isinstance(self.margin_config, dict):
+                        by_regime = self.margin_config.get("by_regime", {})
+                        if regime and by_regime:
+                            regime_config = by_regime.get(regime.lower(), {})
+                            if isinstance(regime_config, dict):
+                                safety_threshold = regime_config.get("safety_threshold")
+                                if safety_threshold is not None:
+                                    logger.debug(
+                                        f"✅ Загружен safety_threshold={safety_threshold} из конфига (regime={regime})"
+                                    )
+                    else:
+                        by_regime = getattr(self.margin_config, "by_regime", None)
+                        if by_regime and regime:
+                            regime_config = getattr(by_regime, regime.lower(), None)
+                            if regime_config:
+                                safety_threshold = getattr(
+                                    regime_config, "safety_threshold", None
+                                )
+                                if safety_threshold is not None:
+                                    logger.debug(
+                                        f"✅ Загружен safety_threshold={safety_threshold} из конфига (regime={regime})"
+                                    )
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось получить адаптивный safety_threshold: {e}")
+
+            # Fallback только если не удалось загрузить из конфига
+            if safety_threshold is None:
+                safety_threshold = 1.5  # Fallback
+                logger.debug(
+                    f"⚠️ Используется fallback safety_threshold={safety_threshold}"
+                )
 
         # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: position_value уже в USD (size_in_coins * current_price)
         # Поэтому position_size (в монетах) = position_value / current_price
@@ -313,8 +351,9 @@ class MarginCalculator:
         self,
         equity: float,
         current_price: float,
-        risk_percentage: float = 0.02,
+        risk_percentage: Optional[float] = None,
         leverage: Optional[int] = None,
+        regime: Optional[str] = None,
     ) -> float:
         """
         Расчет оптимального размера позиции с учетом риска
@@ -330,6 +369,43 @@ class MarginCalculator:
         """
         if leverage is None:
             leverage = self.default_leverage
+
+        # ✅ АДАПТИВНО: Получаем risk_percentage из конфига по режиму
+        # ПРИОРИТЕТ: конфиг -> fallback (сначала пытаемся из конфига, только если нет - fallback)
+        if risk_percentage is None:
+            try:
+                if hasattr(self, "margin_config") and self.margin_config:
+                    if isinstance(self.margin_config, dict):
+                        by_regime = self.margin_config.get("by_regime", {})
+                        if regime and by_regime:
+                            regime_config = by_regime.get(regime.lower(), {})
+                            if isinstance(regime_config, dict):
+                                risk_percentage = regime_config.get("risk_percentage")
+                                if risk_percentage is not None:
+                                    logger.debug(
+                                        f"✅ Загружен risk_percentage={risk_percentage} из конфига (regime={regime})"
+                                    )
+                    else:
+                        by_regime = getattr(self.margin_config, "by_regime", None)
+                        if by_regime and regime:
+                            regime_config = getattr(by_regime, regime.lower(), None)
+                            if regime_config:
+                                risk_percentage = getattr(
+                                    regime_config, "risk_percentage", None
+                                )
+                                if risk_percentage is not None:
+                                    logger.debug(
+                                        f"✅ Загружен risk_percentage={risk_percentage} из конфига (regime={regime})"
+                                    )
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось получить адаптивный risk_percentage: {e}")
+
+            # Fallback только если не удалось загрузить из конфига
+            if risk_percentage is None:
+                risk_percentage = 0.02  # Fallback 2%
+                logger.debug(
+                    f"⚠️ Используется fallback risk_percentage={risk_percentage}"
+                )
 
         # Максимальный риск в USDT
         max_risk_usdt = equity * risk_percentage
@@ -347,7 +423,7 @@ class MarginCalculator:
         return optimal_position_size
 
     def get_margin_health_status(
-        self, equity: float, total_margin_used: float
+        self, equity: float, total_margin_used: float, regime: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Получение статуса здоровья маржи
@@ -368,16 +444,59 @@ class MarginCalculator:
 
         margin_ratio = equity / total_margin_used
 
-        if margin_ratio >= 3.0:
+        # ✅ АДАПТИВНО: Получаем пороги здоровья маржи из конфига по режиму
+        thresholds = {
+            "excellent": 3.0,
+            "good": 2.0,
+            "warning": 1.5,
+            "danger": 1.2,
+        }
+        try:
+            if hasattr(self, "margin_config") and self.margin_config:
+                if isinstance(self.margin_config, dict):
+                    by_regime = self.margin_config.get("by_regime", {})
+                    if regime and by_regime:
+                        regime_config = by_regime.get(regime.lower(), {})
+                        if isinstance(regime_config, dict):
+                            health_thresholds = regime_config.get(
+                                "margin_health_thresholds", {}
+                            )
+                            if isinstance(health_thresholds, dict):
+                                thresholds = health_thresholds
+                else:
+                    by_regime = getattr(self.margin_config, "by_regime", None)
+                    if by_regime and regime:
+                        regime_config = getattr(by_regime, regime.lower(), None)
+                        if regime_config:
+                            health_thresholds = getattr(
+                                regime_config, "margin_health_thresholds", None
+                            )
+                            if health_thresholds:
+                                thresholds = {
+                                    "excellent": getattr(
+                                        health_thresholds, "excellent", 3.0
+                                    ),
+                                    "good": getattr(health_thresholds, "good", 2.0),
+                                    "warning": getattr(
+                                        health_thresholds, "warning", 1.5
+                                    ),
+                                    "danger": getattr(health_thresholds, "danger", 1.2),
+                                }
+        except Exception as e:
+            logger.debug(
+                f"⚠️ Не удалось получить адаптивные пороги здоровья маржи: {e}, используем fallback"
+            )
+
+        if margin_ratio >= thresholds["excellent"]:
             status = "excellent"
             message = "Отличное состояние маржи"
-        elif margin_ratio >= 2.0:
+        elif margin_ratio >= thresholds["good"]:
             status = "good"
             message = "Хорошее состояние маржи"
-        elif margin_ratio >= 1.5:
+        elif margin_ratio >= thresholds["warning"]:
             status = "warning"
             message = "Предупреждение: низкая маржа"
-        elif margin_ratio >= 1.2:
+        elif margin_ratio >= thresholds["danger"]:
             status = "danger"
             message = "ОПАСНО: критически низкая маржа"
         else:

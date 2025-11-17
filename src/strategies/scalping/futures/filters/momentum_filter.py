@@ -46,6 +46,8 @@ class MomentumFilter:
         )
         self.reject_decreasing_volume = config.get("reject_decreasing_volume", True)
         self.reject_choppy_action = config.get("reject_choppy_action", True)
+        # ✅ АДАПТИВНО: Пороги для каждого режима рынка
+        self.thresholds_config = config.get("thresholds", {})
 
     async def evaluate(
         self,
@@ -53,6 +55,9 @@ class MomentumFilter:
         candles: List[OHLCV],
         current_price: float,
         level: Optional[float] = None,
+        market_regime: Optional[
+            str
+        ] = None,  # ✅ АДАПТИВНО: Режим рынка для адаптации порогов
     ) -> Tuple[bool, Optional[str]]:
         """
         Проверяет критерии импульсной сделки из статьи.
@@ -77,13 +82,13 @@ class MomentumFilter:
 
         # 2. Проверка медленного движения к уровню
         if self.check_grind_into_level and level is not None:
-            is_grind = self._check_grind_into_level(candles, level)
+            is_grind = self._check_grind_into_level(candles, level, market_regime)
             if not is_grind:
                 return False, "Fast movement to level - not a grind"
 
         # 3. Проверка постоянного роста объема
         if self.check_volume_increasing:
-            is_increasing = self._check_volume_increasing(candles)
+            is_increasing = self._check_volume_increasing(candles, market_regime)
             if not is_increasing:
                 if self.reject_decreasing_volume:
                     return False, "Volume not consistently increasing"
@@ -93,7 +98,7 @@ class MomentumFilter:
 
         # 4. Проверка лестничного движения
         if self.check_staircase_action:
-            has_staircase = self._check_staircase_action(candles)
+            has_staircase = self._check_staircase_action(candles, market_regime)
             if not has_staircase:
                 if self.reject_choppy_action:
                     return False, "No staircase pattern detected"
@@ -120,7 +125,9 @@ class MomentumFilter:
 
         return False
 
-    def _check_grind_into_level(self, candles: List[OHLCV], level: float) -> bool:
+    def _check_grind_into_level(
+        self, candles: List[OHLCV], level: float, market_regime: Optional[str] = None
+    ) -> bool:
         """Проверяет, что цена медленно приближается к уровню (не вертикальный скачок)."""
         if len(candles) < self.grind_lookback_periods:
             return False  # Недостаточно данных
@@ -143,8 +150,12 @@ class MomentumFilter:
         std_dev = variance**0.5
         cv = std_dev / avg_distance if avg_distance > 0 else 0
 
-        # Если коэффициент вариации слишком высокий - это вертикальный скачок
-        max_cv = 0.5  # Максимальный коэффициент вариации
+        # ✅ АДАПТИВНО: Максимальный коэффициент вариации из конфига по режиму
+        # Получаем пороги для текущего режима
+        regime_thresholds = (
+            self.thresholds_config.get(market_regime, {}) if market_regime else {}
+        )
+        max_cv = regime_thresholds.get("max_cv", 0.5)  # Fallback: 0.5
         is_grind = cv <= max_cv
 
         if not is_grind:
@@ -152,7 +163,9 @@ class MomentumFilter:
 
         return is_grind
 
-    def _check_volume_increasing(self, candles: List[OHLCV]) -> bool:
+    def _check_volume_increasing(
+        self, candles: List[OHLCV], market_regime: Optional[str] = None
+    ) -> bool:
         """Проверяет, что объем постоянно увеличивается."""
         if len(candles) < self.volume_increase_periods:
             return False  # Недостаточно данных
@@ -165,8 +178,13 @@ class MomentumFilter:
             if volumes[i] > volumes[i - 1]:
                 increasing_count += 1
 
-        # Объем должен расти минимум в 60% периодов
-        min_increasing_ratio = 0.6
+        # ✅ АДАПТИВНО: Минимальный ratio из конфига по режиму
+        regime_thresholds = (
+            self.thresholds_config.get(market_regime, {}) if market_regime else {}
+        )
+        min_increasing_ratio = regime_thresholds.get(
+            "min_increasing_ratio", 0.6
+        )  # Fallback: 0.6
         increasing_ratio = (
             increasing_count / (len(volumes) - 1) if len(volumes) > 1 else 0
         )
@@ -181,7 +199,9 @@ class MomentumFilter:
 
         return is_increasing
 
-    def _check_staircase_action(self, candles: List[OHLCV]) -> bool:
+    def _check_staircase_action(
+        self, candles: List[OHLCV], market_regime: Optional[str] = None
+    ) -> bool:
         """Проверяет наличие лестничного движения (staircase pattern)."""
         # Предполагаем 1-минутные свечи
         min_candles = int(self.min_staircase_duration_hours * 60)
@@ -209,7 +229,11 @@ class MomentumFilter:
             return False
 
         ratio = higher_closes / total_changes
-        min_ratio = 0.6  # Минимум 60% свечей должны быть повышающимися
+        # ✅ АДАПТИВНО: Минимальный ratio из конфига по режиму
+        regime_thresholds = (
+            self.thresholds_config.get(market_regime, {}) if market_regime else {}
+        )
+        min_ratio = regime_thresholds.get("min_ratio", 0.6)  # Fallback: 0.6
 
         has_staircase = ratio >= min_ratio
 

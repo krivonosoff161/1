@@ -338,6 +338,10 @@ class FuturesSignalGenerator:
                             adaptive_regime_dict.get(regime_name, {}) or {}
                         )
 
+                    # ✅ ИСПРАВЛЕНИЕ: Сохраняем extract_regime_params для использования в фильтрах
+                    self._extract_regime_params = extract_regime_params
+                    self._adaptive_regime_dict = adaptive_regime_dict
+
                     from src.strategies.modules.adaptive_regime_manager import (
                         IndicatorParameters, ModuleParameters,
                         RegimeParameters)
@@ -631,7 +635,50 @@ class FuturesSignalGenerator:
                     )
 
                 corr_enabled = True  # По умолчанию включен
-                corr_threshold = 0.7
+                # ✅ АДАПТИВНО: correlation_threshold из конфига по режиму
+                regime_name_corr = "ranging"  # Fallback
+                try:
+                    if hasattr(self, "regime_manager") and self.regime_manager:
+                        regime_obj = self.regime_manager.get_current_regime()
+                        if regime_obj:
+                            regime_name_corr = (
+                                regime_obj.lower()
+                                if isinstance(regime_obj, str)
+                                else str(regime_obj).lower()
+                            )
+                except:
+                    pass
+
+                signal_gen_config_corr = getattr(
+                    self.scalping_config, "signal_generator", {}
+                )
+                thresholds_config = {}
+                if isinstance(signal_gen_config_corr, dict):
+                    thresholds_dict = signal_gen_config_corr.get("thresholds", {})
+                    if thresholds_dict:
+                        thresholds_config = (
+                            thresholds_dict.get("by_regime", {}).get(
+                                regime_name_corr, {}
+                            )
+                            if regime_name_corr
+                            else {}
+                        )
+                        if not thresholds_config:
+                            thresholds_config = thresholds_dict  # Fallback на базовые
+                else:
+                    thresholds_obj = getattr(signal_gen_config_corr, "thresholds", None)
+                    if thresholds_obj:
+                        by_regime = getattr(thresholds_obj, "by_regime", None)
+                        if by_regime and regime_name_corr:
+                            thresholds_config = getattr(by_regime, regime_name_corr, {})
+                        if not thresholds_config:
+                            thresholds_config = thresholds_obj  # Fallback на базовые
+
+                corr_threshold = (
+                    thresholds_config.get("correlation_threshold", 0.7)
+                    if isinstance(thresholds_config, dict)
+                    else getattr(thresholds_config, "correlation_threshold", 0.7)
+                )
                 corr_max_positions = 2
                 corr_block_same_direction = True
 
@@ -729,7 +776,58 @@ class FuturesSignalGenerator:
                         f"⚠️ Тип scalping_config: {type(self.scalping_config)}, атрибуты: {dir(self.scalping_config)[:10]}"
                     )
 
-                pivot_tolerance = 0.003  # 0.3%
+                # ✅ АДАПТИВНО: pivot_tolerance из конфига по режиму
+                regime_name_pivot = "ranging"  # Fallback
+                try:
+                    if hasattr(self, "regime_manager") and self.regime_manager:
+                        regime_obj = self.regime_manager.get_current_regime()
+                        if regime_obj:
+                            regime_name_pivot = (
+                                regime_obj.lower()
+                                if isinstance(regime_obj, str)
+                                else str(regime_obj).lower()
+                            )
+                except:
+                    pass
+
+                signal_gen_config_pivot = getattr(
+                    self.scalping_config, "signal_generator", {}
+                )
+                thresholds_config_pivot = {}
+                if isinstance(signal_gen_config_pivot, dict):
+                    thresholds_dict = signal_gen_config_pivot.get("thresholds", {})
+                    if thresholds_dict:
+                        thresholds_config_pivot = (
+                            thresholds_dict.get("by_regime", {}).get(
+                                regime_name_pivot, {}
+                            )
+                            if regime_name_pivot
+                            else {}
+                        )
+                        if not thresholds_config_pivot:
+                            thresholds_config_pivot = (
+                                thresholds_dict  # Fallback на базовые
+                            )
+                else:
+                    thresholds_obj = getattr(
+                        signal_gen_config_pivot, "thresholds", None
+                    )
+                    if thresholds_obj:
+                        by_regime = getattr(thresholds_obj, "by_regime", None)
+                        if by_regime and regime_name_pivot:
+                            thresholds_config_pivot = getattr(
+                                by_regime, regime_name_pivot, {}
+                            )
+                        if not thresholds_config_pivot:
+                            thresholds_config_pivot = (
+                                thresholds_obj  # Fallback на базовые
+                            )
+
+                pivot_tolerance = (
+                    thresholds_config_pivot.get("pivot_tolerance", 0.003)
+                    if isinstance(thresholds_config_pivot, dict)
+                    else getattr(thresholds_config_pivot, "pivot_tolerance", 0.003)
+                )
                 pivot_bonus = 1
                 pivot_timeframe = "1D"
                 pivot_use_days = 1
@@ -862,10 +960,23 @@ class FuturesSignalGenerator:
                 vp_timeframe = "1H"
                 vp_lookback = 100
                 vp_buckets = 50
-                vp_va_percent = 70.0
+                # ✅ АДАПТИВНО: volume_profile параметры из конфига по режиму (используем thresholds_config_pivot)
+                vp_va_percent = (
+                    thresholds_config_pivot.get("volume_profile_va_percent", 70.0)
+                    if isinstance(thresholds_config_pivot, dict)
+                    else getattr(
+                        thresholds_config_pivot, "volume_profile_va_percent", 70.0
+                    )
+                )
                 vp_bonus_va = 1
                 vp_bonus_poc = 1
-                vp_poc_tolerance = 0.005  # 0.5%
+                vp_poc_tolerance = (
+                    thresholds_config_pivot.get("volume_profile_poc_tolerance", 0.005)
+                    if isinstance(thresholds_config_pivot, dict)
+                    else getattr(
+                        thresholds_config_pivot, "volume_profile_poc_tolerance", 0.005
+                    )
+                )
 
                 if vp_config_data:
                     if isinstance(vp_config_data, dict):
@@ -1267,6 +1378,11 @@ class FuturesSignalGenerator:
         """
         Получить параметры индикаторов для режима из конфига.
 
+        ПРИОРИТЕТ (от низкого к высокому):
+        1. base (by_regime.{regime}.indicators - глобальные параметры режима)
+        2. per-symbol (symbol_profiles.{symbol}.{regime}.indicators - per-symbol overrides)
+        3. fallback (дефолтные значения)
+
         Args:
             regime: Режим ("trending"/"ranging"/"choppy") или None для текущего режима
             symbol: Символ для получения режима (использует персональный ARM если есть)
@@ -1288,21 +1404,66 @@ class FuturesSignalGenerator:
             # Получаем текущий режим от ARM
             regime = regime_manager.get_current_regime() or "ranging"
 
-        # Получаем параметры режима из конфига
+        regime_key = regime.lower() if regime else "ranging"
+        base_indicators = {}
+        symbol_indicators = {}
+
+        # ✅ ПРИОРИТЕТ 1: Базовые параметры режима (by_regime.{regime}.indicators)
         try:
             scalping_config = getattr(self.config, "scalping", None)
             if scalping_config:
                 adaptive_regime = getattr(scalping_config, "adaptive_regime", None)
                 if adaptive_regime:
-                    regime_params = getattr(adaptive_regime, f"{regime}_params", None)
-                    if regime_params:
-                        indicators = getattr(regime_params, "indicators", {})
-                        if indicators:
-                            return indicators
-        except Exception as e:
-            logger.debug(f"⚠️ Не удалось получить параметры режима {regime}: {e}")
+                    if isinstance(adaptive_regime, dict):
+                        regime_params = adaptive_regime.get(regime_key, {})
+                    else:
+                        regime_params = getattr(adaptive_regime, regime_key, None)
 
-        # Дефолтные значения (ranging)
+                    if regime_params:
+                        regime_params_dict = self._to_dict(regime_params)
+                        indicators = regime_params_dict.get("indicators", {})
+                        if indicators:
+                            base_indicators = self._to_dict(indicators)
+        except Exception as e:
+            logger.debug(
+                f"⚠️ Не удалось получить базовые параметры режима {regime_key}: {e}"
+            )
+
+        # ✅ ПРИОРИТЕТ 2: Per-symbol overrides (symbol_profiles.{symbol}.{regime}.indicators)
+        if symbol:
+            try:
+                symbol_profiles = getattr(self, "symbol_profiles", {})
+                if symbol_profiles and symbol in symbol_profiles:
+                    symbol_profile = symbol_profiles[symbol]
+                    symbol_profile_dict = self._to_dict(symbol_profile)
+                    regime_profile = symbol_profile_dict.get(regime_key, {})
+                    regime_profile_dict = self._to_dict(regime_profile)
+                    indicators_config = regime_profile_dict.get("indicators", {})
+                    if indicators_config:
+                        symbol_indicators = self._to_dict(indicators_config)
+                        logger.debug(
+                            f"✅ Найдены per-symbol параметры индикаторов для {symbol} ({regime_key})"
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить per-symbol параметры для {symbol}: {e}"
+                )
+
+        # Объединяем: сначала базовые, затем per-symbol (per-symbol имеет приоритет)
+        final_indicators = base_indicators.copy()
+        final_indicators.update(symbol_indicators)  # Per-symbol перезаписывает базовые
+
+        if final_indicators:
+            logger.debug(
+                f"✅ Параметры индикаторов для {regime_key}"
+                + (f" ({symbol})" if symbol else "")
+                + ": "
+                f"RSI overbought={final_indicators.get('rsi_overbought', 70)}, "
+                f"oversold={final_indicators.get('rsi_oversold', 30)}"
+            )
+            return final_indicators
+
+        # ✅ ПРИОРИТЕТ 3: Fallback значения
         return {
             "rsi_overbought": 70,
             "rsi_oversold": 30,
@@ -1340,6 +1501,49 @@ class FuturesSignalGenerator:
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
             )
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем confidence_config_rsi ДО всех условий
+            # Получаем режим для confidence
+            regime_name_for_conf = "ranging"  # Fallback
+            try:
+                if hasattr(self, "regime_manager") and self.regime_manager:
+                    regime_obj = self.regime_manager.get_current_regime()
+                    if regime_obj:
+                        regime_name_for_conf = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except:
+                pass
+
+            # Получаем confidence значения из конфига
+            signal_gen_config_conf = getattr(
+                self.scalping_config, "signal_generator", {}
+            )
+            confidence_config_rsi = {}
+            if isinstance(signal_gen_config_conf, dict):
+                confidence_dict = signal_gen_config_conf.get("confidence", {})
+                if regime_name_for_conf and confidence_dict:
+                    regime_confidence = confidence_dict.get(regime_name_for_conf, {})
+                    if isinstance(regime_confidence, dict):
+                        confidence_config_rsi = regime_confidence
+            else:
+                confidence_obj = getattr(signal_gen_config_conf, "confidence", None)
+                if confidence_obj and regime_name_for_conf:
+                    regime_confidence = getattr(
+                        confidence_obj, regime_name_for_conf, None
+                    )
+                    if regime_confidence:
+                        confidence_config_rsi = {
+                            "bullish_strong": getattr(
+                                regime_confidence, "bullish_strong", 0.7
+                            ),
+                            "bullish_normal": getattr(
+                                regime_confidence, "bullish_normal", 0.6
+                            ),
+                            "rsi_signal": getattr(regime_confidence, "rsi_signal", 0.6),
+                        }
+
             # Перепроданность (покупка) - используем адаптивный порог
             if rsi < rsi_oversold:
                 # Проверяем тренд через EMA - если конфликт, снижаем confidence
@@ -1352,12 +1556,16 @@ class FuturesSignalGenerator:
                 # Это позволит использовать краткосрочные откаты для быстрого скальпа
                 if is_downtrend:
                     # Конфликт: RSI oversold (LONG) vs EMA bearish (DOWN)
-                    confidence = 0.4  # Сниженная уверенность для быстрого скальпа
+                    # ✅ АДАПТИВНО: Сниженная уверенность из конфига (50% от нормальной)
+                    normal_conf = confidence_config_rsi.get("rsi_signal", 0.6)
+                    confidence = (
+                        normal_conf * 0.5
+                    )  # Конфликт = 50% от нормальной уверенности
                     has_conflict = True
-                    # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
-                    # logger.debug(f"⚡ RSI OVERSOLD с конфликтом для {symbol}: confidence={confidence:.1f}")
                 else:
-                    confidence = 0.8  # Нормальная уверенность
+                    confidence = confidence_config_rsi.get(
+                        "rsi_signal", 0.6
+                    )  # ✅ АДАПТИВНО: Из конфига
                     has_conflict = False
                     # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
                     # logger.debug(f"✅ RSI OVERSOLD сигнал для {symbol}: RSI={rsi:.2f}")
@@ -1386,9 +1594,14 @@ class FuturesSignalGenerator:
 
                 # ✅ СТРАТЕГИЯ КОНФЛИКТА: Снижаем confidence, но НЕ блокируем
                 # Это позволит использовать краткосрочные коррекции для быстрого скальпа
+                # ✅ АДАПТИВНО: Используем confidence_config_rsi, полученный выше
                 if is_uptrend:
                     # Конфликт: RSI overbought (SHORT) vs EMA bullish (UP)
-                    confidence = 0.4  # Сниженная уверенность для быстрого скальпа
+                    # ✅ АДАПТИВНО: Сниженная уверенность из конфига (50% от нормальной)
+                    normal_conf = confidence_config_rsi.get("rsi_signal", 0.6)
+                    confidence = (
+                        normal_conf * 0.5
+                    )  # Конфликт = 50% от нормальной уверенности
                     has_conflict = True
                     logger.debug(
                         f"⚡ RSI OVERBOUGHT с конфликтом для {symbol}: "
@@ -1397,7 +1610,9 @@ class FuturesSignalGenerator:
                         f"(confidence={confidence:.1f})"
                     )
                 else:
-                    confidence = 0.8  # Нормальная уверенность
+                    confidence = confidence_config_rsi.get(
+                        "rsi_signal", 0.6
+                    )  # ✅ АДАПТИВНО: Из конфига
                     has_conflict = False
                     # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
                     # logger.debug(f"✅ RSI OVERBOUGHT сигнал для {symbol}: RSI={rsi:.2f}")
@@ -1428,6 +1643,45 @@ class FuturesSignalGenerator:
         signals = []
 
         try:
+            # ✅ АДАПТИВНО: Получаем confidence из конфига по режиму
+            regime_name_macd = "ranging"  # Fallback
+            try:
+                if hasattr(self, "regime_manager") and self.regime_manager:
+                    regime_obj = self.regime_manager.get_current_regime()
+                    if regime_obj:
+                        regime_name_macd = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except:
+                pass
+
+            signal_gen_config_macd = getattr(
+                self.scalping_config, "signal_generator", {}
+            )
+            confidence_config_macd = {}
+            if isinstance(signal_gen_config_macd, dict):
+                confidence_dict = signal_gen_config_macd.get("confidence", {})
+                if regime_name_macd and confidence_dict:
+                    regime_confidence = confidence_dict.get(regime_name_macd, {})
+                    if isinstance(regime_confidence, dict):
+                        confidence_config_macd = regime_confidence
+            else:
+                confidence_obj = getattr(signal_gen_config_macd, "confidence", None)
+                if confidence_obj and regime_name_macd:
+                    regime_confidence = getattr(confidence_obj, regime_name_macd, None)
+                    if regime_confidence:
+                        confidence_config_macd = {
+                            "macd_signal": getattr(
+                                regime_confidence, "macd_signal", 0.65
+                            ),
+                        }
+
+            macd_confidence = confidence_config_macd.get(
+                "macd_signal", 0.65
+            )  # Fallback
+
             macd = indicators.get("macd", {})
             macd_line = macd.get("macd", 0)
             signal_line = macd.get("signal", 0)
@@ -1459,7 +1713,7 @@ class FuturesSignalGenerator:
                         else 0.0,
                         "timestamp": datetime.now(),
                         "indicator_value": histogram,
-                        "confidence": 0.7,
+                        "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
                     }
                 )
 
@@ -1482,7 +1736,7 @@ class FuturesSignalGenerator:
                         else 0.0,
                         "timestamp": datetime.now(),
                         "indicator_value": histogram,
-                        "confidence": 0.7,
+                        "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
                     }
                 )
 
@@ -1508,6 +1762,39 @@ class FuturesSignalGenerator:
 
             # ✅ ОПТИМИЗАЦИЯ: Логируем BB только при генерации сигналов (не каждый раз)
             # logger.debug(f"🔍 BB для {symbol}: цена={current_price:.2f}")
+
+            # ✅ АДАПТИВНО: Получаем confidence для BB из конфига по режиму
+            regime_name_bb = "ranging"  # Fallback
+            try:
+                if hasattr(self, "regime_manager") and self.regime_manager:
+                    regime_obj = self.regime_manager.get_current_regime()
+                    if regime_obj:
+                        regime_name_bb = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except:
+                pass
+
+            signal_gen_config_bb = getattr(self.scalping_config, "signal_generator", {})
+            confidence_config_bb = {}
+            if isinstance(signal_gen_config_bb, dict):
+                confidence_dict = signal_gen_config_bb.get("confidence", {})
+                if regime_name_bb and confidence_dict:
+                    regime_confidence = confidence_dict.get(regime_name_bb, {})
+                    if isinstance(regime_confidence, dict):
+                        confidence_config_bb = regime_confidence
+            else:
+                confidence_obj = getattr(signal_gen_config_bb, "confidence", None)
+                if confidence_obj and regime_name_bb:
+                    regime_confidence = getattr(confidence_obj, regime_name_bb, None)
+                    if regime_confidence:
+                        confidence_config_bb = {
+                            "rsi_signal": getattr(regime_confidence, "rsi_signal", 0.6),
+                        }
+
+            bb_confidence = confidence_config_bb.get("rsi_signal", 0.6)  # Fallback
 
             # Отскок от нижней полосы (покупка)
             # ✅ ИСПРАВЛЕНИЕ: Не даем LONG сигнал в нисходящем тренде!
@@ -1550,7 +1837,7 @@ class FuturesSignalGenerator:
                             else 0.0,
                             "timestamp": datetime.now(),
                             "indicator_value": current_price,
-                            "confidence": 0.75,
+                            "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
                         }
                     )
 
@@ -1595,7 +1882,7 @@ class FuturesSignalGenerator:
                             else 0.0,
                             "timestamp": datetime.now(),
                             "indicator_value": current_price,
-                            "confidence": 0.75,
+                            "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
                         }
                     )
 
@@ -1617,6 +1904,58 @@ class FuturesSignalGenerator:
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
             )
 
+            # ✅ АДАПТИВНО: Получаем параметры signal_generator из конфига (ПЕРЕД использованием)
+            # Получаем режим рынка для всех параметров
+            regime_name_ma = "ranging"  # Fallback значение
+            try:
+                if hasattr(self, "regime_manager") and self.regime_manager:
+                    regime_obj = self.regime_manager.get_current_regime()
+                    if regime_obj:
+                        regime_name_ma = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить режим рынка: {e}, используем fallback 'ranging'"
+                )
+
+            # ✅ АДАПТИВНО: Получаем параметры signal_generator из конфига (ПЕРЕД использованием)
+            # Инициализируем fallback значения на случай ошибки
+            price_change_threshold = 0.0005  # Fallback
+            strength_multiplier = 2000.0  # Fallback
+            strength_reduction_neutral = 0.9  # Fallback
+
+            try:
+                signal_gen_config_ma = getattr(
+                    self.scalping_config, "signal_generator", {}
+                )
+                if isinstance(signal_gen_config_ma, dict):
+                    price_change_threshold = signal_gen_config_ma.get(
+                        "price_change_threshold", 0.0005
+                    )
+                    strength_multiplier = signal_gen_config_ma.get(
+                        "strength_multiplier", 2000.0
+                    )
+                    strength_reduction_neutral = signal_gen_config_ma.get(
+                        "strength_reduction_neutral", 0.9
+                    )
+                elif signal_gen_config_ma:
+                    price_change_threshold = getattr(
+                        signal_gen_config_ma, "price_change_threshold", 0.0005
+                    )
+                    strength_multiplier = getattr(
+                        signal_gen_config_ma, "strength_multiplier", 2000.0
+                    )
+                    strength_reduction_neutral = getattr(
+                        signal_gen_config_ma, "strength_reduction_neutral", 0.9
+                    )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить параметры signal_generator из конфига: {e}, используем fallback значения"
+                )
+
             # ✅ УЛУЧШЕНИЕ: Проверяем направление движения цены (последние 3-5 свечей)
             price_direction = None  # "up", "down", "neutral"
             if market_data.ohlcv_data and len(market_data.ohlcv_data) >= 5:
@@ -1629,10 +1968,10 @@ class FuturesSignalGenerator:
                     (closes[-1] - closes[0]) / closes[0] if closes[0] > 0 else 0
                 )
 
-                # Определяем направление (порог 0.05% чтобы избежать шума)
-                if price_change > 0.0005:  # Рост > 0.05%
+                # ✅ АДАПТИВНО: Порог изменения цены из конфига (определяется выше)
+                if price_change > price_change_threshold:  # Рост > порог
                     price_direction = "up"
-                elif price_change < -0.0005:  # Падение > 0.05%
+                elif price_change < -price_change_threshold:  # Падение > порог
                     price_direction = "down"
                 else:
                     price_direction = "neutral"
@@ -1647,9 +1986,9 @@ class FuturesSignalGenerator:
                     )
                     # Если короткий тренд сильнее - используем его
                     if abs(short_change) > abs(price_change) * 1.5:
-                        if short_change > 0.0005:
+                        if short_change > price_change_threshold:
                             price_direction = "up"
-                        elif short_change < -0.0005:
+                        elif short_change < -price_change_threshold:
                             price_direction = "down"
 
             # ✅ ДИАГНОСТИКА: Логируем значения для анализа
@@ -1665,9 +2004,188 @@ class FuturesSignalGenerator:
             ma_difference_pct = (
                 abs(ma_fast - ma_slow) / ma_slow * 100 if ma_slow > 0 else 0
             )
-            min_ma_difference_pct = (
-                0.1  # Минимальная разница EMA 0.1% для генерации сигнала
-            )
+
+            # ✅ АДАПТИВНО: Получаем min_ma_difference_pct из конфига (ПРИОРИТЕТ: per-symbol > режим > fallback)
+            min_ma_difference_pct = 0.1  # Fallback значение
+            try:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала проверяем per-symbol overrides из symbol_profiles
+                symbol_profile_found = False
+                try:
+                    adaptive_regime = getattr(
+                        self.scalping_config, "adaptive_regime", {}
+                    )
+                    adaptive_dict = (
+                        adaptive_regime
+                        if isinstance(adaptive_regime, dict)
+                        else (
+                            adaptive_regime.__dict__
+                            if hasattr(adaptive_regime, "__dict__")
+                            else {}
+                        )
+                    )
+                    symbol_profiles = adaptive_dict.get("symbol_profiles", {})
+
+                    if symbol and symbol_profiles and symbol in symbol_profiles:
+                        symbol_profile = symbol_profiles[symbol]
+                        symbol_profile_dict = (
+                            symbol_profile
+                            if isinstance(symbol_profile, dict)
+                            else (
+                                symbol_profile.__dict__
+                                if hasattr(symbol_profile, "__dict__")
+                                else {}
+                            )
+                        )
+                        regime_profile = symbol_profile_dict.get(regime_name_ma, {})
+                        regime_profile_dict = (
+                            regime_profile
+                            if isinstance(regime_profile, dict)
+                            else (
+                                regime_profile.__dict__
+                                if hasattr(regime_profile, "__dict__")
+                                else {}
+                            )
+                        )
+                        indicators_config = regime_profile_dict.get("indicators", {})
+                        indicators_dict = (
+                            indicators_config
+                            if isinstance(indicators_config, dict)
+                            else (
+                                indicators_config.__dict__
+                                if hasattr(indicators_config, "__dict__")
+                                else {}
+                            )
+                        )
+
+                        if "min_ma_difference_pct" in indicators_dict:
+                            min_ma_difference_pct = float(
+                                indicators_dict["min_ma_difference_pct"]
+                            )
+                            symbol_profile_found = True
+                            logger.debug(
+                                f"✅ PER-SYMBOL: min_ma_difference_pct для {symbol} ({regime_name_ma}): {min_ma_difference_pct}%"
+                            )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Не удалось получить per-symbol min_ma_difference_pct для {symbol}: {e}"
+                    )
+
+                # ✅ Если per-symbol не найден - используем глобальный порог режима
+                if not symbol_profile_found:
+                    try:
+                        adaptive_regime = getattr(
+                            self.scalping_config, "adaptive_regime", {}
+                        )
+                        adaptive_dict = (
+                            adaptive_regime
+                            if isinstance(adaptive_regime, dict)
+                            else (
+                                adaptive_regime.__dict__
+                                if hasattr(adaptive_regime, "__dict__")
+                                else {}
+                            )
+                        )
+
+                        # Ищем режим в конфиге
+                        regime_config = adaptive_dict.get(regime_name_ma, {})
+                        regime_config_dict = (
+                            regime_config
+                            if isinstance(regime_config, dict)
+                            else (
+                                regime_config.__dict__
+                                if hasattr(regime_config, "__dict__")
+                                else {}
+                            )
+                        )
+
+                        # Получаем indicators из режима
+                        indicators_config = regime_config_dict.get("indicators", {})
+                        indicators_dict = (
+                            indicators_config
+                            if isinstance(indicators_config, dict)
+                            else (
+                                indicators_config.__dict__
+                                if hasattr(indicators_config, "__dict__")
+                                else {}
+                            )
+                        )
+
+                        if "min_ma_difference_pct" in indicators_dict:
+                            min_ma_difference_pct = float(
+                                indicators_dict["min_ma_difference_pct"]
+                            )
+                            logger.debug(
+                                f"✅ ГЛОБАЛЬНЫЙ: min_ma_difference_pct для {regime_name_ma}: {min_ma_difference_pct}%"
+                            )
+                        elif isinstance(adaptive_regime, dict) or hasattr(
+                            adaptive_regime, regime_name_ma
+                        ):
+                            # Альтернативный способ доступа через Pydantic объект
+                            regime_config = getattr(
+                                adaptive_regime, regime_name_ma, None
+                            )
+                            if regime_config:
+                                indicators_config = getattr(
+                                    regime_config, "indicators", None
+                                )
+                                if indicators_config:
+                                    min_ma_difference_pct = getattr(
+                                        indicators_config, "min_ma_difference_pct", 0.1
+                                    )
+                                    logger.debug(
+                                        f"✅ ГЛОБАЛЬНЫЙ (Pydantic): min_ma_difference_pct для {regime_name_ma}: {min_ma_difference_pct}%"
+                                    )
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Не удалось получить глобальный min_ma_difference_pct для {regime_name_ma}: {e}"
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить адаптивный min_ma_difference_pct: {e}, используем fallback 0.1%"
+                )
+
+            # ✅ АДАПТИВНО: Получаем confidence значения по режиму
+            confidence_config = {}
+            if isinstance(signal_gen_config_ma, dict):
+                confidence_dict = signal_gen_config_ma.get("confidence", {})
+                if regime_name_ma and confidence_dict:
+                    regime_confidence = confidence_dict.get(regime_name_ma, {})
+                    if isinstance(regime_confidence, dict):
+                        confidence_config = regime_confidence
+            else:
+                confidence_obj = getattr(signal_gen_config_ma, "confidence", None)
+                if confidence_obj and regime_name_ma:
+                    regime_confidence = getattr(confidence_obj, regime_name_ma, None)
+                    if regime_confidence:
+                        confidence_config = {
+                            "bullish_strong": getattr(
+                                regime_confidence, "bullish_strong", 0.7
+                            ),
+                            "bullish_normal": getattr(
+                                regime_confidence, "bullish_normal", 0.6
+                            ),
+                            "bearish_strong": getattr(
+                                regime_confidence, "bearish_strong", 0.7
+                            ),
+                            "bearish_normal": getattr(
+                                regime_confidence, "bearish_normal", 0.6
+                            ),
+                            "macd_signal": getattr(
+                                regime_confidence, "macd_signal", 0.65
+                            ),
+                            "rsi_signal": getattr(regime_confidence, "rsi_signal", 0.6),
+                        }
+
+            # Fallback confidence значения
+            if not confidence_config:
+                confidence_config = {
+                    "bullish_strong": 0.7,
+                    "bullish_normal": 0.6,
+                    "bearish_strong": 0.7,
+                    "bearish_normal": 0.6,
+                    "macd_signal": 0.65,
+                    "rsi_signal": 0.6,
+                }
 
             # Пересечение быстрой и медленной MA
             if ma_fast > ma_slow and current_price > ma_fast and ma_slow > 0:
@@ -1687,14 +2205,18 @@ class FuturesSignalGenerator:
                     # ✅ ИСПРАВЛЕНИЕ: Правильный расчет strength для MA BULLISH
                     # strength = процентное изменение между EMA (в долях, не процентах)
                     strength = (ma_fast - ma_slow) / ma_slow  # Например: 0.0005 = 0.05%
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Умножаем на 2000 для нормализации к 0-1
-                    # Логика: разница 0.05% → strength = 0.05% * 2000 = 100% = 1.0
-                    # Разница 0.01% → strength = 0.01% * 2000 = 20% = 0.2
+                    # ✅ АДАПТИВНО: Множитель strength из конфига
+                    # Логика: разница 0.05% → strength = 0.05% * multiplier = 100% = 1.0
+                    # Разница 0.01% → strength = 0.01% * multiplier = 20% = 0.2
                     # Это позволит даже маленьким разницам EMA давать разумный strength
-                    strength = min(1.0, abs(strength) * 2000)  # abs() для безопасности
+                    strength = min(
+                        1.0, abs(strength) * strength_multiplier
+                    )  # ✅ АДАПТИВНО: Из конфига
                     # Снижаем силу сигнала если направление neutral (не подтверждено)
                     if price_direction == "neutral":
-                        strength *= 0.9  # Менее агрессивное снижение (было 0.7)
+                        strength *= (
+                            strength_reduction_neutral  # ✅ АДАПТИВНО: Из конфига
+                        )
 
                     logger.debug(
                         f"✅ MA BULLISH сигнал для {symbol}: EMA_12({ma_fast:.2f}) > EMA_26({ma_slow:.2f}), "
@@ -1711,9 +2233,11 @@ class FuturesSignalGenerator:
                             else 0.0,
                             "timestamp": datetime.now(),
                             "indicator_value": ma_fast,
-                            "confidence": 0.7
+                            "confidence": confidence_config.get("bullish_strong", 0.7)
                             if price_direction == "up"
-                            else 0.5,  # Больше уверенности если цена растет
+                            else confidence_config.get(
+                                "bullish_normal", 0.5
+                            ),  # ✅ АДАПТИВНО: Из конфига
                         }
                     )
 
@@ -1734,14 +2258,18 @@ class FuturesSignalGenerator:
                     # ✅ ИСПРАВЛЕНИЕ: Правильный расчет strength для MA BEARISH
                     # strength = процентное изменение между EMA (в долях, не процентах)
                     strength = (ma_slow - ma_fast) / ma_slow  # Например: 0.0005 = 0.05%
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Умножаем на 2000 для нормализации к 0-1
-                    # Логика: разница 0.05% → strength = 0.05% * 2000 = 100% = 1.0
-                    # Разница 0.01% → strength = 0.01% * 2000 = 20% = 0.2
+                    # ✅ АДАПТИВНО: Множитель strength из конфига
+                    # Логика: разница 0.05% → strength = 0.05% * multiplier = 100% = 1.0
+                    # Разница 0.01% → strength = 0.01% * multiplier = 20% = 0.2
                     # Это позволит даже маленьким разницам EMA давать разумный strength
-                    strength = min(1.0, abs(strength) * 2000)  # abs() для безопасности
+                    strength = min(
+                        1.0, abs(strength) * strength_multiplier
+                    )  # ✅ АДАПТИВНО: Из конфига
                     # Снижаем силу сигнала если направление neutral
                     if price_direction == "neutral":
-                        strength *= 0.9  # Менее агрессивное снижение (было 0.7)
+                        strength *= (
+                            strength_reduction_neutral  # ✅ АДАПТИВНО: Из конфига
+                        )
 
                     logger.debug(
                         f"✅ MA BEARISH сигнал для {symbol}: EMA_12({ma_fast:.2f}) < EMA_26({ma_slow:.2f}), "
@@ -1758,9 +2286,11 @@ class FuturesSignalGenerator:
                             else 0.0,
                             "timestamp": datetime.now(),
                             "indicator_value": ma_fast,
-                            "confidence": 0.7
+                            "confidence": confidence_config.get("bearish_strong", 0.7)
                             if price_direction == "down"
-                            else 0.5,  # Больше уверенности если цена падает
+                            else confidence_config.get(
+                                "bearish_normal", 0.5
+                            ),  # ✅ АДАПТИВНО: Из конфига
                         }
                     )
 
@@ -2002,6 +2532,21 @@ class FuturesSignalGenerator:
                 regime_key = (current_regime_name or "ranging").lower()
                 regime_profile = symbol_profile.get(regime_key, {})
                 filters_profile = self._to_dict(regime_profile.get("filters", {}))
+
+                # ✅ ИСПРАВЛЕНИЕ: Объединяем режим-специфичные параметры из by_regime с per-symbol overrides
+                if (
+                    hasattr(self, "_extract_regime_params")
+                    and self._extract_regime_params
+                ):
+                    base_regime_params = self._extract_regime_params(regime_key)
+                    base_regime_filters = self._to_dict(
+                        base_regime_params.get("filters", {})
+                    )
+                    # Объединяем: сначала базовые параметры режима, затем per-symbol overrides
+                    filters_profile = self._deep_merge_dict(
+                        base_regime_filters, filters_profile
+                    )
+
                 liquidity_override = self._to_dict(filters_profile.get("liquidity", {}))
                 order_flow_override = self._to_dict(
                     filters_profile.get("order_flow", {})
@@ -2121,9 +2666,18 @@ class FuturesSignalGenerator:
                                         MTFConfig
 
                                     mtf_modules = regime_params.modules
+                                    # ✅ ИСПРАВЛЕНО: Округляем score_bonus до int (может быть float в конфиге)
+                                    score_bonus_value = getattr(
+                                        mtf_modules, "mtf_score_bonus", 1
+                                    )
+                                    if isinstance(score_bonus_value, float):
+                                        score_bonus_value = int(
+                                            round(score_bonus_value)
+                                        )
+
                                     mtf_new_config = MTFConfig(
                                         confirmation_timeframe=mtf_modules.mtf_confirmation_timeframe,
-                                        score_bonus=mtf_modules.mtf_score_bonus,
+                                        score_bonus=score_bonus_value,  # ✅ ИСПРАВЛЕНО: Округляем float до int
                                         block_opposite=mtf_modules.mtf_block_opposite,  # ✅ Используем из режима
                                         block_neutral=getattr(
                                             mtf_modules, "mtf_block_neutral", False
@@ -2283,12 +2837,14 @@ class FuturesSignalGenerator:
                         # Получаем уровень из сигнала (если есть pivot или другой уровень)
                         level = signal.get("pivot_level") or signal.get("level")
 
+                        # ✅ АДАПТИВНО: Передаем режим рынка в MomentumFilter
                         # Проверяем критерии Momentum Trading
                         is_valid, reason = await self.momentum_filter.evaluate(
                             symbol=symbol,
                             candles=candles,
                             current_price=current_price,
                             level=level,
+                            market_regime=current_regime_name,  # ✅ АДАПТИВНО: Режим для адаптации порогов
                         )
 
                         if not is_valid:
@@ -2380,7 +2936,58 @@ class FuturesSignalGenerator:
         """Фильтрация и ранжирование сигналов"""
         try:
             # Фильтрация по минимальной силе
-            min_strength = self.scalping_config.min_signal_strength
+            # ✅ АДАПТИВНО: min_signal_strength из конфига по режиму
+            regime_name_min_strength = "ranging"  # Fallback
+            try:
+                if hasattr(self, "regime_manager") and self.regime_manager:
+                    regime_obj = self.regime_manager.get_current_regime()
+                    if regime_obj:
+                        regime_name_min_strength = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except:
+                pass
+
+            signal_gen_config_min = getattr(
+                self.scalping_config, "signal_generator", {}
+            )
+            thresholds_config_min = {}
+            if isinstance(signal_gen_config_min, dict):
+                thresholds_dict = signal_gen_config_min.get("thresholds", {})
+                if thresholds_dict:
+                    thresholds_config_min = (
+                        thresholds_dict.get("by_regime", {}).get(
+                            regime_name_min_strength, {}
+                        )
+                        if regime_name_min_strength
+                        else {}
+                    )
+                    if not thresholds_config_min:
+                        thresholds_config_min = thresholds_dict  # Fallback на базовые
+            else:
+                thresholds_obj = getattr(signal_gen_config_min, "thresholds", None)
+                if thresholds_obj:
+                    by_regime = getattr(thresholds_obj, "by_regime", None)
+                    if by_regime and regime_name_min_strength:
+                        thresholds_config_min = getattr(
+                            by_regime, regime_name_min_strength, {}
+                        )
+                    if not thresholds_config_min:
+                        thresholds_config_min = thresholds_obj  # Fallback на базовые
+
+            min_strength = (
+                thresholds_config_min.get("min_signal_strength", 0.3)
+                if isinstance(thresholds_config_min, dict)
+                else getattr(thresholds_config_min, "min_signal_strength", 0.3)
+            )
+            # Fallback на базовый min_signal_strength из scalping_config если нет в thresholds
+            if min_strength == 0.3 and hasattr(
+                self.scalping_config, "min_signal_strength"
+            ):
+                min_strength = getattr(self.scalping_config, "min_signal_strength", 0.3)
+
             filtered_signals = [
                 s for s in signals if s.get("strength", 0) >= min_strength
             ]

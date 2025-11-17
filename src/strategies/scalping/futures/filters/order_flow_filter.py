@@ -40,7 +40,11 @@ class OrderFlowFilter:
         if not self.config.enabled:
             return True
 
+        # ✅ ПРИОРИТЕТ: overrides (из by_regime.{regime}.filters.order_flow) имеет ВЫСШИЙ приоритет
+        # Сначала получаем параметры с учетом base -> regime_profiles
         params = self._resolve_parameters(regime)
+
+        # Затем применяем overrides (абсолютные значения из конфига, highest priority)
         if overrides:
             for key, value in overrides.items():
                 if value is None or key not in params:
@@ -53,7 +57,7 @@ class OrderFlowFilter:
                 except (TypeError, ValueError):
                     continue
 
-        relax_factor = self._get_relax_factor(symbol)
+        relax_factor = self._get_relax_factor(symbol, regime)
         external_relax = 1.0
         if relax_multiplier is not None and relax_multiplier > 0:
             external_relax = min(max(relax_multiplier, 0.1), 1.0)
@@ -126,11 +130,21 @@ class OrderFlowFilter:
         return True
 
     def _resolve_parameters(self, regime: Optional[str]) -> Dict[str, float]:
+        """
+        Получение параметров Order Flow с учетом приоритетов.
+
+        ПРИОРИТЕТ (от низкого к высокому):
+        1. base (self.config - базовые значения из futures_modules.order_flow)
+        2. regime_profiles (режим-специфичные значения)
+        3. overrides в is_signal_valid() (абсолютные значения из by_regime.{regime}.filters.order_flow)
+        """
+        # 1. Базовые значения из конфига (lowest priority)
         window = self.config.window
         long_threshold = self.config.long_threshold
         short_threshold = self.config.short_threshold
         min_total_depth = self.config.min_total_depth_usd
 
+        # 2. Regime profiles (выше приоритет чем base, но ниже чем overrides)
         profiles = getattr(self.config, "regime_profiles", {}) or {}
         if regime:
             profile = profiles.get(regime.lower())
@@ -143,6 +157,8 @@ class OrderFlowFilter:
                     short_threshold = profile.short_threshold
                 if profile.min_total_depth_usd is not None:
                     min_total_depth = max(0.0, profile.min_total_depth_usd)
+
+        # 3. overrides применяется в is_signal_valid() после этого (highest priority)
 
         return {
             "window": window,
@@ -225,7 +241,7 @@ class OrderFlowFilter:
             "asks": book.get("asks", [])[:window],
         }
 
-    def _get_relax_factor(self, symbol: str) -> float:
+    def _get_relax_factor(self, symbol: str, regime: Optional[str] = None) -> float:
         if not getattr(self.config, "fail_open_enabled", False):
             return 1.0
         state = self._relax_state.get(symbol)
@@ -235,7 +251,21 @@ class OrderFlowFilter:
         relax_until = state.get("relax_until", 0.0)
         if relax_until > now:
             state["notified"] = True
-            return max(0.05, getattr(self.config, "relax_multiplier", 0.5))
+            # ✅ ИСПРАВЛЕНО: Используем режим-специфичный relax_multiplier если доступен
+            base_multiplier = getattr(self.config, "relax_multiplier", 0.5)
+            if regime:
+                regime_multipliers = (
+                    getattr(self.config, "relax_multiplier_by_regime", {}) or {}
+                )
+                if isinstance(regime_multipliers, dict):
+                    regime_lower = regime.lower()
+                    if regime_lower in regime_multipliers:
+                        base_multiplier = regime_multipliers[regime_lower]
+                        logger.debug(
+                            f"🔓 OrderFlowFilter fail-open для {symbol} (regime={regime}): "
+                            f"используем режим-специфичный relax_multiplier={base_multiplier}"
+                        )
+            return max(0.05, base_multiplier)
         if relax_until and relax_until <= now:
             state["relax_until"] = 0.0
             state["notified"] = False

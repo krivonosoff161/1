@@ -72,7 +72,11 @@ class LiquidityFilter:
             )
             return True, None
 
+        # ✅ ПРИОРИТЕТ: thresholds_override (из by_regime.{regime}.filters.liquidity) имеет ВЫСШИЙ приоритет
+        # Сначала получаем пороги с учетом base -> symbol -> regime_multipliers
         thresholds, override_source = self._get_thresholds(symbol, regime)
+
+        # Затем применяем thresholds_override (абсолютные значения из конфига, highest priority)
         if thresholds_override:
             for key, value in thresholds_override.items():
                 if value is None:
@@ -264,6 +268,16 @@ class LiquidityFilter:
     def _get_thresholds(
         self, symbol: str, regime: Optional[str] = None
     ) -> Tuple[Dict[str, float], str]:
+        """
+        Получение порогов ликвидности с учетом приоритетов.
+
+        ПРИОРИТЕТ (от низкого к высокому):
+        1. base (self.config - базовые значения из futures_modules.liquidity_filter)
+        2. symbol_overrides (per-symbol переопределения)
+        3. regime_multipliers (множители для режима)
+        4. thresholds_override в evaluate() (абсолютные значения из by_regime.{regime}.filters.liquidity)
+        """
+        # 1. Базовые значения из конфига (lowest priority)
         base = {
             "min_daily_volume_usd": self.config.min_daily_volume_usd,
             "min_best_bid_volume_usd": self.config.min_best_bid_volume_usd,
@@ -275,6 +289,7 @@ class LiquidityFilter:
         thresholds = base.copy()
         source = "base"
 
+        # 2. Per-symbol overrides (выше приоритет чем base)
         overrides = getattr(self.config, "symbol_overrides", {}) or {}
         symbol_override = overrides.get(symbol)
         if symbol_override:
@@ -298,12 +313,15 @@ class LiquidityFilter:
                 thresholds["max_spread_percent"] = symbol_override.max_spread_percent
             source = "symbol"
 
+        # 3. Regime multipliers (выше приоритет чем symbol, но ниже чем thresholds_override)
         multipliers = getattr(self.config, "regime_multipliers", {}) or {}
         if regime:
             regime_profile = multipliers.get(regime.lower())
             if regime_profile:
                 thresholds = self._apply_regime_multipliers(thresholds, regime_profile)
                 source = f"{source}+{regime.lower()}"
+
+        # 4. thresholds_override применяется в evaluate() после этого (highest priority)
 
         return thresholds, source
 

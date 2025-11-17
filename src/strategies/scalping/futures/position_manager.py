@@ -18,6 +18,8 @@ from src.clients.futures_client import OKXFuturesClient
 from src.config import BotConfig, ScalpingConfig
 from src.strategies.modules.margin_calculator import MarginCalculator
 
+from ..spot.position_manager import TradeResult
+
 
 class FuturesPositionManager:
     """
@@ -122,11 +124,45 @@ class FuturesPositionManager:
                     await self._handle_position_closed(symbol)
                 return
 
-            # Обновление активных позиций
-            self.active_positions[symbol] = position
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновление активных позиций с сохранением режима
+            # Данные с биржи (position) не содержат режим, поэтому сохраняем его из active_positions
+            if symbol in self.active_positions:
+                # Сохраняем режим и другие метаданные из существующей позиции
+                saved_regime = self.active_positions[symbol].get("regime")
+                saved_entry_time = self.active_positions[symbol].get("entry_time")
+                saved_entry_price = self.active_positions[symbol].get("entry_price")
+                saved_position_side = self.active_positions[symbol].get("position_side")
+                # Обновляем позицию данными с биржи, но сохраняем метаданные
+                self.active_positions[symbol] = position.copy()
+                if saved_regime:
+                    self.active_positions[symbol]["regime"] = saved_regime
+                if saved_entry_time:
+                    self.active_positions[symbol]["entry_time"] = saved_entry_time
+                if saved_entry_price:
+                    self.active_positions[symbol]["entry_price"] = saved_entry_price
+                if saved_position_side:
+                    self.active_positions[symbol]["position_side"] = saved_position_side
+            else:
+                # Новая позиция - сохраняем как есть
+                self.active_positions[symbol] = position
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавляем режим в position для передачи в методы
+            # Режим нужен для per-regime TP и других адаптивных параметров
+            if (
+                symbol in self.active_positions
+                and "regime" in self.active_positions[symbol]
+            ):
+                position["regime"] = self.active_positions[symbol]["regime"]
 
             # Проверка безопасности позиции
             await self._check_position_safety(position)
+
+            # ✅ МОДЕРНИЗАЦИЯ #1: Проверка Profit Harvest (PH) - ПРИОРИТЕТ #1
+            # PH проверяется ПЕРЕД TP/SL для быстрого закрытия при высокой прибыли
+            ph_should_close = await self._check_profit_harvesting(position)
+            if ph_should_close:
+                await self._close_position_by_reason(position, "profit_harvest")
+                return  # Закрыли по PH, дальше не проверяем
 
             # Проверка TP/SL
             # ⚠️ ВАЖНО: Фиксированный SL отключен, когда используется TrailingSL
@@ -230,14 +266,47 @@ class FuturesPositionManager:
                     f"⚠️ Fallback расчет для {symbol}: size_in_coins={size_in_coins:.6f}, position_value={position_value:.2f} USD"
                 )
 
+            # ✅ ИСПРАВЛЕНО: Получаем режим рынка для адаптивного safety_threshold
+            market_regime = None
+            try:
+                # Получаем режим из позиции (сохранен при открытии)
+                market_regime = position.get("regime") or self.active_positions.get(
+                    symbol, {}
+                ).get("regime")
+
+                # Если режим не найден в позиции, получаем из orchestrator
+                if (
+                    not market_regime
+                    and hasattr(self, "orchestrator")
+                    and self.orchestrator
+                ):
+                    if (
+                        hasattr(self.orchestrator, "signal_generator")
+                        and self.orchestrator.signal_generator
+                    ):
+                        regime_manager = getattr(
+                            self.orchestrator.signal_generator, "regime_manager", None
+                        )
+                        if regime_manager:
+                            regime_obj = regime_manager.get_current_regime()
+                            if regime_obj:
+                                market_regime = (
+                                    regime_obj.lower()
+                                    if isinstance(regime_obj, str)
+                                    else str(regime_obj).lower()
+                                )
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось получить режим для {symbol}: {e}")
+
             # Проверка безопасности через Margin Calculator
             # ⚠️ Используем equity из позиции, а не общий баланс!
             logger.debug(
                 f"🔍 Проверка безопасности {symbol}: "
                 f"position_value={position_value:.2f}, equity={equity:.2f}, "
                 f"current_price={current_price:.2f}, entry_price={entry_price:.2f}, "
-                f"leverage={leverage}x"
+                f"leverage={leverage}x, regime={market_regime or 'N/A'}"
             )
+            # ✅ ИСПРАВЛЕНО: Не передаем safety_threshold - margin_calculator сам получит из конфига по режиму
             is_safe, details = self.margin_calculator.is_position_safe(
                 position_value,
                 equity,  # ✅ Используем equity из позиции!
@@ -245,7 +314,8 @@ class FuturesPositionManager:
                 entry_price,
                 side,
                 leverage,
-                safety_threshold=1.5,
+                safety_threshold=None,  # ✅ ИСПРАВЛЕНО: None - читает из конфига по режиму
+                regime=market_regime,  # ✅ ИСПРАВЛЕНО: Передаем режим для адаптивного safety_threshold
             )
 
             if not is_safe:
@@ -254,8 +324,13 @@ class FuturesPositionManager:
                 available_margin = details.get("available_margin", 0)
                 margin_used = details.get("margin_used", 0)
 
+                # margin_ratio приходит как коэффициент (1.5 = 150%), для лога конвертируем в проценты
+                try:
+                    margin_ratio_pct = float(margin_ratio) * 100.0
+                except Exception:
+                    margin_ratio_pct = margin_ratio
                 logger.warning(
-                    f"⚠️ Позиция {symbol} небезопасна: маржа {margin_ratio:.1f}%"
+                    f"⚠️ Позиция {symbol} небезопасна: маржа {margin_ratio_pct:.2f}%"
                 )
 
                 # 🛡️ КРИТИЧЕСКАЯ ЗАЩИТА от ложных срабатываний (как в LiquidationGuard):
@@ -321,6 +396,194 @@ class FuturesPositionManager:
         """Проверка Take Profit и Stop Loss (DEPRECATED - используется _check_tp_only)"""
         # Этот метод оставлен для совместимости, но теперь используется _check_tp_only
         await self._check_tp_only(position)
+
+    async def _check_profit_harvesting(self, position: Dict[str, Any]) -> bool:
+        """
+        ✅ МОДЕРНИЗАЦИЯ #1: Profit Harvest (PH) - быстрое закрытие при высокой прибыли
+
+        Досрочный выход если позиция быстро достигла хорошей прибыли!
+        ✅ АДАПТИВНЫЕ параметры из конфига по режиму рынка:
+        - TRENDING: $0.20 за 180 сек (3 мин) - из config_futures.yaml
+        - RANGING: $0.15 за 120 сек (2 мин) - из config_futures.yaml
+        - CHOPPY: $0.10 за 60 сек (1 мин) - из config_futures.yaml
+
+        Все параметры читаются динамически из конфига, нет захардкоженных значений!
+
+        Args:
+            position: Данные позиции с биржи
+
+        Returns:
+            True если нужно закрыть позицию по PH
+        """
+        try:
+            symbol = position.get("instId", "").replace("-SWAP", "")
+            size = float(position.get("pos", "0"))
+            side = position.get("posSide", "long")
+            entry_price = float(position.get("avgPx", "0"))
+            current_price = float(position.get("markPx", "0"))
+
+            if size == 0 or entry_price == 0 or current_price == 0:
+                return False
+
+            # Получаем параметры PH из конфига по режиму рынка
+            ph_enabled = False
+            ph_threshold = 0.0
+            ph_time_limit = 0
+
+            try:
+                # Получаем текущий режим рынка из orchestrator
+                market_regime = None
+                if hasattr(self, "orchestrator") and self.orchestrator:
+                    if (
+                        hasattr(self.orchestrator, "signal_generator")
+                        and self.orchestrator.signal_generator
+                    ):
+                        regime_manager = getattr(
+                            self.orchestrator.signal_generator, "regime_manager", None
+                        )
+                        if regime_manager:
+                            regime_obj = regime_manager.get_current_regime()
+                            if regime_obj:
+                                market_regime = (
+                                    regime_obj.lower()
+                                    if isinstance(regime_obj, str)
+                                    else str(regime_obj).lower()
+                                )
+
+                # Получаем параметры PH из конфига
+                adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                regime_config = None
+
+                if market_regime and hasattr(adaptive_regime, market_regime):
+                    regime_config = getattr(adaptive_regime, market_regime)
+                elif hasattr(adaptive_regime, "ranging"):  # Fallback на ranging
+                    regime_config = getattr(adaptive_regime, "ranging")
+
+                if regime_config:
+                    ph_enabled = getattr(regime_config, "ph_enabled", False)
+                    ph_threshold = getattr(regime_config, "ph_threshold", 0.0)
+                    ph_time_limit = getattr(regime_config, "ph_time_limit", 0)
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось получить параметры PH из конфига: {e}")
+                return False
+
+            if not ph_enabled or ph_threshold <= 0 or ph_time_limit <= 0:
+                return False
+
+            # Получаем время открытия позиции
+            entry_time_str = position.get("cTime", position.get("openTime", ""))
+            if not entry_time_str:
+                # Пытаемся получить из active_positions orchestrator
+                if hasattr(self, "orchestrator") and self.orchestrator:
+                    active_positions = getattr(
+                        self.orchestrator, "active_positions", {}
+                    )
+                    if symbol in active_positions:
+                        entry_time_str = active_positions[symbol].get("entry_time", "")
+
+            if not entry_time_str:
+                return False  # Не можем определить время открытия
+
+            try:
+                # Конвертируем время открытия (OKX использует миллисекунды)
+                if isinstance(entry_time_str, str):
+                    if entry_time_str.isdigit():
+                        entry_timestamp = (
+                            int(entry_time_str) / 1000.0
+                        )  # Конвертируем из мс в сек
+                    else:
+                        # Пытаемся распарсить ISO формат
+                        entry_time = datetime.fromisoformat(
+                            entry_time_str.replace("Z", "+00:00")
+                        )
+                        entry_timestamp = entry_time.timestamp()
+                else:
+                    entry_timestamp = (
+                        float(entry_time_str) / 1000.0
+                        if entry_time_str > 1000000000000
+                        else float(entry_time_str)
+                    )
+
+                # Используем UTC время для консистентности с биржей
+                from datetime import timezone
+
+                current_timestamp = datetime.now(timezone.utc).timestamp()
+                time_since_open = current_timestamp - entry_timestamp
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось рассчитать время открытия для {symbol}: {e}"
+                )
+                return False
+
+            # Рассчитываем PnL в USD
+            try:
+                # Получаем размер позиции в монетах
+                inst_details = await self.client.get_instrument_details(symbol)
+                ct_val = float(inst_details.get("ctVal", "0.01"))
+                size_in_coins = abs(size) * ct_val
+
+                # Рассчитываем PnL в USD
+                if side.lower() == "long":
+                    pnl_usd = size_in_coins * (current_price - entry_price)
+                else:  # short
+                    pnl_usd = size_in_coins * (entry_price - current_price)
+
+                # Вычитаем комиссию (открытие + закрытие)
+                # ✅ ИСПРАВЛЕНО: Комиссия из конфига (может быть в scalping или на верхнем уровне)
+                commission_config = getattr(self.scalping_config, "commission", None)
+                if commission_config is None:
+                    # Пробуем получить с верхнего уровня конфига
+                    commission_config = getattr(self.config, "commission", {})
+                if not commission_config:
+                    logger.warning(
+                        "⚠️ Комиссия не найдена в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
+                    )
+                    commission_rate = 0.0010
+                else:
+                    if isinstance(commission_config, dict):
+                        commission_rate = commission_config.get("trading_fee_rate")
+                    else:
+                        commission_rate = getattr(
+                            commission_config, "trading_fee_rate", None
+                        )
+                    if commission_rate is None:
+                        logger.warning(
+                            "⚠️ trading_fee_rate не найден в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
+                        )
+                        commission_rate = 0.0010
+                position_value = size_in_coins * entry_price
+                commission = position_value * commission_rate * 2  # Открытие + закрытие
+                net_pnl_usd = pnl_usd - commission
+
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось рассчитать PnL для {symbol}: {e}")
+                return False
+
+            # Проверка условий Profit Harvesting
+            if net_pnl_usd >= ph_threshold and time_since_open < ph_time_limit:
+                logger.info(
+                    f"💰💰💰 PROFIT HARVESTING TRIGGERED! {symbol} {side.upper()}\n"
+                    f"   Quick profit: ${net_pnl_usd:.4f} (threshold: ${ph_threshold:.2f})\n"
+                    f"   Time: {time_since_open:.1f}s (limit: {ph_time_limit}s)\n"
+                    f"   Entry: ${entry_price:.4f} → Exit: ${current_price:.4f}\n"
+                    f"   Regime: {market_regime or 'N/A'}"
+                )
+                return True
+
+            # Логируем прогресс к PH (если близко)
+            if time_since_open < ph_time_limit and net_pnl_usd > 0:
+                progress = (net_pnl_usd / ph_threshold) * 100 if ph_threshold > 0 else 0
+                if progress >= 50:  # Логируем только если >50% прогресса
+                    logger.debug(
+                        f"📊 PH прогресс {symbol}: ${net_pnl_usd:.4f} / ${ph_threshold:.2f} "
+                        f"({progress:.0f}%), время: {time_since_open:.1f}s / {ph_time_limit}s"
+                    )
+
+            return False
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки Profit Harvesting для {symbol}: {e}")
+            return False
 
     async def _check_tp_only(self, position: Dict[str, Any]):
         """Проверка только Take Profit (SL управляется TrailingSL в orchestrator)"""
@@ -591,11 +854,23 @@ class FuturesPositionManager:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка трейлинг стоп-лосс ПЕРЕД TP
             # Если трейлинг стоп-лосс активен (позиция в прибыли и достиг min_profit_to_close),
             # то TP отключен (трейлинг стоп-лосс имеет приоритет)
-            # ✅ ИСПРАВЛЕНО: Комиссия из конфига
-            commission_config = getattr(self.scalping_config, "commission", {})
-            commission_rate = commission_config.get(
-                "trading_fee_rate", 0.0010
-            )  # ✅ ОБНОВЛЕНО: 0.10% на круг
+            # ✅ ИСПРАВЛЕНО: Комиссия из конфига (может быть в scalping или на верхнем уровне)
+            commission_config = getattr(self.scalping_config, "commission", None)
+            if commission_config is None:
+                # Пробуем получить с верхнего уровня конфига
+                commission_config = getattr(self.config, "commission", {})
+            if not commission_config:
+                commission_config = {}
+            # ✅ ИСПРАВЛЕНО: Получаем комиссию из конфига, без захардкоженного fallback
+            if isinstance(commission_config, dict):
+                commission_rate = commission_config.get("trading_fee_rate")
+            else:
+                commission_rate = getattr(commission_config, "trading_fee_rate", None)
+            if commission_rate is None:
+                logger.warning(
+                    "⚠️ trading_fee_rate не найден в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
+                )
+                commission_rate = 0.0010  # Fallback только если не найдено в конфиге
             trailing_sl_active = False
             min_profit_to_close = None
 
@@ -731,10 +1006,28 @@ class FuturesPositionManager:
                 min_profit_to_close_pct = (
                     min_profit_to_close * 100
                 )  # Конвертируем в проценты для сравнения с tp_percent
-                commission_pct = commission_rate * 100  # Комиссия в процентах (0.09%)
-                # ✅ ИСПРАВЛЕНО: Buffer из конфига
+                # ✅ ИСПРАВЛЕНО: Комиссия от маржи с учетом плеча
+                leverage_for_calc = (
+                    getattr(self.scalping_config, "leverage", leverage) or leverage or 5
+                )
+                commission_rate_from_margin_calc = (
+                    commission_rate * leverage_for_calc * 2
+                )
+                commission_pct = (
+                    commission_rate_from_margin_calc * 100
+                )  # Комиссия от маржи в процентах
+
+                # ✅ ИСПРАВЛЕНО: Buffer из конфига (буфер на slippage)
+                slippage_buffer_pct = commission_config.get(
+                    "slippage_buffer_percent", 0.15
+                )
                 buffer_pct = commission_config.get("tp_buffer_percent", 0.1)
-                min_tp_percent = min_profit_to_close_pct + commission_pct + buffer_pct
+                min_tp_percent = (
+                    min_profit_to_close_pct
+                    + commission_pct
+                    + slippage_buffer_pct
+                    + buffer_pct
+                )
 
                 if tp_percent < min_tp_percent:
                     # TP слишком низкий - поднимаем до минимума
@@ -742,7 +1035,7 @@ class FuturesPositionManager:
                     tp_percent = min_tp_percent
                     logger.debug(
                         f"📊 {symbol} TP поднят с {original_tp:.2f}% до {tp_percent:.2f}% "
-                        f"(минимум для трейлинга: min_profit={min_profit_to_close_pct:.2f}% + комиссия={commission_pct:.2f}% + запас={buffer_pct:.2f}% = {min_tp_percent:.2f}%)"
+                        f"(минимум для трейлинга: min_profit={min_profit_to_close_pct:.2f}% + комиссия={commission_pct:.2f}% + slippage={slippage_buffer_pct:.2f}% + запас={buffer_pct:.2f}% = {min_tp_percent:.2f}%)"
                     )
 
             # ✅ НОВОЕ: Продление TP в тренде (из конфига)
@@ -770,21 +1063,57 @@ class FuturesPositionManager:
                         )
                         # Обновляем TP в позиции (вместо закрытия)
                         # ВАЖНО: Это требует обновления TP на бирже или сохранения нового TP для проверки
-                        # Пока что пропускаем закрытие по TP, если можем продлить
-                        if pnl_percent < new_tp + (commission_rate * 100):
+                        # ✅ ИСПРАВЛЕНО: Учитываем комиссию от маржи при продлении TP
+                        leverage_for_ext = (
+                            getattr(self.scalping_config, "leverage", leverage)
+                            or leverage
+                            or 5
+                        )
+                        commission_rate_from_margin_ext = (
+                            commission_rate * leverage_for_ext * 2
+                        )
+                        commission_pct_from_margin_ext = (
+                            commission_rate_from_margin_ext * 100
+                        )
+                        slippage_buffer_ext = commission_config.get(
+                            "slippage_buffer_percent", 0.15
+                        )
+                        if (
+                            pnl_percent
+                            < new_tp
+                            + commission_pct_from_margin_ext
+                            + slippage_buffer_ext
+                        ):
                             logger.debug(
                                 f"📊 {symbol} продлеваем TP до {new_tp:.2f}%, "
                                 f"текущий PnL {pnl_percent:.2f}% < нового TP {new_tp:.2f}%, не закрываем"
                             )
                             return  # Не закрываем, продлеваем TP
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Учитываем комиссию при проверке TP
-            # TP должен быть достаточно высоким, чтобы покрыть комиссию и дать прибыль
-            tp_percent_with_commission = tp_percent + (commission_rate * 100)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Учитываем комиссию при проверке TP с учетом плеча
+            # Комиссия берется от номинала, но TP в процентах от маржи
+            # При плече 5x: 0.10% от номинала = 1.00% от маржи (0.10% × 5 × 2 для открытия+закрытия)
+            # ✅ ИСПРАВЛЕНО: Учитываем плечо при расчете комиссии от маржи
+            commission_rate_from_margin = (
+                commission_rate * leverage * 2
+            )  # Комиссия от маржи (открытие + закрытие)
+            commission_pct_from_margin = (
+                commission_rate_from_margin * 100
+            )  # В процентах от маржи
+
+            # ✅ НОВОЕ: Получаем slippage buffer из конфига (буфер на slippage)
+            slippage_buffer_pct = commission_config.get(
+                "slippage_buffer_percent", 0.15
+            )  # По умолчанию 0.15%
+
+            # ✅ НОВОЕ: Динамический расчет TP с учетом комиссии, плеча и slippage
+            tp_percent_with_commission = (
+                tp_percent + commission_pct_from_margin + slippage_buffer_pct
+            )
 
             if pnl_percent >= tp_percent_with_commission:
-                # Учитываем комиссию при закрытии
-                net_pnl_percent = pnl_percent - (commission_rate * 100)
+                # ✅ ИСПРАВЛЕНО: Учитываем комиссию от маржи при закрытии
+                net_pnl_percent = pnl_percent - commission_pct_from_margin
                 if net_pnl_percent > 0:
                     logger.info(
                         f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}% "
@@ -797,7 +1126,7 @@ class FuturesPositionManager:
                     # После комиссии убыток - не закрываем по TP
                     logger.debug(
                         f"📊 {symbol} TP достигнут, но после комиссии убыток: "
-                        f"{pnl_percent:.2f}% - {commission_rate * 100:.2f}% = {net_pnl_percent:.2f}%, "
+                        f"{pnl_percent:.2f}% - {commission_pct_from_margin:.2f}% = {net_pnl_percent:.2f}%, "
                         f"не закрываем"
                     )
             else:
@@ -805,6 +1134,170 @@ class FuturesPositionManager:
                     f"📊 {symbol} PnL={pnl_percent:.2f}% < TP={tp_percent:.2f}% "
                     f"(с комиссией: {tp_percent_with_commission:.2f}%, нужно еще {tp_percent_with_commission - pnl_percent:.2f}%)"
                 )
+
+                # ✅ Big-profit exit: при крупной чистой прибыли — немедленное закрытие (игнор min_holding)
+                try:
+                    # ✅ ИСПРАВЛЕНО: Учитываем комиссию от маржи
+                    net_pnl_percent = pnl_percent - commission_pct_from_margin
+                    alts = {"SOL-USDT", "DOGE-USDT", "XRP-USDT"}
+                    if symbol in alts:
+                        big_profit_threshold = float(
+                            getattr(
+                                self.scalping_config,
+                                "big_profit_exit_percent_alts",
+                                1.0,
+                            )
+                        )
+                    else:
+                        big_profit_threshold = float(
+                            getattr(
+                                self.scalping_config,
+                                "big_profit_exit_percent_majors",
+                                0.6,
+                            )
+                        )
+
+                    # ✅ ИСПРАВЛЕНО: Добавлено детальное логирование Big-profit exit
+                    progress = (
+                        (net_pnl_percent / big_profit_threshold * 100)
+                        if big_profit_threshold > 0
+                        else 0
+                    )
+                    if (
+                        net_pnl_percent > 0 and progress >= 50
+                    ):  # Логируем если >50% прогресса
+                        logger.debug(
+                            f"📊 Big-profit exit прогресс {symbol}: net={net_pnl_percent:.2f}% / "
+                            f"порог={big_profit_threshold:.2f}% ({progress:.0f}%)"
+                        )
+
+                    if net_pnl_percent >= big_profit_threshold:
+                        logger.info(
+                            f"💰 Big-profit exit: {symbol} net={net_pnl_percent:.2f}% "
+                            f"(порог={big_profit_threshold:.2f}%), закрываем reduce_only MARKET"
+                        )
+                        await self._close_position_by_reason(
+                            position, "big_profit_exit"
+                        )
+                        return
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка Big-profit exit для {symbol}: {e}")
+
+            # ✅ НОВОЕ: Partial Take Profit лимитами (maker) перед полным закрытием
+            # Если прибыль положительная и порог близок/достигнут — пробуем закрыть часть позиции лимитом c post_only
+            try:
+                partial_cfg = getattr(self.scalping_config, "partial_tp", {})
+                ptp_enabled = partial_cfg.get("enabled", False)
+                ptp_fraction = float(partial_cfg.get("fraction", 0.5))
+                ptp_trigger = float(partial_cfg.get("trigger_percent", 0.5))  # в %
+                ptp_post_only = bool(partial_cfg.get("post_only", True))
+                ptp_offset_bps = float(
+                    partial_cfg.get("limit_offset_bps", 5.0)
+                )  # 5 б.п. = 0.05%
+
+                # Однократность: не делаем повторно для той же позиции
+                partial_done = False
+                if symbol in self.active_positions:
+                    partial_done = self.active_positions[symbol].get(
+                        "partial_tp_done", False
+                    )
+
+                # ✅ ИСПРАВЛЕНО: Добавлено детальное логирование Partial TP
+                if ptp_enabled and not partial_done and size > 0 and pnl_percent > 0:
+                    ptp_progress = (
+                        (pnl_percent / ptp_trigger * 100) if ptp_trigger > 0 else 0
+                    )
+                    if ptp_progress >= 50:  # Логируем если >50% прогресса
+                        logger.debug(
+                            f"📊 Partial TP прогресс {symbol}: pnl={pnl_percent:.2f}% / "
+                            f"триггер={ptp_trigger:.2f}% ({ptp_progress:.0f}%, done={partial_done})"
+                        )
+
+                if (
+                    ptp_enabled
+                    and not partial_done
+                    and size > 0
+                    and pnl_percent > 0
+                    and pnl_percent >= ptp_trigger
+                ):
+                    # Рассчитываем размер и цену лимитного reduce-only ордера
+                    size_abs = abs(size)
+                    size_partial = max(0.0, min(size_abs * ptp_fraction, size_abs))
+                    if size_partial > 0:
+                        # Цена с небольшим сдвигом в сторону тейк-профита
+                        offset = ptp_offset_bps / 10000.0
+                        if side.lower() == "long":
+                            limit_price = current_price * (1 + offset)
+                            close_side = "sell"
+                        else:
+                            limit_price = current_price * (1 - offset)
+                            close_side = "buy"
+
+                        logger.info(
+                            f"📌 Partial TP {symbol}: выставляем лимит {close_side} "
+                            f"{size_partial:.6f} контрактов @ {limit_price:.4f} "
+                            f"(pnl={pnl_percent:.2f}%, fraction={ptp_fraction:.2f}, post_only={ptp_post_only})"
+                        )
+
+                        try:
+                            # Размещаем лимитный reduce-only ордер (size уже в контрактах)
+                            result = await self.client.place_futures_order(
+                                symbol=symbol,
+                                side=close_side,
+                                size=size_partial,
+                                order_type="limit",
+                                price=limit_price,
+                                size_in_contracts=True,
+                                reduce_only=True,
+                                post_only=ptp_post_only,
+                            )
+                            if isinstance(result, dict) and result.get("code") == "0":
+                                # Помечаем, что partial TP выставлен
+                                if symbol in self.active_positions and isinstance(
+                                    self.active_positions[symbol], dict
+                                ):
+                                    self.active_positions[symbol][
+                                        "partial_tp_done"
+                                    ] = True
+                                logger.info(
+                                    f"✅ Partial TP ордер для {symbol} размещён успешно (ordId={result.get('data',[{}])[0].get('ordId','?')})"
+                                )
+                            else:
+                                # ❗ Если лимит не размещён — делаем fallback на MARKET reduce_only
+                                logger.warning(
+                                    f"⚠️ Partial TP лимит не размещён для {symbol}: {result}. Fallback → MARKET reduce_only"
+                                )
+                                market_res = await self.client.place_futures_order(
+                                    symbol=symbol,
+                                    side=close_side,
+                                    size=size_partial,
+                                    order_type="market",
+                                    size_in_contracts=True,
+                                    reduce_only=True,
+                                )
+                                if (
+                                    isinstance(market_res, dict)
+                                    and market_res.get("code") == "0"
+                                ):
+                                    if symbol in self.active_positions and isinstance(
+                                        self.active_positions[symbol], dict
+                                    ):
+                                        self.active_positions[symbol][
+                                            "partial_tp_done"
+                                        ] = True
+                                    logger.info(
+                                        f"✅ Partial TP MARKET для {symbol} выполнен успешно"
+                                    )
+                                else:
+                                    logger.error(
+                                        f"❌ Partial TP MARKET не выполнен для {symbol}: {market_res}"
+                                    )
+                        except Exception as e:
+                            logger.warning(
+                                f"⚠️ Ошибка размещения Partial TP для {symbol}: {e}"
+                            )
+            except Exception as e:
+                logger.debug(f"⚠️ Partial TP блок пропущен: {e}")
 
             # ⚠️ Stop Loss отключен - используется TrailingSL из orchestrator
             # TrailingSL более гибкий и учитывает тренд/режим рынка
@@ -846,8 +1339,15 @@ class FuturesPositionManager:
         # Fallback: возвращаем 0.5 (средняя сила тренда)
         return 0.5
 
-    async def _close_position_by_reason(self, position: Dict[str, Any], reason: str):
-        """Закрытие позиции по причине"""
+    async def _close_position_by_reason(
+        self, position: Dict[str, Any], reason: str
+    ) -> Optional[TradeResult]:
+        """
+        Закрытие позиции по причине
+
+        Returns:
+            TradeResult если позиция успешно закрыта, None в противном случае
+        """
         try:
             symbol = position.get("instId", "").replace("-SWAP", "")
 
@@ -872,10 +1372,14 @@ class FuturesPositionManager:
                 )
                 if symbol in self.active_positions:
                     del self.active_positions[symbol]
-                return
+                return None
 
             size = float(actual_position.get("pos", "0"))
             side = actual_position.get("posSide", "long")
+            entry_price = float(actual_position.get("avgPx", "0"))
+            exit_price = float(
+                actual_position.get("markPx", "0")
+            )  # Текущая цена (mark price)
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем финальный PnL перед закрытием
             final_pnl = 0.0
@@ -892,9 +1396,76 @@ class FuturesPositionManager:
             except (ValueError, TypeError):
                 pass
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем время открытия позиции для расчета duration
+            entry_time = None
+            if symbol in self.active_positions:
+                stored_position = self.active_positions[symbol]
+                if isinstance(stored_position, dict):
+                    entry_time = stored_position.get("entry_time")
+                    if isinstance(entry_time, str):
+                        try:
+                            entry_time = datetime.fromisoformat(
+                                entry_time.replace("Z", "+00:00")
+                            )
+                        except:
+                            entry_time = None
+                    elif not isinstance(entry_time, datetime):
+                        entry_time = None
+
+            # Если нет времени открытия в active_positions, используем текущее время как fallback
+            if entry_time is None:
+                entry_time = datetime.now()
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Комиссия из конфига (может быть в scalping или на верхнем уровне)
+            commission_config = getattr(self.scalping_config, "commission", None)
+            if commission_config is None:
+                # Пробуем получить с верхнего уровня конфига
+                commission_config = getattr(self.config, "commission", {})
+            if not commission_config:
+                commission_config = {}
+            # ✅ ИСПРАВЛЕНО: Получаем комиссию из конфига, без захардкоженного fallback
+            if isinstance(commission_config, dict):
+                commission_rate = commission_config.get("trading_fee_rate")
+            else:
+                commission_rate = getattr(commission_config, "trading_fee_rate", None)
+            if commission_rate is None:
+                logger.warning(
+                    "⚠️ trading_fee_rate не найден в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
+                )
+                commission_rate = 0.0010  # Fallback только если не найдено в конфиге
+
+            # Рассчитываем размер позиции в монетах (size уже в контрактах)
+            # Для futures size в контрактах, но для CSV нужен размер в монетах
+            size_in_coins = abs(
+                size
+            )  # size уже в контрактах, но для CSV используем как есть
+
+            # Рассчитываем комиссию (открытие + закрытие)
+            notional_entry = size_in_coins * entry_price
+            notional_exit = size_in_coins * exit_price
+            commission = (notional_entry + notional_exit) * commission_rate
+
+            # Рассчитываем gross PnL
+            if side.lower() == "long":
+                gross_pnl = (exit_price - entry_price) * size_in_coins
+            else:  # short
+                gross_pnl = (entry_price - exit_price) * size_in_coins
+
+            # Net PnL = Gross PnL - Commission
+            net_pnl = gross_pnl - commission
+
+            # Рассчитываем duration в секундах
+            duration_sec = (datetime.now() - entry_time).total_seconds()
+
             logger.info(
                 f"🔄 Закрытие позиции {symbol} по причине: {reason}, размер={size} контрактов, PnL={final_pnl:.2f} USDT"
             )
+            # ✅ Метрики: суммарное время удержания
+            try:
+                self.management_stats.setdefault("sum_duration_sec", 0.0)
+                self.management_stats["sum_duration_sec"] += float(duration_sec)
+            except Exception:
+                pass
 
             # Определение стороны закрытия
             close_side = "sell" if side.lower() == "long" else "buy"
@@ -915,6 +1486,21 @@ class FuturesPositionManager:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем финальный PnL в лог для анализатора
                 logger.info(
                     f"✅ Позиция {symbol} закрыта по {reason}, PnL = {final_pnl:+.2f} USDT"
+                )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
+                trade_result = TradeResult(
+                    symbol=symbol,
+                    side=side.lower(),  # "long" или "short"
+                    entry_price=entry_price,
+                    exit_price=exit_price,
+                    size=size_in_coins,
+                    gross_pnl=gross_pnl,
+                    commission=commission,
+                    net_pnl=net_pnl,
+                    duration_sec=duration_sec,
+                    reason=reason,
+                    timestamp=datetime.now(),
                 )
 
                 # Обновление статистики
@@ -973,12 +1559,17 @@ class FuturesPositionManager:
                         logger.warning(
                             f"⚠️ Ошибка синхронизации позиций после закрытия {symbol}: {e}"
                         )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Возвращаем TradeResult для записи в CSV
+                return trade_result
             else:
                 error_msg = result.get("msg", "Неизвестная ошибка")
                 logger.error(f"❌ Ошибка закрытия позиции {symbol}: {error_msg}")
+                return None
 
         except Exception as e:
             logger.error(f"Ошибка закрытия позиции: {e}")
+            return None
 
     async def _emergency_close_position(self, position: Dict[str, Any]):
         """Экстренное закрытие позиции"""
@@ -1072,11 +1663,14 @@ class FuturesPositionManager:
         except Exception as e:
             logger.error(f"Ошибка обновления статистики закрытия: {e}")
 
-    async def close_position_manually(self, symbol: str) -> Dict[str, Any]:
+    async def close_position_manually(self, symbol: str) -> Optional[TradeResult]:
         """
         ✅ РУЧНОЕ ЗАКРЫТИЕ ПОЗИЦИИ (для TrailingSL)
 
         Закрывает позицию через API без конфликтов с OCO
+
+        Returns:
+            TradeResult если позиция успешно закрыта, None в противном случае
         """
         try:
             # Получаем информацию о позиции с биржи
@@ -1086,7 +1680,7 @@ class FuturesPositionManager:
             # Проверяем, что positions это список
             if not isinstance(positions, list) or len(positions) == 0:
                 logger.warning(f"Позиция {symbol} не найдена на бирже (список пустой)")
-                return {"success": False, "error": "Позиция не найдена"}
+                return None
 
             # Ищем нужную позицию в списке
             for pos_data in positions:
@@ -1097,11 +1691,7 @@ class FuturesPositionManager:
                 size = float(pos_data.get("pos", "0"))
                 if size == 0:
                     logger.warning(f"Размер позиции {symbol} = 0, позиция уже закрыта")
-                    return {
-                        "success": True,
-                        "symbol": symbol,
-                        "message": "Позиция уже закрыта",
-                    }
+                    return None
 
                 side = pos_data.get("posSide", "long")
 
@@ -1143,10 +1733,93 @@ class FuturesPositionManager:
                     logger.info(
                         f"✅ Позиция {symbol} закрыта через API, PnL = {final_pnl:+.2f} USDT"
                     )
+
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
+                    entry_price = float(pos_data.get("avgPx", "0"))
+                    exit_price = float(pos_data.get("markPx", "0"))
+
+                    # Получаем время открытия позиции
+                    entry_time = None
+                    if symbol in self.active_positions:
+                        stored_position = self.active_positions[symbol]
+                        if isinstance(stored_position, dict):
+                            entry_time = stored_position.get("entry_time")
+                            if isinstance(entry_time, str):
+                                try:
+                                    entry_time = datetime.fromisoformat(
+                                        entry_time.replace("Z", "+00:00")
+                                    )
+                                except:
+                                    entry_time = None
+                            elif not isinstance(entry_time, datetime):
+                                entry_time = None
+
+                    if entry_time is None:
+                        entry_time = datetime.now()
+
+                    # ✅ ИСПРАВЛЕНО: Комиссия из конфига (может быть в scalping или на верхнем уровне)
+                    commission_config = getattr(
+                        self.scalping_config, "commission", None
+                    )
+                    if commission_config is None:
+                        # Пробуем получить с верхнего уровня конфига
+                        commission_config = getattr(self.config, "commission", {})
+                    if not commission_config:
+                        commission_config = {}
+                    # ✅ ИСПРАВЛЕНО: Получаем комиссию из конфига, без захардкоженного fallback
+                    if isinstance(commission_config, dict):
+                        commission_rate = commission_config.get("trading_fee_rate")
+                    else:
+                        commission_rate = getattr(
+                            commission_config, "trading_fee_rate", None
+                        )
+                    if commission_rate is None:
+                        logger.warning(
+                            "⚠️ trading_fee_rate не найден в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
+                        )
+                        commission_rate = (
+                            0.0010  # Fallback только если не найдено в конфиге
+                        )
+
+                    size_in_coins = abs(size)
+                    notional_entry = size_in_coins * entry_price
+                    notional_exit = size_in_coins * exit_price
+                    commission = (notional_entry + notional_exit) * commission_rate
+
+                    # Рассчитываем gross PnL
+                    if side.lower() == "long":
+                        gross_pnl = (exit_price - entry_price) * size_in_coins
+                    else:
+                        gross_pnl = (entry_price - exit_price) * size_in_coins
+
+                    net_pnl = gross_pnl - commission
+                    duration_sec = (datetime.now() - entry_time).total_seconds()
+
+                    trade_result = TradeResult(
+                        symbol=symbol,
+                        side=side.lower(),
+                        entry_price=entry_price,
+                        exit_price=exit_price,
+                        size=size_in_coins,
+                        gross_pnl=gross_pnl,
+                        commission=commission,
+                        net_pnl=net_pnl,
+                        duration_sec=duration_sec,
+                        reason="manual",
+                        timestamp=datetime.now(),
+                    )
+                    # ✅ Метрики: суммарное время удержания и счётчики закрытий
+                    try:
+                        self.management_stats.setdefault("sum_duration_sec", 0.0)
+                        self.management_stats["sum_duration_sec"] += float(duration_sec)
+                        self._update_close_stats("manual")
+                    except Exception:
+                        pass
+
                     # Удаляем из активных позиций
                     if symbol in self.active_positions:
                         del self.active_positions[symbol]
-                    return {"success": True, "symbol": symbol}
+                    return trade_result
                 else:
                     error_msg = result.get("msg", "Неизвестная ошибка")
                     error_code = result.get("data", [{}])[0].get("sCode", "")
@@ -1298,6 +1971,11 @@ class FuturesPositionManager:
                 "tp_rate": tp_rate,
                 "sl_rate": sl_rate,
                 "total_pnl": self.management_stats["total_pnl"],
+                "avg_duration_sec": (
+                    (self.management_stats.get("sum_duration_sec", 0.0) / closed)
+                    if closed > 0
+                    else 0.0
+                ),
                 "last_position_time": self.position_history[-1]["close_time"]
                 if self.position_history
                 else None,

@@ -32,6 +32,7 @@ from .indicators.order_flow_indicator import OrderFlowIndicator
 from .indicators.trailing_stop_loss import TrailingStopLoss
 from .order_executor import FuturesOrderExecutor
 from .position_manager import FuturesPositionManager
+from .private_websocket_manager import PrivateWebSocketManager
 from .risk.max_size_limiter import MaxSizeLimiter
 from .signal_generator import FuturesSignalGenerator
 from .websocket_manager import FuturesWebSocketManager
@@ -92,29 +93,83 @@ class FuturesScalpingOrchestrator:
             futures_modules.slippage_guard if futures_modules.slippage_guard else {}
         )
 
-        # ✅ ИСПРАВЛЕНО: Параметры маржи из конфига
+        # ✅ АДАПТИВНО: Параметры маржи из конфига
         margin_config = getattr(self.scalping_config, "margin", {})
-        maintenance_margin_ratio = margin_config.get("maintenance_margin_ratio", 0.01)
-        initial_margin_ratio = margin_config.get("initial_margin_ratio", 0.1)
+        if isinstance(margin_config, dict):
+            maintenance_margin_ratio = margin_config.get(
+                "maintenance_margin_ratio", 0.01
+            )
+            initial_margin_ratio = margin_config.get("initial_margin_ratio", 0.1)
+        else:
+            maintenance_margin_ratio = getattr(
+                margin_config, "maintenance_margin_ratio", 0.01
+            )
+            initial_margin_ratio = getattr(margin_config, "initial_margin_ratio", 0.1)
 
         self.margin_calculator = MarginCalculator(
-            default_leverage=leverage,  # ✅ АДАПТИВНО: Из конфига (уже получен выше)
+            default_leverage=leverage,  # ✅ АДАПТИВНО: Из конфига
             maintenance_margin_ratio=maintenance_margin_ratio,
             initial_margin_ratio=initial_margin_ratio,
         )
+        # ✅ АДАПТИВНО: Сохраняем ссылку на margin_config для адаптивных параметров
+        self.margin_calculator.margin_config = margin_config
+
+        # ✅ АДАПТИВНО: Liquidation Guard параметры из конфига
+        liquidation_config = getattr(self.scalping_config, "liquidation_guard", {})
+        if isinstance(liquidation_config, dict):
+            warning_threshold = liquidation_config.get("warning_threshold", 1.8)
+            danger_threshold = liquidation_config.get("danger_threshold", 1.3)
+            critical_threshold = liquidation_config.get("critical_threshold", 1.1)
+            auto_close_threshold = liquidation_config.get("auto_close_threshold", 1.05)
+        else:
+            warning_threshold = getattr(liquidation_config, "warning_threshold", 1.8)
+            danger_threshold = getattr(liquidation_config, "danger_threshold", 1.3)
+            critical_threshold = getattr(liquidation_config, "critical_threshold", 1.1)
+            auto_close_threshold = getattr(
+                liquidation_config, "auto_close_threshold", 1.05
+            )
 
         self.liquidation_guard = LiquidationGuard(
             margin_calculator=self.margin_calculator,
-            warning_threshold=1.8,
-            danger_threshold=1.3,
-            critical_threshold=1.1,
-            auto_close_threshold=1.05,
+            warning_threshold=warning_threshold,
+            danger_threshold=danger_threshold,
+            critical_threshold=critical_threshold,
+            auto_close_threshold=auto_close_threshold,
         )
+        # ✅ АДАПТИВНО: Сохраняем ссылку на liquidation_config для адаптивных параметров
+        self.liquidation_guard.liquidation_config = liquidation_config
+
+        # ✅ АДАПТИВНО: Slippage Guard параметры из конфига
+        slippage_config_full = getattr(self.scalping_config, "slippage_guard", {})
+        if isinstance(slippage_config_full, dict):
+            max_slippage_percent = slippage_config_full.get("max_slippage_percent", 0.1)
+            max_spread_percent = slippage_config_full.get("max_spread_percent", 0.05)
+            order_timeout = slippage_config_full.get("order_timeout", 30.0)
+        else:
+            max_slippage_percent = getattr(
+                slippage_config_full, "max_slippage_percent", 0.1
+            )
+            max_spread_percent = getattr(
+                slippage_config_full, "max_spread_percent", 0.05
+            )
+            order_timeout = getattr(slippage_config_full, "order_timeout", 30.0)
+
+        # Fallback на futures_modules.slippage_guard если нет в scalping.slippage_guard
+        if not slippage_config_full or (
+            isinstance(slippage_config_full, dict) and not slippage_config_full
+        ):
+            max_slippage_percent = slippage_config.get("max_slippage_percent", 0.1)
+            max_spread_percent = slippage_config.get("max_spread_percent", 0.05)
+            order_timeout = slippage_config.get("order_timeout", 30.0)
 
         self.slippage_guard = SlippageGuard(
-            max_slippage_percent=slippage_config.get("max_slippage_percent", 0.1),
-            max_spread_percent=slippage_config.get("max_spread_percent", 0.05),
-            order_timeout=slippage_config.get("order_timeout", 30.0),
+            max_slippage_percent=max_slippage_percent,
+            max_spread_percent=max_spread_percent,
+            order_timeout=order_timeout,
+        )
+        # ✅ АДАПТИВНО: Сохраняем ссылку на slippage_config для адаптивных параметров
+        self.slippage_guard.slippage_config = (
+            slippage_config_full if slippage_config_full else slippage_config
         )
 
         # Торговые модули
@@ -143,10 +198,19 @@ class FuturesScalpingOrchestrator:
         # TrailingStopLoss для каждой позиции (словарь по символам)
         self.trailing_sl_by_symbol = {}
 
-        # FastADX для быстрого определения тренда
-        self.fast_adx = FastADX(period=9, threshold=20.0)
+        # ✅ АДАПТИВНО: FastADX параметры из конфига
+        fast_adx_config = getattr(self.scalping_config, "fast_adx", {})
+        if isinstance(fast_adx_config, dict):
+            fast_adx_period = fast_adx_config.get("period", 9)
+            fast_adx_threshold = fast_adx_config.get("threshold", 20.0)
+        else:
+            fast_adx_period = getattr(fast_adx_config, "period", 9)
+            fast_adx_threshold = getattr(fast_adx_config, "threshold", 20.0)
+        self.fast_adx = FastADX(period=fast_adx_period, threshold=fast_adx_threshold)
+        # ✅ АДАПТИВНО: Сохраняем ссылку на fast_adx_config для адаптивных параметров
+        self.fast_adx.fast_adx_config = fast_adx_config
 
-        # OrderFlowIndicator для анализа потока ордеров
+        # ✅ АДАПТИВНО: OrderFlowIndicator параметры из конфига
         order_flow_params = None
         if getattr(config, "futures_modules", None):
             order_flow_params = getattr(config.futures_modules, "order_flow", None)
@@ -155,17 +219,43 @@ class FuturesScalpingOrchestrator:
             of_long = order_flow_params.get("long_threshold", 0.1)
             of_short = order_flow_params.get("short_threshold", -0.1)
         else:
-            of_window = getattr(order_flow_params, "window", 100)
-            of_long = getattr(order_flow_params, "long_threshold", 0.1)
-            of_short = getattr(order_flow_params, "short_threshold", -0.1)
+            of_window = (
+                getattr(order_flow_params, "window", 100) if order_flow_params else 100
+            )
+            of_long = (
+                getattr(order_flow_params, "long_threshold", 0.1)
+                if order_flow_params
+                else 0.1
+            )
+            of_short = (
+                getattr(order_flow_params, "short_threshold", -0.1)
+                if order_flow_params
+                else -0.1
+            )
         self.order_flow = OrderFlowIndicator(
             window=of_window,
             long_threshold=of_long,
             short_threshold=of_short,
         )
 
-        # FundingRateMonitor для мониторинга фандинга
-        self.funding_monitor = FundingRateMonitor(max_funding_rate=0.05)  # 0.05%
+        # ✅ АДАПТИВНО: FundingRateMonitor параметры из конфига
+        funding_config = getattr(config, "futures_modules", {})
+        if funding_config:
+            funding_monitor_config = getattr(funding_config, "funding_monitor", None)
+            if funding_monitor_config:
+                if isinstance(funding_monitor_config, dict):
+                    max_funding_rate = funding_monitor_config.get(
+                        "max_funding_rate", 0.05
+                    )
+                else:
+                    max_funding_rate = getattr(
+                        funding_monitor_config, "max_funding_rate", 0.05
+                    )
+            else:
+                max_funding_rate = 0.05  # Fallback
+        else:
+            max_funding_rate = 0.05  # Fallback
+        self.funding_monitor = FundingRateMonitor(max_funding_rate=max_funding_rate)
 
         # MaxSizeLimiter для защиты от больших позиций
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Загружаем параметры из конфига
@@ -220,10 +310,64 @@ class FuturesScalpingOrchestrator:
 
         self.ws_manager = FuturesWebSocketManager(ws_url=ws_url)
 
+        # ✅ МОДЕРНИЗАЦИЯ #2: Private WebSocket для мониторинга позиций/ордеров
+        self.private_ws_manager: Optional[PrivateWebSocketManager] = None
+        try:
+            self.private_ws_manager = PrivateWebSocketManager(
+                api_key=okx_config.api_key,
+                secret_key=okx_config.api_secret,
+                passphrase=okx_config.passphrase,
+                sandbox=okx_config.sandbox,
+            )
+            logger.info("✅ Private WebSocket Manager инициализирован")
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Не удалось инициализировать Private WebSocket Manager: {e}"
+            )
+
         # Состояние
         self.is_running = False
         self.active_positions = {}
         self.trading_session = None
+        self.trailing_sl_by_symbol: Dict[str, TrailingStopLoss] = {}
+        self._closing_positions: set = set()  # ✅ Защита от множественных закрытий
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #1: Кэш для периодической проверки TSL
+        self._last_tsl_check_time: Dict[
+            str, float
+        ] = {}  # symbol -> timestamp последней проверки
+        # ✅ АДАПТИВНО: Базовый интервал проверки TSL из конфига (будет обновляться по режиму)
+        tsl_config = getattr(self.scalping_config, "trailing_sl", {})
+        self._tsl_check_interval: float = getattr(
+            tsl_config, "check_interval_seconds", 1.5
+        )  # По умолчанию 1.5 сек
+        # ✅ АДАПТИВНО: Кэш интервалов проверки TSL по режимам
+        self._tsl_check_intervals_by_regime: Dict[str, float] = {}  # regime -> interval
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: Флаги для автоматической разблокировки после emergency stop
+        self._emergency_stop_active: bool = False
+        self._emergency_stop_time: float = 0.0
+        self._emergency_stop_balance: float = 0.0
+
+        # ✅ АДАПТИВНО: Задержки из конфига
+        delays_config = getattr(self.scalping_config, "delays", {})
+        if isinstance(delays_config, dict):
+            self._api_request_delay_ms = delays_config.get("api_request_delay_ms", 300)
+            self._symbol_switch_delay_ms = delays_config.get(
+                "symbol_switch_delay_ms", 200
+            )
+            self._position_sync_delay_ms = delays_config.get(
+                "position_sync_delay_ms", 500
+            )
+        else:
+            self._api_request_delay_ms = getattr(
+                delays_config, "api_request_delay_ms", 300
+            )
+            self._symbol_switch_delay_ms = getattr(
+                delays_config, "symbol_switch_delay_ms", 200
+            )
+            self._position_sync_delay_ms = getattr(
+                delays_config, "position_sync_delay_ms", 500
+            )
+        self._delays_config = delays_config  # Сохраняем для адаптации по режимам
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Кэш последних ордеров и задержки между сигналами
         # Кэш последних ордеров: {symbol: {order_id, timestamp, status}}
@@ -316,6 +460,14 @@ class FuturesScalpingOrchestrator:
         # Отключение WebSocket
         await self.ws_manager.disconnect()
 
+        # ✅ МОДЕРНИЗАЦИЯ #2: Отключение Private WebSocket
+        if self.private_ws_manager:
+            try:
+                await self.private_ws_manager.disconnect()
+                logger.info("✅ Private WebSocket отключен")
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка отключения Private WebSocket: {e}")
+
         # Закрытие клиента
         await self.client.close()
 
@@ -378,7 +530,9 @@ class FuturesScalpingOrchestrator:
                         )
 
                     # ✅ ИСПРАВЛЕНИЕ: Задержка для избежания rate limit (429)
-                    await asyncio.sleep(0.3)  # 300ms задержка между запросами
+                    # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
+                    delay_ms = self._get_adaptive_delay("api_request_delay_ms", 300)
+                    await asyncio.sleep(delay_ms / 1000.0)
 
                     try:
                         # Устанавливаем leverage для short позиций
@@ -406,7 +560,9 @@ class FuturesScalpingOrchestrator:
                         leverage_set = True
                     except Exception as e:
                         # ✅ ИСПРАВЛЕНИЕ: Задержка перед повторной попыткой
-                        await asyncio.sleep(0.3)
+                        # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
+                        delay_ms = self._get_adaptive_delay("api_request_delay_ms", 300)
+                        await asyncio.sleep(delay_ms / 1000.0)
                         # ✅ Попытка 2: С posSide="long" (может потребоваться в некоторых случаях)
                         try:
                             logger.debug(
@@ -422,7 +578,11 @@ class FuturesScalpingOrchestrator:
                             leverage_set = True
                         except Exception as e2:
                             # ✅ ИСПРАВЛЕНИЕ: Задержка перед следующей попыткой
-                            await asyncio.sleep(0.3)
+                            # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
+                            delay_ms = self._get_adaptive_delay(
+                                "api_request_delay_ms", 300
+                            )
+                            await asyncio.sleep(delay_ms / 1000.0)
                             # ✅ Попытка 3: С posSide="short"
                             try:
                                 await self.client.set_leverage(
@@ -439,7 +599,9 @@ class FuturesScalpingOrchestrator:
                                 )
 
                 # ✅ ИСПРАВЛЕНИЕ: Задержка между символами для избежания rate limit
-                await asyncio.sleep(0.2)  # 200ms задержка между символами
+                # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
+                delay_ms = self._get_adaptive_delay("symbol_switch_delay_ms", 200)
+                await asyncio.sleep(delay_ms / 1000.0)
 
                 if not leverage_set:
                     if self.client.sandbox:
@@ -492,6 +654,31 @@ class FuturesScalpingOrchestrator:
 
         except Exception as e:
             logger.error(f"❌ Ошибка инициализации WebSocket: {e}")
+
+        # ✅ МОДЕРНИЗАЦИЯ #2: Подключение Private WebSocket для мониторинга позиций/ордеров
+        if self.private_ws_manager:
+            try:
+                connected = await self.private_ws_manager.connect()
+                if connected:
+                    # Подписываемся на обновления позиций
+                    await self.private_ws_manager.subscribe_positions(
+                        callback=self._handle_private_ws_positions
+                    )
+                    # Подписываемся на обновления ордеров
+                    await self.private_ws_manager.subscribe_orders(
+                        callback=self._handle_private_ws_orders
+                    )
+                    logger.info(
+                        "✅ Private WebSocket подключен и подписан на позиции/ордера"
+                    )
+                else:
+                    logger.warning(
+                        "⚠️ Не удалось подключиться к Private WebSocket (будет использоваться REST API)"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Ошибка подключения Private WebSocket: {e} (будет использоваться REST API)"
+                )
 
     async def _handle_ticker_data(self, symbol: str, data: dict):
         """Обработка данных тикера"""
@@ -754,6 +941,12 @@ class FuturesScalpingOrchestrator:
             "extend_time_multiplier": 1.0,  # ✅ ЭТАП 4.3
             "regime_multiplier": 1.0,  # ✅ НОВОЕ: Множитель режима (из конфига, fallback)
             "trend_strength_boost": 1.0,  # ✅ НОВОЕ: Буст при сильном тренде (из конфига, fallback)
+            "check_interval_seconds": 1.5,  # ✅ АДАПТИВНО: Интервал проверки TSL (fallback)
+            "short_reversal_min_duration": 30,  # ✅ АДАПТИВНО: Short reversal protection (fallback)
+            "short_reversal_max_percent": 0.5,  # ✅ АДАПТИВНО: Short reversal protection (fallback)
+            "trail_growth_low_multiplier": 1.5,  # ✅ АДАПТИВНО: Trail growth (fallback)
+            "trail_growth_medium_multiplier": 2.0,  # ✅ АДАПТИВНО: Trail growth (fallback)
+            "trail_growth_high_multiplier": 3.0,  # ✅ АДАПТИВНО: Trail growth (fallback)
         }
 
         trailing_sl_config = None
@@ -806,6 +999,43 @@ class FuturesScalpingOrchestrator:
                 params["extend_time_multiplier"],
             )
 
+            # ✅ АДАПТИВНО: Short reversal protection параметры из общего конфига
+            short_reversal_config = self._get_config_value(
+                trailing_sl_config, "short_reversal_protection", None
+            )
+            if short_reversal_config:
+                short_reversal_dict = (
+                    self._to_dict(short_reversal_config)
+                    if not isinstance(short_reversal_config, dict)
+                    else short_reversal_config
+                )
+                params["short_reversal_min_duration"] = self._get_config_value(
+                    short_reversal_dict, "min_reversal_duration_seconds", 30
+                )
+                params["short_reversal_max_percent"] = self._get_config_value(
+                    short_reversal_dict, "max_reversal_percent", 0.5
+                )
+
+            # ✅ АДАПТИВНО: Trail growth multipliers из общего конфига
+            trail_growth_config = self._get_config_value(
+                trailing_sl_config, "trail_growth", None
+            )
+            if trail_growth_config:
+                trail_growth_dict = (
+                    self._to_dict(trail_growth_config)
+                    if not isinstance(trail_growth_config, dict)
+                    else trail_growth_config
+                )
+                params["trail_growth_low_multiplier"] = self._get_config_value(
+                    trail_growth_dict, "low_profit_multiplier", 1.5
+                )
+                params["trail_growth_medium_multiplier"] = self._get_config_value(
+                    trail_growth_dict, "medium_profit_multiplier", 2.0
+                )
+                params["trail_growth_high_multiplier"] = self._get_config_value(
+                    trail_growth_dict, "high_profit_multiplier", 3.0
+                )
+
             # ✅ ЭТАП 4.5: Адаптация под режим рынка
             if regime:
                 regime_lower = regime.lower() if isinstance(regime, str) else None
@@ -827,7 +1057,33 @@ class FuturesScalpingOrchestrator:
                             if not isinstance(regime_params, dict)
                             else regime_params
                         )
-                        # Переопределяем параметры для режима
+                        # ✅ КРИТИЧЕСКИЕ: Переопределяем базовые параметры TSL для режима
+                        if "initial_trail" in regime_params_dict:
+                            params["initial_trail"] = regime_params_dict[
+                                "initial_trail"
+                            ]
+                        if "max_trail" in regime_params_dict:
+                            params["max_trail"] = regime_params_dict["max_trail"]
+                        if "min_trail" in regime_params_dict:
+                            params["min_trail"] = regime_params_dict["min_trail"]
+                        if "loss_cut_percent" in regime_params_dict:
+                            params["loss_cut_percent"] = regime_params_dict[
+                                "loss_cut_percent"
+                            ]
+                        if "timeout_loss_percent" in regime_params_dict:
+                            params["timeout_loss_percent"] = regime_params_dict[
+                                "timeout_loss_percent"
+                            ]
+                        if "timeout_minutes" in regime_params_dict:
+                            params["timeout_minutes"] = regime_params_dict[
+                                "timeout_minutes"
+                            ]
+                        if "check_interval_seconds" in regime_params_dict:
+                            params["check_interval_seconds"] = regime_params_dict[
+                                "check_interval_seconds"
+                            ]
+
+                        # ✅ Дополнительные параметры
                         if "min_profit_to_close" in regime_params_dict:
                             params["min_profit_to_close"] = regime_params_dict[
                                 "min_profit_to_close"
@@ -840,6 +1096,10 @@ class FuturesScalpingOrchestrator:
                             params["extend_time_multiplier"] = regime_params_dict[
                                 "extend_time_multiplier"
                             ]
+                        if "extend_time_on_profit" in regime_params_dict:
+                            params["extend_time_on_profit"] = regime_params_dict[
+                                "extend_time_on_profit"
+                            ]
                         # ✅ НОВОЕ: Множители режимов для trailing stop (из конфига)
                         if "regime_multiplier" in regime_params_dict:
                             params["regime_multiplier"] = regime_params_dict[
@@ -849,6 +1109,80 @@ class FuturesScalpingOrchestrator:
                             params["trend_strength_boost"] = regime_params_dict[
                                 "trend_strength_boost"
                             ]
+                        # ✅ АДАПТИВНО: High profit threshold для режима
+                        if "high_profit_threshold" in regime_params_dict:
+                            params["high_profit_threshold"] = regime_params_dict[
+                                "high_profit_threshold"
+                            ]
+
+                        # ✅ АДАПТИВНО: Short reversal protection параметры для режима
+                        if "short_reversal_protection" in regime_params_dict:
+                            reversal_protection = regime_params_dict[
+                                "short_reversal_protection"
+                            ]
+                            if isinstance(reversal_protection, dict):
+                                if (
+                                    "min_reversal_duration_seconds"
+                                    in reversal_protection
+                                ):
+                                    params[
+                                        "short_reversal_min_duration"
+                                    ] = reversal_protection[
+                                        "min_reversal_duration_seconds"
+                                    ]
+                                if "max_reversal_percent" in reversal_protection:
+                                    params[
+                                        "short_reversal_max_percent"
+                                    ] = reversal_protection["max_reversal_percent"]
+
+                        # ✅ АДАПТИВНО: Trail growth multipliers для режима
+                        if "trail_growth" in regime_params_dict:
+                            trail_growth = regime_params_dict["trail_growth"]
+                            if isinstance(trail_growth, dict):
+                                if "low_profit_multiplier" in trail_growth:
+                                    params[
+                                        "trail_growth_low_multiplier"
+                                    ] = trail_growth["low_profit_multiplier"]
+                                if "medium_profit_multiplier" in trail_growth:
+                                    params[
+                                        "trail_growth_medium_multiplier"
+                                    ] = trail_growth["medium_profit_multiplier"]
+                                if "high_profit_multiplier" in trail_growth:
+                                    params[
+                                        "trail_growth_high_multiplier"
+                                    ] = trail_growth["high_profit_multiplier"]
+
+            # ✅ АДАПТИВНО: Параметры high_profit из конфига (общие для всех режимов)
+            high_profit_config = self._get_config_value(
+                trailing_sl_config, "high_profit", None
+            )
+            if high_profit_config:
+                high_profit_dict = (
+                    self._to_dict(high_profit_config)
+                    if not isinstance(high_profit_config, dict)
+                    else high_profit_config
+                )
+                # Используем threshold из режима если есть, иначе из общего конфига
+                params["high_profit_threshold"] = params.get(
+                    "high_profit_threshold"
+                ) or self._get_config_value(high_profit_dict, "threshold", 0.01)
+                params["high_profit_max_factor"] = self._get_config_value(
+                    high_profit_dict, "max_profit_factor", 2.0
+                )
+                params["high_profit_reduction_percent"] = self._get_config_value(
+                    high_profit_dict, "reduction_percent_per_1pct", 30
+                )
+                params["high_profit_min_reduction"] = self._get_config_value(
+                    high_profit_dict, "min_reduction_factor", 0.5
+                )
+            else:
+                # Fallback значения
+                params["high_profit_threshold"] = params.get(
+                    "high_profit_threshold", 0.01
+                )
+                params["high_profit_max_factor"] = 2.0
+                params["high_profit_reduction_percent"] = 30
+                params["high_profit_min_reduction"] = 0.5
 
         # Нормализуем числовые значения
         if params["trading_fee_rate"] is not None:
@@ -875,6 +1209,12 @@ class FuturesScalpingOrchestrator:
             "extend_time_multiplier",
             "regime_multiplier",  # ✅ НОВОЕ: Множитель режима
             "trend_strength_boost",  # ✅ НОВОЕ: Буст при сильном тренде
+            "check_interval_seconds",  # ✅ АДАПТИВНО: Интервал проверки TSL
+            "short_reversal_min_duration",  # ✅ АДАПТИВНО: Short reversal protection
+            "short_reversal_max_percent",  # ✅ АДАПТИВНО: Short reversal protection
+            "trail_growth_low_multiplier",  # ✅ АДАПТИВНО: Trail growth
+            "trail_growth_medium_multiplier",  # ✅ АДАПТИВНО: Trail growth
+            "trail_growth_high_multiplier",  # ✅ АДАПТИВНО: Trail growth
         ):
             if params[key] is not None:
                 try:
@@ -1026,6 +1366,16 @@ class FuturesScalpingOrchestrator:
             leverage=leverage,  # ✅ КРИТИЧЕСКОЕ: Передаем leverage для правильного расчета loss_cut от маржи
         )
 
+        # ✅ АДАПТИВНО: Устанавливаем параметры из конфига для TSL
+        tsl.regime_multiplier = params.get("regime_multiplier", 1.0)
+        tsl.trend_strength_boost = params.get("trend_strength_boost", 1.0)
+        tsl.high_profit_threshold = params.get("high_profit_threshold", 0.01)
+        tsl.high_profit_max_factor = params.get("high_profit_max_factor", 2.0)
+        tsl.high_profit_reduction_percent = params.get(
+            "high_profit_reduction_percent", 30
+        )
+        tsl.high_profit_min_reduction = params.get("high_profit_min_reduction", 0.5)
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Конвертируем side в position_side ("long"/"short")
         # side может быть "buy"/"sell" или "long"/"short", нормализуем до "long"/"short"
         side_lower = side.lower()
@@ -1059,9 +1409,12 @@ class FuturesScalpingOrchestrator:
             tsl.update(current_price)
         self.trailing_sl_by_symbol[symbol] = tsl
         fee_display = trading_fee_rate if trading_fee_rate else 0.0
-        logger.debug(
-            f"TrailingStopLoss для {symbol}: trail={tsl.current_trail:.3%}, "
-            f"fee={fee_display:.3%}"
+        logger.info(
+            f"✅ TrailingStopLoss для {symbol} инициализирован: "
+            f"trail={tsl.current_trail:.3%}, fee={fee_display:.3%}, "
+            f"loss_cut={params['loss_cut_percent']:.2%} от маржи, "
+            f"min_holding={params['min_holding_minutes']:.1f} мин, "
+            f"regime={regime or 'N/A'}"
         )
         return tsl
 
@@ -1343,6 +1696,13 @@ class FuturesScalpingOrchestrator:
 
                 # Обновление статистики
                 await self._update_performance()
+
+                if not self.is_running:
+                    break
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #1: Периодическая проверка TSL независимо от тикеров
+                # Проверяем TSL каждые 1-2 секунды для всех открытых позиций
+                await self._periodic_tsl_check()
 
                 if not self.is_running:
                     break
@@ -1637,6 +1997,49 @@ class FuturesScalpingOrchestrator:
 
             logger.info(f"🎯 Исполнение сигнала: {symbol} {side} (сила: {strength:.2f})")
 
+            # ✅ RATE LIMIT: per-symbol cooldown между входами
+            try:
+                cooldown = (
+                    getattr(self.scalping_config, "signal_cooldown_seconds", 0.0) or 0.0
+                )
+                if cooldown and cooldown > 0:
+                    now_ts = datetime.utcnow().timestamp()
+                    if not hasattr(self, "_last_signal_time"):
+                        self._last_signal_time = {}
+                    last_ts = self._last_signal_time.get(symbol)
+                    if last_ts and (now_ts - last_ts) < cooldown:
+                        wait_left = cooldown - (now_ts - last_ts)
+                        logger.debug(
+                            f"⏳ Cooldown: по {symbol} прошло лишь {now_ts - last_ts:.2f}s < {cooldown:.2f}s, "
+                            f"ждём ещё {wait_left:.2f}s, пропускаем вход"
+                        )
+                        return
+                    # записываем время попытки входа
+                    self._last_signal_time[symbol] = now_ts
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось применить cooldown для {symbol}: {e}")
+
+            # ✅ POSITION-AWARENESS: Не открываем новую позицию, если по символу уже есть активная
+            try:
+                if hasattr(self, "position_manager") and self.position_manager:
+                    active = getattr(self.position_manager, "active_positions", {})
+                    if isinstance(active, dict) and symbol in active:
+                        pos = active.get(symbol, {})
+                        size_raw = pos.get("pos", "0")
+                        try:
+                            size_val = float(size_raw)
+                        except (TypeError, ValueError):
+                            size_val = 0.0
+                        if size_val != 0.0:
+                            logger.warning(
+                                f"⚠️ По {symbol} уже есть активная позиция (size={size_val}), пропускаем новый вход"
+                            )
+                            return
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось проверить активную позицию для {symbol}: {e}"
+                )
+
             # 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем активные ордера перед размещением
             try:
                 inst_id = f"{symbol}-SWAP"
@@ -1661,10 +2064,39 @@ class FuturesScalpingOrchestrator:
             balance = await self.client.get_balance()
             current_price = signal.get("price", 0)
 
-            # Адаптивный размер позиции на основе силы сигнала
-            risk_percentage = self.scalping_config.base_risk_percentage * strength
+            # ✅ ИСПРАВЛЕНО: Получаем режим для адаптивного risk_percentage
+            current_regime = None
+            try:
+                if hasattr(self, "signal_generator") and self.signal_generator:
+                    regime_obj = (
+                        self.signal_generator.regime_manager.get_current_regime()
+                    )
+                    if regime_obj:
+                        current_regime = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить режим для расчета размера позиции: {e}"
+                )
+
+            # ✅ ИСПРАВЛЕНО: Используем адаптивный risk_percentage из конфига по режиму
+            # Если режим не определен, используем base_risk_percentage
+            risk_percentage = None  # None - читает из конфига по режиму
+            # Но если нужно использовать strength, умножаем base_risk_percentage
+            base_risk = getattr(self.scalping_config, "base_risk_percentage", 0.03)
+            if strength < 1.0:
+                # Уменьшаем риск для слабых сигналов
+                risk_percentage = base_risk * strength
+
             position_size = self.margin_calculator.calculate_optimal_position_size(
-                balance, current_price, risk_percentage
+                balance,
+                current_price,
+                risk_percentage,
+                leverage=None,
+                regime=current_regime,
             )
 
             # Исполнение ордера
@@ -1697,7 +2129,30 @@ class FuturesScalpingOrchestrator:
             # Получаем конфигурацию лимитных ордеров
             order_executor_config = getattr(self.scalping_config, "order_executor", {})
             limit_order_config = order_executor_config.get("limit_order", {})
-            max_wait = limit_order_config.get("max_wait_seconds", 60)
+
+            # ✅ ИСПРАВЛЕНО: Получаем max_wait_seconds из конфига с учетом режима
+            current_regime = "ranging"  # Fallback
+            try:
+                if hasattr(self, "signal_generator") and self.signal_generator:
+                    regime_obj = (
+                        self.signal_generator.regime_manager.get_current_regime()
+                    )
+                    if regime_obj:
+                        current_regime = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except:
+                pass
+
+            # Получаем параметры по режиму
+            regime_limit_config = limit_order_config.get("by_regime", {}).get(
+                current_regime, {}
+            )
+            max_wait = regime_limit_config.get(
+                "max_wait_seconds", limit_order_config.get("max_wait_seconds", 60)
+            )
             auto_cancel = limit_order_config.get("auto_cancel_enabled", True)
             replace_with_market = limit_order_config.get("replace_with_market", True)
 
@@ -1751,14 +2206,48 @@ class FuturesScalpingOrchestrator:
                                             side = order.get("side", "").lower()
                                             size_str = order.get("sz", "0")
                                             try:
-                                                size = float(size_str)
-                                                if size > 0 and side in ["buy", "sell"]:
+                                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Размер из ордера в контрактах (sz),
+                                                # но _place_market_order ожидает размер в монетах
+                                                # Нужно конвертировать из контрактов в монеты, используя ctVal
+                                                size_in_contracts = float(size_str)
+                                                if size_in_contracts > 0 and side in [
+                                                    "buy",
+                                                    "sell",
+                                                ]:
+                                                    # Получаем ctVal для конвертации контрактов в монеты
+                                                    size_in_coins = size_in_contracts
+                                                    try:
+                                                        details = await self.client.get_instrument_details(
+                                                            symbol
+                                                        )
+                                                        if details:
+                                                            ct_val = float(
+                                                                details.get(
+                                                                    "ctVal", 1.0
+                                                                )
+                                                            )
+                                                            if ct_val > 0:
+                                                                # Конвертируем из контрактов в монеты
+                                                                size_in_coins = (
+                                                                    size_in_contracts
+                                                                    * ct_val
+                                                                )
+                                                            else:
+                                                                logger.warning(
+                                                                    f"⚠️ ctVal для {symbol} равен 0, используем размер в контрактах как есть"
+                                                                )
+                                                    except Exception as e:
+                                                        logger.warning(
+                                                            f"⚠️ Не удалось получить ctVal для {symbol} при замене на рыночный ордер: {e}, "
+                                                            f"используем размер в контрактах как есть"
+                                                        )
+
                                                     logger.info(
                                                         f"📈 Размещаем рыночный ордер вместо зависшего лимитного: "
-                                                        f"{symbol} {side} {size:.6f}"
+                                                        f"{symbol} {side} {size_in_coins:.6f} (было {size_in_contracts:.6f} контрактов)"
                                                     )
                                                     result = await self.order_executor._place_market_order(
-                                                        symbol, side, size
+                                                        symbol, side, size_in_coins
                                                     )
                                                     if result.get("success"):
                                                         logger.info(
@@ -1997,30 +2486,35 @@ class FuturesScalpingOrchestrator:
                     # (проверка направления будет в _process_signals)
 
                     if len(symbol_positions) > 0:
-                        # ✅ КРИТИЧЕСКОЕ: На OKX Futures ордера в одном направлении объединяются
-                        # Поэтому блокируем новые ордера, если уже есть позиция (независимо от направления)
-                        # Это предотвращает накопление комиссии на одной позиции
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем направление позиции!
+                        # На OKX Futures в hedge mode могут быть LONG и SHORT позиции одновременно
+                        # Но мы блокируем только если есть позиция в ТОМ ЖЕ направлении, что и сигнал
+                        # Направление сигнала мы узнаем только после генерации, поэтому здесь блокируем ВСЕ позиции
+                        # если allow_concurrent=false, иначе разрешаем противоположные
                         positions_info = [
-                            f"{p.get('instId')}: {p.get('pos')}"
+                            f"{p.get('instId')}: {p.get('pos')} (posSide={p.get('posSide', 'N/A')})"
                             for p in symbol_positions
                         ]
-                        pos_raw = float(symbol_positions[0].get("pos", "0"))
-                        pos_size = abs(pos_raw)
-                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Правильное определение направления позиции
-                        # Используем posSide из API, если доступен, иначе определяем по знаку pos
-                        pos_side_raw = symbol_positions[0].get("posSide", "").lower()
-                        if pos_side_raw in ["long", "short"]:
-                            # Используем posSide из API (надежнее)
-                            pos_side = pos_side_raw
-                        else:
-                            # Fallback: определяем по знаку pos
-                            pos_side = "long" if pos_raw > 0 else "short"
-                        logger.warning(
-                            f"⚠️ Позиция {symbol} {pos_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
-                            f"БЛОКИРУЕМ новые ордера (на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!). "
-                            f"Позиции: {positions_info}"
-                        )
-                        return
+
+                        # ✅ КРИТИЧЕСКОЕ: Если allow_concurrent=false, блокируем ВСЕ новые сигналы
+                        # если есть хотя бы одна позиция (независимо от направления)
+                        if not allow_concurrent:
+                            pos_raw = float(symbol_positions[0].get("pos", "0"))
+                            pos_size = abs(pos_raw)
+                            pos_side_raw = (
+                                symbol_positions[0].get("posSide", "").lower()
+                            )
+                            if pos_side_raw in ["long", "short"]:
+                                pos_side = pos_side_raw
+                            else:
+                                pos_side = "long" if pos_raw > 0 else "short"
+                            logger.warning(
+                                f"⚠️ Позиция {symbol} {pos_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
+                                f"БЛОКИРУЕМ новые сигналы (allow_concurrent=false). "
+                                f"Позиции: {positions_info}"
+                            )
+                            return
+                        # Если allow_concurrent=true, проверка направления будет в _process_signals
 
                     balance = await self.client.get_balance()
                     balance_profile = self._get_balance_profile(balance)
@@ -2182,6 +2676,10 @@ class FuturesScalpingOrchestrator:
             # Это предотвращает дубликаты даже при race condition или перезапуске бота
             try:
                 inst_id = f"{symbol}-SWAP"
+                # Получаем направление сигнала
+                signal_side = signal.get("side", "").lower() if signal else "buy"
+                signal_position_side = "long" if signal_side == "buy" else "short"
+
                 # Проверяем все позиции (не только по символу, чтобы увидеть все)
                 all_positions = await self.client.get_positions()
                 for pos in all_positions:
@@ -2197,16 +2695,42 @@ class FuturesScalpingOrchestrator:
                         normalized_pos_id = pos_inst_id.replace("-", "").upper()
                         normalized_inst_id = inst_id.replace("-", "").upper()
 
-                        # Проверяем совпадение
+                        # Проверяем совпадение символа
                         if (
                             normalized_pos_id == normalized_inst_id
                             or pos_inst_id == inst_id
                         ):
-                            logger.warning(
-                                f"⚠️ Позиция {symbol} уже открыта на бирже (size={pos_size}, instId={pos_inst_id}), "
-                                f"пропускаем открытие дубликата"
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем направление позиции!
+                            # На OKX Futures в hedge mode могут быть LONG и SHORT позиции одновременно
+                            # Блокируем только если позиция в ТОМ ЖЕ направлении, что и сигнал
+                            pos_side_raw = pos.get("posSide", "").lower()
+                            if pos_side_raw in ["long", "short"]:
+                                actual_side = pos_side_raw
+                            else:
+                                actual_side = "long" if pos_size > 0 else "short"
+
+                            # Проверяем allow_concurrent из конфига
+                            allow_concurrent = getattr(
+                                self.scalping_config,
+                                "allow_concurrent_positions",
+                                False,
                             )
-                            return False
+
+                            if actual_side == signal_position_side:
+                                # Позиция в том же направлении - блокируем
+                                logger.warning(
+                                    f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
+                                    f"БЛОКИРУЕМ новый {signal_side.upper()} ордер (позиция в том же направлении)"
+                                )
+                                return False
+                            elif not allow_concurrent:
+                                # Позиция в другом направлении, но allow_concurrent=false - блокируем
+                                logger.warning(
+                                    f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
+                                    f"БЛОКИРУЕМ новый {signal_side.upper()} ордер (allow_concurrent=false)"
+                                )
+                                return False
+                            # Если allow_concurrent=true и позиция в другом направлении - разрешаем
 
                 # 🔥 ДОПОЛНИТЕЛЬНО: Проверяем активные ордера на открытие позиции
                 # Если есть pending ордер - тоже не открываем дубликат
@@ -2738,12 +3262,50 @@ class FuturesScalpingOrchestrator:
                 if symbol not in self.active_positions:
                     self.active_positions[symbol] = {}
                 entry_time = datetime.now()
-                # ✅ НОВОЕ: Получаем режим из сигнала для сохранения в позиции
-                regime = signal.get("regime")
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем режим из сигнала для сохранения в позиции
+                # Режим должен быть в сигнале, так как он добавляется в signal_generator (строка 2330)
+                regime = signal.get("regime") if signal else None
+
+                # Логируем для отладки
+                if signal:
+                    logger.debug(
+                        f"🔍 Режим в сигнале для {symbol}: {regime or 'НЕ НАЙДЕН'}"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️ Сигнал не передан в _execute_signal_from_price для {symbol}!"
+                    )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если режим не в сигнале, получаем из per-symbol ARM
                 if not regime and hasattr(self.signal_generator, "regime_managers"):
                     manager = self.signal_generator.regime_managers.get(symbol)
                     if manager:
                         regime = manager.get_current_regime()
+                        logger.debug(
+                            f"📊 Режим для {symbol} получен из per-symbol ARM: {regime}"
+                        )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если режим все еще не найден, получаем из общего ARM
+                if not regime and hasattr(self.signal_generator, "regime_manager"):
+                    try:
+                        regime = (
+                            self.signal_generator.regime_manager.get_current_regime()
+                        )
+                        logger.debug(
+                            f"📊 Режим для {symbol} получен из общего ARM: {regime}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Не удалось получить режим из общего ARM для {symbol}: {e}"
+                        )
+
+                # Логируем финальный режим для отладки
+                if regime:
+                    logger.debug(f"✅ Режим для {symbol} сохранен в позиции: {regime}")
+                else:
+                    logger.error(
+                        f"❌ КРИТИЧЕСКАЯ ОШИБКА: Режим для {symbol} не найден при открытии позиции!"
+                    )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем position_side ("long"/"short") для правильного расчета PnL
                 signal_side = signal.get("side", "").lower()
@@ -3469,6 +4031,16 @@ class FuturesScalpingOrchestrator:
                 )
                 return 0.0
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: Проверяем emergency stop перед открытием
+            if hasattr(self, "_emergency_stop_active") and self._emergency_stop_active:
+                # Проверяем, можно ли разблокировать торговлю
+                await self._check_emergency_stop_unlock()
+                if self._emergency_stop_active:
+                    logger.warning(
+                        "⚠️ Emergency stop активен - пропускаем позицию (торговля заблокирована)"
+                    )
+                    return 0.0
+
             logger.info(
                 f"💰 ФИНАЛЬНЫЙ РАСЧЕТ: balance=${balance:.2f}, "
                 f"profile={balance_profile['name']}, "
@@ -3940,6 +4512,74 @@ class FuturesScalpingOrchestrator:
             )
             return self._get_fallback_risk_params()
 
+    def _get_adaptive_delay(self, delay_key: str, default_ms: float) -> float:
+        """
+        ✅ АДАПТИВНО: Получает адаптивную задержку из конфига по режиму рынка
+
+        Args:
+            delay_key: Ключ задержки (api_request_delay_ms, symbol_switch_delay_ms, position_sync_delay_ms)
+            default_ms: Значение по умолчанию в миллисекундах
+
+        Returns:
+            Задержка в миллисекундах
+        """
+        try:
+            delays_config = self._delays_config
+            if not delays_config:
+                return default_ms
+
+            # Получаем базовое значение
+            if isinstance(delays_config, dict):
+                base_delay = delays_config.get(delay_key, default_ms)
+                by_regime = delays_config.get("by_regime", {})
+            else:
+                base_delay = getattr(delays_config, delay_key, default_ms)
+                by_regime = getattr(delays_config, "by_regime", {})
+
+            # Получаем режим рынка
+            regime = None
+            if (
+                hasattr(self, "signal_generator")
+                and self.signal_generator
+                and hasattr(self.signal_generator, "regime_manager")
+                and self.signal_generator.regime_manager
+            ):
+                regime_obj = self.signal_generator.regime_manager.get_current_regime()
+                if regime_obj:
+                    regime = (
+                        regime_obj.lower()
+                        if isinstance(regime_obj, str)
+                        else str(regime_obj).lower()
+                    )
+
+            # Получаем адаптивное значение по режиму
+            if regime and by_regime:
+                if isinstance(by_regime, dict):
+                    regime_config = by_regime.get(regime, {})
+                    if isinstance(regime_config, dict):
+                        regime_delay = regime_config.get(delay_key, base_delay)
+                    else:
+                        regime_delay = getattr(regime_config, delay_key, base_delay)
+                else:
+                    regime_config = getattr(by_regime, regime, None)
+                    if regime_config:
+                        regime_delay = getattr(regime_config, delay_key, base_delay)
+                    else:
+                        regime_delay = base_delay
+
+                logger.debug(
+                    f"✅ АДАПТИВНО: Задержка {delay_key} для режима {regime}: {regime_delay}ms (базовая: {base_delay}ms)"
+                )
+                return regime_delay
+
+            return base_delay
+
+        except Exception as e:
+            logger.debug(
+                f"⚠️ Ошибка получения адаптивной задержки {delay_key}: {e}, используем fallback {default_ms}ms"
+            )
+            return default_ms
+
     def _get_fallback_risk_params(self) -> Dict[str, Any]:
         """Возвращает fallback параметры риска (если конфиг недоступен)"""
         return {
@@ -4194,9 +4834,12 @@ class FuturesScalpingOrchestrator:
         🛑 Emergency Stop - Аварийная остановка
 
         Используется при критических ситуациях:
-        - Drawdown > 5%
+        - Drawdown > max_drawdown_percent
         - Margin close to call
         - Multiple losses in a row
+
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: Теперь блокирует торговлю временно,
+        но автоматически разблокирует при восстановлении баланса.
         """
         try:
             logger.critical("🚨 EMERGENCY STOP АКТИВИРОВАН!")
@@ -4210,22 +4853,39 @@ class FuturesScalpingOrchestrator:
                 except Exception as e:
                     logger.error(f"❌ Ошибка закрытия {symbol}: {e}")
 
-            # 2. Блокируем новые сделки
-            self.is_running = False
-            logger.critical("🛑 Торговля заблокирована")
+            # 2. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: Блокируем новые сделки ВРЕМЕННО
+            # Сохраняем флаг emergency_stop для автоматической разблокировки
+            self._emergency_stop_active = True
+            self._emergency_stop_time = time.time()
+            self._emergency_stop_balance = await self.client.get_balance()
+
+            # ✅ ИСПРАВЛЕНО: НЕ останавливаем весь бот (self.is_running остается True)
+            # Блокируем только открытие новых позиций через флаг _emergency_stop_active
+            # Это позволяет автоматически разблокировать при восстановлении баланса
+            logger.critical("🛑 Торговля временно заблокирована (emergency stop)")
+            logger.critical(
+                f"📊 Баланс при emergency stop: ${self._emergency_stop_balance:.2f}, "
+                f"будет автоматически разблокировано при восстановлении"
+            )
 
             # 3. Отправляем alert (здесь можно добавить телеграм/email)
+            current_balance = await self.client.get_balance()
+            drawdown = (
+                (self.initial_balance - current_balance) / self.initial_balance * 100
+            )
             logger.critical(
                 f"📧 ALERT: Emergency Stop activated! "
-                f"Balance: ${await self.client.get_balance():.2f}, "
-                f"Drawdown: {(self.initial_balance - await self.client.get_balance()) / self.initial_balance * 100:.2f}%"
+                f"Balance: ${current_balance:.2f}, "
+                f"Drawdown: {drawdown:.2f}%"
             )
 
             # 4. Сохраняем логи
             logger.critical("💾 Логи сохранены")
 
-            # 5. Wait for manual intervention
-            logger.critical("⏸️ Ждем ручного разрешения для продолжения")
+            # 5. ✅ ИСПРАВЛЕНО: Не ждем ручного разрешения - будет автоматическая разблокировка
+            logger.critical(
+                "⏸️ Торговля заблокирована. Будет автоматически разблокирована при восстановлении баланса."
+            )
 
         except Exception as e:
             logger.error(f"Ошибка в Emergency Stop: {e}")
@@ -4265,7 +4925,15 @@ class FuturesScalpingOrchestrator:
             profit_pct_gross = tsl.get_profit_pct(
                 current_price, include_fees=False
             )  # Для логов
-            highest = tsl.highest_price
+
+            # ✅ ИСПРАВЛЕНО: Для SHORT показываем lowest_price, для LONG - highest_price
+            position_side = position.get("position_side", "long")
+            if position_side.lower() == "short":
+                extremum = tsl.lowest_price
+                extremum_label = "lowest"
+            else:
+                extremum = tsl.highest_price
+                extremum_label = "highest"
 
             # 🎯 Получаем информацию о тренде и режиме рынка для адаптивной логики
             trend_strength = None
@@ -4310,169 +4978,237 @@ class FuturesScalpingOrchestrator:
                     f"{trend_strength:.2f}" if trend_strength is not None else "N/A"
                 )
                 regime_str = market_regime or "N/A"
-                # Показываем и gross (без комиссии) и net (с комиссией) прибыль
+                # ✅ ИСПРАВЛЕНО: Показываем правильный экстремум (lowest для SHORT, highest для LONG)
                 logger.info(
                     f"📊 TrailingSL {symbol}: price={current_price:.2f}, entry={entry_price:.2f}, "
-                    f"highest={highest:.2f}, stop={stop_loss:.2f}, "
+                    f"{extremum_label}={extremum:.2f}, stop={stop_loss:.2f}, "
                     f"profit={profit_pct:.2%} (net), gross={profit_pct_gross:.2%}, "
                     f"trend={trend_str}, regime={regime_str}"
                 )
 
-            # ✅ НОВОЕ: Проверка индикаторов перед закрытием по Trailing Stop
-            # Если индикаторы показывают возможный разворот в нашу пользу - не закрываем
-            reversal_config = getattr(self.scalping_config, "position_manager", {}).get(
-                "reversal_detection", {}
-            )
-            should_block_close = False
-
-            if reversal_config.get("enabled", False):
-                try:
-                    position_side = position.get(
-                        "position_side", "long"
-                    )  # "long" или "short"
-
-                    # Получаем индикаторы через signal_generator
-                    if hasattr(self, "signal_generator") and self.signal_generator:
-                        market_data = await self.signal_generator._get_market_data(
-                            symbol
-                        )
-                        if market_data and market_data.ohlcv_data:
-                            # Рассчитываем индикаторы
-                            indicators = (
-                                self.signal_generator.indicator_manager.calculate_all(
-                                    market_data
-                                )
-                            )
-
-                            # Проверяем RSI
-                            if reversal_config.get("rsi_check", True):
-                                rsi_result = indicators.get("RSI") or indicators.get(
-                                    "rsi"
-                                )
-                                if rsi_result:
-                                    rsi_value = (
-                                        rsi_result.value
-                                        if hasattr(rsi_result, "value")
-                                        else rsi_result
-                                    )
-
-                                    if position_side == "long" and rsi_value < 30:
-                                        # RSI перепродан - возможен разворот вверх (НЕ закрывать LONG)
-                                        logger.debug(
-                                            f"📊 RSI перепродан ({rsi_value:.1f}) для {symbol} LONG - "
-                                            f"блокируем закрытие по trailing stop"
-                                        )
-                                        should_block_close = True
-
-                                    if position_side == "short" and rsi_value > 70:
-                                        # RSI перекуплен - возможен разворот вниз (НЕ закрывать SHORT)
-                                        logger.debug(
-                                            f"📊 RSI перекуплен ({rsi_value:.1f}) для {symbol} SHORT - "
-                                            f"блокируем закрытие по trailing stop"
-                                        )
-                                        should_block_close = True
-
-                            # Проверяем MACD дивергенцию
-                            if (
-                                reversal_config.get("macd_check", True)
-                                and not should_block_close
-                            ):
-                                macd_result = indicators.get("MACD") or indicators.get(
-                                    "macd"
-                                )
-                                if macd_result and hasattr(macd_result, "metadata"):
-                                    macd_line = macd_result.metadata.get("macd_line", 0)
-                                    signal_line = macd_result.metadata.get(
-                                        "signal_line", 0
-                                    )
-                                    histogram = macd_line - signal_line
-
-                                    # Проверяем дивергенцию (упрощенная версия)
-                                    # Если цена падает, но MACD растет - бычья дивергенция (НЕ закрывать LONG)
-                                    # Если цена растет, но MACD падает - медвежья дивергенция (НЕ закрывать SHORT)
-                                    if position_side == "long" and histogram > 0:
-                                        logger.debug(
-                                            f"📊 MACD бычья дивергенция для {symbol} LONG - "
-                                            f"блокируем закрытие по trailing stop"
-                                        )
-                                        should_block_close = True
-
-                                    if position_side == "short" and histogram < 0:
-                                        logger.debug(
-                                            f"📊 MACD медвежья дивергенция для {symbol} SHORT - "
-                                            f"блокируем закрытие по trailing stop"
-                                        )
-                                        should_block_close = True
-
-                            # Проверяем Bollinger Bands
-                            if (
-                                reversal_config.get("bollinger_check", True)
-                                and not should_block_close
-                            ):
-                                bb_result = indicators.get(
-                                    "BollingerBands"
-                                ) or indicators.get("bollinger_bands")
-                                if bb_result and hasattr(bb_result, "metadata"):
-                                    upper = bb_result.metadata.get(
-                                        "upper_band", current_price
-                                    )
-                                    lower = bb_result.metadata.get(
-                                        "lower_band", current_price
-                                    )
-                                    middle = (
-                                        bb_result.value
-                                        if hasattr(bb_result, "value")
-                                        else current_price
-                                    )
-
-                                    # Если цена близко к нижней полосе (LONG) или верхней (SHORT) - возможен отскок
-                                    if (
-                                        position_side == "long"
-                                        and current_price <= lower * 1.001
-                                    ):
-                                        logger.debug(
-                                            f"📊 Цена у нижней полосы Bollinger для {symbol} LONG - "
-                                            f"блокируем закрытие по trailing stop"
-                                        )
-                                        should_block_close = True
-
-                                    if (
-                                        position_side == "short"
-                                        and current_price >= upper * 0.999
-                                    ):
-                                        logger.debug(
-                                            f"📊 Цена у верхней полосы Bollinger для {symbol} SHORT - "
-                                            f"блокируем закрытие по trailing stop"
-                                        )
-                                        should_block_close = True
-
-                except Exception as e:
-                    logger.debug(f"⚠️ Ошибка проверки индикаторов для {symbol}: {e}")
-
-            # 🎯 Проверяем, нужно ли закрывать позицию по трейлинг стопу
-            # ✅ НОВОЕ: Если индикаторы блокируют закрытие - пропускаем
-            if should_block_close:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем, что позиция все еще открыта
+            # Это предотвращает множественные попытки закрытия одной и той же позиции
+            if symbol not in self.active_positions:
                 logger.debug(
-                    f"🔒 Закрытие по trailing stop заблокировано для {symbol} "
-                    f"(индикаторы показывают возможный разворот в нашу пользу)"
+                    f"⚠️ Позиция {symbol} уже закрыта или закрывается, пропускаем проверку TSL"
                 )
-                return  # Не закрываем позицию
+                return
 
-            # Теперь передаем информацию о тренде и режиме для адаптивной логики
-            if tsl.should_close_position(
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала проверяем стоп-лосс БЕЗ блокировки индикаторами
+            # Если стоп-лосс достигнут - закрываем независимо от индикаторов (особенно для убыточных позиций)
+            should_close_by_sl = tsl.should_close_position(
                 current_price,
                 trend_strength=trend_strength,
                 market_regime=market_regime,
-            ):
+            )
+
+            # Если стоп-лосс достигнут - проверяем блокировку индикаторами только для прибыльных позиций
+            should_block_close = False
+            if should_close_by_sl and profit_pct > 0:
+                # ✅ ТОЛЬКО для прибыльных позиций: проверяем индикаторы перед закрытием
+                # Если индикаторы показывают возможный разворот в нашу пользу - не закрываем
+                reversal_config = getattr(
+                    self.scalping_config, "position_manager", {}
+                ).get("reversal_detection", {})
+
+                if reversal_config.get("enabled", False):
+                    try:
+                        position_side = position.get(
+                            "position_side", "long"
+                        )  # "long" или "short"
+
+                        # Получаем индикаторы через signal_generator
+                        if hasattr(self, "signal_generator") and self.signal_generator:
+                            market_data = await self.signal_generator._get_market_data(
+                                symbol
+                            )
+                            if market_data and market_data.ohlcv_data:
+                                # Рассчитываем индикаторы
+                                indicators = self.signal_generator.indicator_manager.calculate_all(
+                                    market_data
+                                )
+
+                                # Проверяем RSI
+                                if reversal_config.get("rsi_check", True):
+                                    rsi_result = indicators.get(
+                                        "RSI"
+                                    ) or indicators.get("rsi")
+                                    if rsi_result:
+                                        rsi_value = (
+                                            rsi_result.value
+                                            if hasattr(rsi_result, "value")
+                                            else rsi_result
+                                        )
+
+                                        if position_side == "long" and rsi_value < 30:
+                                            # RSI перепродан - возможен разворот вверх (НЕ закрывать LONG)
+                                            logger.debug(
+                                                f"📊 RSI перепродан ({rsi_value:.1f}) для {symbol} LONG - "
+                                                f"блокируем закрытие по trailing stop (позиция в прибыли)"
+                                            )
+                                            should_block_close = True
+
+                                        if position_side == "short" and rsi_value > 70:
+                                            # RSI перекуплен - возможен разворот вниз (НЕ закрывать SHORT)
+                                            logger.debug(
+                                                f"📊 RSI перекуплен ({rsi_value:.1f}) для {symbol} SHORT - "
+                                                f"блокируем закрытие по trailing stop (позиция в прибыли)"
+                                            )
+                                            should_block_close = True
+
+                                # Проверяем MACD дивергенцию
+                                if (
+                                    reversal_config.get("macd_check", True)
+                                    and not should_block_close
+                                ):
+                                    macd_result = indicators.get(
+                                        "MACD"
+                                    ) or indicators.get("macd")
+                                    if macd_result and hasattr(macd_result, "metadata"):
+                                        macd_line = macd_result.metadata.get(
+                                            "macd_line", 0
+                                        )
+                                        signal_line = macd_result.metadata.get(
+                                            "signal_line", 0
+                                        )
+                                        histogram = macd_line - signal_line
+
+                                        # Проверяем дивергенцию (упрощенная версия)
+                                        # Если цена падает, но MACD растет - бычья дивергенция (НЕ закрывать LONG)
+                                        # Если цена растет, но MACD падает - медвежья дивергенция (НЕ закрывать SHORT)
+                                        if position_side == "long" and histogram > 0:
+                                            logger.debug(
+                                                f"📊 MACD бычья дивергенция для {symbol} LONG - "
+                                                f"блокируем закрытие по trailing stop (позиция в прибыли)"
+                                            )
+                                            should_block_close = True
+
+                                        if position_side == "short" and histogram < 0:
+                                            logger.debug(
+                                                f"📊 MACD медвежья дивергенция для {symbol} SHORT - "
+                                                f"блокируем закрытие по trailing stop (позиция в прибыли)"
+                                            )
+                                            should_block_close = True
+
+                                # Проверяем Bollinger Bands
+                                if (
+                                    reversal_config.get("bollinger_check", True)
+                                    and not should_block_close
+                                ):
+                                    bb_result = indicators.get(
+                                        "BollingerBands"
+                                    ) or indicators.get("bollinger_bands")
+                                    if bb_result and hasattr(bb_result, "metadata"):
+                                        upper = bb_result.metadata.get(
+                                            "upper_band", current_price
+                                        )
+                                        lower = bb_result.metadata.get(
+                                            "lower_band", current_price
+                                        )
+                                        middle = (
+                                            bb_result.value
+                                            if hasattr(bb_result, "value")
+                                            else current_price
+                                        )
+
+                                        # Если цена близко к нижней полосе (LONG) или верхней (SHORT) - возможен отскок
+                                        if (
+                                            position_side == "long"
+                                            and current_price <= lower * 1.001
+                                        ):
+                                            logger.debug(
+                                                f"📊 Цена у нижней полосы Bollinger для {symbol} LONG - "
+                                                f"блокируем закрытие по trailing stop (позиция в прибыли)"
+                                            )
+                                            should_block_close = True
+
+                                        if (
+                                            position_side == "short"
+                                            and current_price >= upper * 0.999
+                                        ):
+                                            logger.debug(
+                                                f"📊 Цена у верхней полосы Bollinger для {symbol} SHORT - "
+                                                f"блокируем закрытие по trailing stop (позиция в прибыли)"
+                                            )
+                                            should_block_close = True
+
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки индикаторов для {symbol}: {e}"
+                        )
+
+            # 🎯 Проверяем, нужно ли закрывать позицию по трейлинг стопу
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если стоп-лосс достигнут И позиция в убытке - закрываем независимо от индикаторов
+            # Если стоп-лосс достигнут И позиция в прибыли - применяем блокировку индикаторами
+            if should_close_by_sl:
+                if should_block_close:
+                    logger.debug(
+                        f"🔒 Закрытие по trailing stop заблокировано для {symbol} "
+                        f"(индикаторы показывают возможный разворот в нашу пользу, позиция в прибыли)"
+                    )
+                    return  # Не закрываем позицию
+
+                # Стоп-лосс достигнут и нет блокировки - закрываем позицию
                 trend_str_close = (
                     f"{trend_strength:.2f}" if trend_strength is not None else "N/A"
                 )
+                # ✅ ИСПРАВЛЕНО: Для SHORT используем >=, для LONG <=
+                comparison_op = ">=" if position_side.lower() == "short" else "<="
                 logger.info(
-                    f"🛑 Позиция {symbol} достигла трейлинг стоп-лосса (price={current_price:.2f} <= stop={stop_loss:.2f}, "
+                    f"🛑 Позиция {symbol} достигла трейлинг стоп-лосса (price={current_price:.2f} {comparison_op} stop={stop_loss:.2f}, "
                     f"profit={profit_pct:.2%}, trend={trend_str_close})"
                 )
-                await self._close_position(symbol, "trailing_stop")
+                # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что позиция все еще открыта перед закрытием
+                if symbol in self.active_positions:
+                    await self._close_position(symbol, "trailing_stop")
+                else:
+                    logger.debug(
+                        f"⚠️ Позиция {symbol} уже была закрыта, пропускаем закрытие"
+                    )
                 return
+
+            # ✅ МОДЕРНИЗАЦИЯ #1: Проверка Profit Harvest (PH) - ПРИОРИТЕТ #1
+            # PH проверяется ПЕРЕД TSL для быстрого закрытия при высокой прибыли
+            # Это критично для скальпинга - нужно закрывать быстро при хорошей прибыли!
+            if hasattr(self, "position_manager") and self.position_manager:
+                position_data = self.active_positions.get(symbol, {})
+                if position_data:
+                    # Создаем словарь позиции в формате, который ожидает position_manager
+                    entry_time = position_data.get("entry_time")
+                    if isinstance(entry_time, datetime):
+                        # Конвертируем datetime в миллисекунды (OKX формат)
+                        entry_time_ms = int(entry_time.timestamp() * 1000)
+                    elif entry_time:
+                        # Если это уже число (timestamp), конвертируем в миллисекунды
+                        entry_time_ms = (
+                            int(float(entry_time) * 1000)
+                            if float(entry_time) < 1000000000000
+                            else int(entry_time)
+                        )
+                    else:
+                        entry_time_ms = ""
+
+                    position_dict = {
+                        "instId": f"{symbol}-SWAP",
+                        "pos": str(position_data.get("size", "0")),
+                        "posSide": position_data.get("position_side", "long"),
+                        "avgPx": str(entry_price),
+                        "markPx": str(current_price),
+                        "cTime": str(entry_time_ms) if entry_time_ms else "",
+                    }
+
+                    # Проверяем PH через position_manager
+                    ph_should_close = (
+                        await self.position_manager._check_profit_harvesting(
+                            position_dict
+                        )
+                    )
+                    if ph_should_close:
+                        logger.info(
+                            f"💰 PH сработал для {symbol} - закрываем позицию немедленно!"
+                        )
+                        await self._close_position(symbol, "profit_harvest")
+                        return  # Закрыли по PH, дальше не проверяем
 
             # ✅ НОВОЕ: Проверка времени жизни позиции с продлением
             await self._check_position_holding_time(
@@ -4481,6 +5217,359 @@ class FuturesScalpingOrchestrator:
 
         except Exception as e:
             logger.error(f"Ошибка обновления трейлинг стоп-лосса: {e}")
+
+    async def _periodic_tsl_check(self):
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #1: Периодическая проверка TSL независимо от тикеров
+
+        Проверяет TSL для всех открытых позиций с адаптивным интервалом по режиму,
+        получая цену через REST API если WebSocket не отвечает.
+        Это гарантирует, что TSL будет проверяться даже при задержках WebSocket.
+        """
+        try:
+            if not self.active_positions:
+                return
+
+            import time
+
+            current_time = time.time()
+
+            # ✅ АДАПТИВНО: Получаем текущий режим для определения интервала проверки
+            current_regime = "ranging"  # Fallback
+            try:
+                if hasattr(self, "signal_generator") and self.signal_generator:
+                    regime_obj = (
+                        self.signal_generator.regime_manager.get_current_regime()
+                    )
+                    if regime_obj:
+                        current_regime = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except:
+                pass
+
+            # ✅ АДАПТИВНО: Получаем интервал проверки для текущего режима
+            check_interval = self._tsl_check_interval  # Fallback к базовому
+            if current_regime in self._tsl_check_intervals_by_regime:
+                check_interval = self._tsl_check_intervals_by_regime[current_regime]
+            else:
+                # Получаем из конфига для текущего режима
+                try:
+                    tsl_config = getattr(self.scalping_config, "trailing_sl", {})
+                    by_regime = getattr(tsl_config, "by_regime", None)
+                    if by_regime:
+                        regime_config = getattr(by_regime, current_regime, None)
+                        if regime_config:
+                            regime_interval = getattr(
+                                regime_config, "check_interval_seconds", None
+                            )
+                            if regime_interval:
+                                check_interval = float(regime_interval)
+                                self._tsl_check_intervals_by_regime[
+                                    current_regime
+                                ] = check_interval
+                except:
+                    pass
+
+            # Проверяем TSL для каждой открытой позиции
+            for symbol in list(self.active_positions.keys()):
+                try:
+                    # Проверяем, прошло ли достаточно времени с последней проверки
+                    last_check = self._last_tsl_check_time.get(symbol, 0)
+                    time_since_last_check = current_time - last_check
+
+                    # ✅ АДАПТИВНО: Проверяем только если прошло достаточно времени (интервал по режиму)
+                    if time_since_last_check < check_interval:
+                        continue
+
+                    # Обновляем время последней проверки
+                    self._last_tsl_check_time[symbol] = current_time
+
+                    # Получаем текущую цену через REST API (подстраховка)
+                    current_price = await self._get_current_price_fallback(symbol)
+                    if current_price and current_price > 0:
+                        # Обновляем TSL с текущей ценой
+                        await self._update_trailing_stop_loss(symbol, current_price)
+                    else:
+                        logger.debug(
+                            f"⚠️ Не удалось получить цену для {symbol} при периодической проверке TSL"
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Ошибка периодической проверки TSL для {symbol}: {e}"
+                    )
+        except Exception as e:
+            logger.error(f"❌ Ошибка в _periodic_tsl_check: {e}")
+
+    async def _handle_private_ws_positions(self, positions_data: list):
+        """
+        ✅ МОДЕРНИЗАЦИЯ #2: Обработка обновлений позиций из Private WebSocket
+
+        Args:
+            positions_data: Список позиций из WebSocket
+        """
+        try:
+            for position_data in positions_data:
+                symbol = position_data.get("instId", "").replace("-SWAP", "")
+                pos_size = float(position_data.get("pos", "0"))
+
+                if abs(pos_size) < 1e-8:
+                    # Позиция закрыта - удаляем из active_positions
+                    if symbol in self.active_positions:
+                        logger.info(
+                            f"📊 Private WS: Позиция {symbol} закрыта (размер=0)"
+                        )
+                        await self._handle_position_closed_via_ws(symbol)
+                    continue
+
+                # Обновляем позицию в active_positions
+                if symbol in self.active_positions:
+                    # Обновляем данные позиции
+                    self.active_positions[symbol].update(
+                        {
+                            "size": pos_size,
+                            "margin": float(position_data.get("margin", "0")),
+                            "avgPx": float(position_data.get("avgPx", "0")),
+                            "markPx": float(position_data.get("markPx", "0")),
+                            "upl": float(position_data.get("upl", "0")),
+                            "uplRatio": float(position_data.get("uplRatio", "0")),
+                        }
+                    )
+                    logger.debug(
+                        f"📊 Private WS: Позиция {symbol} обновлена (size={pos_size}, upl={position_data.get('upl', '0')})"
+                    )
+                else:
+                    # Новая позиция - добавляем
+                    logger.info(
+                        f"📊 Private WS: Обнаружена новая позиция {symbol} (size={pos_size})"
+                    )
+                    # Позиция будет обработана при следующей синхронизации
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки обновлений позиций из Private WS: {e}")
+
+    async def _handle_private_ws_orders(self, orders_data: list):
+        """
+        ✅ МОДЕРНИЗАЦИЯ #2: Обработка обновлений ордеров из Private WebSocket
+
+        Args:
+            orders_data: Список ордеров из WebSocket
+        """
+        try:
+            for order_data in orders_data:
+                order_id = order_data.get("ordId", "")
+                state = order_data.get("state", "")
+                inst_id = order_data.get("instId", "")
+                symbol = inst_id.replace("-SWAP", "") if inst_id else ""
+
+                # Обновляем кэш ордеров
+                if symbol:
+                    if symbol not in self.active_orders_cache:
+                        self.active_orders_cache[symbol] = {}
+
+                    self.active_orders_cache[symbol][order_id] = {
+                        "order_id": order_id,
+                        "state": state,
+                        "inst_id": inst_id,
+                        "sz": order_data.get("sz", "0"),
+                        "px": order_data.get("px", "0"),
+                        "side": order_data.get("side", ""),
+                        "ordType": order_data.get("ordType", ""),
+                        "timestamp": time.time(),
+                    }
+
+                    # Если ордер исполнен или отменен - логируем
+                    if state in ["filled", "canceled", "partially_filled"]:
+                        logger.debug(
+                            f"📊 Private WS: Ордер {order_id} для {symbol} - {state}"
+                        )
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки обновлений ордеров из Private WS: {e}")
+
+    async def _handle_position_closed_via_ws(self, symbol: str):
+        """
+        ✅ МОДЕРНИЗАЦИЯ #2: Обработка закрытия позиции через Private WebSocket
+
+        Args:
+            symbol: Символ закрытой позиции
+        """
+        try:
+            # Удаляем из active_positions
+            if symbol in self.active_positions:
+                position = self.active_positions.pop(symbol)
+                logger.info(
+                    f"📊 Private WS: Позиция {symbol} удалена из active_positions"
+                )
+
+                # Удаляем TrailingStopLoss если есть
+                if symbol in self.trailing_sl_by_symbol:
+                    del self.trailing_sl_by_symbol[symbol]
+                    logger.debug(f"📊 Private WS: TrailingStopLoss для {symbol} удален")
+
+                # Очищаем кэш проверок TSL
+                if symbol in self._last_tsl_check_time:
+                    del self._last_tsl_check_time[symbol]
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки закрытия позиции через Private WS: {e}")
+
+    async def _get_current_price_fallback(self, symbol: str) -> Optional[float]:
+        """
+        Получение текущей цены через REST API (fallback если WebSocket не отвечает)
+
+        Args:
+            symbol: Символ (например, BTC-USDT)
+
+        Returns:
+            Текущая цена или None если не удалось получить
+        """
+        try:
+            # ✅ ИСПРАВЛЕНО: Используем прямой HTTP запрос для публичного endpoint без авторизации
+            # Публичные endpoints не требуют авторизации, поэтому используем прямой запрос
+            import aiohttp
+
+            inst_id = f"{symbol}-SWAP"
+
+            # ✅ ИСПРАВЛЕНО: Правильный endpoint для публичного тикера (без /public/)
+            # Для публичных endpoints используется один и тот же URL для sandbox и production
+            base_url = "https://www.okx.com"
+            ticker_url = f"{base_url}/api/v5/market/ticker?instId={inst_id}"
+
+            # Создаем временную сессию если нужно
+            session = (
+                self.client.session
+                if self.client.session and not self.client.session.closed
+                else None
+            )
+            if not session:
+                session = aiohttp.ClientSession()
+                close_session = True
+            else:
+                close_session = False
+
+            try:
+                async with session.get(ticker_url) as ticker_resp:
+                    if ticker_resp.status == 200:
+                        ticker_data = await ticker_resp.json()
+                        if ticker_data and ticker_data.get("code") == "0":
+                            data = ticker_data.get("data", [])
+                            if data and len(data) > 0:
+                                last_price = data[0].get("last")
+                                if last_price:
+                                    return float(last_price)
+                    else:
+                        logger.debug(
+                            f"⚠️ Не удалось получить цену для {symbol}: HTTP {ticker_resp.status}"
+                        )
+            finally:
+                if close_session and session:
+                    await session.close()
+
+            logger.debug(f"⚠️ Не удалось получить цену для {symbol} через REST API")
+            return None
+
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка получения цены для {symbol}: {e}")
+            return None
+
+    async def _check_emergency_stop_unlock(self):
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: Проверка возможности разблокировки после emergency stop
+
+        Автоматически разблокирует торговлю если:
+        - Прошло достаточно времени (минимум 5 минут)
+        - Drawdown восстановился до <70% от лимита
+        - Баланс восстановился или стабилизировался
+        """
+        try:
+            if (
+                not hasattr(self, "_emergency_stop_active")
+                or not self._emergency_stop_active
+            ):
+                return
+
+            import time
+
+            current_time = time.time()
+            time_since_emergency = current_time - self._emergency_stop_time
+
+            # ✅ АДАПТИВНО: Получаем параметры emergency_stop из конфига по режиму
+            emergency_config = getattr(self.scalping_config, "emergency_stop", {})
+            if not emergency_config or not getattr(emergency_config, "enabled", True):
+                return  # Emergency stop отключен
+
+            # Определяем текущий режим рынка
+            regime = None
+            if (
+                hasattr(self.signal_generator, "regime_manager")
+                and self.signal_generator.regime_manager
+            ):
+                regime_obj = self.signal_generator.regime_manager.get_current_regime()
+                if hasattr(regime_obj, "value"):
+                    regime = regime_obj.value.lower()
+                elif isinstance(regime_obj, str):
+                    regime = regime_obj.lower()
+
+            # Получаем параметры для текущего режима
+            by_regime = getattr(emergency_config, "by_regime", {})
+            regime_config = getattr(by_regime, regime, None) if regime else None
+
+            if regime_config:
+                min_lock_minutes = getattr(regime_config, "min_lock_minutes", 5)
+                unlock_threshold_percent = getattr(
+                    regime_config, "unlock_threshold_percent", 70
+                )
+            else:
+                # Fallback значения
+                min_lock_minutes = 5
+                unlock_threshold_percent = 70
+
+            min_lock_time = min_lock_minutes * 60  # Конвертируем в секунды
+
+            if time_since_emergency < min_lock_time:
+                return  # Слишком рано для разблокировки
+
+            # Получаем текущий баланс
+            current_balance = await self.client.get_balance()
+
+            # Проверяем drawdown
+            current_drawdown = (
+                self.initial_balance - current_balance
+            ) / self.initial_balance
+
+            # Получаем адаптивный max_drawdown_percent
+            adaptive_risk_params = self._get_adaptive_risk_params(
+                current_balance, regime
+            )
+            max_drawdown_percent = (
+                adaptive_risk_params.get("max_drawdown_percent", 5.0) / 100.0
+            )
+
+            # ✅ АДАПТИВНО: Разблокируем если drawdown < unlock_threshold_percent% от лимита
+            unlock_threshold = max_drawdown_percent * (unlock_threshold_percent / 100.0)
+
+            if current_drawdown < unlock_threshold:
+                logger.info(
+                    f"✅ Emergency Stop разблокирован автоматически: "
+                    f"drawdown={current_drawdown*100:.2f}% < {unlock_threshold*100:.2f}% "
+                    f"(лимит: {max_drawdown_percent*100:.1f}%), "
+                    f"время блокировки: {time_since_emergency/60:.1f} мин"
+                )
+                self._emergency_stop_active = False
+                self._emergency_stop_time = 0.0
+                self._emergency_stop_balance = 0.0
+            else:
+                logger.debug(
+                    f"⏸️ Emergency Stop все еще активен: "
+                    f"drawdown={current_drawdown*100:.2f}% >= {unlock_threshold*100:.2f}%, "
+                    f"время блокировки: {time_since_emergency/60:.1f} мин"
+                )
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки разблокировки emergency stop: {e}")
 
     async def _check_position_holding_time(
         self,
@@ -4537,34 +5626,42 @@ class FuturesScalpingOrchestrator:
                     if isinstance(regime_obj, str):
                         regime_obj = regime_obj.lower()
 
-                    # Получаем параметры режима из конфига
-                    regime_params = None
-                    if regime_obj == "trending":
-                        regime_params = (
-                            self.signal_generator.regime_manager.config.trending
-                        )
-                    elif regime_obj == "ranging":
-                        regime_params = (
-                            self.signal_generator.regime_manager.config.ranging
-                        )
-                    elif regime_obj == "choppy":
-                        regime_params = (
-                            self.signal_generator.regime_manager.config.choppy
-                        )
+                    # ✅ ИСПРАВЛЕНО: Получаем параметры режима через get_current_parameters()
+                    # и из scalping_config для параметров продления времени
+                    regime_params = (
+                        self.signal_generator.regime_manager.get_current_parameters()
+                    )
 
                     if regime_params:
                         max_holding_minutes = getattr(
                             regime_params, "max_holding_minutes", 30
                         )
-                        extend_time_if_profitable = getattr(
-                            regime_params, "extend_time_if_profitable", True
+
+                        # Получаем параметры продления времени из scalping_config
+                        regime_name = (
+                            regime_obj
+                            if isinstance(regime_obj, str)
+                            else regime_obj.value.lower()
                         )
-                        min_profit_for_extension = getattr(
-                            regime_params, "min_profit_for_extension", 0.1
+                        regime_config = getattr(
+                            self.scalping_config.adaptive_regime, regime_name, None
                         )
-                        extension_percent = getattr(
-                            regime_params, "extension_percent", 50
-                        )
+
+                        if regime_config:
+                            extend_time_if_profitable = getattr(
+                                regime_config, "extend_time_if_profitable", True
+                            )
+                            min_profit_for_extension = getattr(
+                                regime_config, "min_profit_for_extension", 0.1
+                            )
+                            extension_percent = getattr(
+                                regime_config, "extension_percent", 50
+                            )
+                        else:
+                            # Fallback если режим не найден в конфиге
+                            extend_time_if_profitable = True
+                            min_profit_for_extension = 0.1
+                            extension_percent = 50
                     else:
                         # Fallback значения
                         max_holding_minutes = 30
@@ -4732,13 +5829,44 @@ class FuturesScalpingOrchestrator:
     async def _close_position(self, symbol: str, reason: str):
         """Закрытие позиции через position_manager"""
         try:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем, что позиция еще не закрывается
+            # Это предотвращает множественные попытки закрытия одной и той же позиции
+            if not hasattr(self, "_closing_positions"):
+                self._closing_positions = set()
+
+            if symbol in self._closing_positions:
+                logger.debug(
+                    f"⚠️ Позиция {symbol} уже закрывается (reason={reason}), пропускаем"
+                )
+                return
+
             position = self.active_positions.get(symbol, {})
 
-            if position:
+            if not position:
+                logger.debug(
+                    f"⚠️ Позиция {symbol} уже закрыта или не найдена (reason={reason})"
+                )
+                return
+
+            # ✅ Помечаем позицию как закрывающуюся
+            self._closing_positions.add(symbol)
+
+            try:
                 logger.info(f"🛑 Закрытие позиции {symbol}: {reason}")
 
                 # ✅ Закрываем через position_manager (API)
-                await self.position_manager.close_position_manually(symbol)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем TradeResult для записи в CSV
+                trade_result = await self.position_manager.close_position_manually(
+                    symbol
+                )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем сделку в CSV через performance_tracker
+                if trade_result and hasattr(self, "performance_tracker"):
+                    try:
+                        self.performance_tracker.record_trade(trade_result)
+                        logger.debug(f"✅ Сделка {symbol} записана в CSV")
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка записи сделки в CSV: {e}")
 
                 # ✅ Обновляем кэш ордеров
                 normalized_symbol = self._normalize_symbol(symbol)
@@ -4792,9 +5920,19 @@ class FuturesScalpingOrchestrator:
                 )
 
                 await self._sync_positions_with_exchange(force=True)
+            except Exception as e:
+                logger.error(f"Ошибка закрытия позиции {symbol}: {e}")
+            finally:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Убираем позицию из списка закрывающихся
+                # Это позволяет закрыть позицию снова, если она откроется заново
+                if hasattr(self, "_closing_positions"):
+                    self._closing_positions.discard(symbol)
 
         except Exception as e:
-            logger.error(f"Ошибка закрытия позиции: {e}")
+            logger.error(f"Критическая ошибка закрытия позиции {symbol}: {e}")
+            # ✅ Убираем позицию из списка закрывающихся при критической ошибке
+            if hasattr(self, "_closing_positions"):
+                self._closing_positions.discard(symbol)
 
     async def get_status(self) -> Dict[str, Any]:
         """Получение статуса системы"""
