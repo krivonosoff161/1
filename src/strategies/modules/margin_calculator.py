@@ -187,36 +187,100 @@ class MarginCalculator:
         if safety_threshold is None:
             try:
                 if hasattr(self, "margin_config") and self.margin_config:
+                    logger.debug(
+                        f"🔍 Попытка загрузить safety_threshold из конфига: "
+                        f"margin_config type={type(self.margin_config)}, "
+                        f"regime={regime}"
+                    )
+                    
+                    # ✅ ИСПРАВЛЕНО: Универсальная обработка dict и Pydantic объектов
+                    by_regime = None
                     if isinstance(self.margin_config, dict):
                         by_regime = self.margin_config.get("by_regime", {})
-                        if regime and by_regime:
-                            regime_config = by_regime.get(regime.lower(), {})
+                        logger.debug(f"🔍 by_regime (dict): {by_regime}, type={type(by_regime)}")
+                    else:
+                        # Пробуем получить как атрибут (Pydantic объект)
+                        by_regime = getattr(self.margin_config, "by_regime", None)
+                        logger.debug(f"🔍 by_regime (attr): {by_regime}, type={type(by_regime)}")
+                        # Если это Pydantic объект, конвертируем в dict
+                        if by_regime and hasattr(by_regime, "dict"):
+                            try:
+                                by_regime = by_regime.dict()
+                                logger.debug(f"🔍 by_regime конвертирован в dict: {by_regime}")
+                            except:
+                                pass
+                        elif by_regime and hasattr(by_regime, "__dict__"):
+                            try:
+                                by_regime = dict(by_regime.__dict__)
+                                logger.debug(f"🔍 by_regime конвертирован из __dict__: {by_regime}")
+                            except:
+                                pass
+                    
+                    # ✅ ИСПРАВЛЕНО: Если regime=None, используем fallback на 'ranging' (стандартный режим)
+                    regime_to_use = regime.lower() if regime else "ranging"
+                    if not regime:
+                        logger.debug(f"🔍 regime=None, используем fallback: 'ranging'")
+                    
+                    if by_regime and regime_to_use:
+                        # Получаем regime_config
+                        regime_config = None
+                        if isinstance(by_regime, dict):
+                            regime_config = by_regime.get(regime_to_use)
+                        elif hasattr(by_regime, regime_to_use):
+                            regime_config = getattr(by_regime, regime_to_use, None)
+                        
+                        logger.debug(f"🔍 regime_config для {regime_to_use}: {regime_config}, type={type(regime_config)}")
+                        
+                        # Конвертируем regime_config в dict если это Pydantic объект
+                        if regime_config and not isinstance(regime_config, dict):
+                            if hasattr(regime_config, "dict"):
+                                try:
+                                    regime_config = regime_config.dict()
+                                    logger.debug(f"🔍 regime_config конвертирован в dict: {regime_config}")
+                                except:
+                                    pass
+                            elif hasattr(regime_config, "__dict__"):
+                                try:
+                                    regime_config = dict(regime_config.__dict__)
+                                    logger.debug(f"🔍 regime_config конвертирован из __dict__: {regime_config}")
+                                except:
+                                    pass
+                        
+                        # Получаем safety_threshold
+                        if regime_config:
                             if isinstance(regime_config, dict):
                                 safety_threshold = regime_config.get("safety_threshold")
-                                if safety_threshold is not None:
-                                    logger.debug(
-                                        f"✅ Загружен safety_threshold={safety_threshold} из конфига (regime={regime})"
-                                    )
-                    else:
-                        by_regime = getattr(self.margin_config, "by_regime", None)
-                        if by_regime and regime:
-                            regime_config = getattr(by_regime, regime.lower(), None)
-                            if regime_config:
-                                safety_threshold = getattr(
-                                    regime_config, "safety_threshold", None
+                            elif hasattr(regime_config, "safety_threshold"):
+                                safety_threshold = getattr(regime_config, "safety_threshold", None)
+                            else:
+                                safety_threshold = None
+                            
+                            if safety_threshold is not None:
+                                logger.info(
+                                    f"✅ Загружен safety_threshold={safety_threshold} из конфига (regime={regime_to_use}{' (fallback)' if not regime else ''})"
                                 )
-                                if safety_threshold is not None:
-                                    logger.debug(
-                                        f"✅ Загружен safety_threshold={safety_threshold} из конфига (regime={regime})"
-                                    )
+                            
             except Exception as e:
-                logger.debug(f"⚠️ Не удалось получить адаптивный safety_threshold: {e}")
+                logger.warning(
+                    f"⚠️ Не удалось получить адаптивный safety_threshold: {e}, "
+                    f"margin_config type={type(getattr(self, 'margin_config', None))}, "
+                    f"regime={regime}"
+                )
 
-            # Fallback только если не удалось загрузить из конфига
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ошибка вместо fallback - safety_threshold ОБЯЗАТЕЛЕН в конфиге
             if safety_threshold is None:
-                safety_threshold = 1.5  # Fallback
-                logger.debug(
-                    f"⚠️ Используется fallback safety_threshold={safety_threshold}"
+                # Определяем regime_to_use для сообщения об ошибке
+                regime_for_error = "ranging"  # По умолчанию
+                if 'regime_to_use' in locals():
+                    regime_for_error = regime_to_use
+                elif regime:
+                    regime_for_error = regime.lower()
+                
+                regime_info = f" для regime={regime_for_error}" + (" (использован fallback 'ranging')" if not regime else "")
+                raise ValueError(
+                    f"❌ КРИТИЧЕСКАЯ ОШИБКА: safety_threshold не найден в конфиге{regime_info}! "
+                    f"Добавьте в config_futures.yaml: futures_modules.margin.by_regime.{regime_for_error}.safety_threshold. "
+                    f"margin_config type={type(getattr(self, 'margin_config', None))}"
                 )
 
         # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: position_value уже в USD (size_in_coins * current_price)

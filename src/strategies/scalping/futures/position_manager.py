@@ -217,10 +217,42 @@ class FuturesPositionManager:
 
                     # Если все еще 0, используем общий баланс как fallback
                     if equity == 0:
-                        equity = await self.client.get_balance()
-                        logger.warning(
-                            f"⚠️ equity не найден через get_margin_info для {symbol}, используем общий баланс: {equity:.2f}"
-                        )
+                        # ✅ ИСПРАВЛЕНО: Пробуем получить equity из позиции напрямую через API
+                        try:
+                            # Получаем позицию напрямую через API для более точного equity
+                            positions_data = await self.client._make_request(
+                                "GET",
+                                "/api/v5/account/positions",
+                                params={"instType": "SWAP", "instId": f"{symbol}-SWAP"},
+                            )
+                            if positions_data and positions_data.get("data"):
+                                pos_data = positions_data["data"][0]
+                                
+                                # Пробуем получить equity из различных полей
+                                if "eq" in pos_data and pos_data.get("eq"):
+                                    equity = float(pos_data["eq"])
+                                    logger.debug(
+                                        f"✅ equity получен из позиции API для {symbol}: {equity:.2f}"
+                                    )
+                                elif "margin" in pos_data and "upl" in pos_data:
+                                    margin = float(pos_data.get("margin", 0))
+                                    upl = float(pos_data.get("upl", 0))
+                                    equity = margin + upl
+                                    if equity > 0:
+                                        logger.debug(
+                                            f"✅ equity рассчитан из позиции API для {symbol}: "
+                                            f"margin={margin:.2f} + upl={upl:.2f} = {equity:.2f}"
+                                        )
+                        except Exception as e:
+                            logger.debug(f"⚠️ Ошибка получения equity из позиции API для {symbol}: {e}")
+                        
+                        # Fallback на общий баланс только если все остальное не сработало
+                        if equity == 0:
+                            equity = await self.client.get_balance()
+                            logger.warning(
+                                f"⚠️ equity не найден через get_margin_info и API для {symbol}, "
+                                f"используем общий баланс: {equity:.2f}"
+                            )
             except Exception as e:
                 # Fallback при ошибке - сначала пытаемся из позиции
                 equity = 0
@@ -234,10 +266,39 @@ class FuturesPositionManager:
                     pass
 
                 if equity == 0:
-                    equity = await self.client.get_balance()
-                    logger.warning(
-                        f"⚠️ Ошибка получения equity для {symbol}: {e}, используем общий баланс: {equity:.2f}"
-                    )
+                    # ✅ ИСПРАВЛЕНО: Пробуем получить equity из позиции напрямую через API
+                    try:
+                        positions_data = await self.client._make_request(
+                            "GET",
+                            "/api/v5/account/positions",
+                            params={"instType": "SWAP", "instId": f"{symbol}-SWAP"},
+                        )
+                        if positions_data and positions_data.get("data"):
+                            pos_data = positions_data["data"][0]
+                            if "eq" in pos_data and pos_data.get("eq"):
+                                equity = float(pos_data["eq"])
+                                logger.debug(
+                                    f"✅ equity получен из позиции API (fallback) для {symbol}: {equity:.2f}"
+                                )
+                            elif "margin" in pos_data and "upl" in pos_data:
+                                margin = float(pos_data.get("margin", 0))
+                                upl = float(pos_data.get("upl", 0))
+                                equity = margin + upl
+                                if equity > 0:
+                                    logger.debug(
+                                        f"✅ equity рассчитан из позиции API (fallback) для {symbol}: "
+                                        f"margin={margin:.2f} + upl={upl:.2f} = {equity:.2f}"
+                                    )
+                    except Exception as api_error:
+                        logger.debug(f"⚠️ Ошибка получения equity из позиции API (fallback) для {symbol}: {api_error}")
+                    
+                    # Fallback на общий баланс только если все остальное не сработало
+                    if equity == 0:
+                        equity = await self.client.get_balance()
+                        logger.warning(
+                            f"⚠️ Ошибка получения equity для {symbol}: {e}, "
+                            f"используем общий баланс: {equity:.2f}"
+                        )
 
             # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: size из API в контрактах!
             # Нужно получить ctVal для правильного расчета стоимости
@@ -547,10 +608,15 @@ class FuturesPositionManager:
                             commission_config, "trading_fee_rate", None
                         )
                     if commission_rate is None:
-                        logger.warning(
-                            "⚠️ trading_fee_rate не найден в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
+                        # ✅ ИСПРАВЛЕНО: Используем реальную комиссию в зависимости от типа ордера
+                        order_type = getattr(self.scalping_config, "order_type", "limit")
+                        if order_type == "limit":
+                            commission_rate = 0.0002  # Maker: 0.02%
+                        else:
+                            commission_rate = 0.0005  # Taker: 0.05%
+                        logger.debug(
+                            f"✅ Используем комиссию {order_type}: {commission_rate:.4f} ({commission_rate*100:.2f}%)"
                         )
-                        commission_rate = 0.0010
                 position_value = size_in_coins * entry_price
                 commission = position_value * commission_rate * 2  # Открытие + закрытие
                 net_pnl_usd = pnl_usd - commission
@@ -866,11 +932,12 @@ class FuturesPositionManager:
                 commission_rate = commission_config.get("trading_fee_rate")
             else:
                 commission_rate = getattr(commission_config, "trading_fee_rate", None)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: commission_rate ОБЯЗАТЕЛЕН в конфиге (без fallback)
             if commission_rate is None:
-                logger.warning(
-                    "⚠️ trading_fee_rate не найден в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
+                raise ValueError(
+                    "❌ КРИТИЧЕСКАЯ ОШИБКА: trading_fee_rate не найден в конфиге! "
+                    "Добавьте в config_futures.yaml: scalping.commission.trading_fee_rate (например, 0.0010 для 0.10%)"
                 )
-                commission_rate = 0.0010  # Fallback только если не найдено в конфиге
             trailing_sl_active = False
             min_profit_to_close = None
 
@@ -891,14 +958,15 @@ class FuturesPositionManager:
                     # ⚠️ ВАЖНО: profit_pct_net и min_profit_to_close оба в долях (0.001 = 0.1%)
                     if profit_pct_net > 0 and min_profit_to_close is not None:
                         if profit_pct_net >= min_profit_to_close:
-                            # Трейлинг стоп-лосс активен - TP отключен (трейлинг стоп-лосс имеет приоритет)
+                            # ✅ ИСПРАВЛЕНО: Трейлинг стоп-лосс активен, но TP все равно проверяем
+                            # Если TP достигнут, закрываем сразу, не ждем TSL
                             trailing_sl_active = True
                             logger.debug(
                                 f"📊 {symbol} трейлинг стоп-лосс активен "
                                 f"(profit={profit_pct_net:.3%} >= {min_profit_to_close:.3%}), "
-                                f"TP отключен (трейлинг стоп-лосс имеет приоритет)"
+                                f"но TP все равно проверяем (приоритет TP над TSL)"
                             )
-                            return  # Не проверяем TP, трейлинг стоп-лосс имеет приоритет
+                            # ✅ ИСПРАВЛЕНО: НЕ возвращаемся, продолжаем проверку TP ниже
 
             # ✅ НОВОЕ: Проверка Take Profit с поддержкой per-symbol и per-regime TP
             tp_percent = self.scalping_config.tp_percent  # Глобальный (fallback)
@@ -947,15 +1015,15 @@ class FuturesPositionManager:
                             # ✅ ИСПРАВЛЕНИЕ: Проверяем тип перед конвертацией в float
                             if isinstance(regime_tp_percent, (int, float)):
                                 tp_percent = float(regime_tp_percent)
-                                logger.debug(
-                                    f"📊 Per-regime TP для {symbol} ({regime}): {tp_percent}% "
+                                logger.info(
+                                    f"✅ Per-regime TP для {symbol} ({regime}): {tp_percent}% "
                                     f"(глобальный: {self.scalping_config.tp_percent}%)"
                                 )
                             elif isinstance(regime_tp_percent, str):
                                 try:
                                     tp_percent = float(regime_tp_percent)
-                                    logger.debug(
-                                        f"📊 Per-regime TP для {symbol} ({regime}): {tp_percent}% "
+                                    logger.info(
+                                        f"✅ Per-regime TP для {symbol} ({regime}): {tp_percent}% "
                                         f"(глобальный: {self.scalping_config.tp_percent}%)"
                                     )
                                 except (ValueError, TypeError):
@@ -1183,17 +1251,60 @@ class FuturesPositionManager:
                 except Exception as e:
                     logger.warning(f"⚠️ Ошибка Big-profit exit для {symbol}: {e}")
 
-            # ✅ НОВОЕ: Partial Take Profit лимитами (maker) перед полным закрытием
+            # ✅ ОПТИМИЗАЦИЯ #5: Partial Take Profit лимитами (maker) перед полным закрытием - АДАПТИВНО ПО РЕЖИМАМ
             # Если прибыль положительная и порог близок/достигнут — пробуем закрыть часть позиции лимитом c post_only
             try:
                 partial_cfg = getattr(self.scalping_config, "partial_tp", {})
+                if not isinstance(partial_cfg, dict):
+                    partial_cfg = {}
+                
                 ptp_enabled = partial_cfg.get("enabled", False)
-                ptp_fraction = float(partial_cfg.get("fraction", 0.5))
-                ptp_trigger = float(partial_cfg.get("trigger_percent", 0.5))  # в %
                 ptp_post_only = bool(partial_cfg.get("post_only", True))
                 ptp_offset_bps = float(
-                    partial_cfg.get("limit_offset_bps", 5.0)
-                )  # 5 б.п. = 0.05%
+                    partial_cfg.get("limit_offset_bps", 7.0)
+                )  # 7 б.п. = 0.07%
+                
+                # ✅ ОПТИМИЗАЦИЯ #5: Получаем параметры по режиму (адаптивно)
+                ptp_fraction = float(partial_cfg.get("fraction", 0.6))  # По умолчанию 60%
+                ptp_trigger = float(partial_cfg.get("trigger_percent", 0.4))  # По умолчанию 0.4%
+                
+                # Получаем режим рынка из позиции или signal_generator
+                current_regime = None
+                if symbol in self.active_positions:
+                    stored_position = self.active_positions[symbol]
+                    if isinstance(stored_position, dict):
+                        current_regime = stored_position.get("regime")
+                
+                # Если режим не в позиции, пробуем получить из signal_generator
+                if not current_regime and hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "signal_generator") and self.orchestrator.signal_generator:
+                        signal_gen = self.orchestrator.signal_generator
+                        if hasattr(signal_gen, "regime_managers") and signal_gen.regime_managers:
+                            manager = signal_gen.regime_managers.get(symbol)
+                            if manager:
+                                current_regime = manager.get_current_regime()
+                        elif hasattr(signal_gen, "regime_manager") and signal_gen.regime_manager:
+                            try:
+                                current_regime = signal_gen.regime_manager.get_current_regime()
+                            except:
+                                pass
+                
+                # ✅ ОПТИМИЗАЦИЯ #5: Используем адаптивные параметры по режиму
+                regime_configs = partial_cfg.get("by_regime", {})
+                if current_regime and current_regime.lower() in regime_configs:
+                    regime_config = regime_configs[current_regime.lower()]
+                    regime_fraction = regime_config.get("fraction")
+                    regime_trigger = regime_config.get("trigger_percent")
+                    
+                    if regime_fraction is not None:
+                        ptp_fraction = float(regime_fraction)
+                    if regime_trigger is not None:
+                        ptp_trigger = float(regime_trigger)
+                    
+                    logger.debug(
+                        f"📊 Partial TP для {symbol}: режим={current_regime}, "
+                        f"fraction={ptp_fraction:.1%}, trigger={ptp_trigger:.2f}%"
+                    )
 
                 # Однократность: не делаем повторно для той же позиции
                 partial_done = False
@@ -1416,34 +1527,82 @@ class FuturesPositionManager:
             if entry_time is None:
                 entry_time = datetime.now()
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Комиссия из конфига (может быть в scalping или на верхнем уровне)
+            # ✅ ЗАДАЧА #10: Получаем комиссию из конфига (может быть в scalping или на верхнем уровне)
             commission_config = getattr(self.scalping_config, "commission", None)
             if commission_config is None:
                 # Пробуем получить с верхнего уровня конфига
                 commission_config = getattr(self.config, "commission", {})
             if not commission_config:
                 commission_config = {}
-            # ✅ ИСПРАВЛЕНО: Получаем комиссию из конфига, без захардкоженного fallback
+            # ✅ ЗАДАЧА #10: Получаем maker_fee_rate и taker_fee_rate из конфига
             if isinstance(commission_config, dict):
-                commission_rate = commission_config.get("trading_fee_rate")
+                maker_fee_rate = commission_config.get("maker_fee_rate")
+                taker_fee_rate = commission_config.get("taker_fee_rate")
+                trading_fee_rate = commission_config.get("trading_fee_rate")  # Fallback
             else:
-                commission_rate = getattr(commission_config, "trading_fee_rate", None)
-            if commission_rate is None:
+                maker_fee_rate = getattr(commission_config, "maker_fee_rate", None)
+                taker_fee_rate = getattr(commission_config, "taker_fee_rate", None)
+                trading_fee_rate = getattr(commission_config, "trading_fee_rate", None)
+            
+            # ✅ ЗАДАЧА #10: Если не указаны отдельные ставки, используем trading_fee_rate как fallback
+            if maker_fee_rate is None or taker_fee_rate is None:
+                if trading_fee_rate is None:
+                    raise ValueError(
+                        "❌ КРИТИЧЕСКАЯ ОШИБКА: maker_fee_rate, taker_fee_rate или trading_fee_rate не найдены в конфиге! "
+                        "Добавьте в config_futures.yaml: scalping.commission.maker_fee_rate и taker_fee_rate"
+                    )
+                # Используем trading_fee_rate / 2 как fallback для каждого ордера
+                maker_fee_rate = trading_fee_rate / 2.0
+                taker_fee_rate = trading_fee_rate / 2.0
                 logger.warning(
-                    "⚠️ trading_fee_rate не найден в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
+                    f"⚠️ Используется trading_fee_rate как fallback: maker={maker_fee_rate:.4f}, taker={taker_fee_rate:.4f}"
                 )
-                commission_rate = 0.0010  # Fallback только если не найдено в конфиге
 
-            # Рассчитываем размер позиции в монетах (size уже в контрактах)
-            # Для futures size в контрактах, но для CSV нужен размер в монетах
-            size_in_coins = abs(
-                size
-            )  # size уже в контрактах, но для CSV используем как есть
+            # ✅ ЗАДАЧА #10: Определяем тип entry ордера из active_positions
+            entry_order_type = "market"  # По умолчанию taker (MARKET)
+            entry_post_only = False
+            if symbol in self.active_positions:
+                stored_position = self.active_positions[symbol]
+                if isinstance(stored_position, dict):
+                    entry_order_type = stored_position.get("order_type", "market")
+                    entry_post_only = stored_position.get("post_only", False)
+            
+            # ✅ ЗАДАЧА #10: Определяем комиссию entry: если limit с post_only - maker, иначе taker
+            if entry_order_type == "limit" and entry_post_only:
+                entry_commission_rate = maker_fee_rate  # Maker: 0.02%
+                entry_order_type_str = "POST-ONLY/LIMIT (Maker)"
+            else:
+                entry_commission_rate = taker_fee_rate  # Taker: 0.05%
+                entry_order_type_str = f"{entry_order_type.upper()} (Taker)"
+            
+            # ✅ ЗАДАЧА #10: Exit ордер обычно MARKET (taker), но может быть LIMIT с post_only
+            # По умолчанию используем taker для exit, так как закрытие обычно через MARKET ордер
+            exit_commission_rate = taker_fee_rate  # По умолчанию taker
+            exit_order_type_str = "MARKET (Taker)"
 
-            # Рассчитываем комиссию (открытие + закрытие)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Рассчитываем размер позиции в монетах
+            # size из API в КОНТРАКТАХ, нужно конвертировать в монеты через ctVal
+            try:
+                details = await self.client.get_instrument_details(symbol)
+                ct_val = float(details.get("ctVal", "0.01"))
+                # ✅ Правильная конвертация: контракты * ctVal = монеты
+                size_in_coins = abs(size) * ct_val
+                logger.debug(
+                    f"✅ Конвертация размера для {symbol}: size={size} контрактов, "
+                    f"ctVal={ct_val}, size_in_coins={size_in_coins:.6f} монет"
+                )
+            except Exception as e:
+                raise ValueError(
+                    f"❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось получить ctVal для {symbol}: {e}. "
+                    f"Невозможно рассчитать size_in_coins без ctVal!"
+                )
+
+            # ✅ ЗАДАЧА #10: Рассчитываем комиссию отдельно для entry и exit
             notional_entry = size_in_coins * entry_price
             notional_exit = size_in_coins * exit_price
-            commission = (notional_entry + notional_exit) * commission_rate
+            commission_entry = notional_entry * entry_commission_rate
+            commission_exit = notional_exit * exit_commission_rate
+            commission = commission_entry + commission_exit
 
             # Рассчитываем gross PnL
             if side.lower() == "long":
@@ -1456,10 +1615,27 @@ class FuturesPositionManager:
 
             # Рассчитываем duration в секундах
             duration_sec = (datetime.now() - entry_time).total_seconds()
+            duration_min = duration_sec / 60.0
+            duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
 
-            logger.info(
-                f"🔄 Закрытие позиции {symbol} по причине: {reason}, размер={size} контрактов, PnL={final_pnl:.2f} USDT"
-            )
+            # ✅ ЗАДАЧА #8: Улучшенное логирование закрытия позиции
+            close_time = datetime.now()
+            
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(f"💰 ПОЗИЦИЯ ЗАКРЫТА: {symbol} {side.upper()}")
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(f"   ⏰ Время закрытия: {close_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"   📊 Entry price: ${entry_price:.6f}")
+            logger.info(f"   📊 Exit price: ${exit_price:.6f}")
+            logger.info(f"   📦 Size: {size_in_coins:.8f} монет ({size} контрактов)")
+            logger.info(f"   ⏱️  Длительность удержания: {duration_str}")
+            logger.info(f"   💵 Gross PnL: ${gross_pnl:+.4f} USDT")
+            logger.info(f"   💵 Net PnL: ${net_pnl:+.4f} USDT")
+            logger.info(f"   💸 Комиссия вход ({entry_order_type_str}): ${commission_entry:.4f} USDT ({entry_commission_rate*100:.2f}%)")
+            logger.info(f"   💸 Комиссия выход ({exit_order_type_str}): ${commission_exit:.4f} USDT ({exit_commission_rate*100:.2f}%)")
+            logger.info(f"   💸 Комиссия общая: ${commission:.4f} USDT")
+            logger.info(f"   🎯 Причина закрытия: {reason}")
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             # ✅ Метрики: суммарное время удержания
             try:
                 self.management_stats.setdefault("sum_duration_sec", 0.0)
@@ -1483,9 +1659,9 @@ class FuturesPositionManager:
             )
 
             if result.get("code") == "0":
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем финальный PnL в лог для анализатора
+                # ✅ ЗАДАЧА #8: Детальное логирование уже сделано выше перед закрытием
                 logger.info(
-                    f"✅ Позиция {symbol} закрыта по {reason}, PnL = {final_pnl:+.2f} USDT"
+                    f"✅ Позиция {symbol} успешно закрыта по {reason}"
                 )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
@@ -1622,15 +1798,15 @@ class FuturesPositionManager:
             # Нужно получить ctVal для конвертации в монеты перед расчетом PnL
             try:
                 details = await self.client.get_instrument_details(symbol)
-                ct_val = details.get("ctVal", 0.01)  # По умолчанию для BTC/ETH
+                ct_val = float(details.get("ctVal", "0.01"))
                 # Реальный размер в монетах
                 size_in_coins = abs(size) * ct_val
             except Exception as e:
-                logger.warning(
-                    f"⚠️ Ошибка получения ctVal для {symbol}, используем fallback: {e}"
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ошибка вместо fallback - ctVal ОБЯЗАТЕЛЕН
+                raise ValueError(
+                    f"❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось получить ctVal для {symbol} в _update_position_stats: {e}. "
+                    f"Невозможно рассчитать size_in_coins без ctVal!"
                 )
-                # Fallback: предполагаем что size уже в монетах (для совместимости)
-                size_in_coins = abs(size)
 
             # Расчет текущего PnL (теперь с правильным размером в монетах)
             if side.lower() == "long":
@@ -1663,7 +1839,7 @@ class FuturesPositionManager:
         except Exception as e:
             logger.error(f"Ошибка обновления статистики закрытия: {e}")
 
-    async def close_position_manually(self, symbol: str) -> Optional[TradeResult]:
+    async def close_position_manually(self, symbol: str, reason: str = "manual") -> Optional[TradeResult]:
         """
         ✅ РУЧНОЕ ЗАКРЫТИЕ ПОЗИЦИИ (для TrailingSL)
 
@@ -1729,9 +1905,9 @@ class FuturesPositionManager:
                 )
 
                 if result.get("code") == "0":
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем финальный PnL в лог для анализатора
+                    # ✅ ЗАДАЧА #8: Детальное логирование уже сделано выше перед закрытием
                     logger.info(
-                        f"✅ Позиция {symbol} закрыта через API, PnL = {final_pnl:+.2f} USDT"
+                        f"✅ Позиция {symbol} успешно закрыта через API"
                     )
 
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
@@ -1757,7 +1933,7 @@ class FuturesPositionManager:
                     if entry_time is None:
                         entry_time = datetime.now()
 
-                    # ✅ ИСПРАВЛЕНО: Комиссия из конфига (может быть в scalping или на верхнем уровне)
+                    # ✅ ЗАДАЧА #10: Комиссия из конфига (может быть в scalping или на верхнем уровне)
                     commission_config = getattr(
                         self.scalping_config, "commission", None
                     )
@@ -1766,25 +1942,73 @@ class FuturesPositionManager:
                         commission_config = getattr(self.config, "commission", {})
                     if not commission_config:
                         commission_config = {}
-                    # ✅ ИСПРАВЛЕНО: Получаем комиссию из конфига, без захардкоженного fallback
+                    # ✅ ЗАДАЧА #10: Получаем maker_fee_rate и taker_fee_rate из конфига
                     if isinstance(commission_config, dict):
-                        commission_rate = commission_config.get("trading_fee_rate")
+                        maker_fee_rate = commission_config.get("maker_fee_rate")
+                        taker_fee_rate = commission_config.get("taker_fee_rate")
+                        trading_fee_rate = commission_config.get("trading_fee_rate")  # Fallback
                     else:
-                        commission_rate = getattr(
-                            commission_config, "trading_fee_rate", None
-                        )
-                    if commission_rate is None:
+                        maker_fee_rate = getattr(commission_config, "maker_fee_rate", None)
+                        taker_fee_rate = getattr(commission_config, "taker_fee_rate", None)
+                        trading_fee_rate = getattr(commission_config, "trading_fee_rate", None)
+                    
+                    # ✅ ЗАДАЧА #10: Если не указаны отдельные ставки, используем trading_fee_rate как fallback
+                    if maker_fee_rate is None or taker_fee_rate is None:
+                        if trading_fee_rate is None:
+                            raise ValueError(
+                                "❌ КРИТИЧЕСКАЯ ОШИБКА: maker_fee_rate, taker_fee_rate или trading_fee_rate не найдены в конфиге! "
+                                "Добавьте в config_futures.yaml: scalping.commission.maker_fee_rate и taker_fee_rate"
+                            )
+                        # Используем trading_fee_rate / 2 как fallback для каждого ордера
+                        maker_fee_rate = trading_fee_rate / 2.0
+                        taker_fee_rate = trading_fee_rate / 2.0
                         logger.warning(
-                            "⚠️ trading_fee_rate не найден в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
-                        )
-                        commission_rate = (
-                            0.0010  # Fallback только если не найдено в конфиге
+                            f"⚠️ Используется trading_fee_rate как fallback: maker={maker_fee_rate:.4f}, taker={taker_fee_rate:.4f}"
                         )
 
-                    size_in_coins = abs(size)
+                    # ✅ ЗАДАЧА #10: Определяем тип entry ордера из active_positions
+                    entry_order_type = "market"  # По умолчанию taker (MARKET)
+                    entry_post_only = False
+                    if symbol in self.active_positions:
+                        stored_position = self.active_positions[symbol]
+                        if isinstance(stored_position, dict):
+                            entry_order_type = stored_position.get("order_type", "market")
+                            entry_post_only = stored_position.get("post_only", False)
+                    
+                    # ✅ ЗАДАЧА #10: Определяем комиссию entry: если limit с post_only - maker, иначе taker
+                    if entry_order_type == "limit" and entry_post_only:
+                        entry_commission_rate = maker_fee_rate  # Maker: 0.02%
+                        entry_order_type_str = "POST-ONLY/LIMIT (Maker)"
+                    else:
+                        entry_commission_rate = taker_fee_rate  # Taker: 0.05%
+                        entry_order_type_str = f"{entry_order_type.upper()} (Taker)"
+                    
+                    # ✅ ЗАДАЧА #10: Exit ордер обычно MARKET (taker), но может быть LIMIT с post_only
+                    # По умолчанию используем taker для exit, так как закрытие обычно через MARKET ордер
+                    exit_commission_rate = taker_fee_rate  # По умолчанию taker
+                    exit_order_type_str = "MARKET (Taker)"
+
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Конвертируем size из контрактов в монеты через ctVal
+                    try:
+                        details = await self.client.get_instrument_details(symbol)
+                        ct_val = float(details.get("ctVal", "0.01"))
+                        size_in_coins = abs(size) * ct_val
+                        logger.debug(
+                            f"✅ Конвертация размера для {symbol} (close_position_manually): "
+                            f"size={size} контрактов, ctVal={ct_val}, size_in_coins={size_in_coins:.6f} монет"
+                        )
+                    except Exception as e:
+                        raise ValueError(
+                            f"❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось получить ctVal для {symbol}: {e}. "
+                            f"Невозможно рассчитать size_in_coins без ctVal!"
+                        )
+                    
+                    # ✅ ЗАДАЧА #10: Рассчитываем комиссию отдельно для entry и exit
                     notional_entry = size_in_coins * entry_price
                     notional_exit = size_in_coins * exit_price
-                    commission = (notional_entry + notional_exit) * commission_rate
+                    commission_entry = notional_entry * entry_commission_rate
+                    commission_exit = notional_exit * exit_commission_rate
+                    commission = commission_entry + commission_exit
 
                     # Рассчитываем gross PnL
                     if side.lower() == "long":
@@ -1794,6 +2018,27 @@ class FuturesPositionManager:
 
                     net_pnl = gross_pnl - commission
                     duration_sec = (datetime.now() - entry_time).total_seconds()
+                    duration_min = duration_sec / 60.0
+                    duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
+                    
+                    # ✅ ЗАДАЧА #8: Улучшенное логирование закрытия позиции
+                    close_time = datetime.now()
+                    
+                    logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    logger.info(f"💰 ПОЗИЦИЯ ЗАКРЫТА (manual): {symbol} {side.upper()}")
+                    logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    logger.info(f"   ⏰ Время закрытия: {close_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    logger.info(f"   📊 Entry price: ${entry_price:.6f}")
+                    logger.info(f"   📊 Exit price: ${exit_price:.6f}")
+                    logger.info(f"   📦 Size: {size_in_coins:.8f} монет ({size} контрактов)")
+                    logger.info(f"   ⏱️  Длительность удержания: {duration_str}")
+                    logger.info(f"   💵 Gross PnL: ${gross_pnl:+.4f} USDT")
+                    logger.info(f"   💵 Net PnL: ${net_pnl:+.4f} USDT")
+                    logger.info(f"   💸 Комиссия вход ({entry_order_type_str}): ${commission_entry:.4f} USDT ({entry_commission_rate*100:.2f}%)")
+                    logger.info(f"   💸 Комиссия выход ({exit_order_type_str}): ${commission_exit:.4f} USDT ({exit_commission_rate*100:.2f}%)")
+                    logger.info(f"   💸 Комиссия общая: ${commission:.4f} USDT")
+                    logger.info(f"   🎯 Причина закрытия: {reason}")
+                    logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
                     trade_result = TradeResult(
                         symbol=symbol,
@@ -1805,14 +2050,14 @@ class FuturesPositionManager:
                         commission=commission,
                         net_pnl=net_pnl,
                         duration_sec=duration_sec,
-                        reason="manual",
+                        reason=reason,  # ✅ ИСПРАВЛЕНО: Используем переданный reason вместо "manual"
                         timestamp=datetime.now(),
                     )
                     # ✅ Метрики: суммарное время удержания и счётчики закрытий
                     try:
                         self.management_stats.setdefault("sum_duration_sec", 0.0)
                         self.management_stats["sum_duration_sec"] += float(duration_sec)
-                        self._update_close_stats("manual")
+                        self._update_close_stats(reason)  # ✅ ИСПРАВЛЕНО: Используем переданный reason
                     except Exception:
                         pass
 

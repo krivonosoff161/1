@@ -48,6 +48,7 @@ class TrailingStopLoss:
         extend_time_on_profit: bool = False,  # ✅ ЭТАП 4.3: Продлевать время для прибыльных позиций
         extend_time_multiplier: float = 1.0,  # ✅ ЭТАП 4.3: Множитель продления времени
         leverage: float = 1.0,  # ✅ КРИТИЧЕСКОЕ: Leverage для правильного расчета loss_cut от маржи
+        min_critical_hold_seconds: Optional[float] = None,  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (из конфига)
     ):
         """
         Инициализация Trailing Stop Loss.
@@ -94,6 +95,12 @@ class TrailingStopLoss:
         self.extend_time_on_profit = extend_time_on_profit
         self.extend_time_multiplier = (
             extend_time_multiplier if extend_time_multiplier > 1.0 else 1.0
+        )
+        # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (из конфига)
+        self.min_critical_hold_seconds = (
+            min_critical_hold_seconds
+            if min_critical_hold_seconds and min_critical_hold_seconds > 0
+            else None
         )
         self.aggressive_mode = False
         self.aggressive_step_profit = 0.0
@@ -424,9 +431,11 @@ class TrailingStopLoss:
             # Критический убыток должен быть в 2 раза больше обычного loss_cut_percent
             # И позиция должна держаться хотя бы 10-15 секунд (0.25 минуты)
             seconds_in_position = minutes_in_position * 60.0
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: min_critical_hold_seconds должен быть НЕ БОЛЬШЕ половины min_holding_minutes
-            # Если min_holding_minutes = 2.0 мин (120 сек), то min_critical_hold_seconds = min(60, половина от min_holding_minutes)
-            if effective_min_holding is not None:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем min_critical_hold_seconds из конфига, если указан
+            # Иначе вычисляем как половину min_holding_minutes (но не больше 60 сек)
+            if self.min_critical_hold_seconds is not None:
+                min_critical_hold_seconds = self.min_critical_hold_seconds
+            elif effective_min_holding is not None:
                 min_critical_hold_seconds = min(
                     60.0, (effective_min_holding * 60.0) / 2.0
                 )  # Половина min_holding_minutes, но не больше 60 сек
@@ -441,45 +450,67 @@ class TrailingStopLoss:
                     self.loss_cut_percent * 2.0
                 ) / self.leverage
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем loss_cut ТОЛЬКО если прошло min_critical_hold_seconds
-                # НО не закрываем по обычному loss_cut, если не прошло min_holding_minutes
-                # Закрываем только по критическому 2x loss_cut, если прошло min_critical_hold_seconds но меньше min_holding_minutes
+                # ✅ ИСПРАВЛЕНО: Проверяем loss_cut после min_critical_hold_seconds
+                # Если убыток больше loss_cut, закрываем СРАЗУ (не ждем min_holding_minutes)
                 if seconds_in_position >= min_critical_hold_seconds:
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если прошло min_critical_hold_seconds, но меньше min_holding_minutes,
-                    # закрываем ТОЛЬКО по критическому 2x loss_cut, НЕ по обычному loss_cut
+                    # ✅ ИСПРАВЛЕНО: Закрываем по обычному loss_cut СРАЗУ (после min_critical_hold_seconds)
+                    if profit_pct <= -loss_cut_from_price:
+                        loss_from_margin = abs(profit_pct) * self.leverage
+                        logger.warning(
+                            f"⚠️ Loss-cut: прибыль {profit_pct:.2%} от цены "
+                            f"({loss_from_margin:.2%} от маржи) <= -{loss_cut_from_price:.2%} от цены "
+                            f"(-{self.loss_cut_percent:.2%} от маржи, leverage={self.leverage}x), "
+                            f"позиция будет закрыта СРАЗУ (time_in_position={minutes_in_position:.2f} мин, "
+                            f"прошло {seconds_in_position:.1f} сек >= {min_critical_hold_seconds:.1f} сек, "
+                            f"entry_time={entry_iso}, branch=loss_cut_immediate)"
+                        )
+                        return True  # ✅ ИСПРАВЛЕНО: Закрываем по loss_cut сразу, не ждем min_holding_minutes
+                    # ✅ Критический 2x loss_cut - тоже закрываем сразу
                     if profit_pct <= -critical_loss_cut_from_price:
                         loss_from_margin = abs(profit_pct) * self.leverage
                         logger.warning(
                             f"⚠️ Loss-cut КРИТИЧЕСКИЙ (2x): прибыль {profit_pct:.2%} от цены "
                             f"({loss_from_margin:.2%} от маржи) <= -{critical_loss_cut_from_price:.2%} от цены "
                             f"(-{self.loss_cut_percent * 2.0:.2%} от маржи, leverage={self.leverage}x), "
-                            f"позиция будет закрыта ДАЖЕ ЕСЛИ прошло меньше min_holding_minutes "
-                            f"(time_in_position={minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
-                            f"но прошло {seconds_in_position:.1f} сек >= {min_critical_hold_seconds:.1f} сек, "
-                            f"entry_time={entry_iso}, branch=critical_loss_cut_override)"
+                            f"позиция будет закрыта СРАЗУ (time_in_position={minutes_in_position:.2f} мин, "
+                            f"прошло {seconds_in_position:.1f} сек >= {min_critical_hold_seconds:.1f} сек, "
+                            f"entry_time={entry_iso}, branch=critical_loss_cut_immediate)"
                         )
-                        return True  # Закрываем позицию по критическому loss_cut (2x) даже до min_holding_minutes
-                    # ✅ НЕ закрываем по обычному loss_cut до достижения min_holding_minutes
-                    # Ждем, пока пройдет min_holding_minutes, или достигнем критического 2x loss_cut
+                        return True  # Закрываем по критическому loss_cut сразу
                 else:
-                    # Позиция держится менее 15 секунд - не закрываем даже при большом убытке
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Критический убыток (2x loss_cut) закрываем НЕМЕДЛЕННО, даже до min_critical_hold_seconds
+                    # Это защищает от катастрофических убытков (как -10.24% за 1 минуту)
+                    if profit_pct <= -critical_loss_cut_from_price:
+                        loss_from_margin = abs(profit_pct) * self.leverage
+                        logger.warning(
+                            f"🚨 Loss-cut КРИТИЧЕСКИЙ (2x) НЕМЕДЛЕННО: прибыль {profit_pct:.2%} от цены "
+                            f"({loss_from_margin:.2%} от маржи) <= -{critical_loss_cut_from_price:.2%} от цены "
+                            f"(-{self.loss_cut_percent * 2.0:.2%} от маржи, leverage={self.leverage}x), "
+                            f"позиция будет закрыта НЕМЕДЛЕННО (time_in_position={minutes_in_position:.2f} мин, "
+                            f"прошло {seconds_in_position:.1f} сек < {min_critical_hold_seconds:.1f} сек, "
+                            f"entry_time={entry_iso}, branch=critical_loss_cut_immediate_override)"
+                        )
+                        return True  # ✅ КРИТИЧЕСКОЕ: Закрываем по критическому loss_cut НЕМЕДЛЕННО, даже до min_critical_hold_seconds
+                    # ✅ Защита от проскальзывания - первые min_critical_hold_seconds не закрываем обычный loss_cut
                     # (это может быть проскальзывание или кратковременная флуктуация)
                     if profit_pct <= -loss_cut_from_price:
                         loss_from_margin = abs(profit_pct) * self.leverage
                         logger.debug(
-                            f"⏱️ Loss-cut ИГНОРИРУЕТСЯ (слишком рано): прибыль {profit_pct:.2%} от цены "
+                            f"⏱️ Loss-cut ИГНОРИРУЕТСЯ (защита от проскальзывания): прибыль {profit_pct:.2%} от цены "
                             f"({loss_from_margin:.2%} от маржи) <= -{loss_cut_from_price:.2%} от цены, "
                             f"но позиция держится всего {seconds_in_position:.1f} сек < {min_critical_hold_seconds:.1f} сек "
                             f"(это может быть проскальзывание или кратковременная флуктуация), "
-                            f"не закрываем (time_in_position={minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
+                            f"не закрываем (time_in_position={minutes_in_position:.2f} мин, "
                             f"entry_time={entry_iso}, branch=min_holding_protection)"
                         )
-            # Для остальных случаев не закрываем раньше минимального времени
-            logger.debug(
-                f"⏱️ Минимальное время удержания: позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
-                f"не закрываем (profit={profit_pct:.2%}, entry_time={entry_iso}, branch=min_holding)"
-            )
-            return False
+            # ✅ ИСПРАВЛЕНО: Если прошло min_holding_minutes, но убыток меньше loss_cut, не закрываем
+            # (это нормальная ситуация - позиция может восстановиться)
+            if effective_min_holding is not None and minutes_in_position < effective_min_holding:
+                logger.debug(
+                    f"⏱️ Минимальное время удержания: позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
+                    f"не закрываем (profit={profit_pct:.2%}, entry_time={entry_iso}, branch=min_holding)"
+                )
+                return False
 
         # ✅ Жёсткое ограничение убытка
         # ✅ КРИТИЧЕСКОЕ: Учитываем leverage при сравнении loss_cut_percent

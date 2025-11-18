@@ -546,6 +546,10 @@ class FuturesModulesConfig(BaseModel):
     impulse_trading: Optional[ImpulseTradingConfig] = Field(
         default_factory=ImpulseTradingConfig
     )
+    margin: Optional[Dict] = Field(
+        default=None,
+        description="✅ ОБЯЗАТЕЛЬНО: Параметры маржи с адаптивными значениями для режимов (trending/ranging/choppy)"
+    )
 
 
 class BotConfig(BaseModel):
