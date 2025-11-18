@@ -548,7 +548,7 @@ class FuturesModulesConfig(BaseModel):
     )
     margin: Optional[Dict] = Field(
         default=None,
-        description="✅ ОБЯЗАТЕЛЬНО: Параметры маржи с адаптивными значениями для режимов (trending/ranging/choppy)"
+        description="✅ ОБЯЗАТЕЛЬНО: Параметры маржи с адаптивными значениями для режимов (trending/ranging/choppy)",
     )
 
 

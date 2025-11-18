@@ -192,35 +192,43 @@ class MarginCalculator:
                         f"margin_config type={type(self.margin_config)}, "
                         f"regime={regime}"
                     )
-                    
+
                     # ✅ ИСПРАВЛЕНО: Универсальная обработка dict и Pydantic объектов
                     by_regime = None
                     if isinstance(self.margin_config, dict):
                         by_regime = self.margin_config.get("by_regime", {})
-                        logger.debug(f"🔍 by_regime (dict): {by_regime}, type={type(by_regime)}")
+                        logger.debug(
+                            f"🔍 by_regime (dict): {by_regime}, type={type(by_regime)}"
+                        )
                     else:
                         # Пробуем получить как атрибут (Pydantic объект)
                         by_regime = getattr(self.margin_config, "by_regime", None)
-                        logger.debug(f"🔍 by_regime (attr): {by_regime}, type={type(by_regime)}")
+                        logger.debug(
+                            f"🔍 by_regime (attr): {by_regime}, type={type(by_regime)}"
+                        )
                         # Если это Pydantic объект, конвертируем в dict
                         if by_regime and hasattr(by_regime, "dict"):
                             try:
                                 by_regime = by_regime.dict()
-                                logger.debug(f"🔍 by_regime конвертирован в dict: {by_regime}")
+                                logger.debug(
+                                    f"🔍 by_regime конвертирован в dict: {by_regime}"
+                                )
                             except:
                                 pass
                         elif by_regime and hasattr(by_regime, "__dict__"):
                             try:
                                 by_regime = dict(by_regime.__dict__)
-                                logger.debug(f"🔍 by_regime конвертирован из __dict__: {by_regime}")
+                                logger.debug(
+                                    f"🔍 by_regime конвертирован из __dict__: {by_regime}"
+                                )
                             except:
                                 pass
-                    
+
                     # ✅ ИСПРАВЛЕНО: Если regime=None, используем fallback на 'ranging' (стандартный режим)
                     regime_to_use = regime.lower() if regime else "ranging"
                     if not regime:
                         logger.debug(f"🔍 regime=None, используем fallback: 'ranging'")
-                    
+
                     if by_regime and regime_to_use:
                         # Получаем regime_config
                         regime_config = None
@@ -228,38 +236,46 @@ class MarginCalculator:
                             regime_config = by_regime.get(regime_to_use)
                         elif hasattr(by_regime, regime_to_use):
                             regime_config = getattr(by_regime, regime_to_use, None)
-                        
-                        logger.debug(f"🔍 regime_config для {regime_to_use}: {regime_config}, type={type(regime_config)}")
-                        
+
+                        logger.debug(
+                            f"🔍 regime_config для {regime_to_use}: {regime_config}, type={type(regime_config)}"
+                        )
+
                         # Конвертируем regime_config в dict если это Pydantic объект
                         if regime_config and not isinstance(regime_config, dict):
                             if hasattr(regime_config, "dict"):
                                 try:
                                     regime_config = regime_config.dict()
-                                    logger.debug(f"🔍 regime_config конвертирован в dict: {regime_config}")
+                                    logger.debug(
+                                        f"🔍 regime_config конвертирован в dict: {regime_config}"
+                                    )
                                 except:
                                     pass
                             elif hasattr(regime_config, "__dict__"):
                                 try:
                                     regime_config = dict(regime_config.__dict__)
-                                    logger.debug(f"🔍 regime_config конвертирован из __dict__: {regime_config}")
+                                    logger.debug(
+                                        f"🔍 regime_config конвертирован из __dict__: {regime_config}"
+                                    )
                                 except:
                                     pass
-                        
+
                         # Получаем safety_threshold
                         if regime_config:
                             if isinstance(regime_config, dict):
                                 safety_threshold = regime_config.get("safety_threshold")
                             elif hasattr(regime_config, "safety_threshold"):
-                                safety_threshold = getattr(regime_config, "safety_threshold", None)
+                                safety_threshold = getattr(
+                                    regime_config, "safety_threshold", None
+                                )
                             else:
                                 safety_threshold = None
-                            
+
                             if safety_threshold is not None:
                                 logger.info(
                                     f"✅ Загружен safety_threshold={safety_threshold} из конфига (regime={regime_to_use}{' (fallback)' if not regime else ''})"
                                 )
-                            
+
             except Exception as e:
                 logger.warning(
                     f"⚠️ Не удалось получить адаптивный safety_threshold: {e}, "
@@ -271,12 +287,14 @@ class MarginCalculator:
             if safety_threshold is None:
                 # Определяем regime_to_use для сообщения об ошибке
                 regime_for_error = "ranging"  # По умолчанию
-                if 'regime_to_use' in locals():
+                if "regime_to_use" in locals():
                     regime_for_error = regime_to_use
                 elif regime:
                     regime_for_error = regime.lower()
-                
-                regime_info = f" для regime={regime_for_error}" + (" (использован fallback 'ranging')" if not regime else "")
+
+                regime_info = f" для regime={regime_for_error}" + (
+                    " (использован fallback 'ranging')" if not regime else ""
+                )
                 raise ValueError(
                     f"❌ КРИТИЧЕСКАЯ ОШИБКА: safety_threshold не найден в конфиге{regime_info}! "
                     f"Добавьте в config_futures.yaml: futures_modules.margin.by_regime.{regime_for_error}.safety_threshold. "

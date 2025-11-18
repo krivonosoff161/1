@@ -1568,26 +1568,40 @@ class FuturesSignalGenerator:
                                     if isinstance(regime_obj, str)
                                     else str(regime_obj).lower()
                                 )
-                        
-                        adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+
+                        adaptive_regime = getattr(
+                            self.scalping_config, "adaptive_regime", {}
+                        )
                         if isinstance(adaptive_regime, dict):
                             regime_config = adaptive_regime.get(regime_name_rsi, {})
                         else:
-                            regime_config = getattr(adaptive_regime, regime_name_rsi, {})
-                        
+                            regime_config = getattr(
+                                adaptive_regime, regime_name_rsi, {}
+                            )
+
                         if isinstance(regime_config, dict):
-                            strength_multipliers = regime_config.get("strength_multipliers", {})
-                            conflict_multiplier = strength_multipliers.get("conflict", 0.5)
+                            strength_multipliers = regime_config.get(
+                                "strength_multipliers", {}
+                            )
+                            conflict_multiplier = strength_multipliers.get(
+                                "conflict", 0.5
+                            )
                         else:
-                            strength_multipliers = getattr(regime_config, "strength_multipliers", None)
+                            strength_multipliers = getattr(
+                                regime_config, "strength_multipliers", None
+                            )
                             if strength_multipliers:
-                                conflict_multiplier = getattr(strength_multipliers, "conflict", 0.5)
+                                conflict_multiplier = getattr(
+                                    strength_multipliers, "conflict", 0.5
+                                )
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить conflict_multiplier для {regime_name_rsi}: {e}")
-                    
+                        logger.debug(
+                            f"⚠️ Не удалось получить conflict_multiplier для {regime_name_rsi}: {e}"
+                        )
+
                     # ✅ ЗАДАЧА #7: Снижаем strength при конфликте
                     strength *= conflict_multiplier
-                    
+
                     # ✅ АДАПТИВНО: Сниженная уверенность из конфига (50% от нормальной)
                     normal_conf = confidence_config_rsi.get("rsi_signal", 0.6)
                     confidence = (
@@ -1646,26 +1660,40 @@ class FuturesSignalGenerator:
                                     if isinstance(regime_obj, str)
                                     else str(regime_obj).lower()
                                 )
-                        
-                        adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+
+                        adaptive_regime = getattr(
+                            self.scalping_config, "adaptive_regime", {}
+                        )
                         if isinstance(adaptive_regime, dict):
                             regime_config = adaptive_regime.get(regime_name_rsi, {})
                         else:
-                            regime_config = getattr(adaptive_regime, regime_name_rsi, {})
-                        
+                            regime_config = getattr(
+                                adaptive_regime, regime_name_rsi, {}
+                            )
+
                         if isinstance(regime_config, dict):
-                            strength_multipliers = regime_config.get("strength_multipliers", {})
-                            conflict_multiplier = strength_multipliers.get("conflict", 0.5)
+                            strength_multipliers = regime_config.get(
+                                "strength_multipliers", {}
+                            )
+                            conflict_multiplier = strength_multipliers.get(
+                                "conflict", 0.5
+                            )
                         else:
-                            strength_multipliers = getattr(regime_config, "strength_multipliers", None)
+                            strength_multipliers = getattr(
+                                regime_config, "strength_multipliers", None
+                            )
                             if strength_multipliers:
-                                conflict_multiplier = getattr(strength_multipliers, "conflict", 0.5)
+                                conflict_multiplier = getattr(
+                                    strength_multipliers, "conflict", 0.5
+                                )
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить conflict_multiplier для {regime_name_rsi}: {e}")
-                    
+                        logger.debug(
+                            f"⚠️ Не удалось получить conflict_multiplier для {regime_name_rsi}: {e}"
+                        )
+
                     # ✅ ЗАДАЧА #7: Снижаем strength при конфликте
                     strength *= conflict_multiplier
-                    
+
                     # ✅ АДАПТИВНО: Сниженная уверенность из конфига (50% от нормальной)
                     normal_conf = confidence_config_rsi.get("rsi_signal", 0.6)
                     confidence = (
@@ -1768,44 +1796,58 @@ class FuturesSignalGenerator:
             current_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
             )
-            
+
             # Пересечение MACD линии и сигнальной линии
             if macd_line > signal_line and histogram > 0:
                 # ✅ ЗАДАЧА #7: Проверяем совпадение EMA и цены для BULLISH
                 is_bullish_trend = ema_fast > ema_slow and current_price > ema_fast
-                
+
                 # Базовый strength из MACD histogram
                 base_strength = min(abs(histogram) / 200.0, 1.0)
-                
+
                 # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим
                 if not is_bullish_trend:
                     # Конфликт: MACD bullish, но EMA/цена не bullish
                     # Получаем strength_multiplier для конфликта из конфига
                     conflict_multiplier = 0.5  # Fallback
                     try:
-                        adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                        adaptive_regime = getattr(
+                            self.scalping_config, "adaptive_regime", {}
+                        )
                         if isinstance(adaptive_regime, dict):
                             regime_config = adaptive_regime.get(regime_name_macd, {})
                         else:
-                            regime_config = getattr(adaptive_regime, regime_name_macd, {})
-                        
+                            regime_config = getattr(
+                                adaptive_regime, regime_name_macd, {}
+                            )
+
                         if isinstance(regime_config, dict):
-                            strength_multipliers = regime_config.get("strength_multipliers", {})
-                            conflict_multiplier = strength_multipliers.get("conflict", 0.5)
+                            strength_multipliers = regime_config.get(
+                                "strength_multipliers", {}
+                            )
+                            conflict_multiplier = strength_multipliers.get(
+                                "conflict", 0.5
+                            )
                         else:
-                            strength_multipliers = getattr(regime_config, "strength_multipliers", None)
+                            strength_multipliers = getattr(
+                                regime_config, "strength_multipliers", None
+                            )
                             if strength_multipliers:
-                                conflict_multiplier = getattr(strength_multipliers, "conflict", 0.5)
+                                conflict_multiplier = getattr(
+                                    strength_multipliers, "conflict", 0.5
+                                )
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить conflict_multiplier для {regime_name_macd}: {e}")
-                    
+                        logger.debug(
+                            f"⚠️ Не удалось получить conflict_multiplier для {regime_name_macd}: {e}"
+                        )
+
                     base_strength *= conflict_multiplier
                     logger.debug(
                         f"⚡ MACD BULLISH с конфликтом для {symbol}: "
                         f"MACD bullish, но EMA/цена не bullish (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f}, price={current_price:.2f}), "
                         f"strength снижен на {conflict_multiplier:.1%} (было {min(abs(histogram) / 200.0, 1.0):.3f}, стало {base_strength:.3f})"
                     )
-                
+
                 logger.debug(
                     f"✅ MACD BULLISH сигнал для {symbol}: macd({macd_line:.4f}) > signal({signal_line:.4f}), "
                     f"histogram={histogram:.4f} > 0, is_bullish_trend={is_bullish_trend}"
@@ -1829,40 +1871,56 @@ class FuturesSignalGenerator:
                 # ✅ ЗАДАЧА #7: Проверяем совпадение EMA и цены для BEARISH
                 # Для BEARISH: ema_fast<ema_slow AND price<ema_fast
                 is_bearish_trend = ema_fast < ema_slow and current_price < ema_fast
-                
+
                 # Базовый strength из MACD histogram
                 base_strength = min(abs(histogram) / 200.0, 1.0)
-                
+
                 # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим
                 if not is_bearish_trend:
                     # Конфликт: MACD bearish, но EMA/цена не bearish
                     # Получаем strength_multiplier для конфликта из конфига
                     conflict_multiplier = 0.5  # Fallback
                     try:
-                        adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                        adaptive_regime = getattr(
+                            self.scalping_config, "adaptive_regime", {}
+                        )
                         if isinstance(adaptive_regime, dict):
                             regime_config = adaptive_regime.get(regime_name_macd, {})
                         else:
-                            regime_config = getattr(adaptive_regime, regime_name_macd, {})
-                        
+                            regime_config = getattr(
+                                adaptive_regime, regime_name_macd, {}
+                            )
+
                         if isinstance(regime_config, dict):
-                            strength_multipliers = regime_config.get("strength_multipliers", {})
-                            conflict_multiplier = strength_multipliers.get("conflict", 0.5)
+                            strength_multipliers = regime_config.get(
+                                "strength_multipliers", {}
+                            )
+                            conflict_multiplier = strength_multipliers.get(
+                                "conflict", 0.5
+                            )
                         else:
-                            strength_multipliers = getattr(regime_config, "strength_multipliers", None)
+                            strength_multipliers = getattr(
+                                regime_config, "strength_multipliers", None
+                            )
                             if strength_multipliers:
-                                conflict_multiplier = getattr(strength_multipliers, "conflict", 0.5)
+                                conflict_multiplier = getattr(
+                                    strength_multipliers, "conflict", 0.5
+                                )
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить conflict_multiplier для {regime_name_macd}: {e}")
-                    
+                        logger.debug(
+                            f"⚠️ Не удалось получить conflict_multiplier для {regime_name_macd}: {e}"
+                        )
+
                     base_strength *= conflict_multiplier
                     logger.debug(
                         f"⚡ MACD BEARISH с конфликтом для {symbol}: "
                         f"MACD bearish, но EMA/цена не bearish (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f}, price={current_price:.2f}), "
                         f"strength снижен на {conflict_multiplier:.1%} (было {min(abs(histogram) / 200.0, 1.0):.3f}, стало {base_strength:.3f})"
                     )
-                
-                logger.debug(f"✅ MACD BEARISH сигнал для {symbol}: histogram={histogram:.4f}, is_bearish_trend={is_bearish_trend}")
+
+                logger.debug(
+                    f"✅ MACD BEARISH сигнал для {symbol}: histogram={histogram:.4f}, is_bearish_trend={is_bearish_trend}"
+                )
                 signals.append(
                     {
                         "symbol": symbol,
@@ -1951,28 +2009,40 @@ class FuturesSignalGenerator:
                     else 0.5,
                     1.0,
                 )
-                
+
                 if is_downtrend:
                     # Конфликт: BB oversold (LONG) vs EMA bearish (DOWN)
                     # Получаем strength_multiplier для конфликта из конфига
                     conflict_multiplier = 0.5  # Fallback
                     try:
-                        adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                        adaptive_regime = getattr(
+                            self.scalping_config, "adaptive_regime", {}
+                        )
                         if isinstance(adaptive_regime, dict):
                             regime_config = adaptive_regime.get(regime_name_bb, {})
                         else:
                             regime_config = getattr(adaptive_regime, regime_name_bb, {})
-                        
+
                         if isinstance(regime_config, dict):
-                            strength_multipliers = regime_config.get("strength_multipliers", {})
-                            conflict_multiplier = strength_multipliers.get("conflict", 0.5)
+                            strength_multipliers = regime_config.get(
+                                "strength_multipliers", {}
+                            )
+                            conflict_multiplier = strength_multipliers.get(
+                                "conflict", 0.5
+                            )
                         else:
-                            strength_multipliers = getattr(regime_config, "strength_multipliers", None)
+                            strength_multipliers = getattr(
+                                regime_config, "strength_multipliers", None
+                            )
                             if strength_multipliers:
-                                conflict_multiplier = getattr(strength_multipliers, "conflict", 0.5)
+                                conflict_multiplier = getattr(
+                                    strength_multipliers, "conflict", 0.5
+                                )
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить conflict_multiplier для {regime_name_bb}: {e}")
-                    
+                        logger.debug(
+                            f"⚠️ Не удалось получить conflict_multiplier для {regime_name_bb}: {e}"
+                        )
+
                     # ✅ ЗАДАЧА #7: Снижаем strength при конфликте
                     base_strength *= conflict_multiplier
                     logger.debug(
@@ -1987,7 +2057,7 @@ class FuturesSignalGenerator:
                         f"цена({current_price:.2f}) <= lower({lower:.2f}), "
                         f"тренд не нисходящий (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f})"
                     )
-                
+
                 signals.append(
                     {
                         "symbol": symbol,
@@ -2020,28 +2090,40 @@ class FuturesSignalGenerator:
                     else 0.5,
                     1.0,
                 )
-                
+
                 if is_uptrend:
                     # Конфликт: BB overbought (SHORT) vs EMA bullish (UP)
                     # Получаем strength_multiplier для конфликта из конфига
                     conflict_multiplier = 0.5  # Fallback
                     try:
-                        adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                        adaptive_regime = getattr(
+                            self.scalping_config, "adaptive_regime", {}
+                        )
                         if isinstance(adaptive_regime, dict):
                             regime_config = adaptive_regime.get(regime_name_bb, {})
                         else:
                             regime_config = getattr(adaptive_regime, regime_name_bb, {})
-                        
+
                         if isinstance(regime_config, dict):
-                            strength_multipliers = regime_config.get("strength_multipliers", {})
-                            conflict_multiplier = strength_multipliers.get("conflict", 0.5)
+                            strength_multipliers = regime_config.get(
+                                "strength_multipliers", {}
+                            )
+                            conflict_multiplier = strength_multipliers.get(
+                                "conflict", 0.5
+                            )
                         else:
-                            strength_multipliers = getattr(regime_config, "strength_multipliers", None)
+                            strength_multipliers = getattr(
+                                regime_config, "strength_multipliers", None
+                            )
                             if strength_multipliers:
-                                conflict_multiplier = getattr(strength_multipliers, "conflict", 0.5)
+                                conflict_multiplier = getattr(
+                                    strength_multipliers, "conflict", 0.5
+                                )
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить conflict_multiplier для {regime_name_bb}: {e}")
-                    
+                        logger.debug(
+                            f"⚠️ Не удалось получить conflict_multiplier для {regime_name_bb}: {e}"
+                        )
+
                     # ✅ ЗАДАЧА #7: Снижаем strength при конфликте
                     base_strength *= conflict_multiplier
                     logger.debug(
@@ -2056,7 +2138,7 @@ class FuturesSignalGenerator:
                         f"цена({current_price:.2f}) >= upper({upper:.2f}), "
                         f"тренд не восходящий (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f})"
                     )
-                
+
                 signals.append(
                     {
                         "symbol": symbol,

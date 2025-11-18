@@ -48,7 +48,9 @@ class TrailingStopLoss:
         extend_time_on_profit: bool = False,  # ✅ ЭТАП 4.3: Продлевать время для прибыльных позиций
         extend_time_multiplier: float = 1.0,  # ✅ ЭТАП 4.3: Множитель продления времени
         leverage: float = 1.0,  # ✅ КРИТИЧЕСКОЕ: Leverage для правильного расчета loss_cut от маржи
-        min_critical_hold_seconds: Optional[float] = None,  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (из конфига)
+        min_critical_hold_seconds: Optional[
+            float
+        ] = None,  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (из конфига)
     ):
         """
         Инициализация Trailing Stop Loss.
@@ -505,7 +507,10 @@ class TrailingStopLoss:
                         )
             # ✅ ИСПРАВЛЕНО: Если прошло min_holding_minutes, но убыток меньше loss_cut, не закрываем
             # (это нормальная ситуация - позиция может восстановиться)
-            if effective_min_holding is not None and minutes_in_position < effective_min_holding:
+            if (
+                effective_min_holding is not None
+                and minutes_in_position < effective_min_holding
+            ):
                 logger.debug(
                     f"⏱️ Минимальное время удержания: позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
                     f"не закрываем (profit={profit_pct:.2%}, entry_time={entry_iso}, branch=min_holding)"
