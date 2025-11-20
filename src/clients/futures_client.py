@@ -124,92 +124,173 @@ class OKXFuturesClient:
         if not self.session or self.session.closed:
             self.session = aiohttp.ClientSession()
 
-        try:
-            async with self.session.request(
-                method, url, headers=headers, params=params, data=body
-            ) as resp:
-                # 🔥 ИСПРАВЛЕНИЕ: Проверяем content-type перед парсингом JSON
-                content_type = resp.headers.get("Content-Type", "").lower()
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Retry логика для таймаутов и ошибок подключения
+        max_retries = 3
+        retry_delay = 1.0  # Начальная задержка в секундах
+        
+        for attempt in range(max_retries):
+            try:
+                # Увеличиваем таймаут для запросов (30 секунд)
+                timeout = aiohttp.ClientTimeout(total=30, connect=10)
+                async with self.session.request(
+                    method, url, headers=headers, params=params, data=body, timeout=timeout
+                ) as resp:
+                    # 🔥 ИСПРАВЛЕНИЕ: Проверяем content-type перед парсингом JSON
+                    content_type = resp.headers.get("Content-Type", "").lower()
 
-                # Если OKX вернул HTML вместо JSON - это ошибка (rate limit, 403, 404 и т.д.)
-                if "text/html" in content_type:
-                    # Получаем текст для диагностики
-                    text = await resp.text()
-                    logger.error(
-                        f"❌ OKX вернул HTML вместо JSON! Status: {resp.status}, "
-                        f"URL: {url}, Content-Type: {content_type}"
-                    )
-                    # Пытаемся найти причину в HTML (может быть rate limit или ошибка авторизации)
-                    if "rate limit" in text.lower() or "too many" in text.lower():
+                    # Если OKX вернул HTML вместо JSON - это ошибка (rate limit, 403, 404 и т.д.)
+                    if "text/html" in content_type:
+                        # Получаем текст для диагностики
+                        text = await resp.text()
                         logger.error(
-                            "⚠️ Превышен rate limit OKX! Нужна задержка между запросами."
+                            f"❌ OKX вернул HTML вместо JSON! Status: {resp.status}, "
+                            f"URL: {url}, Content-Type: {content_type}"
                         )
-                        raise RuntimeError("OKX rate limit exceeded")
-                    elif resp.status == 403:
-                        logger.error(
-                            "⚠️ Доступ запрещен (403). Проверьте API ключи и права доступа."
-                        )
-                        raise RuntimeError("OKX API: Access forbidden (403)")
-                    elif resp.status == 404:
-                        logger.error("⚠️ Endpoint не найден (404). Проверьте URL.")
-                        raise RuntimeError(f"OKX API: Endpoint not found (404): {url}")
-                    else:
-                        logger.error(f"⚠️ Неожиданный HTML ответ от OKX: {text[:500]}")
-                        raise RuntimeError(
-                            f"OKX API returned HTML instead of JSON. "
-                            f"Status: {resp.status}, Content-Type: {content_type}"
-                        )
+                        # Пытаемся найти причину в HTML (может быть rate limit или ошибка авторизации)
+                        if "rate limit" in text.lower() or "too many" in text.lower():
+                            logger.error(
+                                "⚠️ Превышен rate limit OKX! Нужна задержка между запросами."
+                            )
+                            raise RuntimeError("OKX rate limit exceeded")
+                        elif resp.status == 403:
+                            logger.error(
+                                "⚠️ Доступ запрещен (403). Проверьте API ключи и права доступа."
+                            )
+                            raise RuntimeError("OKX API: Access forbidden (403)")
+                        elif resp.status == 404:
+                            logger.error("⚠️ Endpoint не найден (404). Проверьте URL.")
+                            raise RuntimeError(f"OKX API: Endpoint not found (404): {url}")
+                        else:
+                            logger.error(f"⚠️ Неожиданный HTML ответ от OKX: {text[:500]}")
+                            raise RuntimeError(
+                                f"OKX API returned HTML instead of JSON. "
+                                f"Status: {resp.status}, Content-Type: {content_type}"
+                            )
 
-                # Парсим JSON только если это действительно JSON
-                try:
-                    resp_data = await resp.json()
-                except Exception as e:
-                    # Если не удалось распарсить JSON, логируем и выбрасываем ошибку
-                    text = await resp.text()
-                    logger.error(
-                        f"❌ Ошибка парсинга JSON от OKX: {e}, "
-                        f"Status: {resp.status}, Content-Type: {content_type}, "
-                        f"Response: {text[:500]}"
-                    )
-                    raise RuntimeError(
-                        f"Failed to parse JSON response from OKX: {e}, "
-                        f"Status: {resp.status}"
-                    )
-
-                # Проверяем статус ответа
-                if resp.status != 200:
-                    logger.error(f"❌ OKX API вернул статус {resp.status}: {resp_data}")
-                    raise RuntimeError(
-                        f"OKX API error: status {resp.status}, data: {resp_data}"
-                    )
-
-                if resp_data.get("code") != "0":
-                    logger.error("OKX API error: %s", resp_data)
-                    raise RuntimeError(resp_data)
-
-                # ✅ ЛОГИРОВАНИЕ КОМИССИИ: Если это ответ на размещение ордера, логируем комиссию
-                if method == "POST" and "/trade/order" in url:
+                    # Парсим JSON только если это действительно JSON
                     try:
-                        order_data = resp_data.get("data", [])
-                        if order_data and len(order_data) > 0:
-                            fee = order_data[0].get("fee", "N/A")
-                            fee_ccy = order_data[0].get("feeCcy", "N/A")
-                            if fee != "N/A" and fee:
-                                logger.info(
-                                    f"💰 Комиссия за ордер {order_data[0].get('ordId', 'N/A')}: "
-                                    f"{fee} {fee_ccy} (или будет списана при исполнении)"
-                                )
+                        resp_data = await resp.json()
                     except Exception as e:
-                        logger.debug(f"Не удалось залогировать комиссию: {e}")
+                        # Если не удалось распарсить JSON, логируем и выбрасываем ошибку
+                        text = await resp.text()
+                        logger.error(
+                            f"❌ Ошибка парсинга JSON от OKX: {e}, "
+                            f"Status: {resp.status}, Content-Type: {content_type}, "
+                            f"Response: {text[:500]}"
+                        )
+                        raise RuntimeError(
+                            f"Failed to parse JSON response from OKX: {e}, "
+                            f"Status: {resp.status}"
+                        )
 
-                return resp_data
+                    # Проверяем статус ответа
+                    if resp.status != 200:
+                        logger.error(f"❌ OKX API вернул статус {resp.status}: {resp_data}")
+                        raise RuntimeError(
+                            f"OKX API error: status {resp.status}, data: {resp_data}"
+                        )
 
-        except asyncio.CancelledError:
-            logger.debug(f"Запрос к OKX отменен: {method} {url}")
-            raise  # Пробрасываем дальше
-        except Exception as e:
-            logger.error(f"Ошибка при запросе к OKX ({method} {url}): {e}")
-            raise
+                    if resp_data.get("code") != "0":
+                        logger.error("OKX API error: %s", resp_data)
+                        raise RuntimeError(resp_data)
+
+                    # ✅ ЛОГИРОВАНИЕ КОМИССИИ: Если это ответ на размещение ордера, логируем комиссию
+                    if method == "POST" and "/trade/order" in url:
+                        try:
+                            order_data = resp_data.get("data", [])
+                            if order_data and len(order_data) > 0:
+                                fee = order_data[0].get("fee", "N/A")
+                                fee_ccy = order_data[0].get("feeCcy", "N/A")
+                                if fee != "N/A" and fee:
+                                    logger.info(
+                                        f"💰 Комиссия за ордер {order_data[0].get('ordId', 'N/A')}: "
+                                        f"{fee} {fee_ccy} (или будет списана при исполнении)"
+                                    )
+                        except Exception as e:
+                            logger.debug(f"Не удалось залогировать комиссию: {e}")
+
+                    return resp_data
+                    
+            except asyncio.TimeoutError:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)  # Экспоненциальная задержка
+                    logger.warning(
+                        f"⏱️ Таймаут при запросе к OKX (попытка {attempt + 1}/{max_retries}): "
+                        f"{method} {url}, повтор через {wait_time:.1f}с"
+                    )
+                    await asyncio.sleep(wait_time)
+                    # Обновляем timestamp и подпись для новой попытки
+                    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                    sign_str = timestamp + method.upper() + request_path + body
+                    signature = base64.b64encode(
+                        hmac.new(
+                            self.secret_key.encode(), sign_str.encode(), hashlib.sha256
+                        ).digest()
+                    ).decode()
+                    headers["OK-ACCESS-TIMESTAMP"] = timestamp
+                    headers["OK-ACCESS-SIGN"] = signature
+                    continue
+                else:
+                    logger.error(f"❌ Превышен таймаут при запросе к OKX после {max_retries} попыток: {method} {url}")
+                    raise
+            except OSError as e:
+                # Обработка WinError 121 (превышен таймаут семафора) и других ошибок подключения
+                error_str = str(e).lower()
+                if "121" in str(e) or "семафор" in error_str or "semaphore" in error_str or "timeout" in error_str:
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt)
+                        logger.warning(
+                            f"⏱️ Таймаут семафора при запросе к OKX (попытка {attempt + 1}/{max_retries}): "
+                            f"{method} {url}, ошибка: {e}, повтор через {wait_time:.1f}с"
+                        )
+                        await asyncio.sleep(wait_time)
+                        # Обновляем timestamp и подпись для новой попытки
+                        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                        sign_str = timestamp + method.upper() + request_path + body
+                        signature = base64.b64encode(
+                            hmac.new(
+                                self.secret_key.encode(), sign_str.encode(), hashlib.sha256
+                            ).digest()
+                        ).decode()
+                        headers["OK-ACCESS-TIMESTAMP"] = timestamp
+                        headers["OK-ACCESS-SIGN"] = signature
+                        continue
+                    else:
+                        logger.error(f"❌ Превышен таймаут семафора при запросе к OKX после {max_retries} попыток: {method} {url}, ошибка: {e}")
+                        raise
+                else:
+                    # Другие OSError - пробрасываем дальше
+                    raise
+            except aiohttp.ClientError as e:
+                # Ошибки подключения aiohttp (Cannot connect to host и т.д.)
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    logger.warning(
+                        f"⏱️ Ошибка подключения к OKX (попытка {attempt + 1}/{max_retries}): "
+                        f"{method} {url}, ошибка: {e}, повтор через {wait_time:.1f}с"
+                    )
+                    await asyncio.sleep(wait_time)
+                    # Обновляем timestamp и подпись для новой попытки
+                    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                    sign_str = timestamp + method.upper() + request_path + body
+                    signature = base64.b64encode(
+                        hmac.new(
+                            self.secret_key.encode(), sign_str.encode(), hashlib.sha256
+                        ).digest()
+                    ).decode()
+                    headers["OK-ACCESS-TIMESTAMP"] = timestamp
+                    headers["OK-ACCESS-SIGN"] = signature
+                    continue
+                else:
+                    logger.error(f"❌ Ошибка подключения к OKX после {max_retries} попыток: {method} {url}, ошибка: {e}")
+                    raise
+            except asyncio.CancelledError:
+                logger.debug(f"Запрос к OKX отменен: {method} {url}")
+                raise  # Пробрасываем дальше
+            except Exception as e:
+                # Для других ошибок не делаем retry (ошибки API, авторизации и т.д.)
+                logger.error(f"Ошибка при запросе к OKX ({method} {url}): {e}")
+                raise
 
     # ---------- Account & Margin ----------
     async def get_account_config(self) -> dict:

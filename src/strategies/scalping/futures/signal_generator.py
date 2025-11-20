@@ -229,8 +229,26 @@ class FuturesSignalGenerator:
         self.is_initialized = False
         self.last_signals = {}
         self.signal_history = []
+        # ✅ НОВОЕ: Модуль статистики для динамической адаптации
+        self.trading_statistics = None
 
         logger.info("FuturesSignalGenerator инициализирован")
+
+    def set_trading_statistics(self, trading_statistics):
+        """
+        ✅ НОВОЕ: Установить модуль статистики для динамической адаптации
+
+        Args:
+            trading_statistics: Экземпляр TradingStatistics
+        """
+        self.trading_statistics = trading_statistics
+        # Передаем статистику в ARM
+        if self.regime_manager and hasattr(self.regime_manager, "trading_statistics"):
+            self.regime_manager.trading_statistics = trading_statistics
+        # Передаем статистику во все per-symbol ARM
+        for symbol, manager in self.regime_managers.items():
+            if hasattr(manager, "trading_statistics"):
+                manager.trading_statistics = trading_statistics
 
     @staticmethod
     def _to_dict(raw: Any) -> Dict[str, Any]:
@@ -485,7 +503,9 @@ class FuturesSignalGenerator:
                         ranging_params=ranging_params,
                         choppy_params=choppy_params,
                     )
-                    self.regime_manager = AdaptiveRegimeManager(regime_config)
+                    self.regime_manager = AdaptiveRegimeManager(
+                        regime_config, trading_statistics=self.trading_statistics
+                    )
 
                     if ohlcv_data:
                         await self.regime_manager.initialize(ohlcv_data)
@@ -537,7 +557,8 @@ class FuturesSignalGenerator:
                             choppy_params=symbol_choppy_params,
                         )
                         self.regime_managers[symbol] = AdaptiveRegimeManager(
-                            symbol_regime_config
+                            regime_config,
+                            trading_statistics=self.trading_statistics
                         )
                         if ohlcv_data and symbol in ohlcv_data:
                             await self.regime_managers[symbol].initialize(

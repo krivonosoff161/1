@@ -24,6 +24,7 @@ from src.config import BotConfig
 from src.strategies.modules.liquidation_guard import LiquidationGuard
 from src.strategies.modules.margin_calculator import MarginCalculator
 from src.strategies.modules.slippage_guard import SlippageGuard
+from src.strategies.modules.trading_statistics import TradingStatistics
 
 from ..spot.performance_tracker import PerformanceTracker
 from .indicators.fast_adx import FastADX
@@ -209,9 +210,15 @@ class FuturesScalpingOrchestrator:
             slippage_config_full if slippage_config_full else slippage_config
         )
 
+        # ✅ НОВОЕ: Модуль статистики для динамической адаптации
+        self.trading_statistics = TradingStatistics(lookback_hours=24)
+
         # Торговые модули
         # ✅ Передаем клиент в signal_generator для инициализации фильтров
         self.signal_generator = FuturesSignalGenerator(config, client=self.client)
+        # ✅ НОВОЕ: Передаем trading_statistics в signal_generator для ARM
+        if hasattr(self.signal_generator, "set_trading_statistics"):
+            self.signal_generator.set_trading_statistics(self.trading_statistics)
         self.order_executor = FuturesOrderExecutor(
             config, self.client, self.slippage_guard
         )
@@ -2318,6 +2325,7 @@ class FuturesScalpingOrchestrator:
                 risk_percentage,
                 leverage=None,
                 regime=current_regime,
+                trading_statistics=self.trading_statistics if hasattr(self, "trading_statistics") else None,
             )
 
             # Исполнение ордера
@@ -5390,9 +5398,21 @@ class FuturesScalpingOrchestrator:
 
             # Получаем entry_price из позиции
             entry_price = position.get("entry_price", 0)
+            # ✅ ИСПРАВЛЕНО: Конвертируем в float если это строка
+            if isinstance(entry_price, str):
+                try:
+                    entry_price = float(entry_price)
+                except (ValueError, TypeError):
+                    entry_price = 0
             # ✅ ИСПРАВЛЕНО: Если entry_price = 0, пробуем получить из avgPx
             if entry_price == 0:
                 avg_px = position.get("avgPx", 0)
+                # ✅ ИСПРАВЛЕНО: Конвертируем в float если это строка
+                if isinstance(avg_px, str):
+                    try:
+                        avg_px = float(avg_px)
+                    except (ValueError, TypeError):
+                        avg_px = 0
                 if avg_px and avg_px > 0:
                     entry_price = float(avg_px)
                     # Обновляем entry_price в позиции для будущих вызовов
@@ -5408,7 +5428,12 @@ class FuturesScalpingOrchestrator:
                             for pos in positions:
                                 pos_size = float(pos.get("pos", "0"))
                                 if abs(pos_size) > 1e-8:  # Позиция есть
-                                    api_avg_px = float(pos.get("avgPx", "0"))
+                                    api_avg_px_raw = pos.get("avgPx", "0")
+                                    # ✅ ИСПРАВЛЕНО: Конвертируем в float если это строка
+                                    try:
+                                        api_avg_px = float(api_avg_px_raw)
+                                    except (ValueError, TypeError):
+                                        api_avg_px = 0
                                     if api_avg_px and api_avg_px > 0:
                                         entry_price = api_avg_px
                                         # Обновляем entry_price и avgPx в позиции для будущих вызовов
@@ -6278,6 +6303,17 @@ class FuturesScalpingOrchestrator:
                         )
                         return  # Не закрываем, даем больше времени
 
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: НЕ закрываем убыточные позиции по времени
+                    # Убыточные позиции должны закрываться только по trailing stop или loss cut
+                    if profit_pct <= 0:
+                        logger.info(
+                            f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
+                            f"(лимит: {actual_max_holding:.1f} минут), "
+                            f"но прибыль {profit_pct:.2%} <= 0%, "
+                            f"НЕ закрываем по времени (используем только trailing stop и loss cut)"
+                        )
+                        return  # Не закрываем убыточные позиции по времени
+
                     # Время истекло и позиция не в прибыли > min_profit_to_close - закрываем
                     logger.info(
                         f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
@@ -6430,6 +6466,90 @@ class FuturesScalpingOrchestrator:
                         logger.debug(f"✅ Сделка {symbol} записана в CSV")
                     except Exception as e:
                         logger.error(f"❌ Ошибка записи сделки в CSV: {e}")
+
+                # ✅ НОВОЕ: Записываем статистику для динамической адаптации
+                if trade_result and hasattr(self, "trading_statistics"):
+                    try:
+                        # ✅ ИСПРАВЛЕНО: Получаем режим рынка из per-symbol ARM (если есть)
+                        regime = "ranging"  # Fallback
+                        if (
+                            hasattr(self, "signal_generator")
+                            and self.signal_generator
+                        ):
+                            # Сначала пробуем per-symbol ARM
+                            if (
+                                hasattr(self.signal_generator, "regime_managers")
+                                and symbol in self.signal_generator.regime_managers
+                            ):
+                                regime_manager = self.signal_generator.regime_managers[symbol]
+                                regime_obj = regime_manager.get_current_regime()
+                                if regime_obj:
+                                    regime = (
+                                        regime_obj.value.lower()
+                                        if hasattr(regime_obj, "value")
+                                        else str(regime_obj).lower()
+                                    )
+                            # Если нет per-symbol ARM - используем общий
+                            elif (
+                                hasattr(self.signal_generator, "regime_manager")
+                                and self.signal_generator.regime_manager
+                            ):
+                                regime_obj = (
+                                    self.signal_generator.regime_manager.get_current_regime()
+                                )
+                                if regime_obj:
+                                    regime = (
+                                        regime_obj.value.lower()
+                                        if hasattr(regime_obj, "value")
+                                        else str(regime_obj).lower()
+                                    )
+
+                        # Получаем данные из trade_result
+                        side = trade_result.side if hasattr(trade_result, "side") else position.get("side", "buy")
+                        pnl = trade_result.pnl if hasattr(trade_result, "pnl") else 0.0
+                        entry_price = (
+                            trade_result.entry_price
+                            if hasattr(trade_result, "entry_price")
+                            else position.get("entry_price", 0)
+                        )
+                        exit_price = (
+                            trade_result.exit_price
+                            if hasattr(trade_result, "exit_price")
+                            else position.get("current_price", 0)
+                        )
+                        entry_time = (
+                            trade_result.entry_time
+                            if hasattr(trade_result, "entry_time")
+                            else position.get("entry_time", datetime.now())
+                        )
+                        exit_time = (
+                            trade_result.exit_time
+                            if hasattr(trade_result, "exit_time")
+                            else datetime.now()
+                        )
+                        signal_strength = position.get("signal_strength", 0.0)
+                        signal_type = position.get("signal_type", "unknown")
+
+                        # Записываем статистику
+                        self.trading_statistics.record_trade(
+                            symbol=symbol,
+                            side=side,
+                            regime=regime,
+                            pnl=pnl,
+                            entry_price=entry_price,
+                            exit_price=exit_price,
+                            entry_time=entry_time,
+                            exit_time=exit_time,
+                            signal_strength=signal_strength,
+                            signal_type=signal_type,
+                        )
+                        logger.debug(
+                            f"📊 Статистика записана для {symbol}: regime={regime}, pnl={pnl:.2f}, "
+                            f"win_rate={self.trading_statistics.get_win_rate(regime, symbol):.2%} "
+                            f"(по паре), общий win_rate={self.trading_statistics.get_win_rate(regime):.2%} (по режиму)"
+                        )
+                    except Exception as e:
+                        logger.warning(f"⚠️ Ошибка записи статистики: {e}")
 
                 # ✅ Обновляем кэш ордеров
                 normalized_symbol = self._normalize_symbol(symbol)

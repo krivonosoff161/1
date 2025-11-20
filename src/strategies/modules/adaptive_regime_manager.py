@@ -188,7 +188,7 @@ class AdaptiveRegimeManager:
     переключает параметры торговли для оптимальной производительности.
     """
 
-    def __init__(self, config: RegimeConfig):
+    def __init__(self, config: RegimeConfig, trading_statistics=None):
         self.config = config
         # Текущий режим
         self.current_regime: RegimeType = RegimeType.RANGING  # По умолчанию
@@ -198,6 +198,8 @@ class AdaptiveRegimeManager:
         self.regime_confirmations: List[RegimeType] = []
         # Статистика
         self.regime_switches: Dict[str, int] = {}
+        # ✅ НОВОЕ: Модуль статистики для динамической адаптации
+        self.trading_statistics = trading_statistics
         self.time_in_regime: Dict[RegimeType, timedelta] = {
             RegimeType.TRENDING: timedelta(0),
             RegimeType.RANGING: timedelta(0),
@@ -535,6 +537,46 @@ class AdaptiveRegimeManager:
 
         return None
 
+    def calculate_dynamic_threshold(
+        self, base_threshold: float, win_rate: float, volatility: Optional[float] = None
+    ) -> float:
+        """
+        ✅ НОВОЕ: Расчет динамического порога на основе win rate и волатильности
+
+        Args:
+            base_threshold: Базовый порог (0-1)
+            win_rate: Win rate (0-1)
+            volatility: Волатильность (опционально, 0-1)
+
+        Returns:
+            Адаптированный порог (0-1)
+        """
+        multiplier = 1.0
+
+        # Адаптация на основе win rate
+        if win_rate < 0.3:
+            # Низкий win rate - повышаем порог (строже фильтрация)
+            multiplier = 1.3
+        elif win_rate < 0.4:
+            multiplier = 1.2
+        elif win_rate < 0.5:
+            multiplier = 1.1
+        else:
+            # Win rate >= 50% - можно снизить порог
+            multiplier = 1.0
+
+        # Адаптация на основе волатильности
+        if volatility is not None:
+            if volatility > 0.05:  # Высокая волатильность (>5%)
+                multiplier *= 1.1  # Повышаем порог на 10%
+            elif volatility < 0.02:  # Низкая волатильность (<2%)
+                multiplier *= 0.95  # Слегка снижаем порог
+
+        # Ограничиваем множитель (не ниже 0.5, не выше 2.0)
+        multiplier = max(0.5, min(2.0, multiplier))
+
+        return base_threshold * multiplier
+
     async def is_signal_valid(self, signal: Dict, market_data=None) -> bool:
         """
         Проверяет валидность сигнала для текущего режима.
@@ -554,7 +596,41 @@ class AdaptiveRegimeManager:
             signal_strength = signal.get("strength", 0)
             # ✅ ИСПРАВЛЕНИЕ: Нормализуем min_score_threshold к 0-1 диапазону
             # Но для ranging режима делаем более мягкую проверку (учитываем конфликтные сигналы)
-            min_strength = regime_params.min_score_threshold / 12.0
+            base_min_strength = regime_params.min_score_threshold / 12.0
+
+            # ✅ НОВОЕ: Динамическая адаптация порога на основе статистики
+            min_strength = base_min_strength
+            if self.trading_statistics:
+                regime_name = self.current_regime.value.lower()
+                # ✅ ИСПРАВЛЕНО: Получаем статистику по символу и режиму
+                symbol = signal.get("symbol")
+                win_rate = self.trading_statistics.get_win_rate(regime_name, symbol)
+
+                # Получаем волатильность из market_data если доступна
+                volatility = None
+                if market_data and hasattr(market_data, "ohlcv_data") and market_data.ohlcv_data:
+                    # Простой расчет волатильности как ATR / цена
+                    try:
+                        prices = [c.close for c in market_data.ohlcv_data[-20:]]
+                        if len(prices) > 1:
+                            price_changes = [
+                                abs(prices[i] - prices[i - 1]) / prices[i - 1]
+                                for i in range(1, len(prices))
+                            ]
+                            volatility = sum(price_changes) / len(price_changes) if price_changes else None
+                    except:
+                        pass
+
+                # Рассчитываем динамический порог
+                min_strength = self.calculate_dynamic_threshold(
+                    base_min_strength, win_rate, volatility
+                )
+
+                logger.debug(
+                    f"📊 Динамический порог для {regime_name}: "
+                    f"base={base_min_strength:.3f}, win_rate={win_rate:.2%}, "
+                    f"final={min_strength:.3f} (multiplier={min_strength/base_min_strength:.2f}x)"
+                )
 
             # ✅ УМЯГЧЕНИЕ: Если сигнал с конфликтом (has_conflict), снижаем порог на 50%
             # Это позволит конфликтным сигналам проходить для быстрого скальпа
