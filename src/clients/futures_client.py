@@ -127,13 +127,18 @@ class OKXFuturesClient:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Retry логика для таймаутов и ошибок подключения
         max_retries = 3
         retry_delay = 1.0  # Начальная задержка в секундах
-        
+
         for attempt in range(max_retries):
             try:
                 # Увеличиваем таймаут для запросов (30 секунд)
                 timeout = aiohttp.ClientTimeout(total=30, connect=10)
                 async with self.session.request(
-                    method, url, headers=headers, params=params, data=body, timeout=timeout
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    data=body,
+                    timeout=timeout,
                 ) as resp:
                     # 🔥 ИСПРАВЛЕНИЕ: Проверяем content-type перед парсингом JSON
                     content_type = resp.headers.get("Content-Type", "").lower()
@@ -159,9 +164,13 @@ class OKXFuturesClient:
                             raise RuntimeError("OKX API: Access forbidden (403)")
                         elif resp.status == 404:
                             logger.error("⚠️ Endpoint не найден (404). Проверьте URL.")
-                            raise RuntimeError(f"OKX API: Endpoint not found (404): {url}")
+                            raise RuntimeError(
+                                f"OKX API: Endpoint not found (404): {url}"
+                            )
                         else:
-                            logger.error(f"⚠️ Неожиданный HTML ответ от OKX: {text[:500]}")
+                            logger.error(
+                                f"⚠️ Неожиданный HTML ответ от OKX: {text[:500]}"
+                            )
                             raise RuntimeError(
                                 f"OKX API returned HTML instead of JSON. "
                                 f"Status: {resp.status}, Content-Type: {content_type}"
@@ -185,7 +194,9 @@ class OKXFuturesClient:
 
                     # Проверяем статус ответа
                     if resp.status != 200:
-                        logger.error(f"❌ OKX API вернул статус {resp.status}: {resp_data}")
+                        logger.error(
+                            f"❌ OKX API вернул статус {resp.status}: {resp_data}"
+                        )
                         raise RuntimeError(
                             f"OKX API error: status {resp.status}, data: {resp_data}"
                         )
@@ -210,17 +221,21 @@ class OKXFuturesClient:
                             logger.debug(f"Не удалось залогировать комиссию: {e}")
 
                     return resp_data
-                    
+
             except asyncio.TimeoutError:
                 if attempt < max_retries - 1:
-                    wait_time = retry_delay * (2 ** attempt)  # Экспоненциальная задержка
+                    wait_time = retry_delay * (
+                        2**attempt
+                    )  # Экспоненциальная задержка
                     logger.warning(
                         f"⏱️ Таймаут при запросе к OKX (попытка {attempt + 1}/{max_retries}): "
                         f"{method} {url}, повтор через {wait_time:.1f}с"
                     )
                     await asyncio.sleep(wait_time)
                     # Обновляем timestamp и подпись для новой попытки
-                    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                    timestamp = (
+                        datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                    )
                     sign_str = timestamp + method.upper() + request_path + body
                     signature = base64.b64encode(
                         hmac.new(
@@ -231,32 +246,46 @@ class OKXFuturesClient:
                     headers["OK-ACCESS-SIGN"] = signature
                     continue
                 else:
-                    logger.error(f"❌ Превышен таймаут при запросе к OKX после {max_retries} попыток: {method} {url}")
+                    logger.error(
+                        f"❌ Превышен таймаут при запросе к OKX после {max_retries} попыток: {method} {url}"
+                    )
                     raise
             except OSError as e:
                 # Обработка WinError 121 (превышен таймаут семафора) и других ошибок подключения
                 error_str = str(e).lower()
-                if "121" in str(e) or "семафор" in error_str or "semaphore" in error_str or "timeout" in error_str:
+                if (
+                    "121" in str(e)
+                    or "семафор" in error_str
+                    or "semaphore" in error_str
+                    or "timeout" in error_str
+                ):
                     if attempt < max_retries - 1:
-                        wait_time = retry_delay * (2 ** attempt)
+                        wait_time = retry_delay * (2**attempt)
                         logger.warning(
                             f"⏱️ Таймаут семафора при запросе к OKX (попытка {attempt + 1}/{max_retries}): "
                             f"{method} {url}, ошибка: {e}, повтор через {wait_time:.1f}с"
                         )
                         await asyncio.sleep(wait_time)
                         # Обновляем timestamp и подпись для новой попытки
-                        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                        timestamp = (
+                            datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+                            + "Z"
+                        )
                         sign_str = timestamp + method.upper() + request_path + body
                         signature = base64.b64encode(
                             hmac.new(
-                                self.secret_key.encode(), sign_str.encode(), hashlib.sha256
+                                self.secret_key.encode(),
+                                sign_str.encode(),
+                                hashlib.sha256,
                             ).digest()
                         ).decode()
                         headers["OK-ACCESS-TIMESTAMP"] = timestamp
                         headers["OK-ACCESS-SIGN"] = signature
                         continue
                     else:
-                        logger.error(f"❌ Превышен таймаут семафора при запросе к OKX после {max_retries} попыток: {method} {url}, ошибка: {e}")
+                        logger.error(
+                            f"❌ Превышен таймаут семафора при запросе к OKX после {max_retries} попыток: {method} {url}, ошибка: {e}"
+                        )
                         raise
                 else:
                     # Другие OSError - пробрасываем дальше
@@ -264,14 +293,16 @@ class OKXFuturesClient:
             except aiohttp.ClientError as e:
                 # Ошибки подключения aiohttp (Cannot connect to host и т.д.)
                 if attempt < max_retries - 1:
-                    wait_time = retry_delay * (2 ** attempt)
+                    wait_time = retry_delay * (2**attempt)
                     logger.warning(
                         f"⏱️ Ошибка подключения к OKX (попытка {attempt + 1}/{max_retries}): "
                         f"{method} {url}, ошибка: {e}, повтор через {wait_time:.1f}с"
                     )
                     await asyncio.sleep(wait_time)
                     # Обновляем timestamp и подпись для новой попытки
-                    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                    timestamp = (
+                        datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                    )
                     sign_str = timestamp + method.upper() + request_path + body
                     signature = base64.b64encode(
                         hmac.new(
@@ -282,7 +313,9 @@ class OKXFuturesClient:
                     headers["OK-ACCESS-SIGN"] = signature
                     continue
                 else:
-                    logger.error(f"❌ Ошибка подключения к OKX после {max_retries} попыток: {method} {url}, ошибка: {e}")
+                    logger.error(
+                        f"❌ Ошибка подключения к OKX после {max_retries} попыток: {method} {url}, ошибка: {e}"
+                    )
                     raise
             except asyncio.CancelledError:
                 logger.debug(f"Запрос к OKX отменен: {method} {url}")

@@ -608,7 +608,11 @@ class AdaptiveRegimeManager:
 
                 # Получаем волатильность из market_data если доступна
                 volatility = None
-                if market_data and hasattr(market_data, "ohlcv_data") and market_data.ohlcv_data:
+                if (
+                    market_data
+                    and hasattr(market_data, "ohlcv_data")
+                    and market_data.ohlcv_data
+                ):
                     # Простой расчет волатильности как ATR / цена
                     try:
                         prices = [c.close for c in market_data.ohlcv_data[-20:]]
@@ -617,7 +621,11 @@ class AdaptiveRegimeManager:
                                 abs(prices[i] - prices[i - 1]) / prices[i - 1]
                                 for i in range(1, len(prices))
                             ]
-                            volatility = sum(price_changes) / len(price_changes) if price_changes else None
+                            volatility = (
+                                sum(price_changes) / len(price_changes)
+                                if price_changes
+                                else None
+                            )
                     except:
                         pass
 

@@ -112,7 +112,9 @@ class TradingStatistics:
         cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
         self.signals = [s for s in self.signals if s["timestamp"] >= cutoff_time]
 
-    def get_win_rate(self, regime: Optional[str] = None, symbol: Optional[str] = None) -> float:
+    def get_win_rate(
+        self, regime: Optional[str] = None, symbol: Optional[str] = None
+    ) -> float:
         """
         Получить win rate
 
@@ -141,7 +143,9 @@ class TradingStatistics:
         wins = sum(1 for t in filtered_trades if t["is_win"])
         return wins / len(filtered_trades)
 
-    def get_avg_pnl(self, regime: Optional[str] = None, symbol: Optional[str] = None) -> Tuple[float, float]:
+    def get_avg_pnl(
+        self, regime: Optional[str] = None, symbol: Optional[str] = None
+    ) -> Tuple[float, float]:
         """
         Получить средний PnL (wins и losses отдельно)
 
@@ -173,7 +177,9 @@ class TradingStatistics:
 
         return (avg_win, avg_loss)
 
-    def get_trade_count(self, regime: Optional[str] = None, symbol: Optional[str] = None) -> int:
+    def get_trade_count(
+        self, regime: Optional[str] = None, symbol: Optional[str] = None
+    ) -> int:
         """
         Получить количество сделок
 
@@ -218,7 +224,9 @@ class TradingStatistics:
             executed = sum(1 for s in self.signals if s["was_executed"])
             return executed / len(self.signals)
 
-    def get_statistics(self, regime: Optional[str] = None, symbol: Optional[str] = None) -> Dict:
+    def get_statistics(
+        self, regime: Optional[str] = None, symbol: Optional[str] = None
+    ) -> Dict:
         """
         Получить полную статистику
 
@@ -240,8 +248,5 @@ class TradingStatistics:
             "avg_loss": avg_loss,
             "trade_count": trade_count,
             "signal_execution_rate": signal_execution_rate,
-            "risk_reward_ratio": (
-                abs(avg_win / avg_loss) if avg_loss != 0 else 0.0
-            ),
+            "risk_reward_ratio": (abs(avg_win / avg_loss) if avg_loss != 0 else 0.0),
         }
-

@@ -2325,7 +2325,9 @@ class FuturesScalpingOrchestrator:
                 risk_percentage,
                 leverage=None,
                 regime=current_regime,
-                trading_statistics=self.trading_statistics if hasattr(self, "trading_statistics") else None,
+                trading_statistics=self.trading_statistics
+                if hasattr(self, "trading_statistics")
+                else None,
             )
 
             # Исполнение ордера
@@ -6472,16 +6474,15 @@ class FuturesScalpingOrchestrator:
                     try:
                         # ✅ ИСПРАВЛЕНО: Получаем режим рынка из per-symbol ARM (если есть)
                         regime = "ranging"  # Fallback
-                        if (
-                            hasattr(self, "signal_generator")
-                            and self.signal_generator
-                        ):
+                        if hasattr(self, "signal_generator") and self.signal_generator:
                             # Сначала пробуем per-symbol ARM
                             if (
                                 hasattr(self.signal_generator, "regime_managers")
                                 and symbol in self.signal_generator.regime_managers
                             ):
-                                regime_manager = self.signal_generator.regime_managers[symbol]
+                                regime_manager = self.signal_generator.regime_managers[
+                                    symbol
+                                ]
                                 regime_obj = regime_manager.get_current_regime()
                                 if regime_obj:
                                     regime = (
@@ -6505,7 +6506,11 @@ class FuturesScalpingOrchestrator:
                                     )
 
                         # Получаем данные из trade_result
-                        side = trade_result.side if hasattr(trade_result, "side") else position.get("side", "buy")
+                        side = (
+                            trade_result.side
+                            if hasattr(trade_result, "side")
+                            else position.get("side", "buy")
+                        )
                         pnl = trade_result.pnl if hasattr(trade_result, "pnl") else 0.0
                         entry_price = (
                             trade_result.entry_price

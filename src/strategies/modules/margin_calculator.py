@@ -362,11 +362,15 @@ class MarginCalculator:
             # margin_ratio = equity / margin_used (показывает запас)
             # Но для consistency используем available_margin:
             available_margin = equity - margin_used + pnl
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Защита для малых позиций (XRP-USDT и т.д.)
             # Для очень малых позиций (margin_used < 5 USDT) возможны ошибки округления
             # Если available_margin отрицательный, но equity > margin_used, это ошибка расчета
-            if available_margin < 0 and margin_used < 5.0 and equity > margin_used * 0.5:
+            if (
+                available_margin < 0
+                and margin_used < 5.0
+                and equity > margin_used * 0.5
+            ):
                 # Для малых позиций используем более консервативный расчет
                 # Если equity > margin_used, значит есть запас, даже если available_margin отрицательный
                 logger.debug(
@@ -376,7 +380,9 @@ class MarginCalculator:
                     f"Используем equity-based расчет."
                 )
                 # Используем equity-based расчет для малых позиций
-                available_margin = max(0, equity - margin_used * 0.9)  # Оставляем 10% запас
+                available_margin = max(
+                    0, equity - margin_used * 0.9
+                )  # Оставляем 10% запас
 
         # ✅ ОПТИМИЗАЦИЯ: Логируем только при изменениях или проблемах (не каждый раз)
         # Убрано избыточное DEBUG логирование каждой проверки (экономия ~20% логов)
@@ -404,14 +410,19 @@ class MarginCalculator:
             # ⚠️ УВЕЛИЧЕН ПОРОГ: Если PnL менее 15% от баланса, а margin_ratio отрицательный - вероятна ошибка
             # Также проверяем, что available_margin не слишком отрицательный относительно equity
             margin_deficit_percent = abs(available_margin) / equity if equity > 0 else 0
-            
+
             # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Для малых позиций более строгая проверка
             is_small_position = margin_used < 5.0
-            pnl_threshold = 0.20 if is_small_position else 0.15  # Для малых позиций порог выше
-            deficit_threshold = 1.5 if is_small_position else 2.0  # Для малых позиций более строгий порог
-            
+            pnl_threshold = (
+                0.20 if is_small_position else 0.15
+            )  # Для малых позиций порог выше
+            deficit_threshold = (
+                1.5 if is_small_position else 2.0
+            )  # Для малых позиций более строгий порог
+
             if (
-                pnl_percent < pnl_threshold and margin_deficit_percent < deficit_threshold
+                pnl_percent < pnl_threshold
+                and margin_deficit_percent < deficit_threshold
             ):  # Дефицит маржи в пределах разумного
                 logger.debug(
                     f"⚠️ Подозрительный margin_ratio={margin_ratio:.2f} исправлен: "
@@ -421,7 +432,7 @@ class MarginCalculator:
                 )
                 # Используем более консервативный расчет: просто equity / margin_used
                 margin_ratio = equity / margin_used if margin_used > 0 else float("inf")
-                
+
                 # ✅ ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Если margin_ratio все еще отрицательный или очень мал,
                 # устанавливаем минимальное безопасное значение
                 if margin_ratio < 0.5:
@@ -538,21 +549,29 @@ class MarginCalculator:
                 #   q = 1 - p (вероятность проигрыша)
                 #   b = avg_win / abs(avg_loss) (risk/reward ratio)
                 if avg_loss != 0 and abs(avg_loss) > 0.01:  # Избегаем деления на ноль
-                    risk_reward_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else 1.0
+                    risk_reward_ratio = (
+                        abs(avg_win / avg_loss) if avg_loss != 0 else 1.0
+                    )
                     q = 1.0 - win_rate
 
                     # Kelly fraction
                     if risk_reward_ratio > 0:
-                        kelly_fraction = (win_rate * risk_reward_ratio - q) / risk_reward_ratio
+                        kelly_fraction = (
+                            win_rate * risk_reward_ratio - q
+                        ) / risk_reward_ratio
                     else:
                         kelly_fraction = 0.0
 
                     # Ограничиваем Kelly (используем 25% от Kelly для безопасности)
                     # Если Kelly отрицательный - не торгуем (или очень маленький размер)
                     if kelly_fraction > 0:
-                        kelly_fraction_safe = min(kelly_fraction * 0.25, 0.1)  # Максимум 10% от баланса
+                        kelly_fraction_safe = min(
+                            kelly_fraction * 0.25, 0.1
+                        )  # Максимум 10% от баланса
                         # Применяем множитель к risk_percentage
-                        kelly_multiplier = max(0.5, min(2.0, kelly_fraction_safe / risk_percentage))
+                        kelly_multiplier = max(
+                            0.5, min(2.0, kelly_fraction_safe / risk_percentage)
+                        )
                         logger.debug(
                             f"📊 Kelly Criterion для {regime}: "
                             f"win_rate={win_rate:.2%}, avg_win={avg_win:.2f}, avg_loss={avg_loss:.2f}, "
@@ -568,7 +587,9 @@ class MarginCalculator:
                             f"снижаем размер позиции (multiplier={kelly_multiplier:.2f}x)"
                         )
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка расчета Kelly Criterion: {e}, используем базовый risk_percentage")
+                logger.debug(
+                    f"⚠️ Ошибка расчета Kelly Criterion: {e}, используем базовый risk_percentage"
+                )
 
         # Максимальный риск в USDT (с учетом Kelly)
         adjusted_risk_percentage = risk_percentage * kelly_multiplier

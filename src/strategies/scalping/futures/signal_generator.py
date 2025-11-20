@@ -557,8 +557,7 @@ class FuturesSignalGenerator:
                             choppy_params=symbol_choppy_params,
                         )
                         self.regime_managers[symbol] = AdaptiveRegimeManager(
-                            regime_config,
-                            trading_statistics=self.trading_statistics
+                            regime_config, trading_statistics=self.trading_statistics
                         )
                         if ohlcv_data and symbol in ohlcv_data:
                             await self.regime_managers[symbol].initialize(
