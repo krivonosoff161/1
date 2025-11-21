@@ -76,7 +76,6 @@ class ScalpingOrchestrator:
 
         # Состояние
         self.active = config.enabled
-        self.positions: Dict[str, Position] = {}
         self.market_data_cache: Dict[str, MarketData] = {}
 
         # Rate limiting
@@ -91,8 +90,11 @@ class ScalpingOrchestrator:
         # 1. Инициализация индикаторов
         self.indicators = self._setup_indicators()
 
-        # 2. Инициализация Phase 1 модулей
-        self.modules = self._init_phase1_modules()
+        # 2. Инициализация Phase 1 модулей через ModuleFactory
+        from .module_factory import ModuleFactory
+
+        module_factory = ModuleFactory(client, config)
+        self.modules = module_factory.create_phase1_modules()
 
         # 3. Инициализация Telegram (если включен)
         self.telegram = self._init_telegram()
@@ -102,12 +104,24 @@ class ScalpingOrchestrator:
             client, config, risk_config, self.modules, self.indicators
         )
 
+        # 🆕 НОВОЕ: RiskManager для расчета размеров позиций
+        from .risk_manager import RiskManager
+
+        self.risk_manager = RiskManager(
+            client,
+            config,
+            risk_config,
+            full_config,
+            adaptive_regime=self.modules.get("arm"),
+        )
+
         self.order_executor = OrderExecutor(
             client,
             config,
             risk_config,
             balance_checker=self.modules.get("balance"),
             adaptive_regime=self.modules.get("arm"),
+            risk_manager=self.risk_manager,  # 🆕 Передаем RiskManager
         )
 
         # Инициализация WebSocket для быстрых входов
@@ -188,7 +202,7 @@ class ScalpingOrchestrator:
         logger.info("✅ Indicators initialized")
         return manager
 
-    def _init_phase1_modules(self) -> Dict:
+    def _init_phase1_modules_DEPRECATED(self) -> Dict:
         """
         Инициализация Phase 1 модулей.
 
@@ -388,7 +402,7 @@ class ScalpingOrchestrator:
 
         return modules
 
-    def _create_arm_config(self) -> RegimeConfig:
+    def _create_arm_config_DEPRECATED(self) -> RegimeConfig:
         """
         Создание конфигурации ARM из config.yaml.
 
@@ -852,28 +866,29 @@ class ScalpingOrchestrator:
             return
 
         # 4. Мониторинг существующих позиций
-        if symbol in self.positions:
+        if self.position_manager.has_position(symbol):
             logger.debug(f"   ↻ Monitoring existing position...")
             current_prices = {symbol: current_price}
             to_close = await self.position_manager.monitor_positions(
-                {symbol: self.positions[symbol]}, current_prices
+                {symbol: self.position_manager.get_position(symbol)}, current_prices
             )
 
             for close_symbol, reason in to_close:
                 logger.debug(f"   ⚠ Closing position: {reason}")
-                await self._close_position(close_symbol, current_price, reason)
-
-                # 🔥 КРИТИЧНО: Удаляем позицию после закрытия!
-                if close_symbol in self.positions:
-                    del self.positions[close_symbol]
-                    logger.info(f"✅ Position removed from tracking: {close_symbol}")
+                await self.position_manager.close_position_by_symbol(
+                    close_symbol,
+                    current_price,
+                    reason,
+                    self.performance_tracker,
+                    self.risk_controller,
+                )
 
             return  # Если есть позиция - не открываем новую
 
         # 5. Проверка можно ли торговать
         stats = self.performance_tracker.get_stats()
         can_trade, reason = self.risk_controller.can_trade(
-            symbol, self.positions, stats
+            symbol, self.position_manager.get_all_positions(), stats
         )
 
         if not can_trade:
@@ -913,7 +928,7 @@ class ScalpingOrchestrator:
             symbol,
             indicators,
             tick,
-            self.positions,
+            self.position_manager.get_all_positions(),
             market_data,  # 🆕 Передаем market_data для ADX
         )
 
@@ -930,7 +945,7 @@ class ScalpingOrchestrator:
         position = await self.order_executor.execute_signal(signal, market_data)
 
         if position:
-            self.positions[symbol] = position
+            self.position_manager.add_position(symbol, position)
             self.risk_controller.record_trade_opened(symbol)
             logger.info(f"   ✅ Position opened and tracking started")
 
@@ -943,30 +958,14 @@ class ScalpingOrchestrator:
             current_price: Текущая цена
             reason: Причина закрытия
         """
-        position = self.positions.get(symbol)
-        if not position:
-            return
-
-        # Закрываем через PositionManager
-        trade_result = await self.position_manager.close_position(
-            symbol, position, current_price, reason
+        # Закрываем через PositionManager (с полной логикой)
+        await self.position_manager.close_position_by_symbol(
+            symbol,
+            current_price,
+            reason,
+            self.performance_tracker,
+            self.risk_controller,
         )
-
-        if trade_result:
-            # Записываем в статистику
-            self.performance_tracker.record_trade(trade_result)
-
-            # Обновляем риск-контроллер
-            self.risk_controller.record_trade_closed(trade_result.net_pnl)
-
-            # Удаляем позицию
-            del self.positions[symbol]
-
-            logger.info(f"✅ Position removed from tracking: {symbol}")
-        else:
-            # PHANTOM или ошибка - просто удаляем
-            del self.positions[symbol]
-            logger.warning(f"⚠️ Position removed without trade result: {symbol}")
 
     async def _update_market_data(self, symbol: str):
         """Обновление рыночных данных"""
@@ -1019,45 +1018,11 @@ class ScalpingOrchestrator:
 
         Или через отдельный скрипт emergency_close.py
         """
-        logger.error("🚨 EMERGENCY CLOSE ALL INITIATED!")
-
-        try:
-            positions_to_close = list(self.positions.items())
-
-            if not positions_to_close:
-                logger.info("⚪ No open positions to close")
-                return
-
-            logger.info(f"📊 Closing {len(positions_to_close)} positions...")
-
-            for symbol, position in positions_to_close:
-                try:
-                    # Получаем текущую цену
-                    ticker = await self.client.get_ticker(symbol)
-                    current_price = float(ticker.get("last", position.current_price))
-
-                    # Закрываем через PositionManager
-                    trade_result = await self.position_manager.close_position(
-                        symbol, position, current_price, "emergency_manual"
-                    )
-
-                    if trade_result:
-                        self.performance_tracker.record_trade(trade_result)
-                        logger.info(
-                            f"✅ {symbol} closed: NET ${trade_result.net_pnl:.2f}"
-                        )
-
-                    # Удаляем из трекинга
-                    if symbol in self.positions:
-                        del self.positions[symbol]
-
-                except Exception as e:
-                    logger.error(f"❌ Failed to close {symbol}: {e}")
-
-            logger.info("🚨 Emergency close completed!")
-
-        except Exception as e:
-            logger.critical(f"🚨 Critical error in emergency close: {e}")
+        # Делегируем в PositionManager
+        await self.position_manager.emergency_close_all(
+            self.performance_tracker,
+            self.risk_controller,
+        )
 
     def stop(self):
         """Остановка стратегии"""

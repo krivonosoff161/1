@@ -60,6 +60,9 @@ class PositionManager:
         # Batch Order Manager для группировки обновлений TP/SL
         self.batch_manager = BatchOrderManager(client)
 
+        # 🆕 Хранилище позиций
+        self.positions: Dict[str, Position] = {}
+
         # Параметры
         self.min_close_value_usd = 15.0
 
@@ -99,7 +102,7 @@ class PositionManager:
         self.partial_tp_enabled = getattr(config, "partial_tp_enabled", False)
 
     async def monitor_positions(
-        self, positions: Dict[str, Position], current_prices: Dict[str, float]
+        self, positions: Optional[Dict[str, Position]] = None, current_prices: Optional[Dict[str, float]] = None
     ) -> List[Tuple[str, str]]:
         """
         Мониторинг всех позиций.
@@ -111,15 +114,18 @@ class PositionManager:
         4. Partial TP (частичные выходы)
 
         Args:
-            positions: Словарь открытых позиций
-            current_prices: Текущие цены по символам
+            positions: Словарь открытых позиций (опционально, использует внутреннее хранилище)
+            current_prices: Текущие цены по символам (опционально)
 
         Returns:
             List[(symbol, reason)] - список позиций для закрытия
         """
+        # Используем внутреннее хранилище если не передано
+        positions_to_monitor = positions if positions is not None else self.positions
+        
         to_close = []
 
-        for symbol, position in list(positions.items()):
+        for symbol, position in list(positions_to_monitor.items()):
             current_price = current_prices.get(symbol)
             if not current_price:
                 continue
@@ -713,3 +719,221 @@ class PositionManager:
     def get_batch_stats(self) -> Dict[str, Any]:
         """Получить статистику batch операций"""
         return self.batch_manager.get_stats()
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 🆕 НОВЫЕ МЕТОДЫ: Управление позициями (ЭТАП 2 рефакторинга)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    def add_position(self, symbol: str, position: Position) -> None:
+        """
+        Добавить позицию в трекинг.
+
+        Args:
+            symbol: Торговый символ
+            position: Объект позиции
+        """
+        self.positions[symbol] = position
+        logger.info(f"✅ Position added to tracking: {symbol}")
+        logger.debug(
+            f"   Side: {position.side.value.upper()} | "
+            f"Entry: ${position.entry_price:.4f} | "
+            f"Size: {position.size:.8f}"
+        )
+
+    def remove_position(self, symbol: str) -> Optional[Position]:
+        """
+        Удалить позицию из трекинга.
+
+        Args:
+            symbol: Торговый символ
+
+        Returns:
+            Position: Удаленная позиция или None
+        """
+        position = self.positions.pop(symbol, None)
+        if position:
+            logger.info(f"✅ Position removed from tracking: {symbol}")
+        else:
+            logger.warning(f"⚠️ Position not found for removal: {symbol}")
+        return position
+
+    def get_position(self, symbol: str) -> Optional[Position]:
+        """
+        Получить позицию по символу.
+
+        Args:
+            symbol: Торговый символ
+
+        Returns:
+            Position: Объект позиции или None
+        """
+        return self.positions.get(symbol)
+
+    def has_position(self, symbol: str) -> bool:
+        """
+        Проверить наличие позиции по символу.
+
+        Args:
+            symbol: Торговый символ
+
+        Returns:
+            bool: True если позиция существует
+        """
+        return symbol in self.positions
+
+    def get_all_positions(self) -> Dict[str, Position]:
+        """
+        Получить все открытые позиции.
+
+        Returns:
+            Dict[str, Position]: Словарь всех позиций
+        """
+        return self.positions.copy()
+
+    def get_positions_count(self) -> int:
+        """
+        Получить количество открытых позиций.
+
+        Returns:
+            int: Количество позиций
+        """
+        return len(self.positions)
+
+    async def close_position_by_symbol(
+        self,
+        symbol: str,
+        current_price: float,
+        reason: str,
+        performance_tracker=None,
+        risk_controller=None,
+    ) -> bool:
+        """
+        Закрыть позицию по символу с полной логикой orchestrator.
+
+        Включает:
+        - Закрытие через close_position()
+        - Запись в performance_tracker
+        - Обновление risk_controller
+        - Удаление из трекинга
+
+        Args:
+            symbol: Торговый символ
+            current_price: Текущая цена
+            reason: Причина закрытия
+            performance_tracker: Трекер производительности (опционально)
+            risk_controller: Риск-контроллер (опционально)
+
+        Returns:
+            bool: True если закрыта успешно
+        """
+        position = self.get_position(symbol)
+        if not position:
+            logger.warning(f"⚠️ Cannot close position: {symbol} not found")
+            return False
+
+        # Закрываем через существующий метод
+        trade_result = await self.close_position(symbol, position, current_price, reason)
+
+        if trade_result:
+            # Записываем в статистику
+            if performance_tracker:
+                performance_tracker.record_trade(trade_result)
+
+            # Обновляем риск-контроллер
+            if risk_controller:
+                risk_controller.record_trade_closed(trade_result.net_pnl)
+
+            # Удаляем позицию
+            self.remove_position(symbol)
+
+            logger.info(f"✅ Position closed successfully: {symbol}")
+            return True
+        else:
+            # PHANTOM или ошибка - просто удаляем
+            self.remove_position(symbol)
+            logger.warning(f"⚠️ Position removed without trade result: {symbol}")
+            return False
+
+    async def emergency_close_all(
+        self,
+        performance_tracker=None,
+        risk_controller=None,
+    ) -> Dict[str, Any]:
+        """
+        🚨 ЭКСТРЕННОЕ ЗАКРЫТИЕ ВСЕХ ПОЗИЦИЙ
+
+        Использование:
+        1. Останови бота (Ctrl+C или stop_bot.bat)
+        2. В консоли Python:
+           >>> from src.main import BotRunner
+           >>> bot = BotRunner(...)
+           >>> await bot.strategy.position_manager.emergency_close_all()
+
+        Args:
+            performance_tracker: Трекер производительности (опционально)
+            risk_controller: Риск-контроллер (опционально)
+
+        Returns:
+            Dict: Статистика закрытия
+        """
+        logger.error("🚨 EMERGENCY CLOSE ALL INITIATED!")
+
+        stats = {
+            "total_positions": len(self.positions),
+            "closed_success": 0,
+            "closed_failed": 0,
+            "total_pnl": 0.0,
+        }
+
+        try:
+            positions_to_close = list(self.positions.items())
+
+            if not positions_to_close:
+                logger.info("⚪ No open positions to close")
+                return stats
+
+            logger.info(f"📊 Closing {len(positions_to_close)} positions...")
+
+            for symbol, position in positions_to_close:
+                try:
+                    # Получаем текущую цену
+                    ticker = await self.client.get_ticker(symbol)
+                    current_price = float(ticker.get("last", position.current_price))
+
+                    # Закрываем через существующий метод
+                    trade_result = await self.close_position(
+                        symbol, position, current_price, "emergency_manual"
+                    )
+
+                    if trade_result:
+                        if performance_tracker:
+                            performance_tracker.record_trade(trade_result)
+
+                        stats["closed_success"] += 1
+                        stats["total_pnl"] += trade_result.net_pnl
+
+                        logger.info(
+                            f"✅ {symbol} closed: NET ${trade_result.net_pnl:.2f}"
+                        )
+                    else:
+                        stats["closed_failed"] += 1
+
+                    # Удаляем из трекинга
+                    self.remove_position(symbol)
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to close {symbol}: {e}")
+                    stats["closed_failed"] += 1
+
+            logger.info("🚨 Emergency close completed!")
+            logger.info(
+                f"📊 Results: {stats['closed_success']} success, "
+                f"{stats['closed_failed']} failed, "
+                f"Total PnL: ${stats['total_pnl']:.2f}"
+            )
+
+            return stats
+
+        except Exception as e:
+            logger.critical(f"🚨 Critical error in emergency close: {e}")
+            return stats

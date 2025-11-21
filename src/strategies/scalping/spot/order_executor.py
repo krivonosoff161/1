@@ -27,7 +27,7 @@ class OrderExecutor:
     """
 
     def __init__(
-        self, client, config, risk_config, balance_checker=None, adaptive_regime=None
+        self, client, config, risk_config, balance_checker=None, adaptive_regime=None, risk_manager=None
     ):
         """
         Args:
@@ -36,12 +36,14 @@ class OrderExecutor:
             risk_config: Risk конфигурация
             balance_checker: Balance Checker модуль (опционально)
             adaptive_regime: ARM модуль (опционально)
+            risk_manager: Risk Manager модуль (опционально)
         """
         self.client = client
         self.config = config
         self.risk_config = risk_config
         self.balance_checker = balance_checker
         self.adaptive_regime = adaptive_regime
+        self.risk_manager = risk_manager  # 🆕 НОВОЕ: RiskManager для расчета размеров
 
         # Market Data WebSocket для быстрых цен
         self.market_ws = None
@@ -683,6 +685,8 @@ class OrderExecutor:
         """
         Расчет размера позиции на основе риск-менеджмента.
 
+        Делегирует в RiskManager.
+
         Args:
             symbol: Торговый символ
             price: Текущая цена
@@ -690,173 +694,10 @@ class OrderExecutor:
         Returns:
             float: Размер позиции (0 при ошибке)
         """
-        logger.info(f"🔍 CALCULATING POSITION SIZE for {symbol} @ ${price:.2f}")
-        try:
-            # Получаем баланс USDT
-            balances = await self.client.get_account_balance()
-            base_balance = next(
-                (b.free for b in balances if b.currency == "USDT"),
-                0.0,
-            )
-
-            logger.info(f"💰 USDT Balance: ${base_balance:.2f}")
-
-            if base_balance <= 0:
-                logger.warning(f"❌ No USDT balance for {symbol}")
-                return 0.0
-
-            # 🔥 КРИТИЧНО: Manual Pool Allocation из конфига!
-            # Получаем текущий режим рынка
-            current_regime = await self._get_current_regime()
-
-            # Получаем manual_pools из конфига
-            try:
-                from src.config import load_config
-
-                full_config = load_config()
-                manual_pools = full_config.manual_pools
-
-                if not manual_pools:
-                    logger.error("❌ Manual pools не найдены в конфиге!")
-                    return 0.0
-
-                # Определяем размер позиции по режиму и активу из manual_pools
-                quantity = 0.0
-
-                if current_regime == "TRENDING":
-                    if symbol == "ETH-USDT":
-                        quantity = manual_pools["eth_pool"]["trending"][
-                            "quantity_per_trade"
-                        ]
-                        logger.info(
-                            f"🎯 TRENDING ETH: {quantity} ETH (≈ ${quantity * price:.2f})"
-                        )
-                    elif symbol == "BTC-USDT":
-                        quantity = manual_pools["btc_pool"]["trending"][
-                            "quantity_per_trade"
-                        ]
-                        logger.info(
-                            f"🎯 TRENDING BTC: {quantity} BTC (≈ ${quantity * price:.2f})"
-                        )
-                elif current_regime == "RANGING":
-                    if symbol == "ETH-USDT":
-                        quantity = manual_pools["eth_pool"]["ranging"][
-                            "quantity_per_trade"
-                        ]
-                        logger.info(
-                            f"🎯 RANGING ETH: {quantity} ETH (≈ ${quantity * price:.2f})"
-                        )
-                    elif symbol == "BTC-USDT":
-                        quantity = manual_pools["btc_pool"]["ranging"][
-                            "quantity_per_trade"
-                        ]
-                        logger.info(
-                            f"🎯 RANGING BTC: {quantity} BTC (≈ ${quantity * price:.2f})"
-                        )
-                elif current_regime == "CHOPPY":
-                    if symbol == "ETH-USDT":
-                        quantity = manual_pools["eth_pool"]["choppy"][
-                            "quantity_per_trade"
-                        ]
-                        logger.info(
-                            f"🎯 CHOPPY ETH: {quantity} ETH (≈ ${quantity * price:.2f})"
-                        )
-                    elif symbol == "BTC-USDT":
-                        quantity = manual_pools["btc_pool"]["choppy"][
-                            "quantity_per_trade"
-                        ]
-                        logger.info(
-                            f"🎯 CHOPPY BTC: {quantity} BTC (≈ ${quantity * price:.2f})"
-                        )
-
-            except Exception as e:
-                logger.error(f"❌ Ошибка получения manual_pools: {e}")
-                return 0.0
-
-            if quantity <= 0:
-                logger.warning(
-                    f"❌ No quantity defined for {symbol} in {current_regime} mode"
-                )
-                return 0.0
-
-            # Проверяем баланс актива
-            if symbol == "ETH-USDT":
-                eth_balance = await self.client.get_balance("ETH")
-                if eth_balance < quantity:
-                    logger.warning(
-                        f"❌ Недостаточно ETH: {eth_balance:.6f} < {quantity:.6f}"
-                    )
-                    return 0.0
-            elif symbol == "BTC-USDT":
-                btc_balance = await self.client.get_balance("BTC")
-                if btc_balance < quantity:
-                    logger.warning(
-                        f"❌ Недостаточно BTC: {btc_balance:.8f} < {quantity:.8f}"
-                    )
-                    return 0.0
-
-            # Проверка минимума
-            position_value_usd = quantity * price
-            logger.info(
-                f"📊 Final position size: {quantity:.6f} = "
-                f"${position_value_usd:.2f} (min: ${self.min_order_value_usd})"
-            )
-
-            if position_value_usd < self.min_order_value_usd:
-                # КРИТИЧНО: Проверяем баланс ПЕРЕД увеличением позиции!
-                required_value = self.min_order_value_usd * 1.02
-                balances_check = await self.client.get_account_balance()
-                # balances_check может быть списком, словарем или объектом Balance
-                if isinstance(balances_check, list):
-                    usdt_balance = 0.0
-                    for balance in balances_check:
-                        if hasattr(balance, "currency") and balance.currency == "USDT":
-                            # Проверяем разные атрибуты для доступного баланса
-                            if hasattr(balance, "available"):
-                                usdt_balance = float(balance.available)
-                            elif hasattr(balance, "free"):
-                                usdt_balance = float(balance.free)
-                            elif hasattr(balance, "balance"):
-                                usdt_balance = float(balance.balance)
-                            break
-                        elif (
-                            isinstance(balance, dict)
-                            and balance.get("currency") == "USDT"
-                        ):
-                            usdt_balance = float(balance.get("available", 0.0))
-                            break
-                elif hasattr(balances_check, "get"):
-                    usdt_balance = balances_check.get("USDT", 0.0)
-                else:
-                    # Это объект Balance
-                    usdt_balance = 0.0
-                    if hasattr(balances_check, "USDT"):
-                        usdt_balance = float(balances_check.USDT)
-
-                if usdt_balance < required_value:
-                    logger.error(
-                        f"🚨 {symbol} НЕДОСТАТОЧНО СРЕДСТВ для увеличения позиции!"
-                    )
-                    logger.error(
-                        f"💰 Требуется: ${required_value:.2f}, Доступно: ${usdt_balance:.2f}"
-                    )
-                    logger.error(f"🚫 СДЕЛКА ЗАБЛОКИРОВАНА - НЕ БЕРЕМ ЗАЙМЫ!")
-                    return 0.0
-
-                # Увеличиваем размер до минимума
-                quantity = (self.min_order_value_usd * 1.02) / price
-                final_value = quantity * price
-                logger.info(
-                    f"⬆️ {symbol} Position size increased: "
-                    f"${position_value_usd:.2f} → ${final_value:.2f}"
-                )
-
-            # Округление
-            rounded_size = round(quantity, 8)
-            return rounded_size
-
-        except Exception as e:
-            logger.error(f"❌ Error calculating position size: {e}")
+        if self.risk_manager:
+            return await self.risk_manager.calculate_position_size(symbol, price)
+        else:
+            logger.error("❌ RiskManager not initialized!")
             return 0.0
 
     async def _get_current_regime(self) -> str:
@@ -886,7 +727,14 @@ class OrderExecutor:
         Returns:
             (stop_loss, take_profit)
         """
-        # ARM параметры или дефолтные
+        # Делегируем в RiskManager если доступен
+        if self.risk_manager:
+            take_profit, stop_loss = self.risk_manager.calculate_exit_levels(
+                entry_price, side.value, atr
+            )
+            return stop_loss, take_profit
+        
+        # Fallback: ARM параметры или дефолтные
         if self.adaptive_regime:
             regime_params = self.adaptive_regime.get_current_parameters()
             sl_multiplier = regime_params.sl_atr_multiplier

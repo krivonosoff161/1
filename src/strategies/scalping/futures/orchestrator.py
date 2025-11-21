@@ -30,6 +30,7 @@ from ..spot.performance_tracker import PerformanceTracker
 from .indicators.fast_adx import FastADX
 from .indicators.funding_rate_monitor import FundingRateMonitor
 from .indicators.order_flow_indicator import OrderFlowIndicator
+from .config.config_manager import ConfigManager
 from .indicators.trailing_stop_loss import TrailingStopLoss
 from .order_executor import FuturesOrderExecutor
 from .position_manager import FuturesPositionManager
@@ -60,6 +61,9 @@ class FuturesScalpingOrchestrator:
         self.config = config
         self.scalping_config = config.scalping
         self.risk_config = config.risk
+
+        # ✅ ЭТАП 1: Config Manager для работы с конфигурацией
+        self.config_manager = ConfigManager(config)
 
         # 🛡️ Защиты риска
         self.initial_balance = None  # Для drawdown расчета
@@ -233,7 +237,8 @@ class FuturesScalpingOrchestrator:
         # (инициализируем после создания symbol_profiles)
         self.performance_tracker = PerformanceTracker()
 
-        self.symbol_profiles: Dict[str, Dict[str, Any]] = self._load_symbol_profiles()
+        # ✅ ЭТАП 1: Используем symbol_profiles из ConfigManager
+        self.symbol_profiles: Dict[str, Dict[str, Any]] = self.config_manager.get_symbol_profiles()
 
         # ✅ НОВОЕ: Передаем symbol_profiles в position_manager для per-symbol TP
         if hasattr(self.position_manager, "set_symbol_profiles"):
@@ -575,7 +580,9 @@ class FuturesScalpingOrchestrator:
 
                     # ✅ ИСПРАВЛЕНИЕ: Задержка для избежания rate limit (429)
                     # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
-                    delay_ms = self._get_adaptive_delay("api_request_delay_ms", 300)
+                    delay_ms = self.config_manager.get_adaptive_delay(
+                        "api_request_delay_ms", 300, self._delays_config, self.signal_generator
+                    )
                     await asyncio.sleep(delay_ms / 1000.0)
 
                     try:
@@ -605,7 +612,9 @@ class FuturesScalpingOrchestrator:
                     except Exception as e:
                         # ✅ ИСПРАВЛЕНИЕ: Задержка перед повторной попыткой
                         # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
-                        delay_ms = self._get_adaptive_delay("api_request_delay_ms", 300)
+                        delay_ms = self.config_manager.get_adaptive_delay(
+                        "api_request_delay_ms", 300, self._delays_config, self.signal_generator
+                    )
                         await asyncio.sleep(delay_ms / 1000.0)
                         # ✅ Попытка 2: С posSide="long" (может потребоваться в некоторых случаях)
                         try:
@@ -644,7 +653,9 @@ class FuturesScalpingOrchestrator:
 
                 # ✅ ИСПРАВЛЕНИЕ: Задержка между символами для избежания rate limit
                 # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
-                delay_ms = self._get_adaptive_delay("symbol_switch_delay_ms", 200)
+                delay_ms = self.config_manager.get_adaptive_delay(
+                    "symbol_switch_delay_ms", 200, self._delays_config, self.signal_generator
+                )
                 await asyncio.sleep(delay_ms / 1000.0)
 
                 if not leverage_set:
@@ -1110,344 +1121,8 @@ class FuturesScalpingOrchestrator:
         return getattr(source, key, default) if hasattr(source, key) else default
 
     def _get_trailing_sl_params(self, regime: Optional[str] = None) -> Dict[str, Any]:
-        """✅ ЭТАП 4: Возвращает параметры Trailing SL с учетом конфига, fallback значений и адаптацией под режим рынка."""
-        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем правильные fallback значения (как в конфиге)
-        # Эти значения используются ТОЛЬКО если конфиг не загружен
-        params: Dict[str, Any] = {
-            "trading_fee_rate": 0.0010,  # ✅ ОБНОВЛЕНО: 0.10% на круг (0.05% вход + 0.05% выход для taker на OKX)
-            "initial_trail": 0.005,  # ✅ ИСПРАВЛЕНО: 0.5% (было 0.05 = 5%)
-            "max_trail": 0.01,  # ✅ ИСПРАВЛЕНО: 1% (было 0.2 = 20%)
-            "min_trail": 0.003,  # ✅ ИСПРАВЛЕНО: 0.3% (было 0.02 = 2%)
-            "loss_cut_percent": None,
-            "timeout_loss_percent": None,
-            "timeout_minutes": None,
-            "min_holding_minutes": None,  # ✅ ЭТАП 4.4
-            "min_profit_to_close": None,  # ✅ ЭТАП 4.1
-            "extend_time_on_profit": False,  # ✅ ЭТАП 4.3
-            "extend_time_multiplier": 1.0,  # ✅ ЭТАП 4.3
-            "regime_multiplier": 1.0,  # ✅ НОВОЕ: Множитель режима (из конфига, fallback)
-            "trend_strength_boost": 1.0,  # ✅ НОВОЕ: Буст при сильном тренде (из конфига, fallback)
-            "check_interval_seconds": 1.5,  # ✅ АДАПТИВНО: Интервал проверки TSL (fallback)
-            "min_critical_hold_seconds": 30.0,  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (fallback)
-            "short_reversal_min_duration": 30,  # ✅ АДАПТИВНО: Short reversal protection (fallback)
-            "short_reversal_max_percent": 0.5,  # ✅ АДАПТИВНО: Short reversal protection (fallback)
-            "trail_growth_low_multiplier": 1.5,  # ✅ АДАПТИВНО: Trail growth (fallback)
-            "trail_growth_medium_multiplier": 2.0,  # ✅ АДАПТИВНО: Trail growth (fallback)
-            "trail_growth_high_multiplier": 3.0,  # ✅ АДАПТИВНО: Trail growth (fallback)
-        }
-
-        trailing_sl_config = None
-        if hasattr(self.config, "futures_modules") and self.config.futures_modules:
-            trailing_sl_config = self._get_config_value(
-                self.config.futures_modules, "trailing_sl", None
-            )
-
-        if trailing_sl_config:
-            params["trading_fee_rate"] = self._get_config_value(
-                trailing_sl_config, "trading_fee_rate", params["trading_fee_rate"]
-            )
-            params["initial_trail"] = self._get_config_value(
-                trailing_sl_config, "initial_trail", params["initial_trail"]
-            )
-            params["max_trail"] = self._get_config_value(
-                trailing_sl_config, "max_trail", params["max_trail"]
-            )
-            params["min_trail"] = self._get_config_value(
-                trailing_sl_config, "min_trail", params["min_trail"]
-            )
-            params["loss_cut_percent"] = self._get_config_value(
-                trailing_sl_config, "loss_cut_percent", params["loss_cut_percent"]
-            )
-            params["timeout_loss_percent"] = self._get_config_value(
-                trailing_sl_config,
-                "timeout_loss_percent",
-                params["timeout_loss_percent"],
-            )
-            params["timeout_minutes"] = self._get_config_value(
-                trailing_sl_config, "timeout_minutes", params["timeout_minutes"]
-            )
-            # ✅ ЭТАП 4.4: Минимальное время удержания
-            params["min_holding_minutes"] = self._get_config_value(
-                trailing_sl_config, "min_holding_minutes", params["min_holding_minutes"]
-            )
-            # ✅ ЭТАП 4.1: Минимальный профит для закрытия
-            params["min_profit_to_close"] = self._get_config_value(
-                trailing_sl_config, "min_profit_to_close", params["min_profit_to_close"]
-            )
-            # ✅ ЭТАП 4.3: Продлевание времени для прибыльных позиций
-            params["extend_time_on_profit"] = self._get_config_value(
-                trailing_sl_config,
-                "extend_time_on_profit",
-                params["extend_time_on_profit"],
-            )
-            params["extend_time_multiplier"] = self._get_config_value(
-                trailing_sl_config,
-                "extend_time_multiplier",
-                params["extend_time_multiplier"],
-            )
-
-            # ✅ АДАПТИВНО: Short reversal protection параметры из общего конфига
-            short_reversal_config = self._get_config_value(
-                trailing_sl_config, "short_reversal_protection", None
-            )
-            if short_reversal_config:
-                short_reversal_dict = (
-                    self._to_dict(short_reversal_config)
-                    if not isinstance(short_reversal_config, dict)
-                    else short_reversal_config
-                )
-                params["short_reversal_min_duration"] = self._get_config_value(
-                    short_reversal_dict, "min_reversal_duration_seconds", 30
-                )
-                params["short_reversal_max_percent"] = self._get_config_value(
-                    short_reversal_dict, "max_reversal_percent", 0.5
-                )
-
-            # ✅ АДАПТИВНО: Trail growth multipliers из общего конфига
-            trail_growth_config = self._get_config_value(
-                trailing_sl_config, "trail_growth", None
-            )
-            if trail_growth_config:
-                trail_growth_dict = (
-                    self._to_dict(trail_growth_config)
-                    if not isinstance(trail_growth_config, dict)
-                    else trail_growth_config
-                )
-                params["trail_growth_low_multiplier"] = self._get_config_value(
-                    trail_growth_dict, "low_profit_multiplier", 1.5
-                )
-                params["trail_growth_medium_multiplier"] = self._get_config_value(
-                    trail_growth_dict, "medium_profit_multiplier", 2.0
-                )
-                params["trail_growth_high_multiplier"] = self._get_config_value(
-                    trail_growth_dict, "high_profit_multiplier", 3.0
-                )
-
-            # ✅ ЭТАП 4.5: Адаптация под режим рынка
-            if regime:
-                regime_lower = regime.lower() if isinstance(regime, str) else None
-                by_regime = self._get_config_value(
-                    trailing_sl_config, "by_regime", None
-                )
-                if by_regime and regime_lower:
-                    # Преобразуем by_regime в словарь, если это объект
-                    by_regime_dict = (
-                        self._to_dict(by_regime)
-                        if not isinstance(by_regime, dict)
-                        else by_regime
-                    )
-                    if regime_lower in by_regime_dict:
-                        regime_params = by_regime_dict[regime_lower]
-                        # Преобразуем regime_params в словарь, если это объект
-                        regime_params_dict = (
-                            self._to_dict(regime_params)
-                            if not isinstance(regime_params, dict)
-                            else regime_params
-                        )
-                        # ✅ КРИТИЧЕСКИЕ: Переопределяем базовые параметры TSL для режима
-                        if "initial_trail" in regime_params_dict:
-                            params["initial_trail"] = regime_params_dict[
-                                "initial_trail"
-                            ]
-                        if "max_trail" in regime_params_dict:
-                            params["max_trail"] = regime_params_dict["max_trail"]
-                        if "min_trail" in regime_params_dict:
-                            params["min_trail"] = regime_params_dict["min_trail"]
-                        if "loss_cut_percent" in regime_params_dict:
-                            params["loss_cut_percent"] = regime_params_dict[
-                                "loss_cut_percent"
-                            ]
-                        if "timeout_loss_percent" in regime_params_dict:
-                            params["timeout_loss_percent"] = regime_params_dict[
-                                "timeout_loss_percent"
-                            ]
-                        if "timeout_minutes" in regime_params_dict:
-                            params["timeout_minutes"] = regime_params_dict[
-                                "timeout_minutes"
-                            ]
-                        if "check_interval_seconds" in regime_params_dict:
-                            params["check_interval_seconds"] = regime_params_dict[
-                                "check_interval_seconds"
-                            ]
-                        if "min_critical_hold_seconds" in regime_params_dict:
-                            params["min_critical_hold_seconds"] = regime_params_dict[
-                                "min_critical_hold_seconds"
-                            ]
-
-                        # ✅ Дополнительные параметры
-                        if "min_profit_to_close" in regime_params_dict:
-                            params["min_profit_to_close"] = regime_params_dict[
-                                "min_profit_to_close"
-                            ]
-                        if "min_holding_minutes" in regime_params_dict:
-                            params["min_holding_minutes"] = regime_params_dict[
-                                "min_holding_minutes"
-                            ]
-                        if "extend_time_multiplier" in regime_params_dict:
-                            params["extend_time_multiplier"] = regime_params_dict[
-                                "extend_time_multiplier"
-                            ]
-                        if "extend_time_on_profit" in regime_params_dict:
-                            params["extend_time_on_profit"] = regime_params_dict[
-                                "extend_time_on_profit"
-                            ]
-                        # ✅ НОВОЕ: Множители режимов для trailing stop (из конфига)
-                        if "regime_multiplier" in regime_params_dict:
-                            params["regime_multiplier"] = regime_params_dict[
-                                "regime_multiplier"
-                            ]
-                        if "trend_strength_boost" in regime_params_dict:
-                            params["trend_strength_boost"] = regime_params_dict[
-                                "trend_strength_boost"
-                            ]
-                        # ✅ АДАПТИВНО: High profit threshold для режима
-                        if "high_profit_threshold" in regime_params_dict:
-                            params["high_profit_threshold"] = regime_params_dict[
-                                "high_profit_threshold"
-                            ]
-
-                        # ✅ АДАПТИВНО: Short reversal protection параметры для режима
-                        if "short_reversal_protection" in regime_params_dict:
-                            reversal_protection = regime_params_dict[
-                                "short_reversal_protection"
-                            ]
-                            if isinstance(reversal_protection, dict):
-                                if (
-                                    "min_reversal_duration_seconds"
-                                    in reversal_protection
-                                ):
-                                    params[
-                                        "short_reversal_min_duration"
-                                    ] = reversal_protection[
-                                        "min_reversal_duration_seconds"
-                                    ]
-                                if "max_reversal_percent" in reversal_protection:
-                                    params[
-                                        "short_reversal_max_percent"
-                                    ] = reversal_protection["max_reversal_percent"]
-
-                        # ✅ АДАПТИВНО: Trail growth multipliers для режима
-                        if "trail_growth" in regime_params_dict:
-                            trail_growth = regime_params_dict["trail_growth"]
-                            if isinstance(trail_growth, dict):
-                                if "low_profit_multiplier" in trail_growth:
-                                    params[
-                                        "trail_growth_low_multiplier"
-                                    ] = trail_growth["low_profit_multiplier"]
-                                if "medium_profit_multiplier" in trail_growth:
-                                    params[
-                                        "trail_growth_medium_multiplier"
-                                    ] = trail_growth["medium_profit_multiplier"]
-                                if "high_profit_multiplier" in trail_growth:
-                                    params[
-                                        "trail_growth_high_multiplier"
-                                    ] = trail_growth["high_profit_multiplier"]
-
-            # ✅ АДАПТИВНО: Параметры high_profit из конфига (общие для всех режимов)
-            high_profit_config = self._get_config_value(
-                trailing_sl_config, "high_profit", None
-            )
-            if high_profit_config:
-                high_profit_dict = (
-                    self._to_dict(high_profit_config)
-                    if not isinstance(high_profit_config, dict)
-                    else high_profit_config
-                )
-                # Используем threshold из режима если есть, иначе из общего конфига
-                params["high_profit_threshold"] = params.get(
-                    "high_profit_threshold"
-                ) or self._get_config_value(high_profit_dict, "threshold", 0.01)
-                params["high_profit_max_factor"] = self._get_config_value(
-                    high_profit_dict, "max_profit_factor", 2.0
-                )
-                params["high_profit_reduction_percent"] = self._get_config_value(
-                    high_profit_dict, "reduction_percent_per_1pct", 30
-                )
-                params["high_profit_min_reduction"] = self._get_config_value(
-                    high_profit_dict, "min_reduction_factor", 0.5
-                )
-            else:
-                # Fallback значения
-                params["high_profit_threshold"] = params.get(
-                    "high_profit_threshold", 0.01
-                )
-                params["high_profit_max_factor"] = 2.0
-                params["high_profit_reduction_percent"] = 30
-                params["high_profit_min_reduction"] = 0.5
-
-        # Нормализуем числовые значения
-        if params["trading_fee_rate"] is not None:
-            try:
-                params["trading_fee_rate"] = max(0.0, float(params["trading_fee_rate"]))
-            except (TypeError, ValueError):
-                logger.warning(
-                    f"⚠️ Не удалось преобразовать trading_fee_rate в float: {params['trading_fee_rate']}"
-                )
-                params[
-                    "trading_fee_rate"
-                ] = 0.0010  # ✅ ОБНОВЛЕНО: 0.10% на круг (0.05% вход + 0.05% выход для taker на OKX)
-
-        # Нормализуем числовые параметры трейлинга
-        for key in (
-            "initial_trail",
-            "max_trail",
-            "min_trail",
-            "loss_cut_percent",
-            "timeout_loss_percent",
-            "timeout_minutes",
-            "min_holding_minutes",
-            "min_profit_to_close",
-            "extend_time_multiplier",
-            "regime_multiplier",  # ✅ НОВОЕ: Множитель режима
-            "trend_strength_boost",  # ✅ НОВОЕ: Буст при сильном тренде
-            "check_interval_seconds",  # ✅ АДАПТИВНО: Интервал проверки TSL
-            "short_reversal_min_duration",  # ✅ АДАПТИВНО: Short reversal protection
-            "short_reversal_max_percent",  # ✅ АДАПТИВНО: Short reversal protection
-            "trail_growth_low_multiplier",  # ✅ АДАПТИВНО: Trail growth
-            "trail_growth_medium_multiplier",  # ✅ АДАПТИВНО: Trail growth
-            "trail_growth_high_multiplier",  # ✅ АДАПТИВНО: Trail growth
-        ):
-            if params[key] is not None:
-                try:
-                    params[key] = float(params[key])
-                    if key in (
-                        "min_holding_minutes",
-                        "extend_time_multiplier",
-                        "timeout_minutes",
-                    ):
-                        params[key] = max(0.0, params[key])
-                    else:
-                        params[key] = (
-                            max(0.0, params[key]) if params[key] >= 0 else None
-                        )
-                except (TypeError, ValueError):
-                    logger.warning(
-                        f"⚠️ Не удалось преобразовать {key} в float: {params[key]}"
-                    )
-                    params[key] = (
-                        None
-                        if key
-                        in (
-                            "loss_cut_percent",
-                            "timeout_loss_percent",
-                            "timeout_minutes",
-                            "min_holding_minutes",
-                            "min_profit_to_close",
-                        )
-                        else 1.0
-                    )
-
-        # ✅ Нормализуем boolean значение extend_time_on_profit
-        if isinstance(params["extend_time_on_profit"], str):
-            params["extend_time_on_profit"] = params[
-                "extend_time_on_profit"
-            ].lower() in ("true", "1", "yes", "on")
-        elif params["extend_time_on_profit"] is None:
-            params["extend_time_on_profit"] = False
-        else:
-            params["extend_time_on_profit"] = bool(params["extend_time_on_profit"])
-
-        return params
+        """✅ ЭТАП 1: Возвращает параметры Trailing SL через ConfigManager"""
+        return self.config_manager.get_trailing_sl_params(regime=regime)
 
     def _initialize_trailing_stop(
         self,
@@ -1475,12 +1150,12 @@ class FuturesScalpingOrchestrator:
                 regime = manager.get_current_regime()
 
         # ✅ ЭТАП 4: Получаем параметры с адаптацией под режим рынка
-        params = self._get_trailing_sl_params(regime=regime)
+        params = self.config_manager.get_trailing_sl_params(regime=regime)
 
         # Получаем дополнительные переопределения из профиля символа (если есть)
-        regime_profile = self._get_symbol_regime_profile(symbol, regime)
+        regime_profile = self.config_manager.get_symbol_regime_profile(symbol, regime)
         trailing_overrides = (
-            self._to_dict(regime_profile.get("trailing_sl", {}))
+            self.config_manager.to_dict(regime_profile.get("trailing_sl", {}))
             if regime_profile
             else {}
         )
@@ -1558,6 +1233,10 @@ class FuturesScalpingOrchestrator:
             min_critical_hold_seconds=params.get(
                 "min_critical_hold_seconds"
             ),  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (из конфига)
+            # ✅ НОВОЕ: Передаем trail_growth multipliers для адаптивного трейлинга
+            trail_growth_low_multiplier=params.get("trail_growth_low_multiplier", 1.5),
+            trail_growth_medium_multiplier=params.get("trail_growth_medium_multiplier", 2.0),
+            trail_growth_high_multiplier=params.get("trail_growth_high_multiplier", 3.0),
         )
 
         # ✅ АДАПТИВНО: Устанавливаем параметры из конфига для TSL
@@ -1647,21 +1326,21 @@ class FuturesScalpingOrchestrator:
                 regime = self.signal_generator.regime_manager.get_current_regime()
 
             balance = await self.client.get_balance()
-            balance_profile = self._get_balance_profile(balance)
+            balance_profile = self.config_manager.get_balance_profile(balance)
             profile_name = balance_profile.get("name", "small")
 
             # Получаем множитель интервала по режиму (ПРИОРИТЕТ 1)
-            by_regime = self._to_dict(getattr(positions_sync_config, "by_regime", {}))
+            by_regime = self.config_manager.to_dict(getattr(positions_sync_config, "by_regime", {}))
             regime_multiplier = 1.0
             if regime:
-                regime_config = self._to_dict(by_regime.get(regime.lower(), {}))
+                regime_config = self.config_manager.to_dict(by_regime.get(regime.lower(), {}))
                 regime_multiplier = regime_config.get("interval_multiplier", 1.0) or 1.0
 
             # Получаем множитель интервала по балансу (ПРИОРИТЕТ 2, если режим не переопределил)
-            by_balance = self._to_dict(getattr(positions_sync_config, "by_balance", {}))
+            by_balance = self.config_manager.to_dict(getattr(positions_sync_config, "by_balance", {}))
             balance_multiplier = 1.0
             if profile_name:
-                balance_config = self._to_dict(by_balance.get(profile_name, {}))
+                balance_config = self.config_manager.to_dict(by_balance.get(profile_name, {}))
                 balance_multiplier = (
                     balance_config.get("interval_multiplier", 1.0) or 1.0
                 )
@@ -1810,7 +1489,7 @@ class FuturesScalpingOrchestrator:
                 self.trailing_sl_by_symbol.pop(symbol, None)
             if symbol in self.max_size_limiter.position_sizes:
                 self.max_size_limiter.remove_position(symbol)
-            normalized_symbol = self._normalize_symbol(symbol)
+            normalized_symbol = self.config_manager.normalize_symbol(symbol)
             if normalized_symbol in self.last_orders_cache:
                 self.last_orders_cache[normalized_symbol]["status"] = "closed"
 
@@ -2571,7 +2250,7 @@ class FuturesScalpingOrchestrator:
         try:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Нормализуем символ для блокировки
             # Это предотвращает race condition при разных форматах ("BTC-USDT" vs "BTCUSDT")
-            normalized_symbol = self._normalize_symbol(symbol)
+            normalized_symbol = self.config_manager.normalize_symbol(symbol)
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: БЛОКИРОВКА для предотвращения race condition
             # Создаем блокировку для нормализованного символа, если её нет
@@ -2839,7 +2518,7 @@ class FuturesScalpingOrchestrator:
                         # Если allow_concurrent=true, проверка направления будет в _process_signals
 
                     balance = await self.client.get_balance()
-                    balance_profile = self._get_balance_profile(balance)
+                    balance_profile = self.config_manager.get_balance_profile(balance)
                     max_open = balance_profile.get(
                         "max_open_positions", 6
                     )  # ✅ Увеличено до 6 (3 на BTC + 3 на ETH)
@@ -2862,8 +2541,8 @@ class FuturesScalpingOrchestrator:
                         regime = (
                             self.signal_generator.regime_manager.get_current_regime()
                         )
-                    adaptive_risk_params = self._get_adaptive_risk_params(
-                        balance, regime
+                    adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
+                        balance, regime, signal_generator=self.signal_generator
                     )
                     min_balance_usd = adaptive_risk_params.get("min_balance_usd", 20.0)
 
@@ -3331,7 +3010,7 @@ class FuturesScalpingOrchestrator:
             import time
 
             current_time = time.time()
-            normalized_symbol = self._normalize_symbol(symbol)
+            normalized_symbol = self.config_manager.normalize_symbol(symbol)
             if normalized_symbol in self.last_orders_cache:
                 last_order = self.last_orders_cache[normalized_symbol]
                 order_time = last_order.get("timestamp", 0)
@@ -3399,7 +3078,7 @@ class FuturesScalpingOrchestrator:
                 import time
 
                 current_time = time.time()
-                normalized_symbol = self._normalize_symbol(symbol)
+                normalized_symbol = self.config_manager.normalize_symbol(symbol)
                 self.last_orders_cache[normalized_symbol] = {
                     "order_id": order_id,
                     "timestamp": current_time,
@@ -3779,7 +3458,7 @@ class FuturesScalpingOrchestrator:
                     self.signal_generator.regime_manager.get_current_regime()
                 )
 
-            balance_profile = self._get_balance_profile(balance)
+            balance_profile = self.config_manager.get_balance_profile(balance)
 
             base_usd_size = balance_profile["base_position_usd"]
             min_usd_size = balance_profile["min_position_usd"]
@@ -3792,7 +3471,7 @@ class FuturesScalpingOrchestrator:
                 if symbol_profile:
                     # position_multiplier находится на верхнем уровне символа, не в режиме
                     symbol_dict = (
-                        self._to_dict(symbol_profile)
+                        self.config_manager.to_dict(symbol_profile)
                         if not isinstance(symbol_profile, dict)
                         else symbol_profile
                     )
@@ -3826,7 +3505,7 @@ class FuturesScalpingOrchestrator:
             position_overrides: Dict[str, Any] = {}
             if symbol:
                 regime_profile = self._get_symbol_regime_profile(symbol, symbol_regime)
-                position_overrides = self._to_dict(regime_profile.get("position", {}))
+                position_overrides = self.config_manager.to_dict(regime_profile.get("position", {}))
 
             # ⚠️ ВАЖНО: position overrides из symbol_profiles могут быть устаревшими
             # Они применяются только если явно указаны и имеют приоритет над multiplier
@@ -3978,7 +3657,7 @@ class FuturesScalpingOrchestrator:
                         or self.signal_generator.regime_manager.get_current_regime()
                     )
                     if regime_key:
-                        regime_params = self._get_regime_params(regime_key, symbol)
+                        regime_params = self.config_manager.get_regime_params(regime_key, symbol)
                         multiplier = regime_params.get("position_size_multiplier")
                         if multiplier is not None:
                             base_usd_size *= multiplier
@@ -3990,8 +3669,8 @@ class FuturesScalpingOrchestrator:
             signal_strength = signal.get("strength", 0.5)
 
             # ✅ МОДЕРНИЗАЦИЯ: Получаем адаптивные параметры риска с учетом режима и баланса
-            adaptive_risk_params = self._get_adaptive_risk_params(
-                balance, symbol_regime, symbol
+            adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
+                balance, symbol_regime, symbol, signal_generator=self.signal_generator
             )
             strength_multipliers = adaptive_risk_params.get("strength_multipliers", {})
             strength_thresholds = adaptive_risk_params.get("strength_thresholds", {})
@@ -4047,7 +3726,7 @@ class FuturesScalpingOrchestrator:
                 if volatility_config is None:
                     volatility_config = {}
                 elif not isinstance(volatility_config, dict):
-                    volatility_config = self._to_dict(volatility_config)
+                    volatility_config = self.config_manager.to_dict(volatility_config)
 
                 volatility_adjustment_enabled = volatility_config.get("enabled", False)
 
@@ -4176,8 +3855,8 @@ class FuturesScalpingOrchestrator:
             self.total_margin_used = used_margin
 
             # ✅ МОДЕРНИЗАЦИЯ: Получаем адаптивные параметры риска с учетом режима и баланса
-            adaptive_risk_params = self._get_adaptive_risk_params(
-                balance, symbol_regime, symbol
+            adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
+                balance, symbol_regime, symbol, signal_generator=self.signal_generator
             )
             max_margin_percent = (
                 adaptive_risk_params.get("max_margin_percent", 80.0) / 100.0
@@ -4853,15 +4532,15 @@ class FuturesScalpingOrchestrator:
                 logger.debug("adaptive_regime не найден в scalping_config")
                 return {}
 
-            adaptive_dict = self._to_dict(adaptive_regime)
-            regime_params = self._to_dict(adaptive_dict.get(regime_name, {}))
+            adaptive_dict = self.config_manager.to_dict(adaptive_regime)
+            regime_params = self.config_manager.to_dict(adaptive_dict.get(regime_name, {}))
 
             if symbol:
                 symbol_profile = self.symbol_profiles.get(symbol, {})
                 regime_profile = symbol_profile.get(regime_name.lower(), {})
-                arm_override = self._to_dict(regime_profile.get("arm", {}))
+                arm_override = self.config_manager.to_dict(regime_profile.get("arm", {}))
                 if arm_override:
-                    regime_params = self._deep_merge_dict(regime_params, arm_override)
+                    regime_params = self.config_manager.deep_merge_dict(regime_params, arm_override)
 
             return regime_params
 
@@ -4906,297 +4585,33 @@ class FuturesScalpingOrchestrator:
                 )
                 return self._get_fallback_risk_params()
 
-            # Конвертируем в словарь если нужно
-            risk_dict = self._to_dict(risk_config)
-
-            # ✅ ОТЛАДКА: Проверяем наличие полей в risk_dict
-            if (
-                not risk_dict.get("base")
-                and not risk_dict.get("by_regime")
-                and not risk_dict.get("by_balance")
-            ):
-                logger.warning(
-                    f"⚠️ Поля base, by_regime, by_balance не найдены в risk_config. "
-                    f"Доступные поля: {list(risk_dict.keys())}. "
-                    f"Используем fallback значения."
-                )
-                # Пытаемся получить напрямую из объекта
-                if hasattr(risk_config, "base"):
-                    risk_dict["base"] = self._to_dict(risk_config.base)
-                if hasattr(risk_config, "by_regime"):
-                    risk_dict["by_regime"] = self._to_dict(risk_config.by_regime)
-                if hasattr(risk_config, "by_balance"):
-                    risk_dict["by_balance"] = self._to_dict(risk_config.by_balance)
-
-            # Базовые параметры (fallback)
-            base_params = self._to_dict(risk_dict.get("base", {}))
-
-            # 2. Определяем баланс профиль
-            balance_profile = self._get_balance_profile(balance)
-            profile_name = balance_profile.get("name", "small")
-
-            # Параметры по балансу
-            by_balance = self._to_dict(risk_dict.get("by_balance", {}))
-            balance_params = self._to_dict(by_balance.get(profile_name, {}))
-
-            # 3. Определяем режим рынка (если не указан)
-            if not regime:
-                if (
-                    hasattr(self.signal_generator, "regime_manager")
-                    and self.signal_generator.regime_manager
-                ):
-                    regime = self.signal_generator.regime_manager.get_current_regime()
-                else:
-                    regime = "ranging"  # Fallback режим
-
-            # Нормализуем режим (может быть uppercase или lowercase)
-            regime = regime.lower() if regime else "ranging"
-
-            # Параметры по режиму (ПРИОРИТЕТ 1)
-            by_regime = self._to_dict(risk_dict.get("by_regime", {}))
-            regime_params = self._to_dict(by_regime.get(regime, {}))
-
-            # 4. Объединяем параметры с приоритетом: режим > баланс > базовые
-            # Начинаем с базовых параметров
-            adaptive_params = base_params.copy()
-
-            # Применяем параметры баланса (перезаписывают базовые)
-            adaptive_params.update(balance_params)
-
-            # Применяем параметры режима (перезаписывают баланс и базовые) - ПРИОРИТЕТ 1
-            adaptive_params.update(regime_params)
-
-            # 5. Обрабатываем вложенные словари (strength_multipliers, strength_thresholds)
-            if "strength_multipliers" in adaptive_params:
-                adaptive_params["strength_multipliers"] = self._to_dict(
-                    adaptive_params["strength_multipliers"]
-                )
-            else:
-                # Fallback strength_multipliers
-                adaptive_params["strength_multipliers"] = {
-                    "conflict": 0.5,
-                    "very_strong": 1.5,
-                    "strong": 1.2,
-                    "medium": 1.0,
-                    "weak": 0.8,
-                }
-
-            if "strength_thresholds" in adaptive_params:
-                adaptive_params["strength_thresholds"] = self._to_dict(
-                    adaptive_params["strength_thresholds"]
-                )
-            else:
-                # Fallback strength_thresholds
-                adaptive_params["strength_thresholds"] = {
-                    "very_strong": 0.8,
-                    "strong": 0.6,
-                    "medium": 0.4,
-                }
-
-            # 6. Валидация параметров
-            adaptive_params = self._validate_risk_params(
-                adaptive_params, regime, profile_name
+            # ✅ ЭТАП 1: Используем ConfigManager для получения адаптивных параметров риска
+            # Этот метод уже вынесен в ConfigManager, просто вызываем его
+            return self.config_manager.get_adaptive_risk_params(
+                balance, regime, symbol, signal_generator=self.signal_generator
             )
-
-            logger.debug(
-                f"📊 Адаптивные параметры риска: режим={regime}, профиль={profile_name}, "
-                f"max_loss={adaptive_params.get('max_loss_per_trade_percent', 2.0)}%, "
-                f"max_margin={adaptive_params.get('max_margin_percent', 80.0)}%"
-            )
-
-            return adaptive_params
 
         except Exception as e:
             logger.error(
                 f"❌ Ошибка получения адаптивных параметров риска: {e}", exc_info=True
             )
-            return self._get_fallback_risk_params()
+            return self.config_manager.get_fallback_risk_params()
 
     def _get_adaptive_delay(self, delay_key: str, default_ms: float) -> float:
-        """
-        ✅ АДАПТИВНО: Получает адаптивную задержку из конфига по режиму рынка
-
-        Args:
-            delay_key: Ключ задержки (api_request_delay_ms, symbol_switch_delay_ms, position_sync_delay_ms)
-            default_ms: Значение по умолчанию в миллисекундах
-
-        Returns:
-            Задержка в миллисекундах
-        """
-        try:
-            delays_config = self._delays_config
-            if not delays_config:
-                return default_ms
-
-            # Получаем базовое значение
-            if isinstance(delays_config, dict):
-                base_delay = delays_config.get(delay_key, default_ms)
-                by_regime = delays_config.get("by_regime", {})
-            else:
-                base_delay = getattr(delays_config, delay_key, default_ms)
-                by_regime = getattr(delays_config, "by_regime", {})
-
-            # Получаем режим рынка
-            regime = None
-            if (
-                hasattr(self, "signal_generator")
-                and self.signal_generator
-                and hasattr(self.signal_generator, "regime_manager")
-                and self.signal_generator.regime_manager
-            ):
-                regime_obj = self.signal_generator.regime_manager.get_current_regime()
-                if regime_obj:
-                    regime = (
-                        regime_obj.lower()
-                        if isinstance(regime_obj, str)
-                        else str(regime_obj).lower()
-                    )
-
-            # Получаем адаптивное значение по режиму
-            if regime and by_regime:
-                if isinstance(by_regime, dict):
-                    regime_config = by_regime.get(regime, {})
-                    if isinstance(regime_config, dict):
-                        regime_delay = regime_config.get(delay_key, base_delay)
-                    else:
-                        regime_delay = getattr(regime_config, delay_key, base_delay)
-                else:
-                    regime_config = getattr(by_regime, regime, None)
-                    if regime_config:
-                        regime_delay = getattr(regime_config, delay_key, base_delay)
-                    else:
-                        regime_delay = base_delay
-
-                logger.debug(
-                    f"✅ АДАПТИВНО: Задержка {delay_key} для режима {regime}: {regime_delay}ms (базовая: {base_delay}ms)"
-                )
-                return regime_delay
-
-            return base_delay
-
-        except Exception as e:
-            logger.debug(
-                f"⚠️ Ошибка получения адаптивной задержки {delay_key}: {e}, используем fallback {default_ms}ms"
-            )
-            return default_ms
+        """✅ ЭТАП 1: Получает адаптивную задержку через ConfigManager"""
+        return self.config_manager.get_adaptive_delay(
+            delay_key, default_ms, self._delays_config, self.signal_generator
+        )
 
     def _get_fallback_risk_params(self) -> Dict[str, Any]:
-        """Возвращает fallback параметры риска (если конфиг недоступен)"""
-        return {
-            "max_loss_per_trade_percent": 2.0,
-            "max_margin_percent": 80.0,
-            "max_drawdown_percent": 5.0,
-            "max_margin_safety_percent": 90.0,
-            "min_balance_usd": 20.0,
-            "min_time_between_orders_seconds": 30,
-            "position_override_tolerance_percent": 50.0,
-            "strength_multipliers": {
-                "conflict": 0.5,
-                "very_strong": 1.5,
-                "strong": 1.2,
-                "medium": 1.0,
-                "weak": 0.8,
-            },
-            "strength_thresholds": {
-                "very_strong": 0.8,
-                "strong": 0.6,
-                "medium": 0.4,
-            },
-        }
+        """✅ ЭТАП 1: Возвращает fallback параметры риска через ConfigManager"""
+        return self.config_manager.get_fallback_risk_params()
 
     def _validate_risk_params(
         self, params: Dict[str, Any], regime: str, profile_name: str
     ) -> Dict[str, Any]:
-        """
-        Валидация параметров риска из конфига.
-
-        Args:
-            params: Параметры для валидации
-            regime: Режим рынка
-            profile_name: Имя баланс профиля
-
-        Returns:
-            Валидированные параметры
-        """
-        validated = params.copy()
-
-        # Валидация обязательных параметров
-        required_params = [
-            "max_loss_per_trade_percent",
-            "max_margin_percent",
-            "max_drawdown_percent",
-            "max_margin_safety_percent",
-            "min_balance_usd",
-            "min_time_between_orders_seconds",
-        ]
-
-        fallback_params = self._get_fallback_risk_params()
-
-        for param in required_params:
-            if param not in validated or validated[param] is None:
-                logger.warning(
-                    f"⚠️ Параметр {param} не найден в конфиге для режима={regime}, профиль={profile_name}, "
-                    f"используем fallback значение: {fallback_params[param]}"
-                )
-                validated[param] = fallback_params[param]
-            elif (
-                not isinstance(validated[param], (int, float)) or validated[param] <= 0
-            ):
-                logger.error(
-                    f"❌ Параметр {param} имеет недопустимое значение: {validated[param]}, "
-                    f"используем fallback значение: {fallback_params[param]}"
-                )
-                validated[param] = fallback_params[param]
-
-        # Валидация strength_multipliers
-        if "strength_multipliers" not in validated or not isinstance(
-            validated["strength_multipliers"], dict
-        ):
-            logger.warning(
-                f"⚠️ strength_multipliers не найден в конфиге, используем fallback значения"
-            )
-            validated["strength_multipliers"] = fallback_params["strength_multipliers"]
-        else:
-            # Валидация каждого множителя
-            sm = validated["strength_multipliers"]
-            fallback_sm = fallback_params["strength_multipliers"]
-            for key in ["conflict", "very_strong", "strong", "medium", "weak"]:
-                if (
-                    key not in sm
-                    or not isinstance(sm[key], (int, float))
-                    or sm[key] <= 0
-                ):
-                    logger.warning(
-                        f"⚠️ strength_multipliers[{key}] не найден или невалиден, "
-                        f"используем fallback: {fallback_sm[key]}"
-                    )
-                    sm[key] = fallback_sm[key]
-
-        # Валидация strength_thresholds
-        if "strength_thresholds" not in validated or not isinstance(
-            validated["strength_thresholds"], dict
-        ):
-            logger.warning(
-                f"⚠️ strength_thresholds не найден в конфиге, используем fallback значения"
-            )
-            validated["strength_thresholds"] = fallback_params["strength_thresholds"]
-        else:
-            # Валидация каждого порога
-            st = validated["strength_thresholds"]
-            fallback_st = fallback_params["strength_thresholds"]
-            for key in ["very_strong", "strong", "medium"]:
-                if (
-                    key not in st
-                    or not isinstance(st[key], (int, float))
-                    or st[key] <= 0
-                ):
-                    logger.warning(
-                        f"⚠️ strength_thresholds[{key}] не найден или невалиден, "
-                        f"используем fallback: {fallback_st[key]}"
-                    )
-                    st[key] = fallback_st[key]
-
-        return validated
+        """✅ ЭТАП 1: Валидация параметров риска через ConfigManager"""
+        return self.config_manager.validate_risk_params(params, regime, profile_name)
 
     async def _get_used_margin(self) -> float:
         """
@@ -5298,8 +4713,8 @@ class FuturesScalpingOrchestrator:
             ):
                 regime = self.signal_generator.regime_manager.get_current_regime()
 
-            adaptive_risk_params = self._get_adaptive_risk_params(
-                current_balance, regime
+            adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
+                current_balance, regime, signal_generator=self.signal_generator
             )
             max_drawdown_percent = (
                 adaptive_risk_params.get("max_drawdown_percent", 5.0) / 100.0
@@ -5904,8 +5319,32 @@ class FuturesScalpingOrchestrator:
                     # ✅ ИСПРАВЛЕНО: Обновляем entry_price из avgPx, если avgPx > 0
                     if avg_px > 0:
                         update_data["entry_price"] = avg_px
+                    
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем entry_time и другие метаданные при обновлении
+                    # Если entry_time уже есть - сохраняем его, иначе устанавливаем текущее время
+                    if "entry_time" not in self.active_positions[symbol]:
+                        update_data["entry_time"] = datetime.now()
+                        update_data["timestamp"] = datetime.now()
+                    # Сохраняем режим и другие метаданные, если они есть
+                    saved_regime = self.active_positions[symbol].get("regime")
+                    saved_position_side = self.active_positions[symbol].get("position_side")
+                    saved_time_extended = self.active_positions[symbol].get("time_extended", False)
+                    saved_order_type = self.active_positions[symbol].get("order_type")
+                    saved_post_only = self.active_positions[symbol].get("post_only")
 
                     self.active_positions[symbol].update(update_data)
+                    
+                    # Восстанавливаем метаданные после update
+                    if saved_regime:
+                        self.active_positions[symbol]["regime"] = saved_regime
+                    if saved_position_side:
+                        self.active_positions[symbol]["position_side"] = saved_position_side
+                    if saved_time_extended:
+                        self.active_positions[symbol]["time_extended"] = saved_time_extended
+                    if saved_order_type:
+                        self.active_positions[symbol]["order_type"] = saved_order_type
+                    if saved_post_only is not None:
+                        self.active_positions[symbol]["post_only"] = saved_post_only
                     logger.debug(
                         f"📊 Private WS: Позиция {symbol} обновлена (size={pos_size}, upl={position_data.get('upl', '0')})"
                     )
@@ -6110,8 +5549,8 @@ class FuturesScalpingOrchestrator:
             ) / self.initial_balance
 
             # Получаем адаптивный max_drawdown_percent
-            adaptive_risk_params = self._get_adaptive_risk_params(
-                current_balance, regime
+            adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
+                current_balance, regime, signal_generator=self.signal_generator
             )
             max_drawdown_percent = (
                 adaptive_risk_params.get("max_drawdown_percent", 5.0) / 100.0
@@ -6166,7 +5605,8 @@ class FuturesScalpingOrchestrator:
                 # Если нет entry_time - пытаемся использовать timestamp
                 entry_time = position.get("timestamp")
                 if not entry_time:
-                    logger.warning(f"⚠️ Нет времени открытия для позиции {symbol}")
+                    # ✅ ИСПРАВЛЕНО: Используем DEBUG вместо WARNING, так как это временное состояние при открытии позиции
+                    logger.debug(f"⚠️ Нет времени открытия для позиции {symbol} (позиция только что открыта, entry_time будет установлен при инициализации TSL)")
                     return
 
             # Вычисляем время удержания
@@ -6557,7 +5997,7 @@ class FuturesScalpingOrchestrator:
                         logger.warning(f"⚠️ Ошибка записи статистики: {e}")
 
                 # ✅ Обновляем кэш ордеров
-                normalized_symbol = self._normalize_symbol(symbol)
+                normalized_symbol = self.config_manager.normalize_symbol(symbol)
                 if normalized_symbol in self.last_orders_cache:
                     self.last_orders_cache[normalized_symbol]["status"] = "closed"
                     logger.debug(f"📦 Обновлен статус ордера для {symbol} на 'closed'")

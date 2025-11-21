@@ -251,7 +251,9 @@ class FuturesPositionManager:
                         # Fallback на общий баланс только если все остальное не сработало
                         if equity == 0:
                             equity = await self.client.get_balance()
-                            logger.warning(
+                            # ✅ ИСПРАВЛЕНО: Используем DEBUG вместо WARNING для нормальных случаев
+                            # equity может быть 0 для новых позиций или во время синхронизации
+                            logger.debug(
                                 f"⚠️ equity не найден через get_margin_info и API для {symbol}, "
                                 f"используем общий баланс: {equity:.2f}"
                             )
@@ -394,8 +396,10 @@ class FuturesPositionManager:
                     margin_ratio_pct = float(margin_ratio) * 100.0
                 except Exception:
                     margin_ratio_pct = margin_ratio
-                logger.warning(
-                    f"⚠️ Позиция {symbol} небезопасна: маржа {margin_ratio_pct:.2f}%"
+                # ✅ ИСПРАВЛЕНО: Используем DEBUG вместо WARNING, так как защита от ложных срабатываний работает
+                # Предупреждение будет выведено только если действительно есть проблема
+                logger.debug(
+                    f"⚠️ Позиция {symbol} небезопасна: маржа {margin_ratio_pct:.2f}% (проверяем защиту от ложных срабатываний)"
                 )
 
                 # 🛡️ КРИТИЧЕСКАЯ ЗАЩИТА от ложных срабатываний (как в LiquidationGuard):
@@ -414,7 +418,9 @@ class FuturesPositionManager:
                 # Если margin_ratio <= threshold и PnL небольшой - это ошибка расчета, а не реальный риск
                 # Это особенно часто происходит сразу после открытия позиции
                 if margin_ratio <= margin_ratio_threshold and abs(pnl) < pnl_threshold:
-                    logger.warning(
+                    # ✅ ИСПРАВЛЕНО: Используем DEBUG вместо WARNING, так как защита от ложных срабатываний работает
+                    # Это нормально для новых позиций, защита предотвращает автозакрытие
+                    logger.debug(
                         f"⚠️ ПОДОЗРИТЕЛЬНОЕ состояние для {symbol} в PositionManager: "
                         f"margin_ratio={margin_ratio:.2f}, available_margin={available_margin:.2f}, "
                         f"pnl={pnl:.2f}, equity={equity:.2f}. "
@@ -2278,6 +2284,181 @@ class FuturesPositionManager:
         except Exception as e:
             logger.error(f"Ошибка получения статистики управления: {e}")
             return {"error": str(e)}
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 🆕 НОВЫЕ МЕТОДЫ: Управление позициями (ЭТАП 2 рефакторинга)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    def add_position_to_tracking(self, symbol: str, position: Dict[str, Any]) -> None:
+        """
+        Добавить позицию в трекинг (алиас для совместимости).
+
+        Args:
+            symbol: Торговый символ
+            position: Данные позиции
+        """
+        self.active_positions[symbol] = position
+        logger.debug(f"✅ Position added: {symbol}")
+
+    def remove_position_from_tracking(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Удалить позицию из трекинга (алиас для совместимости).
+
+        Args:
+            symbol: Торговый символ
+
+        Returns:
+            Dict: Удаленная позиция или None
+        """
+        position = self.active_positions.pop(symbol, None)
+        if position:
+            logger.debug(f"✅ Position removed: {symbol}")
+        return position
+
+    def get_position_by_symbol(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Получить позицию по символу.
+
+        Args:
+            symbol: Торговый символ
+
+        Returns:
+            Dict: Данные позиции или None
+        """
+        return self.active_positions.get(symbol)
+
+    def has_position_for_symbol(self, symbol: str) -> bool:
+        """
+        Проверить наличие позиции по символу.
+
+        Args:
+            symbol: Торговый символ
+
+        Returns:
+            bool: True если позиция существует
+        """
+        return symbol in self.active_positions
+
+    def get_all_active_positions(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Получить все открытые позиции.
+
+        Returns:
+            Dict: Словарь всех позиций
+        """
+        return self.active_positions.copy()
+
+    def get_active_positions_count(self) -> int:
+        """
+        Получить количество открытых позиций.
+
+        Returns:
+            int: Количество позиций
+        """
+        return len(self.active_positions)
+
+    async def load_positions_from_exchange(self) -> int:
+        """
+        Загрузить существующие позиции с биржи.
+
+        Returns:
+            int: Количество загруженных позиций
+        """
+        try:
+            positions = await self.client.get_positions()
+            count = 0
+
+            for position in positions:
+                symbol = position.get("instId", "").replace("-SWAP", "")
+                size = float(position.get("pos", "0"))
+                if size != 0:
+                    self.active_positions[symbol] = position
+                    count += 1
+
+            logger.info(f"✅ Loaded {count} existing positions from exchange")
+            self.is_initialized = True
+            return count
+
+        except Exception as e:
+            logger.error(f"❌ Error loading existing positions: {e}")
+            return 0
+
+    async def sync_positions_with_exchange(self, force: bool = False) -> Dict[str, Any]:
+        """
+        Синхронизация локальных позиций с биржей.
+
+        Args:
+            force: Принудительная синхронизация
+
+        Returns:
+            Dict: Статистика синхронизации
+        """
+        stats = {
+            "synced": 0,
+            "new": 0,
+            "closed": 0,
+            "errors": 0,
+        }
+
+        try:
+            # Получаем актуальные позиции с биржи
+            exchange_positions = await self.client.get_positions()
+            exchange_symbols = set()
+
+            # Обновляем существующие и добавляем новые
+            for position in exchange_positions:
+                symbol = position.get("instId", "").replace("-SWAP", "")
+                size = float(position.get("pos", "0"))
+                
+                if size != 0:
+                    exchange_symbols.add(symbol)
+                    
+                    # Обновляем или добавляем позицию
+                    if symbol in self.active_positions:
+                        # Сохраняем метаданные
+                        saved_regime = self.active_positions[symbol].get("regime")
+                        saved_entry_time = self.active_positions[symbol].get("entry_time")
+                        saved_entry_price = self.active_positions[symbol].get("entry_price")
+                        saved_position_side = self.active_positions[symbol].get("position_side")
+                        
+                        self.active_positions[symbol] = position.copy()
+                        
+                        if saved_regime:
+                            self.active_positions[symbol]["regime"] = saved_regime
+                        if saved_entry_time:
+                            self.active_positions[symbol]["entry_time"] = saved_entry_time
+                        if saved_entry_price:
+                            self.active_positions[symbol]["entry_price"] = saved_entry_price
+                        if saved_position_side:
+                            self.active_positions[symbol]["position_side"] = saved_position_side
+                        
+                        stats["synced"] += 1
+                    else:
+                        self.active_positions[symbol] = position
+                        stats["new"] += 1
+                        logger.info(f"✅ New position detected: {symbol}")
+
+            # Удаляем позиции которых нет на бирже
+            local_symbols = set(self.active_positions.keys())
+            closed_symbols = local_symbols - exchange_symbols
+
+            for symbol in closed_symbols:
+                logger.info(f"🔍 Position closed on exchange: {symbol}")
+                await self._handle_position_closed(symbol)
+                stats["closed"] += 1
+
+            if force or closed_symbols or stats["new"] > 0:
+                logger.info(
+                    f"✅ Sync completed: {stats['synced']} synced, "
+                    f"{stats['new']} new, {stats['closed']} closed"
+                )
+
+            return stats
+
+        except Exception as e:
+            logger.error(f"❌ Error syncing positions: {e}")
+            stats["errors"] += 1
+            return stats
 
 
 # Пример использования

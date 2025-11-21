@@ -51,6 +51,9 @@ class TrailingStopLoss:
         min_critical_hold_seconds: Optional[
             float
         ] = None,  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (из конфига)
+        trail_growth_low_multiplier: float = 1.5,  # ✅ НОВОЕ: Множитель трейлинга для низкой прибыли (<0.5%)
+        trail_growth_medium_multiplier: float = 2.0,  # ✅ НОВОЕ: Множитель трейлинга для средней прибыли (0.5-1.5%)
+        trail_growth_high_multiplier: float = 3.0,  # ✅ НОВОЕ: Множитель трейлинга для высокой прибыли (>1.5%)
     ):
         """
         Инициализация Trailing Stop Loss.
@@ -110,6 +113,10 @@ class TrailingStopLoss:
         # ✅ НОВОЕ: Множители режимов из конфига (устанавливаются в orchestrator)
         self.regime_multiplier = None  # Будет установлено из конфига
         self.trend_strength_boost = None  # Будет установлено из конфига
+        # ✅ НОВОЕ: Сохраняем trail_growth multipliers для адаптивного трейлинга
+        self.trail_growth_low_multiplier = trail_growth_low_multiplier
+        self.trail_growth_medium_multiplier = trail_growth_medium_multiplier
+        self.trail_growth_high_multiplier = trail_growth_high_multiplier
         self.aggressive_max_trail: Optional[float] = max_trail
         self._next_trail_profit_target: Optional[float] = None
 
@@ -205,42 +212,64 @@ class TrailingStopLoss:
             if current_price > self.highest_price:
                 self.highest_price = current_price
                 # Армирование: до достижения min_profit_to_close не усиливаем трейл
+                trail_multiplier = None  # Инициализируем для логирования
                 if (
                     getattr(self, "min_profit_to_close", None) is not None
                     and profit_pct_total < self.min_profit_to_close
                 ):
                     self.current_trail = max(self.current_trail, self.initial_trail)
+                    trail_multiplier = 1.0  # Не используем multiplier, оставляем initial_trail
                 else:
                     # Увеличиваем трейл при росте цены
-                    # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ для расчета трейла!
+                    # ✅ АДАПТИВНО: Используем trail_growth multipliers из конфига вместо захардкоженного 2.0
+                    # Адаптируем множитель по уровню прибыли (low/medium/high)
+                    if profit_pct_total < 0.005:  # < 0.5% - низкая прибыль
+                        trail_multiplier = self.trail_growth_low_multiplier
+                    elif profit_pct_total < 0.015:  # 0.5-1.5% - средняя прибыль
+                        trail_multiplier = self.trail_growth_medium_multiplier
+                    else:  # > 1.5% - высокая прибыль
+                        trail_multiplier = self.trail_growth_high_multiplier
+                    
                     self.current_trail = min(
-                        self.initial_trail + max(profit_pct_total, 0.0) * 2,
+                        self.initial_trail + max(profit_pct_total, 0.0) * trail_multiplier,
                         self.max_trail,
                     )
                 logger.debug(
                     f"Long: новая максимальная цена={current_price:.2f}, "
-                    f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией)"
+                    f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией), "
+                    f"multiplier={trail_multiplier:.2f}x" if trail_multiplier is not None else "multiplier=N/A"
                 )
         else:  # short
             # Для шорта отслеживаем минимальную цену
             if current_price < self.lowest_price:
                 self.lowest_price = current_price
                 # Армирование: до достижения min_profit_to_close не усиливаем трейл
+                trail_multiplier = None  # Инициализируем для логирования
                 if (
                     getattr(self, "min_profit_to_close", None) is not None
                     and profit_pct_total < self.min_profit_to_close
                 ):
                     self.current_trail = max(self.current_trail, self.initial_trail)
+                    trail_multiplier = 1.0  # Не используем multiplier, оставляем initial_trail
                 else:
                     # Увеличиваем трейл при падении цены
-                    # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ для расчета трейла!
+                    # ✅ АДАПТИВНО: Используем trail_growth multipliers из конфига вместо захардкоженного 2.0
+                    # Адаптируем множитель по уровню прибыли (low/medium/high)
+                    if profit_pct_total < 0.005:  # < 0.5% - низкая прибыль
+                        trail_multiplier = self.trail_growth_low_multiplier
+                    elif profit_pct_total < 0.015:  # 0.5-1.5% - средняя прибыль
+                        trail_multiplier = self.trail_growth_medium_multiplier
+                    else:  # > 1.5% - высокая прибыль
+                        trail_multiplier = self.trail_growth_high_multiplier
+                    
                     self.current_trail = min(
-                        self.initial_trail + max(profit_pct_total, 0.0) * 2,
+                        self.initial_trail + max(profit_pct_total, 0.0) * trail_multiplier,
                         self.max_trail,
                     )
                 logger.debug(
                     f"Short: новая минимальная цена={current_price:.2f}, "
-                    f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией)"
+                    f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией), "
+                    f"multiplier={trail_multiplier:.2f}x" if trail_multiplier is not None else "multiplier=N/A"
                 )
 
         if (
