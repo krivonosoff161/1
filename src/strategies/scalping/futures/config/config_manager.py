@@ -38,10 +38,10 @@ class ConfigManager:
         """
         self.config = config
         self.scalping_config = config.scalping
-        
+
         # Загружаем symbol_profiles при инициализации
         self.symbol_profiles: Dict[str, Dict[str, Any]] = self.load_symbol_profiles()
-        
+
         logger.info("ConfigManager инициализирован")
 
     @staticmethod
@@ -320,9 +320,7 @@ class ConfigManager:
             # ✅ ЭТАП 4.5: Адаптация под режим рынка
             if regime:
                 regime_lower = regime.lower() if isinstance(regime, str) else None
-                by_regime = self.get_config_value(
-                    trailing_sl_config, "by_regime", None
-                )
+                by_regime = self.get_config_value(trailing_sl_config, "by_regime", None)
                 if by_regime and regime_lower:
                     # Преобразуем by_regime в словарь, если это объект
                     by_regime_dict = (
@@ -1043,7 +1041,11 @@ class ConfigManager:
 
             # 3. Определяем режим рынка (если не указан)
             if not regime:
-                if signal_generator and hasattr(signal_generator, "regime_manager") and signal_generator.regime_manager:
+                if (
+                    signal_generator
+                    and hasattr(signal_generator, "regime_manager")
+                    and signal_generator.regime_manager
+                ):
                     regime = signal_generator.regime_manager.get_current_regime()
                 else:
                     regime = "ranging"  # Fallback режим
@@ -1144,7 +1146,11 @@ class ConfigManager:
 
             # Получаем режим рынка
             regime = None
-            if signal_generator and hasattr(signal_generator, "regime_manager") and signal_generator.regime_manager:
+            if (
+                signal_generator
+                and hasattr(signal_generator, "regime_manager")
+                and signal_generator.regime_manager
+            ):
                 regime_obj = signal_generator.regime_manager.get_current_regime()
                 if regime_obj:
                     regime = (
@@ -1180,4 +1186,3 @@ class ConfigManager:
                 f"⚠️ Ошибка получения адаптивной задержки {delay_key}: {e}, используем fallback {default_ms}ms"
             )
             return default_ms
-

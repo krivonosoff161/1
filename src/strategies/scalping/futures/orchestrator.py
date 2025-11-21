@@ -27,10 +27,10 @@ from src.strategies.modules.slippage_guard import SlippageGuard
 from src.strategies.modules.trading_statistics import TradingStatistics
 
 from ..spot.performance_tracker import PerformanceTracker
+from .config.config_manager import ConfigManager
 from .indicators.fast_adx import FastADX
 from .indicators.funding_rate_monitor import FundingRateMonitor
 from .indicators.order_flow_indicator import OrderFlowIndicator
-from .config.config_manager import ConfigManager
 from .indicators.trailing_stop_loss import TrailingStopLoss
 from .order_executor import FuturesOrderExecutor
 from .position_manager import FuturesPositionManager
@@ -238,7 +238,9 @@ class FuturesScalpingOrchestrator:
         self.performance_tracker = PerformanceTracker()
 
         # ✅ ЭТАП 1: Используем symbol_profiles из ConfigManager
-        self.symbol_profiles: Dict[str, Dict[str, Any]] = self.config_manager.get_symbol_profiles()
+        self.symbol_profiles: Dict[
+            str, Dict[str, Any]
+        ] = self.config_manager.get_symbol_profiles()
 
         # ✅ НОВОЕ: Передаем symbol_profiles в position_manager для per-symbol TP
         if hasattr(self.position_manager, "set_symbol_profiles"):
@@ -581,7 +583,10 @@ class FuturesScalpingOrchestrator:
                     # ✅ ИСПРАВЛЕНИЕ: Задержка для избежания rate limit (429)
                     # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
                     delay_ms = self.config_manager.get_adaptive_delay(
-                        "api_request_delay_ms", 300, self._delays_config, self.signal_generator
+                        "api_request_delay_ms",
+                        300,
+                        self._delays_config,
+                        self.signal_generator,
                     )
                     await asyncio.sleep(delay_ms / 1000.0)
 
@@ -613,8 +618,11 @@ class FuturesScalpingOrchestrator:
                         # ✅ ИСПРАВЛЕНИЕ: Задержка перед повторной попыткой
                         # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
                         delay_ms = self.config_manager.get_adaptive_delay(
-                        "api_request_delay_ms", 300, self._delays_config, self.signal_generator
-                    )
+                            "api_request_delay_ms",
+                            300,
+                            self._delays_config,
+                            self.signal_generator,
+                        )
                         await asyncio.sleep(delay_ms / 1000.0)
                         # ✅ Попытка 2: С posSide="long" (может потребоваться в некоторых случаях)
                         try:
@@ -654,7 +662,10 @@ class FuturesScalpingOrchestrator:
                 # ✅ ИСПРАВЛЕНИЕ: Задержка между символами для избежания rate limit
                 # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)
                 delay_ms = self.config_manager.get_adaptive_delay(
-                    "symbol_switch_delay_ms", 200, self._delays_config, self.signal_generator
+                    "symbol_switch_delay_ms",
+                    200,
+                    self._delays_config,
+                    self.signal_generator,
                 )
                 await asyncio.sleep(delay_ms / 1000.0)
 
@@ -1235,8 +1246,12 @@ class FuturesScalpingOrchestrator:
             ),  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (из конфига)
             # ✅ НОВОЕ: Передаем trail_growth multipliers для адаптивного трейлинга
             trail_growth_low_multiplier=params.get("trail_growth_low_multiplier", 1.5),
-            trail_growth_medium_multiplier=params.get("trail_growth_medium_multiplier", 2.0),
-            trail_growth_high_multiplier=params.get("trail_growth_high_multiplier", 3.0),
+            trail_growth_medium_multiplier=params.get(
+                "trail_growth_medium_multiplier", 2.0
+            ),
+            trail_growth_high_multiplier=params.get(
+                "trail_growth_high_multiplier", 3.0
+            ),
         )
 
         # ✅ АДАПТИВНО: Устанавливаем параметры из конфига для TSL
@@ -1330,17 +1345,25 @@ class FuturesScalpingOrchestrator:
             profile_name = balance_profile.get("name", "small")
 
             # Получаем множитель интервала по режиму (ПРИОРИТЕТ 1)
-            by_regime = self.config_manager.to_dict(getattr(positions_sync_config, "by_regime", {}))
+            by_regime = self.config_manager.to_dict(
+                getattr(positions_sync_config, "by_regime", {})
+            )
             regime_multiplier = 1.0
             if regime:
-                regime_config = self.config_manager.to_dict(by_regime.get(regime.lower(), {}))
+                regime_config = self.config_manager.to_dict(
+                    by_regime.get(regime.lower(), {})
+                )
                 regime_multiplier = regime_config.get("interval_multiplier", 1.0) or 1.0
 
             # Получаем множитель интервала по балансу (ПРИОРИТЕТ 2, если режим не переопределил)
-            by_balance = self.config_manager.to_dict(getattr(positions_sync_config, "by_balance", {}))
+            by_balance = self.config_manager.to_dict(
+                getattr(positions_sync_config, "by_balance", {})
+            )
             balance_multiplier = 1.0
             if profile_name:
-                balance_config = self.config_manager.to_dict(by_balance.get(profile_name, {}))
+                balance_config = self.config_manager.to_dict(
+                    by_balance.get(profile_name, {})
+                )
                 balance_multiplier = (
                     balance_config.get("interval_multiplier", 1.0) or 1.0
                 )
@@ -3505,7 +3528,9 @@ class FuturesScalpingOrchestrator:
             position_overrides: Dict[str, Any] = {}
             if symbol:
                 regime_profile = self._get_symbol_regime_profile(symbol, symbol_regime)
-                position_overrides = self.config_manager.to_dict(regime_profile.get("position", {}))
+                position_overrides = self.config_manager.to_dict(
+                    regime_profile.get("position", {})
+                )
 
             # ⚠️ ВАЖНО: position overrides из symbol_profiles могут быть устаревшими
             # Они применяются только если явно указаны и имеют приоритет над multiplier
@@ -3657,7 +3682,9 @@ class FuturesScalpingOrchestrator:
                         or self.signal_generator.regime_manager.get_current_regime()
                     )
                     if regime_key:
-                        regime_params = self.config_manager.get_regime_params(regime_key, symbol)
+                        regime_params = self.config_manager.get_regime_params(
+                            regime_key, symbol
+                        )
                         multiplier = regime_params.get("position_size_multiplier")
                         if multiplier is not None:
                             base_usd_size *= multiplier
@@ -4533,14 +4560,20 @@ class FuturesScalpingOrchestrator:
                 return {}
 
             adaptive_dict = self.config_manager.to_dict(adaptive_regime)
-            regime_params = self.config_manager.to_dict(adaptive_dict.get(regime_name, {}))
+            regime_params = self.config_manager.to_dict(
+                adaptive_dict.get(regime_name, {})
+            )
 
             if symbol:
                 symbol_profile = self.symbol_profiles.get(symbol, {})
                 regime_profile = symbol_profile.get(regime_name.lower(), {})
-                arm_override = self.config_manager.to_dict(regime_profile.get("arm", {}))
+                arm_override = self.config_manager.to_dict(
+                    regime_profile.get("arm", {})
+                )
                 if arm_override:
-                    regime_params = self.config_manager.deep_merge_dict(regime_params, arm_override)
+                    regime_params = self.config_manager.deep_merge_dict(
+                        regime_params, arm_override
+                    )
 
             return regime_params
 
@@ -5319,7 +5352,7 @@ class FuturesScalpingOrchestrator:
                     # ✅ ИСПРАВЛЕНО: Обновляем entry_price из avgPx, если avgPx > 0
                     if avg_px > 0:
                         update_data["entry_price"] = avg_px
-                    
+
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем entry_time и другие метаданные при обновлении
                     # Если entry_time уже есть - сохраняем его, иначе устанавливаем текущее время
                     if "entry_time" not in self.active_positions[symbol]:
@@ -5327,20 +5360,28 @@ class FuturesScalpingOrchestrator:
                         update_data["timestamp"] = datetime.now()
                     # Сохраняем режим и другие метаданные, если они есть
                     saved_regime = self.active_positions[symbol].get("regime")
-                    saved_position_side = self.active_positions[symbol].get("position_side")
-                    saved_time_extended = self.active_positions[symbol].get("time_extended", False)
+                    saved_position_side = self.active_positions[symbol].get(
+                        "position_side"
+                    )
+                    saved_time_extended = self.active_positions[symbol].get(
+                        "time_extended", False
+                    )
                     saved_order_type = self.active_positions[symbol].get("order_type")
                     saved_post_only = self.active_positions[symbol].get("post_only")
 
                     self.active_positions[symbol].update(update_data)
-                    
+
                     # Восстанавливаем метаданные после update
                     if saved_regime:
                         self.active_positions[symbol]["regime"] = saved_regime
                     if saved_position_side:
-                        self.active_positions[symbol]["position_side"] = saved_position_side
+                        self.active_positions[symbol][
+                            "position_side"
+                        ] = saved_position_side
                     if saved_time_extended:
-                        self.active_positions[symbol]["time_extended"] = saved_time_extended
+                        self.active_positions[symbol][
+                            "time_extended"
+                        ] = saved_time_extended
                     if saved_order_type:
                         self.active_positions[symbol]["order_type"] = saved_order_type
                     if saved_post_only is not None:
@@ -5606,7 +5647,9 @@ class FuturesScalpingOrchestrator:
                 entry_time = position.get("timestamp")
                 if not entry_time:
                     # ✅ ИСПРАВЛЕНО: Используем DEBUG вместо WARNING, так как это временное состояние при открытии позиции
-                    logger.debug(f"⚠️ Нет времени открытия для позиции {symbol} (позиция только что открыта, entry_time будет установлен при инициализации TSL)")
+                    logger.debug(
+                        f"⚠️ Нет времени открытия для позиции {symbol} (позиция только что открыта, entry_time будет установлен при инициализации TSL)"
+                    )
                     return
 
             # Вычисляем время удержания

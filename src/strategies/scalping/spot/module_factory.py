@@ -11,25 +11,21 @@ from typing import Dict
 
 from loguru import logger
 
-from src.filters.time_session_manager import TimeFilterConfig, TimeSessionManager
+from src.filters.time_session_manager import (TimeFilterConfig,
+                                              TimeSessionManager)
 from src.strategies.modules.adaptive_regime_manager import (
-    AdaptiveRegimeManager,
-    IndicatorParameters,
-    ModuleParameters,
-    RegimeConfig,
-    RegimeParameters,
-)
-from src.strategies.modules.balance_checker import BalanceCheckConfig, BalanceChecker
-from src.strategies.modules.correlation_filter import (
-    CorrelationFilter,
-    CorrelationFilterConfig,
-)
-from src.strategies.modules.multi_timeframe import MTFConfig, MultiTimeframeFilter
-from src.strategies.modules.pivot_points import PivotPointsConfig, PivotPointsFilter
-from src.strategies.modules.volume_profile_filter import (
-    VolumeProfileConfig,
-    VolumeProfileFilter,
-)
+    AdaptiveRegimeManager, IndicatorParameters, ModuleParameters, RegimeConfig,
+    RegimeParameters)
+from src.strategies.modules.balance_checker import (BalanceCheckConfig,
+                                                    BalanceChecker)
+from src.strategies.modules.correlation_filter import (CorrelationFilter,
+                                                       CorrelationFilterConfig)
+from src.strategies.modules.multi_timeframe import (MTFConfig,
+                                                    MultiTimeframeFilter)
+from src.strategies.modules.pivot_points import (PivotPointsConfig,
+                                                 PivotPointsFilter)
+from src.strategies.modules.volume_profile_filter import (VolumeProfileConfig,
+                                                          VolumeProfileFilter)
 
 
 class ModuleFactory:
@@ -126,9 +122,7 @@ class ModuleFactory:
                 ),
             )
             logger.info("✅ Correlation Filter enabled")
-            return CorrelationFilter(
-                self.client, corr_config, self.config.symbols
-            )
+            return CorrelationFilter(self.client, corr_config, self.config.symbols)
         else:
             logger.info("⚪ Correlation Filter disabled")
             return None
@@ -139,7 +133,8 @@ class ModuleFactory:
             hasattr(self.config, "adx_filter_enabled")
             and self.config.adx_filter_enabled
         ):
-            from src.strategies.modules.adx_filter import ADXFilter, ADXFilterConfig
+            from src.strategies.modules.adx_filter import (ADXFilter,
+                                                           ADXFilterConfig)
 
             adx_config = ADXFilterConfig(
                 enabled=True,
@@ -428,4 +423,3 @@ class ModuleFactory:
 
         logger.info("✅ ARM Config created from config.yaml")
         return config
-

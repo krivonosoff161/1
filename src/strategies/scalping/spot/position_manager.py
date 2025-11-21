@@ -102,7 +102,9 @@ class PositionManager:
         self.partial_tp_enabled = getattr(config, "partial_tp_enabled", False)
 
     async def monitor_positions(
-        self, positions: Optional[Dict[str, Position]] = None, current_prices: Optional[Dict[str, float]] = None
+        self,
+        positions: Optional[Dict[str, Position]] = None,
+        current_prices: Optional[Dict[str, float]] = None,
     ) -> List[Tuple[str, str]]:
         """
         Мониторинг всех позиций.
@@ -122,7 +124,7 @@ class PositionManager:
         """
         # Используем внутреннее хранилище если не передано
         positions_to_monitor = positions if positions is not None else self.positions
-        
+
         to_close = []
 
         for symbol, position in list(positions_to_monitor.items()):
@@ -832,7 +834,9 @@ class PositionManager:
             return False
 
         # Закрываем через существующий метод
-        trade_result = await self.close_position(symbol, position, current_price, reason)
+        trade_result = await self.close_position(
+            symbol, position, current_price, reason
+        )
 
         if trade_result:
             # Записываем в статистику

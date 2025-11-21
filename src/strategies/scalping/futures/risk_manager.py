@@ -88,7 +88,10 @@ class FuturesRiskManager:
                     manager = signal_generator.regime_managers.get(symbol)
                     if manager:
                         symbol_regime = manager.get_current_regime()
-                elif hasattr(signal_generator, "regime_manager") and signal_generator.regime_manager:
+                elif (
+                    hasattr(signal_generator, "regime_manager")
+                    and signal_generator.regime_manager
+                ):
                     symbol_regime = signal_generator.regime_manager.get_current_regime()
 
             # Получаем balance profile
@@ -132,8 +135,10 @@ class FuturesRiskManager:
                         if position_overrides:
                             # Проверяем max_position_usd override
                             if position_overrides.get("max_position_usd") is not None:
-                                symbol_max = float(position_overrides["max_position_usd"])
-                                
+                                symbol_max = float(
+                                    position_overrides["max_position_usd"]
+                                )
+
                                 # Если symbol_max БОЛЬШЕ balance_max - используем symbol_max
                                 if symbol_max > max_usd_size:
                                     logger.debug(
@@ -156,7 +161,10 @@ class FuturesRiskManager:
                                     )
                                     return 0.0
 
-                            if position_overrides.get("max_position_percent") is not None:
+                            if (
+                                position_overrides.get("max_position_percent")
+                                is not None
+                            ):
                                 balance_profile["max_position_percent"] = float(
                                     position_overrides["max_position_percent"]
                                 )
@@ -261,4 +269,3 @@ class FuturesRiskManager:
         return self.config_manager.get_adaptive_risk_params(
             balance, regime, symbol, signal_generator
         )
-

@@ -218,7 +218,9 @@ class TrailingStopLoss:
                     and profit_pct_total < self.min_profit_to_close
                 ):
                     self.current_trail = max(self.current_trail, self.initial_trail)
-                    trail_multiplier = 1.0  # Не используем multiplier, оставляем initial_trail
+                    trail_multiplier = (
+                        1.0  # Не используем multiplier, оставляем initial_trail
+                    )
                 else:
                     # Увеличиваем трейл при росте цены
                     # ✅ АДАПТИВНО: Используем trail_growth multipliers из конфига вместо захардкоженного 2.0
@@ -229,15 +231,18 @@ class TrailingStopLoss:
                         trail_multiplier = self.trail_growth_medium_multiplier
                     else:  # > 1.5% - высокая прибыль
                         trail_multiplier = self.trail_growth_high_multiplier
-                    
+
                     self.current_trail = min(
-                        self.initial_trail + max(profit_pct_total, 0.0) * trail_multiplier,
+                        self.initial_trail
+                        + max(profit_pct_total, 0.0) * trail_multiplier,
                         self.max_trail,
                     )
                 logger.debug(
                     f"Long: новая максимальная цена={current_price:.2f}, "
                     f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией), "
-                    f"multiplier={trail_multiplier:.2f}x" if trail_multiplier is not None else "multiplier=N/A"
+                    f"multiplier={trail_multiplier:.2f}x"
+                    if trail_multiplier is not None
+                    else "multiplier=N/A"
                 )
         else:  # short
             # Для шорта отслеживаем минимальную цену
@@ -250,7 +255,9 @@ class TrailingStopLoss:
                     and profit_pct_total < self.min_profit_to_close
                 ):
                     self.current_trail = max(self.current_trail, self.initial_trail)
-                    trail_multiplier = 1.0  # Не используем multiplier, оставляем initial_trail
+                    trail_multiplier = (
+                        1.0  # Не используем multiplier, оставляем initial_trail
+                    )
                 else:
                     # Увеличиваем трейл при падении цены
                     # ✅ АДАПТИВНО: Используем trail_growth multipliers из конфига вместо захардкоженного 2.0
@@ -261,15 +268,18 @@ class TrailingStopLoss:
                         trail_multiplier = self.trail_growth_medium_multiplier
                     else:  # > 1.5% - высокая прибыль
                         trail_multiplier = self.trail_growth_high_multiplier
-                    
+
                     self.current_trail = min(
-                        self.initial_trail + max(profit_pct_total, 0.0) * trail_multiplier,
+                        self.initial_trail
+                        + max(profit_pct_total, 0.0) * trail_multiplier,
                         self.max_trail,
                     )
                 logger.debug(
                     f"Short: новая минимальная цена={current_price:.2f}, "
                     f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией), "
-                    f"multiplier={trail_multiplier:.2f}x" if trail_multiplier is not None else "multiplier=N/A"
+                    f"multiplier={trail_multiplier:.2f}x"
+                    if trail_multiplier is not None
+                    else "multiplier=N/A"
                 )
 
         if (

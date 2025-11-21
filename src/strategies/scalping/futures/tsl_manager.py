@@ -29,7 +29,7 @@ class TSLManager:
         """
         self.config_manager = config_manager
         self.trailing_sl_by_symbol: Dict[str, TrailingStopLoss] = {}
-        
+
         logger.info("✅ TSLManager initialized")
 
     def create_tsl_for_position(
@@ -71,9 +71,15 @@ class TSLManager:
             extend_time_multiplier=tsl_params.get("extend_time_multiplier", 1.0),
             leverage=leverage,
             min_critical_hold_seconds=tsl_params.get("min_critical_hold_seconds", 30.0),
-            trail_growth_low_multiplier=tsl_params.get("trail_growth_low_multiplier", 1.5),
-            trail_growth_medium_multiplier=tsl_params.get("trail_growth_medium_multiplier", 2.0),
-            trail_growth_high_multiplier=tsl_params.get("trail_growth_high_multiplier", 3.0),
+            trail_growth_low_multiplier=tsl_params.get(
+                "trail_growth_low_multiplier", 1.5
+            ),
+            trail_growth_medium_multiplier=tsl_params.get(
+                "trail_growth_medium_multiplier", 2.0
+            ),
+            trail_growth_high_multiplier=tsl_params.get(
+                "trail_growth_high_multiplier", 3.0
+            ),
         )
 
         # Инициализируем TSL
@@ -229,4 +235,3 @@ class TSLManager:
         self.trailing_sl_by_symbol.clear()
         logger.info(f"✅ Cleared {count} TSL instances")
         return count
-

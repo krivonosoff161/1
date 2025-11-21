@@ -44,7 +44,9 @@ class RiskManager:
         self.adaptive_regime = adaptive_regime
 
         # Минимальные размеры ордеров - ОТКЛЮЧЕНЫ для manual_pools!
-        self.min_order_value_usd = 0.0  # 🔥 ОТКЛЮЧЕНО: Используем ТОЛЬКО manual_pools параметры!
+        self.min_order_value_usd = (
+            0.0  # 🔥 ОТКЛЮЧЕНО: Используем ТОЛЬКО manual_pools параметры!
+        )
 
         logger.info("✅ RiskManager initialized")
 
@@ -92,12 +94,16 @@ class RiskManager:
 
             if current_regime == "TRENDING":
                 if symbol == "ETH-USDT":
-                    quantity = manual_pools["eth_pool"]["trending"]["quantity_per_trade"]
+                    quantity = manual_pools["eth_pool"]["trending"][
+                        "quantity_per_trade"
+                    ]
                     logger.info(
                         f"🎯 TRENDING ETH: {quantity} ETH (≈ ${quantity * price:.2f})"
                     )
                 elif symbol == "BTC-USDT":
-                    quantity = manual_pools["btc_pool"]["trending"]["quantity_per_trade"]
+                    quantity = manual_pools["btc_pool"]["trending"][
+                        "quantity_per_trade"
+                    ]
                     logger.info(
                         f"🎯 TRENDING BTC: {quantity} BTC (≈ ${quantity * price:.2f})"
                     )
@@ -157,7 +163,7 @@ class RiskManager:
                 # КРИТИЧНО: Проверяем баланс ПЕРЕД увеличением позиции!
                 required_value = self.min_order_value_usd * 1.02
                 balances_check = await self.client.get_account_balance()
-                
+
                 # balances_check может быть списком, словарем или объектом Balance
                 usdt_balance = self._extract_usdt_balance(balances_check)
 
@@ -305,4 +311,3 @@ class RiskManager:
                 return entry_price * 1.004, entry_price * 0.997
             else:
                 return entry_price * 0.996, entry_price * 1.003
-

@@ -27,7 +27,13 @@ class OrderExecutor:
     """
 
     def __init__(
-        self, client, config, risk_config, balance_checker=None, adaptive_regime=None, risk_manager=None
+        self,
+        client,
+        config,
+        risk_config,
+        balance_checker=None,
+        adaptive_regime=None,
+        risk_manager=None,
     ):
         """
         Args:
@@ -733,7 +739,7 @@ class OrderExecutor:
                 entry_price, side.value, atr
             )
             return stop_loss, take_profit
-        
+
         # Fallback: ARM параметры или дефолтные
         if self.adaptive_regime:
             regime_params = self.adaptive_regime.get_current_parameters()

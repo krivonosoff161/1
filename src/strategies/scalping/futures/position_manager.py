@@ -2409,29 +2409,41 @@ class FuturesPositionManager:
             for position in exchange_positions:
                 symbol = position.get("instId", "").replace("-SWAP", "")
                 size = float(position.get("pos", "0"))
-                
+
                 if size != 0:
                     exchange_symbols.add(symbol)
-                    
+
                     # Обновляем или добавляем позицию
                     if symbol in self.active_positions:
                         # Сохраняем метаданные
                         saved_regime = self.active_positions[symbol].get("regime")
-                        saved_entry_time = self.active_positions[symbol].get("entry_time")
-                        saved_entry_price = self.active_positions[symbol].get("entry_price")
-                        saved_position_side = self.active_positions[symbol].get("position_side")
-                        
+                        saved_entry_time = self.active_positions[symbol].get(
+                            "entry_time"
+                        )
+                        saved_entry_price = self.active_positions[symbol].get(
+                            "entry_price"
+                        )
+                        saved_position_side = self.active_positions[symbol].get(
+                            "position_side"
+                        )
+
                         self.active_positions[symbol] = position.copy()
-                        
+
                         if saved_regime:
                             self.active_positions[symbol]["regime"] = saved_regime
                         if saved_entry_time:
-                            self.active_positions[symbol]["entry_time"] = saved_entry_time
+                            self.active_positions[symbol][
+                                "entry_time"
+                            ] = saved_entry_time
                         if saved_entry_price:
-                            self.active_positions[symbol]["entry_price"] = saved_entry_price
+                            self.active_positions[symbol][
+                                "entry_price"
+                            ] = saved_entry_price
                         if saved_position_side:
-                            self.active_positions[symbol]["position_side"] = saved_position_side
-                        
+                            self.active_positions[symbol][
+                                "position_side"
+                            ] = saved_position_side
+
                         stats["synced"] += 1
                     else:
                         self.active_positions[symbol] = position
