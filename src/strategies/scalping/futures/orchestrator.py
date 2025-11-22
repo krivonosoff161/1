@@ -28,13 +28,13 @@ from src.strategies.modules.trading_statistics import TradingStatistics
 
 from ..spot.performance_tracker import PerformanceTracker
 from .config.config_manager import ConfigManager
+from .coordinators.order_coordinator import OrderCoordinator
+from .coordinators.signal_coordinator import SignalCoordinator
+from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
+from .coordinators.websocket_coordinator import WebSocketCoordinator
 from .indicators.fast_adx import FastADX
 from .indicators.funding_rate_monitor import FundingRateMonitor
 from .indicators.order_flow_indicator import OrderFlowIndicator
-from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
-from .coordinators.order_coordinator import OrderCoordinator
-from .coordinators.websocket_coordinator import WebSocketCoordinator
-from .coordinators.signal_coordinator import SignalCoordinator
 from .order_executor import FuturesOrderExecutor
 from .position_manager import FuturesPositionManager
 from .private_websocket_manager import PrivateWebSocketManager
@@ -73,10 +73,10 @@ class FuturesScalpingOrchestrator:
         from src.strategies.modules.debug_logger import DebugLogger
 
         self.debug_logger = DebugLogger(
-            enabled=True,           # Включить для диагностики
-            csv_export=True,        # Экспортировать в logs/futures/debug/
+            enabled=True,  # Включить для диагностики
+            csv_export=True,  # Экспортировать в logs/futures/debug/
             csv_dir="logs/futures/debug",  # ✅ Папка внутри futures (как основные логи)
-            verbose=True            # DEBUG уровень логирования
+            verbose=True,  # DEBUG уровень логирования
         )
 
         # 🛡️ Защиты риска
@@ -452,7 +452,7 @@ class FuturesScalpingOrchestrator:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Кэш последних ордеров и задержки между сигналами
         # Кэш последних ордеров: {symbol: {order_id, timestamp, status}}
         self.last_orders_cache = {}
-        
+
         # Order coordinator
         self.order_coordinator = OrderCoordinator(
             client=self.client,
@@ -461,7 +461,7 @@ class FuturesScalpingOrchestrator:
             signal_generator=self.signal_generator,
             last_orders_cache_ref=self.last_orders_cache,
         )
-        
+
         # Время последнего сигнала по символу: {symbol: timestamp}
         self.last_signal_time = {}
         # Минимальная задержка между сигналами для одного символа (секунды)
@@ -499,16 +499,16 @@ class FuturesScalpingOrchestrator:
         # Signal Coordinator (создаем ПЕРЕД WebSocketCoordinator, т.к. он нужен для callback)
         # Используем список для total_margin_used_ref, чтобы можно было изменять значение
         total_margin_used_ref = [self.total_margin_used]
-        
+
         # Callback методы для SignalCoordinator
         def _get_position_for_tsl_callback(symbol: str) -> Dict[str, Any]:
             """Callback для получения позиции по символу"""
             return self.active_positions.get(symbol, {})
-        
+
         async def _close_position_for_tsl_callback(symbol: str, reason: str) -> None:
             """Callback для закрытия позиции"""
             await self._close_position(symbol, reason)
-        
+
         self.signal_coordinator = SignalCoordinator(
             client=self.client,
             scalping_config=self.scalping_config,
@@ -541,7 +541,9 @@ class FuturesScalpingOrchestrator:
         self._total_margin_used_ref = total_margin_used_ref
 
         # Callback для обновления кэша ордеров из WebSocket
-        def _update_orders_cache_from_ws(symbol: str, order_id: str, order_cache_data: Dict[str, Any]) -> None:
+        def _update_orders_cache_from_ws(
+            symbol: str, order_id: str, order_cache_data: Dict[str, Any]
+        ) -> None:
             """Callback для обновления кэша ордеров из WebSocket"""
             if symbol not in self.active_orders_cache:
                 self.active_orders_cache[symbol] = {}
@@ -551,7 +553,7 @@ class FuturesScalpingOrchestrator:
                 self.active_orders_cache[symbol]["order_ids"].add(order_id)
             self.active_orders_cache[symbol][order_id] = order_cache_data
             self.active_orders_cache[symbol]["timestamp"] = time.time()
-        
+
         # WebSocket Coordinator (создаем ПОСЛЕ SignalCoordinator, т.к. используем его callback)
         self.websocket_coordinator = WebSocketCoordinator(
             ws_manager=self.ws_manager,
@@ -1121,7 +1123,6 @@ class FuturesScalpingOrchestrator:
             return source.get(key, default)
         return getattr(source, key, default) if hasattr(source, key) else default
 
-
     async def _sync_positions_with_exchange(self, force: bool = False) -> None:
         """
         ✅ МОДЕРНИЗАЦИЯ: Синхронизирует локальные позиции и лимиты с фактическими данными биржи.
@@ -1301,17 +1302,19 @@ class FuturesScalpingOrchestrator:
                     if position_side
                     else ("long" if side == "buy" else "short")
                 )
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем режим для правильных параметров TSL
                 regime = None
-                if hasattr(self.signal_generator, "regime_managers") and symbol in getattr(self.signal_generator, "regime_managers", {}):
+                if hasattr(
+                    self.signal_generator, "regime_managers"
+                ) and symbol in getattr(self.signal_generator, "regime_managers", {}):
                     manager = self.signal_generator.regime_managers.get(symbol)
                     if manager:
                         regime = manager.get_current_regime()
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем signal с режимом для передачи в initialize_trailing_stop
                 signal_with_regime = {"regime": regime} if regime else None
-                
+
                 self.trailing_sl_coordinator.initialize_trailing_stop(
                     symbol=symbol,
                     entry_price=effective_price,
@@ -1412,7 +1415,9 @@ class FuturesScalpingOrchestrator:
                     break
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Периодически обновляем статус ордеров в кэше
-                await self.order_coordinator.update_orders_cache_status(self._normalize_symbol)
+                await self.order_coordinator.update_orders_cache_status(
+                    self._normalize_symbol
+                )
 
                 if not self.is_running:
                     break
@@ -2156,7 +2161,9 @@ class FuturesScalpingOrchestrator:
 
     async def _update_trailing_stop_loss(self, symbol: str, current_price: float):
         """Совместимость: делегирует обновление TrailingStopLoss координатору."""
-        await self.trailing_sl_coordinator.update_trailing_stop_loss(symbol, current_price)
+        await self.trailing_sl_coordinator.update_trailing_stop_loss(
+            symbol, current_price
+        )
 
     async def _periodic_tsl_check(self):
         """Совместимость: делегирует периодическую проверку TSL координатору."""
@@ -2177,7 +2184,7 @@ class FuturesScalpingOrchestrator:
     async def _get_current_price_fallback(self, symbol: str) -> Optional[float]:
         """
         Получение текущей цены через REST API (fallback если WebSocket не отвечает).
-        
+
         Делегирует вызов WebSocketCoordinator.
 
         Args:
@@ -2303,11 +2310,10 @@ class FuturesScalpingOrchestrator:
         """Совместимость: делегирует обработку закрытия позиции координатору."""
         await self.websocket_coordinator.handle_position_closed_via_ws(symbol)
 
-
     async def _get_current_price_fallback(self, symbol: str) -> Optional[float]:
         """
         Получение текущей цены через REST API (fallback если WebSocket не отвечает).
-        
+
         Делегирует вызов WebSocketCoordinator.
 
         Args:
@@ -2643,15 +2649,18 @@ class FuturesScalpingOrchestrator:
                 size = position.get("size", 0)
                 side = position.get("position_side", "unknown")
                 entry_time = position.get("entry_time")
-                
+
                 # Вычисляем время в позиции
                 import time
                 from datetime import datetime
+
                 if isinstance(entry_time, datetime):
-                    minutes_in_position = (datetime.now() - entry_time).total_seconds() / 60.0
+                    minutes_in_position = (
+                        datetime.now() - entry_time
+                    ).total_seconds() / 60.0
                 else:
                     minutes_in_position = 0.0
-                
+
                 logger.info(
                     f"🛑 Закрытие позиции {symbol}: {reason} "
                     f"(side={side}, size={size}, entry={entry_price}, time={minutes_in_position:.2f} мин)"
@@ -2780,7 +2789,10 @@ class FuturesScalpingOrchestrator:
                         # Быстрая синхронизация маржи (без полной синхронизации позиций)
                         updated_margin = await self._get_used_margin()
                         self.total_margin_used = updated_margin
-                        if hasattr(self, "_total_margin_used_ref") and self._total_margin_used_ref:
+                        if (
+                            hasattr(self, "_total_margin_used_ref")
+                            and self._total_margin_used_ref
+                        ):
                             self._total_margin_used_ref[0] = updated_margin
                             logger.debug(
                                 f"💼 Обновлена маржа с биржи: ${self.total_margin_used:.2f} (после закрытия позиции)"

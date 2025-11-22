@@ -33,12 +33,24 @@ class WebSocketCoordinator:
         trailing_sl_coordinator=None,
         debug_logger=None,
         client=None,
-        handle_ticker_callback: Optional[Callable[[str, float], Awaitable[None]]] = None,
-        update_trailing_sl_callback: Optional[Callable[[str, float], Awaitable[None]]] = None,
-        check_signals_callback: Optional[Callable[[str, float], Awaitable[None]]] = None,
-        handle_position_closed_callback: Optional[Callable[[str], Awaitable[None]]] = None,
-        update_active_positions_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
-        update_active_orders_cache_callback: Optional[Callable[[str, str, Dict[str, Any]], None]] = None,
+        handle_ticker_callback: Optional[
+            Callable[[str, float], Awaitable[None]]
+        ] = None,
+        update_trailing_sl_callback: Optional[
+            Callable[[str, float], Awaitable[None]]
+        ] = None,
+        check_signals_callback: Optional[
+            Callable[[str, float], Awaitable[None]]
+        ] = None,
+        handle_position_closed_callback: Optional[
+            Callable[[str], Awaitable[None]]
+        ] = None,
+        update_active_positions_callback: Optional[
+            Callable[[str, Dict[str, Any]], None]
+        ] = None,
+        update_active_orders_cache_callback: Optional[
+            Callable[[str, str, Dict[str, Any]], None]
+        ] = None,
     ):
         """
         Инициализация WebSocketCoordinator.
@@ -69,7 +81,7 @@ class WebSocketCoordinator:
         self.trailing_sl_coordinator = trailing_sl_coordinator
         self.debug_logger = debug_logger
         self.client = client
-        
+
         # Callbacks для взаимодействия с orchestrator
         self.handle_ticker_callback = handle_ticker_callback
         self.update_trailing_sl_callback = update_trailing_sl_callback
@@ -193,7 +205,9 @@ class WebSocketCoordinator:
                             if self.update_trailing_sl_callback:
                                 await self.update_trailing_sl_callback(symbol, price)
                             elif self.trailing_sl_coordinator:
-                                await self.trailing_sl_coordinator.update_trailing_stop_loss(symbol, price)
+                                await self.trailing_sl_coordinator.update_trailing_stop_loss(
+                                    symbol, price
+                                )
                     else:
                         # Генерируем сигналы только если позиции нет
                         logger.debug(f"🔍 Проверка сигналов для {symbol}...")
@@ -251,7 +265,9 @@ class WebSocketCoordinator:
                     saved_time_extended = self.active_positions_ref[symbol].get(
                         "time_extended", False
                     )
-                    saved_order_type = self.active_positions_ref[symbol].get("order_type")
+                    saved_order_type = self.active_positions_ref[symbol].get(
+                        "order_type"
+                    )
                     saved_post_only = self.active_positions_ref[symbol].get("post_only")
 
                     self.active_positions_ref[symbol].update(update_data)
@@ -268,7 +284,9 @@ class WebSocketCoordinator:
                             "time_extended"
                         ] = saved_time_extended
                     if saved_order_type:
-                        self.active_positions_ref[symbol]["order_type"] = saved_order_type
+                        self.active_positions_ref[symbol][
+                            "order_type"
+                        ] = saved_order_type
                     if saved_post_only is not None:
                         self.active_positions_ref[symbol]["post_only"] = saved_post_only
                     logger.debug(
@@ -310,9 +328,11 @@ class WebSocketCoordinator:
                         "ordType": order_data.get("ordType", ""),
                         "timestamp": time.time(),
                     }
-                    
+
                     if self.update_active_orders_cache_callback:
-                        self.update_active_orders_cache_callback(symbol, order_id, order_cache_data)
+                        self.update_active_orders_cache_callback(
+                            symbol, order_id, order_cache_data
+                        )
 
                     # Если ордер исполнен или отменен - логируем
                     if state in ["filled", "canceled", "partially_filled"]:
@@ -334,27 +354,29 @@ class WebSocketCoordinator:
             # Удаляем из active_positions
             if symbol in self.active_positions_ref:
                 position = self.active_positions_ref.pop(symbol)
-                
+
                 # Логируем закрытие
                 reason = "unknown"
-                
+
                 # Получаем детали позиции для логирования
                 entry_price = position.get("entry_price", 0)
                 entry_time = position.get("entry_time")
                 size = position.get("size", 0)
                 side = position.get("position_side", "unknown")
-                
+
                 # Вычисляем время в позиции
                 minutes_in_position = 0.0
                 if isinstance(entry_time, datetime):
-                    minutes_in_position = (datetime.now() - entry_time).total_seconds() / 60.0
-                
+                    minutes_in_position = (
+                        datetime.now() - entry_time
+                    ).total_seconds() / 60.0
+
                 # Логируем закрытие через WebSocket
                 logger.info(
                     f"📊 Private WS: Позиция {symbol} закрыта (причина: {reason}, "
                     f"side={side}, size={size}, entry={entry_price}, time={minutes_in_position:.2f} мин)"
                 )
-                
+
                 # DEBUG LOGGER: Логируем закрытие через WebSocket
                 if self.debug_logger:
                     # Пытаемся получить последнюю цену для расчета PnL
@@ -370,14 +392,16 @@ class WebSocketCoordinator:
                             profit_pct = 0.0
                     except:
                         profit_pct = 0.0
-                    
+
                     self.debug_logger.log_position_close(
                         symbol=symbol,
-                        exit_price=current_price if 'current_price' in locals() and current_price else 0.0,
+                        exit_price=current_price
+                        if "current_price" in locals() and current_price
+                        else 0.0,
                         pnl_usd=0.0,  # Не можем рассчитать без размера позиции
-                        pnl_pct=profit_pct if 'profit_pct' in locals() else 0.0,
+                        pnl_pct=profit_pct if "profit_pct" in locals() else 0.0,
                         time_in_position_minutes=minutes_in_position,
-                        reason=f"ws_{reason}"
+                        reason=f"ws_{reason}",
                     )
 
                 # Вызываем callback для обработки закрытия позиции
@@ -410,7 +434,10 @@ class WebSocketCoordinator:
             # Создаем временную сессию если нужно
             session = (
                 self.client.session
-                if self.client and hasattr(self.client, "session") and self.client.session and not self.client.session.closed
+                if self.client
+                and hasattr(self.client, "session")
+                and self.client.session
+                and not self.client.session.closed
                 else None
             )
             if not session:
@@ -443,4 +470,3 @@ class WebSocketCoordinator:
         except Exception as e:
             logger.debug(f"⚠️ Ошибка получения цены для {symbol}: {e}")
             return None
-

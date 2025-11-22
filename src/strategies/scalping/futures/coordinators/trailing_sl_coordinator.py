@@ -33,10 +33,18 @@ class TrailingSLCoordinator:
         signal_generator,
         client,
         scalping_config,
-        get_position_callback: Callable[[str], Dict[str, Any]],  # Синхронная функция для получения позиции
-        close_position_callback: Callable[[str, str], Awaitable[None]],  # Async функция для закрытия позиции
-        get_current_price_callback: Callable[[str], Awaitable[Optional[float]]],  # Async функция для получения цены
-        active_positions_ref: Optional[Dict[str, Dict[str, Any]]] = None,  # Ссылка на active_positions (опционально)
+        get_position_callback: Callable[
+            [str], Dict[str, Any]
+        ],  # Синхронная функция для получения позиции
+        close_position_callback: Callable[
+            [str, str], Awaitable[None]
+        ],  # Async функция для закрытия позиции
+        get_current_price_callback: Callable[
+            [str], Awaitable[Optional[float]]
+        ],  # Async функция для получения цены
+        active_positions_ref: Optional[
+            Dict[str, Dict[str, Any]]
+        ] = None,  # Ссылка на active_positions (опционально)
         fast_adx=None,
         position_manager=None,
     ):
@@ -64,7 +72,9 @@ class TrailingSLCoordinator:
         self.get_position_callback = get_position_callback
         self.close_position_callback = close_position_callback
         self.get_current_price_callback = get_current_price_callback
-        self.active_positions_ref = active_positions_ref  # Для прямого доступа к active_positions
+        self.active_positions_ref = (
+            active_positions_ref  # Для прямого доступа к active_positions
+        )
         self.fast_adx = fast_adx
         self.position_manager = position_manager
 
@@ -154,7 +164,7 @@ class TrailingSLCoordinator:
 
         # ✅ ЭТАП 4: Получаем параметры с адаптацией под режим рынка
         params = self.config_manager.get_trailing_sl_params(regime=regime)
-        
+
         # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Логируем режим и параметры для диагностики
         logger.info(
             f"🔍 TSL INIT для {symbol}: regime={regime}, "
@@ -318,15 +328,13 @@ class TrailingSLCoordinator:
                 entry_price=entry_price,
                 side=position_side,
                 min_holding=params.get("min_holding_minutes"),
-                timeout=params.get("timeout_minutes")
+                timeout=params.get("timeout_minutes"),
             )
 
         # ✅ DEBUG LOGGER: Логируем загруженные параметры конфига
         if self.debug_logger:
             self.debug_logger.log_config_loaded(
-                symbol=symbol,
-                regime=regime or "unknown",
-                params=params
+                symbol=symbol, regime=regime or "unknown", params=params
             )
 
         return tsl
@@ -398,7 +406,9 @@ class TrailingSLCoordinator:
 
                 try:
                     pos_size = float(position.get("pos", position.get("size", "0")))
-                    pos_side = position.get("posSide") or position.get("position_side", "long")
+                    pos_side = position.get("posSide") or position.get(
+                        "position_side", "long"
+                    )
 
                     if entry_price <= 0:
                         avg_px = float(position.get("avgPx", "0") or 0)
@@ -413,7 +423,9 @@ class TrailingSLCoordinator:
                             if entry_time_str:
                                 try:
                                     entry_timestamp = int(entry_time_str) / 1000
-                                    position["entry_time"] = datetime.fromtimestamp(entry_timestamp)
+                                    position["entry_time"] = datetime.fromtimestamp(
+                                        entry_timestamp
+                                    )
                                     position["timestamp"] = position["entry_time"]
                                     logger.debug(
                                         f"✅ Установлен entry_time для {symbol} из cTime/uTime: {position['entry_time']}"
@@ -446,7 +458,9 @@ class TrailingSLCoordinator:
                                 f"entry_time={position.get('entry_time', 'N/A')})"
                             )
                         else:
-                            logger.error(f"❌ Не удалось инициализировать TSL для {symbol}")
+                            logger.error(
+                                f"❌ Не удалось инициализировать TSL для {symbol}"
+                            )
                             return
                     else:
                         logger.warning(
@@ -455,7 +469,9 @@ class TrailingSLCoordinator:
                         )
                         return
                 except Exception as e:
-                    logger.error(f"❌ Ошибка автоматической инициализации TSL для {symbol}: {e}")
+                    logger.error(
+                        f"❌ Ошибка автоматической инициализации TSL для {symbol}: {e}"
+                    )
                     return
 
                 if symbol not in self.trailing_sl_by_symbol:
@@ -471,7 +487,9 @@ class TrailingSLCoordinator:
             profit_pct = tsl.get_profit_pct(current_price, include_fees=True)
             profit_pct_gross = tsl.get_profit_pct(current_price, include_fees=False)
 
-            position_side = position.get("position_side", position.get("posSide", "long"))
+            position_side = position.get(
+                "position_side", position.get("posSide", "long")
+            )
             if position_side.lower() == "short":
                 extremum = tsl.lowest_price
                 extremum_label = "lowest"
@@ -495,7 +513,9 @@ class TrailingSLCoordinator:
                     hasattr(self.signal_generator, "regime_manager")
                     and self.signal_generator.regime_manager
                 ):
-                    regime_obj = self.signal_generator.regime_manager.get_current_regime()
+                    regime_obj = (
+                        self.signal_generator.regime_manager.get_current_regime()
+                    )
                     if regime_obj:
                         market_regime = (
                             regime_obj.lower() if isinstance(regime_obj, str) else None
@@ -508,7 +528,9 @@ class TrailingSLCoordinator:
             self._tsl_log_count[symbol] += 1
 
             if self._tsl_log_count[symbol] % 5 == 0:
-                trend_str = f"{trend_strength:.2f}" if trend_strength is not None else "N/A"
+                trend_str = (
+                    f"{trend_strength:.2f}" if trend_strength is not None else "N/A"
+                )
                 regime_str = market_regime or "N/A"
                 logger.info(
                     f"📊 TrailingSL {symbol}: price={current_price:.2f}, entry={entry_price:.2f}, "
@@ -540,16 +562,22 @@ class TrailingSLCoordinator:
                         pos_side = position_side
 
                         if hasattr(self.signal_generator, "_get_market_data"):
-                            market_data = await self.signal_generator._get_market_data(symbol)
+                            market_data = await self.signal_generator._get_market_data(
+                                symbol
+                            )
                         else:
                             market_data = None
                         if market_data and getattr(market_data, "ohlcv_data", None):
-                            indicators = self.signal_generator.indicator_manager.calculate_all(
-                                market_data
+                            indicators = (
+                                self.signal_generator.indicator_manager.calculate_all(
+                                    market_data
+                                )
                             )
 
                             if reversal_config.get("rsi_check", True):
-                                rsi_result = indicators.get("RSI") or indicators.get("rsi")
+                                rsi_result = indicators.get("RSI") or indicators.get(
+                                    "rsi"
+                                )
                                 if rsi_result:
                                     rsi_value = (
                                         rsi_result.value
@@ -573,10 +601,14 @@ class TrailingSLCoordinator:
                                 reversal_config.get("macd_check", True)
                                 and not should_block_close
                             ):
-                                macd_result = indicators.get("MACD") or indicators.get("macd")
+                                macd_result = indicators.get("MACD") or indicators.get(
+                                    "macd"
+                                )
                                 if macd_result and hasattr(macd_result, "metadata"):
                                     macd_line = macd_result.metadata.get("macd_line", 0)
-                                    signal_line = macd_result.metadata.get("signal_line", 0)
+                                    signal_line = macd_result.metadata.get(
+                                        "signal_line", 0
+                                    )
                                     histogram = macd_line - signal_line
 
                                     if pos_side == "long" and histogram > 0:
@@ -597,33 +629,45 @@ class TrailingSLCoordinator:
                                 reversal_config.get("bollinger_check", True)
                                 and not should_block_close
                             ):
-                                bb_result = indicators.get("BollingerBands") or indicators.get(
-                                    "bollinger_bands"
-                                )
+                                bb_result = indicators.get(
+                                    "BollingerBands"
+                                ) or indicators.get("bollinger_bands")
                                 if bb_result and hasattr(bb_result, "metadata"):
-                                    upper = bb_result.metadata.get("upper_band", current_price)
-                                    lower = bb_result.metadata.get("lower_band", current_price)
+                                    upper = bb_result.metadata.get(
+                                        "upper_band", current_price
+                                    )
+                                    lower = bb_result.metadata.get(
+                                        "lower_band", current_price
+                                    )
                                     middle = (
                                         bb_result.value
                                         if hasattr(bb_result, "value")
                                         else current_price
                                     )
 
-                                    if pos_side == "long" and current_price <= lower * 1.001:
+                                    if (
+                                        pos_side == "long"
+                                        and current_price <= lower * 1.001
+                                    ):
                                         logger.debug(
                                             f"📊 Цена у нижней полосы Bollinger для {symbol} LONG - "
                                             f"блокируем закрытие по trailing stop (позиция в прибыли)"
                                         )
                                         should_block_close = True
 
-                                    if pos_side == "short" and current_price >= upper * 0.999:
+                                    if (
+                                        pos_side == "short"
+                                        and current_price >= upper * 0.999
+                                    ):
                                         logger.debug(
                                             f"📊 Цена у верхней полосы Bollinger для {symbol} SHORT - "
                                             f"блокируем закрытие по trailing stop (позиция в прибыли)"
                                         )
                                         should_block_close = True
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка проверки индикаторов для {symbol}: {e}")
+                        logger.debug(
+                            f"⚠️ Ошибка проверки индикаторов для {symbol}: {e}"
+                        )
 
             if should_close_by_sl:
                 if should_block_close:
@@ -639,7 +683,9 @@ class TrailingSLCoordinator:
                 comparison_op = ">=" if position_side.lower() == "short" else "<="
                 entry_time = position.get("entry_time")
                 if isinstance(entry_time, datetime):
-                    minutes_in_position = (datetime.now() - entry_time).total_seconds() / 60.0
+                    minutes_in_position = (
+                        datetime.now() - entry_time
+                    ).total_seconds() / 60.0
                 elif tsl.entry_timestamp > 0:
                     minutes_in_position = (time.time() - tsl.entry_timestamp) / 60.0
                 else:
@@ -687,16 +733,21 @@ class TrailingSLCoordinator:
                     position_dict = {
                         "instId": f"{symbol}-SWAP",
                         "pos": str(
-                            position_data.get("size", position_data.get("pos", "0")) or "0"
+                            position_data.get("size", position_data.get("pos", "0"))
+                            or "0"
                         ),
-                        "posSide": position_data.get("position_side", position_data.get("posSide", "long")),
+                        "posSide": position_data.get(
+                            "position_side", position_data.get("posSide", "long")
+                        ),
                         "avgPx": str(entry_price),
                         "markPx": str(current_price),
                         "cTime": str(entry_time_ms) if entry_time_ms else "",
                     }
 
-                    ph_should_close = await self.position_manager._check_profit_harvesting(
-                        position_dict
+                    ph_should_close = (
+                        await self.position_manager._check_profit_harvesting(
+                            position_dict
+                        )
                     )
                     if ph_should_close:
                         logger.info(
@@ -731,7 +782,9 @@ class TrailingSLCoordinator:
                     hasattr(self.signal_generator, "regime_manager")
                     and self.signal_generator.regime_manager
                 ):
-                    regime_obj = self.signal_generator.regime_manager.get_current_regime()
+                    regime_obj = (
+                        self.signal_generator.regime_manager.get_current_regime()
+                    )
                     if regime_obj:
                         current_regime = (
                             regime_obj.lower()
@@ -975,10 +1028,7 @@ class TrailingSLCoordinator:
                 if tsl:
                     min_profit_to_close = getattr(tsl, "min_profit_to_close", None)
 
-                if (
-                    min_profit_to_close is not None
-                    and profit_pct > min_profit_to_close
-                ):
+                if min_profit_to_close is not None and profit_pct > min_profit_to_close:
                     logger.info(
                         f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
                         f"(лимит: {actual_max_holding:.1f} минут), "

@@ -476,7 +476,7 @@ class TrailingStopLoss:
         if self.loss_cut_percent is not None:
             loss_cut_from_price = self.loss_cut_percent / self.leverage
             critical_loss_cut_from_price = (self.loss_cut_percent * 2.0) / self.leverage
-            
+
             # ✅ КРИТИЧЕСКОЕ: Критический убыток (2x loss_cut) закрываем НЕМЕДЛЕННО
             if profit_pct <= -critical_loss_cut_from_price:
                 loss_from_margin = abs(profit_pct) * self.leverage
@@ -490,12 +490,15 @@ class TrailingStopLoss:
                 # ✅ DEBUG LOGGER: Логируем закрытие по критическому loss_cut
                 if self.debug_logger:
                     self.debug_logger.log_tsl_loss_cut_check(
-                        symbol=getattr(self, '_symbol', 'UNKNOWN'),
+                        symbol=getattr(self, "_symbol", "UNKNOWN"),
                         profit_pct=profit_pct,
                         loss_cut_from_price=critical_loss_cut_from_price,
-                        will_close=True
+                        will_close=True,
                     )
-                return True, "critical_loss_cut_2x"  # Закрываем по критическому loss_cut НЕМЕДЛЕННО
+                return (
+                    True,
+                    "critical_loss_cut_2x",
+                )  # Закрываем по критическому loss_cut НЕМЕДЛЕННО
 
         # ✅ ПРАВКА #2: Проверка min_holding ПЕРЕД обычным loss_cut
         if (
@@ -516,13 +519,13 @@ class TrailingStopLoss:
                     # ✅ DEBUG LOGGER: Логируем блокировку loss_cut
                     if self.debug_logger:
                         self.debug_logger.log_tsl_loss_cut_check(
-                            symbol=getattr(self, '_symbol', 'UNKNOWN'),
+                            symbol=getattr(self, "_symbol", "UNKNOWN"),
                             profit_pct=profit_pct,
                             loss_cut_from_price=loss_cut_from_price,
-                            will_close=False  # Блокировано min_holding
+                            will_close=False,  # Блокировано min_holding
                         )
                     return False, None  # НЕ закрываем - min_holding защита активна!
-            
+
             # Если не loss_cut - просто блокируем закрытие
             logger.debug(
                 f"⏱️ Минимальное время удержания: позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
@@ -531,10 +534,10 @@ class TrailingStopLoss:
             # ✅ DEBUG LOGGER: Логируем блокировку min_holding
             if self.debug_logger:
                 self.debug_logger.log_tsl_min_holding_block(
-                    symbol=getattr(self, '_symbol', 'UNKNOWN'),
+                    symbol=getattr(self, "_symbol", "UNKNOWN"),
                     minutes_in_position=minutes_in_position,
                     min_holding=effective_min_holding,
-                    profit_pct=profit_pct
+                    profit_pct=profit_pct,
                 )
             return False, None
 
@@ -558,10 +561,10 @@ class TrailingStopLoss:
                 # ✅ DEBUG LOGGER: Логируем закрытие по loss_cut
                 if self.debug_logger:
                     self.debug_logger.log_tsl_loss_cut_check(
-                        symbol=getattr(self, '_symbol', 'UNKNOWN'),
+                        symbol=getattr(self, "_symbol", "UNKNOWN"),
                         profit_pct=profit_pct,
                         loss_cut_from_price=loss_cut_from_price,
-                        will_close=True
+                        will_close=True,
                     )
                 return True, "loss_cut"
 
@@ -591,11 +594,11 @@ class TrailingStopLoss:
                 # ✅ DEBUG LOGGER: Логируем закрытие по timeout
                 if self.debug_logger:
                     self.debug_logger.log_tsl_timeout_check(
-                        symbol=getattr(self, '_symbol', 'UNKNOWN'),
+                        symbol=getattr(self, "_symbol", "UNKNOWN"),
                         minutes_in_position=minutes_in_position,
                         timeout_minutes=self.timeout_minutes,
                         profit_pct=profit_pct,
-                        will_close=True
+                        will_close=True,
                     )
                 return True, "timeout"
 
@@ -609,12 +612,12 @@ class TrailingStopLoss:
             # ✅ DEBUG LOGGER: Логируем что не закрываем (цена не достигла SL)
             if self.debug_logger:
                 self.debug_logger.log_tsl_check(
-                    symbol=getattr(self, '_symbol', 'UNKNOWN'),
+                    symbol=getattr(self, "_symbol", "UNKNOWN"),
                     minutes_in_position=minutes_in_position,
                     profit_pct=profit_pct,
                     current_price=current_price,
                     stop_loss=stop_loss,
-                    will_close=False
+                    will_close=False,
                 )
             return False, None  # Цена не достигла стоп-лосса - не закрываем
 
@@ -794,12 +797,12 @@ class TrailingStopLoss:
         will_close = True
         if self.debug_logger:
             self.debug_logger.log_tsl_check(
-                symbol=getattr(self, '_symbol', 'UNKNOWN'),
+                symbol=getattr(self, "_symbol", "UNKNOWN"),
                 minutes_in_position=minutes_in_position,
                 profit_pct=profit_pct,
                 current_price=current_price,
                 stop_loss=stop_loss,
-                will_close=True
+                will_close=True,
             )
 
         return True, close_reason  # Закрываем по стоп-лоссу

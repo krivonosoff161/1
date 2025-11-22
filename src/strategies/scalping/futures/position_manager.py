@@ -80,37 +80,46 @@ class FuturesPositionManager:
     def set_orchestrator(self, orchestrator):
         """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливает ссылку на orchestrator для доступа к trailing_sl_by_symbol"""
         self.orchestrator = orchestrator
-    
-    def _get_adaptive_tp_percent(self, symbol: str, regime: Optional[str] = None) -> float:
+
+    def _get_adaptive_tp_percent(
+        self, symbol: str, regime: Optional[str] = None
+    ) -> float:
         """
         ✅ КРИТИЧЕСКОЕ: Получает адаптивный TP% для символа и режима.
-        
+
         Приоритет:
         1. Per-regime TP (если режим определен)
         2. Per-symbol TP (fallback)
         3. Глобальный TP (fallback)
-        
+
         Args:
             symbol: Торговый символ
             regime: Режим рынка (trending, ranging, choppy)
-            
+
         Returns:
             TP% для использования
         """
         # Глобальный TP (fallback)
         tp_percent = self.scalping_config.tp_percent
-        
+
         # Получаем режим из позиции, если не передан
         if not regime:
             if symbol in self.active_positions:
                 regime = self.active_positions[symbol].get("regime")
             elif hasattr(self, "orchestrator") and self.orchestrator:
-                if hasattr(self.orchestrator, "signal_generator") and self.orchestrator.signal_generator:
+                if (
+                    hasattr(self.orchestrator, "signal_generator")
+                    and self.orchestrator.signal_generator
+                ):
                     if hasattr(self.orchestrator.signal_generator, "regime_managers"):
-                        manager = self.orchestrator.signal_generator.regime_managers.get(symbol)
+                        manager = (
+                            self.orchestrator.signal_generator.regime_managers.get(
+                                symbol
+                            )
+                        )
                         if manager:
                             regime = manager.get_current_regime()
-        
+
         # Получаем tp_percent для символа и режима (если есть в symbol_profiles)
         if symbol and self.symbol_profiles:
             symbol_profile = self.symbol_profiles.get(symbol, {})
@@ -125,12 +134,16 @@ class FuturesPositionManager:
                         symbol_dict = {}
                 else:
                     symbol_dict = symbol_profile
-                
+
                 # 1. ✅ ПРИОРИТЕТ 1: Per-regime TP (если режим определен)
                 if regime:
-                    regime_lower = regime.lower() if isinstance(regime, str) else str(regime).lower()
+                    regime_lower = (
+                        regime.lower()
+                        if isinstance(regime, str)
+                        else str(regime).lower()
+                    )
                     regime_profile = symbol_dict.get(regime_lower, {})
-                    
+
                     if not isinstance(regime_profile, dict):
                         if hasattr(regime_profile, "dict"):
                             regime_profile = regime_profile.dict()
@@ -138,7 +151,7 @@ class FuturesPositionManager:
                             regime_profile = dict(regime_profile.__dict__)
                         else:
                             regime_profile = {}
-                    
+
                     regime_tp_percent = regime_profile.get("tp_percent")
                     if regime_tp_percent is not None:
                         try:
@@ -152,7 +165,7 @@ class FuturesPositionManager:
                             logger.warning(
                                 f"⚠️ Не удалось конвертировать regime_tp_percent в float для {symbol} ({regime}): {regime_tp_percent}"
                             )
-                
+
                 # 2. ✅ ПРИОРИТЕТ 2: Per-symbol TP (fallback, если режим не определен)
                 symbol_tp_percent = symbol_dict.get("tp_percent")
                 if symbol_tp_percent is not None:
@@ -167,7 +180,7 @@ class FuturesPositionManager:
                         logger.warning(
                             f"⚠️ Не удалось конвертировать symbol_tp_percent в float для {symbol}: {symbol_tp_percent}"
                         )
-        
+
         # 3. ✅ ПРИОРИТЕТ 3: Глобальный TP (fallback)
         logger.debug(
             f"📊 Используется глобальный TP для {symbol} (regime={regime or 'N/A'}): {tp_percent}% "
@@ -867,7 +880,9 @@ class FuturesPositionManager:
                                 f"(side={side}, position_side={position_side or 'N/A'})"
                             )
                             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный TP вместо глобального
-                            regime = position.get("regime") or self.active_positions.get(symbol, {}).get("regime")
+                            regime = position.get(
+                                "regime"
+                            ) or self.active_positions.get(symbol, {}).get("regime")
                             tp_percent = self._get_adaptive_tp_percent(symbol, regime)
                             if pnl_percent >= tp_percent:
                                 logger.info(
@@ -980,7 +995,9 @@ class FuturesPositionManager:
                                 f"(side={side}, position_side={position_side or 'N/A'})"
                             )
                             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный TP вместо глобального
-                            regime = position.get("regime") or self.active_positions.get(symbol, {}).get("regime")
+                            regime = position.get(
+                                "regime"
+                            ) or self.active_positions.get(symbol, {}).get("regime")
                             tp_percent = self._get_adaptive_tp_percent(symbol, regime)
                             if pnl_percent >= tp_percent:
                                 logger.info(
@@ -1083,7 +1100,7 @@ class FuturesPositionManager:
             regime = position.get("regime") or self.active_positions.get(
                 symbol, {}
             ).get("regime")
-            
+
             # ✅ Используем вспомогательный метод для получения адаптивного TP
             tp_percent = self._get_adaptive_tp_percent(symbol, regime)
 
@@ -1232,11 +1249,11 @@ class FuturesPositionManager:
                 try:
                     # ✅ ИСПРАВЛЕНО: Учитываем комиссию от маржи
                     net_pnl_percent = pnl_percent - commission_pct_from_margin
-                    
+
                     # ✅ НОВОЕ: Получаем big_profit_exit_percent из конфига по символу и режиму
                     big_profit_threshold = None
                     market_regime = None
-                    
+
                     # Получаем текущий режим рынка
                     if hasattr(self, "orchestrator") and self.orchestrator:
                         if (
@@ -1244,21 +1261,28 @@ class FuturesPositionManager:
                             and self.orchestrator.signal_generator
                         ):
                             regime_manager = getattr(
-                                self.orchestrator.signal_generator, "regime_manager", None
+                                self.orchestrator.signal_generator,
+                                "regime_manager",
+                                None,
                             )
                             if regime_manager:
                                 regime_obj = regime_manager.get_current_regime()
                                 if regime_obj:
                                     market_regime = regime_obj.lower()
-                    
+
                     # Пытаемся получить параметр из symbol_profiles по символу и режиму
                     if symbol in self.symbol_profiles:
                         symbol_config = self.symbol_profiles[symbol]
                         if market_regime and market_regime in symbol_config:
                             regime_config = symbol_config[market_regime]
-                            if isinstance(regime_config, dict) and "big_profit_exit_percent" in regime_config:
-                                big_profit_threshold = float(regime_config["big_profit_exit_percent"])
-                    
+                            if (
+                                isinstance(regime_config, dict)
+                                and "big_profit_exit_percent" in regime_config
+                            ):
+                                big_profit_threshold = float(
+                                    regime_config["big_profit_exit_percent"]
+                                )
+
                     # Fallback на глобальные значения если не найдено
                     if big_profit_threshold is None:
                         alts = {"SOL-USDT", "DOGE-USDT", "XRP-USDT"}
@@ -1297,36 +1321,48 @@ class FuturesPositionManager:
                     # Трейлинг стоп: отслеживаем максимальную прибыль и закрываем только если прибыль просела
                     # ✅ ИСПРАВЛЕНО: position - это dict, используем проверку через "in" вместо hasattr
                     if "_big_profit_max" not in position:
-                        position["_big_profit_max"] = net_pnl_percent  # Инициализируем максимум
-                        position["_big_profit_history"] = []  # История прибыли для определения резкого тренда
+                        position[
+                            "_big_profit_max"
+                        ] = net_pnl_percent  # Инициализируем максимум
+                        position[
+                            "_big_profit_history"
+                        ] = []  # История прибыли для определения резкого тренда
                     else:
                         # Обновляем максимум если прибыль выросла
                         if net_pnl_percent > position["_big_profit_max"]:
                             position["_big_profit_max"] = net_pnl_percent
-                    
+
                     # ✅ НОВОЕ: Отслеживаем историю прибыли для определения резкого тренда
                     if "_big_profit_history" not in position:
                         position["_big_profit_history"] = []
-                    
+
                     import time
+
                     current_time = time.time()
-                    position["_big_profit_history"].append((current_time, net_pnl_percent))
+                    position["_big_profit_history"].append(
+                        (current_time, net_pnl_percent)
+                    )
                     # Храним историю за последние 5 минут
                     position["_big_profit_history"] = [
-                        (t, p) for t, p in position["_big_profit_history"]
+                        (t, p)
+                        for t, p in position["_big_profit_history"]
                         if current_time - t <= 300  # 5 минут
                     ]
-                    
+
                     # ✅ НОВОЕ: Определение резкого тренда (быстрый рост прибыли)
                     strong_trend = False
                     if len(position["_big_profit_history"]) >= 2:
                         # Проверяем скорость роста прибыли
                         oldest_time, oldest_profit = position["_big_profit_history"][0]
                         newest_time, newest_profit = position["_big_profit_history"][-1]
-                        time_diff = max(newest_time - oldest_time, 1)  # Минимум 1 секунда
+                        time_diff = max(
+                            newest_time - oldest_time, 1
+                        )  # Минимум 1 секунда
                         profit_growth = newest_profit - oldest_profit
-                        growth_rate_per_minute = (profit_growth / time_diff) * 60  # % в минуту
-                        
+                        growth_rate_per_minute = (
+                            profit_growth / time_diff
+                        ) * 60  # % в минуту
+
                         # Резкий тренд: прибыль растет быстрее 0.3% в минуту
                         if growth_rate_per_minute > 0.3 and net_pnl_percent > 0:
                             strong_trend = True
@@ -1334,20 +1370,31 @@ class FuturesPositionManager:
                                 f"🚀 Резкий тренд обнаружен {symbol}: скорость роста {growth_rate_per_minute:.2f}%/мин, "
                                 f"прибыль {net_pnl_percent:.2f}%"
                             )
-                    
+
                     # ✅ НОВОЕ: Продление позиций при резком тренде
                     # Если резкий тренд активен - увеличиваем порог и трейлинг стоп проседание
                     if strong_trend:
-                        big_profit_threshold = big_profit_threshold * 1.5  # Увеличиваем порог на 50%
-                        big_profit_trailing_pct = 0.4  # Увеличиваем проседание до 40% (вместо 30%)
+                        big_profit_threshold = (
+                            big_profit_threshold * 1.5
+                        )  # Увеличиваем порог на 50%
+                        big_profit_trailing_pct = (
+                            0.4  # Увеличиваем проседание до 40% (вместо 30%)
+                        )
                     else:
-                        big_profit_trailing_pct = 0.3  # 30% проседание от максимума (стандарт)
-                    
-                    profit_drawdown = (position["_big_profit_max"] - net_pnl_percent) / position["_big_profit_max"] if position["_big_profit_max"] > 0 else 0
-                    
+                        big_profit_trailing_pct = (
+                            0.3  # 30% проседание от максимума (стандарт)
+                        )
+
+                    profit_drawdown = (
+                        (position["_big_profit_max"] - net_pnl_percent)
+                        / position["_big_profit_max"]
+                        if position["_big_profit_max"] > 0
+                        else 0
+                    )
+
                     should_close = False
                     close_reason = ""
-                    
+
                     if net_pnl_percent >= big_profit_threshold:
                         # Прибыль достигла порога - проверяем трейлинг
                         if net_pnl_percent >= position["_big_profit_max"]:
@@ -1368,20 +1415,32 @@ class FuturesPositionManager:
                                 f"(порог={big_profit_threshold:.2f}%, max={position['_big_profit_max']:.2f}%), "
                                 f"проседание {profit_drawdown:.1%} < {big_profit_trailing_pct:.0%} - держим (трейлинг стоп)"
                             )
-                    
+
                     if should_close:
                         # ✅ ИСПРАВЛЕНО: Проверка min_holding ПЕРЕД big_profit_exit
                         import time
+
                         min_holding_blocked = False
                         if hasattr(self, "orchestrator") and self.orchestrator:
                             # ✅ ИСПРАВЛЕНО: TSL теперь в trailing_sl_coordinator
                             if hasattr(self.orchestrator, "trailing_sl_coordinator"):
-                                tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                                tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(
+                                    symbol
+                                )
                             else:
                                 tsl = None
-                            if tsl and hasattr(tsl, "min_holding_minutes") and tsl.min_holding_minutes:
-                                if hasattr(tsl, "entry_timestamp") and tsl.entry_timestamp:
-                                    minutes_in_position = (time.time() - tsl.entry_timestamp) / 60.0
+                            if (
+                                tsl
+                                and hasattr(tsl, "min_holding_minutes")
+                                and tsl.min_holding_minutes
+                            ):
+                                if (
+                                    hasattr(tsl, "entry_timestamp")
+                                    and tsl.entry_timestamp
+                                ):
+                                    minutes_in_position = (
+                                        time.time() - tsl.entry_timestamp
+                                    ) / 60.0
                                     effective_min_holding = tsl.min_holding_minutes
                                     # Учитываем extend_time_on_profit если позиция в прибыли
                                     if (
@@ -1390,8 +1449,11 @@ class FuturesPositionManager:
                                         and net_pnl_percent > 0
                                         and hasattr(tsl, "extend_time_multiplier")
                                     ):
-                                        effective_min_holding = effective_min_holding * tsl.extend_time_multiplier
-                                    
+                                        effective_min_holding = (
+                                            effective_min_holding
+                                            * tsl.extend_time_multiplier
+                                        )
+
                                     if minutes_in_position < effective_min_holding:
                                         min_holding_blocked = True
                                         logger.debug(
@@ -1399,10 +1461,10 @@ class FuturesPositionManager:
                                             f"{minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин "
                                             f"(min_holding защита активна, net={net_pnl_percent:.2f}%)"
                                         )
-                        
+
                         if min_holding_blocked:
                             return  # НЕ закрываем по big_profit_exit - min_holding защита активна!
-                        
+
                         logger.info(
                             f"💰 Big-profit exit: {symbol} net={net_pnl_percent:.2f}% "
                             f"(порог={big_profit_threshold:.2f}%, max={position['_big_profit_max']:.2f}%), "
@@ -1516,16 +1578,25 @@ class FuturesPositionManager:
                 ):
                     # ✅ ПРАВКА #1: Проверка min_holding ПЕРЕД Partial TP
                     import time
+
                     min_holding_blocked = False
                     if hasattr(self, "orchestrator") and self.orchestrator:
                         # ✅ ИСПРАВЛЕНО: TSL теперь в trailing_sl_coordinator
                         if hasattr(self.orchestrator, "trailing_sl_coordinator"):
-                            tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                            tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(
+                                symbol
+                            )
                         else:
                             tsl = None
-                        if tsl and hasattr(tsl, "min_holding_minutes") and tsl.min_holding_minutes:
+                        if (
+                            tsl
+                            and hasattr(tsl, "min_holding_minutes")
+                            and tsl.min_holding_minutes
+                        ):
                             if hasattr(tsl, "entry_timestamp") and tsl.entry_timestamp:
-                                minutes_in_position = (time.time() - tsl.entry_timestamp) / 60.0
+                                minutes_in_position = (
+                                    time.time() - tsl.entry_timestamp
+                                ) / 60.0
                                 effective_min_holding = tsl.min_holding_minutes
                                 # Учитываем extend_time_on_profit если позиция в прибыли
                                 if (
@@ -1534,8 +1605,11 @@ class FuturesPositionManager:
                                     and pnl_percent > 0
                                     and hasattr(tsl, "extend_time_multiplier")
                                 ):
-                                    effective_min_holding = effective_min_holding * tsl.extend_time_multiplier
-                                
+                                    effective_min_holding = (
+                                        effective_min_holding
+                                        * tsl.extend_time_multiplier
+                                    )
+
                                 if minutes_in_position < effective_min_holding:
                                     min_holding_blocked = True
                                     logger.debug(
@@ -1543,10 +1617,10 @@ class FuturesPositionManager:
                                         f"{minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин "
                                         f"(min_holding защита активна, pnl={pnl_percent:.2f}%)"
                                     )
-                    
+
                     if min_holding_blocked:
                         return  # НЕ закрываем по Partial TP - min_holding защита активна!
-                    
+
                     # Рассчитываем размер и цену лимитного reduce-only ордера
                     size_abs = abs(size)
                     size_partial = max(0.0, min(size_abs * ptp_fraction, size_abs))
@@ -1919,7 +1993,9 @@ class FuturesPositionManager:
                         )
                     # ✅ ИСПРАВЛЕНО: TSL теперь в trailing_sl_coordinator
                     if hasattr(self.orchestrator, "trailing_sl_coordinator"):
-                        tsl = self.orchestrator.trailing_sl_coordinator.remove_tsl(symbol)
+                        tsl = self.orchestrator.trailing_sl_coordinator.remove_tsl(
+                            symbol
+                        )
                         if tsl:
                             tsl.reset()
                         logger.debug(

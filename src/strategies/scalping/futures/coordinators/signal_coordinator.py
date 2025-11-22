@@ -52,7 +52,9 @@ class SignalCoordinator:
         get_position_callback: Optional[Callable[[str], Dict[str, Any]]] = None,
         close_position_callback: Optional[Callable[[str, str], Awaitable[None]]] = None,
         normalize_symbol_callback: Optional[Callable[[str], str]] = None,
-        initialize_trailing_stop_callback: Optional[Callable[[str, float, str, float, Dict[str, Any]], Any]] = None,
+        initialize_trailing_stop_callback: Optional[
+            Callable[[str, float, str, float, Dict[str, Any]], Any]
+        ] = None,
     ):
         """
         Инициализация SignalCoordinator.
@@ -441,7 +443,10 @@ class SignalCoordinator:
             # ✅ ИСПРАВЛЕНО: Получаем режим для адаптивного risk_percentage
             current_regime = None
             try:
-                if hasattr(self.signal_generator, "regime_manager") and self.signal_generator:
+                if (
+                    hasattr(self.signal_generator, "regime_manager")
+                    and self.signal_generator
+                ):
                     regime_obj = (
                         self.signal_generator.regime_manager.get_current_regime()
                     )
@@ -550,12 +555,15 @@ class SignalCoordinator:
                 should_check_orders = True
                 if normalized_symbol in self.last_orders_check_time_ref:
                     time_since_check = (
-                        current_time - self.last_orders_check_time_ref[normalized_symbol]
+                        current_time
+                        - self.last_orders_check_time_ref[normalized_symbol]
                     )
                     if time_since_check < 5:  # Проверяем не чаще раза в 5 секунд
                         # Используем кэш (с нормализованным символом)
                         if normalized_symbol in self.active_orders_cache_ref:
-                            cached_orders = self.active_orders_cache_ref[normalized_symbol]
+                            cached_orders = self.active_orders_cache_ref[
+                                normalized_symbol
+                            ]
                             if cached_orders.get("order_ids"):
                                 logger.debug(
                                     f"📦 Используем кэш активных ордеров для {symbol}: {len(cached_orders['order_ids'])} ордеров"
@@ -585,7 +593,9 @@ class SignalCoordinator:
                             "order_ids": [o.get("ordId") for o in open_position_orders],
                             "timestamp": current_time,
                         }
-                        self.last_orders_check_time_ref[normalized_symbol] = current_time
+                        self.last_orders_check_time_ref[
+                            normalized_symbol
+                        ] = current_time
 
                         if len(open_position_orders) > 0:
                             logger.warning(
@@ -641,7 +651,7 @@ class SignalCoordinator:
                                 "-", ""
                             ):
                                 symbol_positions.append(p)
-                    
+
                     # ✅ КРИТИЧЕСКОЕ: Если позиция есть в кэше, но не на бирже - очищаем кэш
                     if has_position_in_cache and len(symbol_positions) == 0:
                         logger.warning(
@@ -1381,24 +1391,32 @@ class SignalCoordinator:
                                 # ✅ ПРАВКА #3: Не считаем провалом если ордер в статусе pending
                                 # Проверяем статус ордера
                                 try:
-                                    active_orders = await self.client.get_active_orders(symbol)
+                                    active_orders = await self.client.get_active_orders(
+                                        symbol
+                                    )
                                     order_found = False
                                     order_state = None
-                                    
+
                                     for order in active_orders:
                                         if str(order.get("ordId", "")) == str(order_id):
                                             order_found = True
                                             order_state = order.get("state", "").lower()
                                             break
-                                    
-                                    if order_found and order_state in ["live", "pending", "partially_filled"]:
+
+                                    if order_found and order_state in [
+                                        "live",
+                                        "pending",
+                                        "partially_filled",
+                                    ]:
                                         # ✅ Ордер еще активен - НЕ считаем провалом
                                         logger.info(
                                             f"⏳ Лимитный ордер {order_id} для {symbol} еще активен (state={order_state}), "
                                             f"ожидаем исполнения. Позиция будет инициализирована при исполнении через WebSocket."
                                         )
                                         # Обновляем кэш со статусом "pending"
-                                        self.last_orders_cache_ref[normalized_symbol] = {
+                                        self.last_orders_cache_ref[
+                                            normalized_symbol
+                                        ] = {
                                             "order_id": order_id,
                                             "timestamp": current_time,
                                             "status": "pending",
@@ -1417,7 +1435,9 @@ class SignalCoordinator:
                                         )
                                         return False
                                 except Exception as e:
-                                    logger.error(f"Ошибка проверки статуса ордера {order_id}: {e}")
+                                    logger.error(
+                                        f"Ошибка проверки статуса ордера {order_id}: {e}"
+                                    )
                                     return False
                     except Exception as e:
                         logger.error(f"Ошибка проверки статуса ордера {order_id}: {e}")
@@ -1662,4 +1682,3 @@ class SignalCoordinator:
         except Exception as e:
             logger.error(f"Ошибка выполнения сигнала: {e}", exc_info=True)
             return False
-

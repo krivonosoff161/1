@@ -65,7 +65,9 @@ class OrderCoordinator:
             current_regime = "ranging"  # Fallback
             try:
                 if self.signal_generator:
-                    regime_obj = self.signal_generator.regime_manager.get_current_regime()
+                    regime_obj = (
+                        self.signal_generator.regime_manager.get_current_regime()
+                    )
                     if regime_obj:
                         current_regime = (
                             regime_obj.lower()
@@ -145,10 +147,8 @@ class OrderCoordinator:
                                                     # Получаем ctVal для конвертации контрактов в монеты
                                                     size_in_coins = size_in_contracts
                                                     try:
-                                                        details = (
-                                                            await self.client.get_instrument_details(
-                                                                symbol
-                                                            )
+                                                        details = await self.client.get_instrument_details(
+                                                            symbol
                                                         )
                                                         if details:
                                                             ct_val = float(
@@ -176,10 +176,8 @@ class OrderCoordinator:
                                                         f"📈 Размещаем рыночный ордер вместо зависшего лимитного: "
                                                         f"{symbol} {side} {size_in_coins:.6f} (было {size_in_contracts:.6f} контрактов)"
                                                     )
-                                                    result = (
-                                                        await self.order_executor._place_market_order(
-                                                            symbol, side, size_in_coins
-                                                        )
+                                                    result = await self.order_executor._place_market_order(
+                                                        symbol, side, size_in_coins
                                                     )
                                                     if result.get("success"):
                                                         logger.info(
@@ -374,4 +372,3 @@ class OrderCoordinator:
         """
         if normalized_symbol in self.last_orders_cache:
             self.last_orders_cache[normalized_symbol]["status"] = "closed"
-

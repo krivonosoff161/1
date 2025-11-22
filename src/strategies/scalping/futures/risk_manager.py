@@ -56,7 +56,9 @@ class FuturesRiskManager:
         self.liquidation_protector = liquidation_protector
         self.margin_monitor = margin_monitor
         self.max_size_limiter = max_size_limiter
-        self.orchestrator = orchestrator  # ✅ РЕФАКТОРИНГ: Для доступа к методам orchestrator
+        self.orchestrator = (
+            orchestrator  # ✅ РЕФАКТОРИНГ: Для доступа к методам orchestrator
+        )
 
         # Получаем symbol_profiles из config_manager
         self.symbol_profiles = config_manager.get_symbol_profiles()
@@ -110,13 +112,17 @@ class FuturesRiskManager:
 
     async def _check_drawdown_protection(self) -> bool:
         """Проверяет drawdown protection через orchestrator"""
-        if self.orchestrator and hasattr(self.orchestrator, "_check_drawdown_protection"):
+        if self.orchestrator and hasattr(
+            self.orchestrator, "_check_drawdown_protection"
+        ):
             return await self.orchestrator._check_drawdown_protection()
         return True  # Если orchestrator не доступен, разрешаем торговлю
 
     async def _check_emergency_stop_unlock(self):
         """Проверяет emergency stop unlock через orchestrator"""
-        if self.orchestrator and hasattr(self.orchestrator, "_check_emergency_stop_unlock"):
+        if self.orchestrator and hasattr(
+            self.orchestrator, "_check_emergency_stop_unlock"
+        ):
             return await self.orchestrator._check_emergency_stop_unlock()
 
     async def calculate_position_size(
@@ -310,8 +316,13 @@ class FuturesRiskManager:
                 self.risk_config, "max_open_positions", profile_max_positions
             )
             if profile_max_positions:
-                allowed_positions = max(1, min(profile_max_positions, global_max_positions))
-                if self.max_size_limiter and self.max_size_limiter.max_positions != allowed_positions:
+                allowed_positions = max(
+                    1, min(profile_max_positions, global_max_positions)
+                )
+                if (
+                    self.max_size_limiter
+                    and self.max_size_limiter.max_positions != allowed_positions
+                ):
                     logger.debug(
                         f"🔧 MaxSizeLimiter: обновляем max_positions {self.max_size_limiter.max_positions} → {allowed_positions}"
                     )
@@ -336,11 +347,20 @@ class FuturesRiskManager:
                     f"max_open_positions должен быть указан и > 0 в конфиге для профиля {balance_profile.get('name', 'unknown')}"
                 )
 
-            if signal_generator and hasattr(signal_generator, "regime_manager") and signal_generator.regime_manager:
+            if (
+                signal_generator
+                and hasattr(signal_generator, "regime_manager")
+                and signal_generator.regime_manager
+            ):
                 try:
-                    regime_key = symbol_regime or signal_generator.regime_manager.get_current_regime()
+                    regime_key = (
+                        symbol_regime
+                        or signal_generator.regime_manager.get_current_regime()
+                    )
                     if regime_key:
-                        regime_params = self.config_manager.get_regime_params(regime_key, symbol)
+                        regime_params = self.config_manager.get_regime_params(
+                            regime_key, symbol
+                        )
                         multiplier = regime_params.get("position_size_multiplier")
                         if multiplier is not None:
                             base_usd_size *= multiplier
@@ -367,27 +387,39 @@ class FuturesRiskManager:
                 )
             elif signal_strength > strength_thresholds.get("very_strong", 0.8):
                 strength_multiplier = strength_multipliers.get("very_strong", 1.5)
-                logger.debug(f"Очень сильный сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}")
+                logger.debug(
+                    f"Очень сильный сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
+                )
             elif signal_strength > strength_thresholds.get("strong", 0.6):
                 strength_multiplier = strength_multipliers.get("strong", 1.2)
-                logger.debug(f"Хороший сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}")
+                logger.debug(
+                    f"Хороший сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
+                )
             elif signal_strength > strength_thresholds.get("medium", 0.4):
                 strength_multiplier = strength_multipliers.get("medium", 1.0)
-                logger.debug(f"Средний сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}")
+                logger.debug(
+                    f"Средний сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
+                )
             else:
                 strength_multiplier = strength_multipliers.get("weak", 0.8)
-                logger.debug(f"Слабый сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}")
+                logger.debug(
+                    f"Слабый сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
+                )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем multiplier, но ограничиваем max_usd_size!
             base_usd_size *= strength_multiplier
             base_usd_size = min(base_usd_size, max_usd_size)
-            logger.debug(f"💰 После multiplier: base_usd_size=${base_usd_size:.2f} (max=${max_usd_size:.2f})")
+            logger.debug(
+                f"💰 После multiplier: base_usd_size=${base_usd_size:.2f} (max=${max_usd_size:.2f})"
+            )
 
             # ✅ ОПТИМИЗАЦИЯ #4: Динамический размер позиций на основе волатильности (ATR-based)
             volatility_adjustment_enabled = False
             volatility_multiplier = 1.0
             try:
-                volatility_config = getattr(self.scalping_config, "volatility_adjustment", None)
+                volatility_config = getattr(
+                    self.scalping_config, "volatility_adjustment", None
+                )
                 if volatility_config is None:
                     volatility_config = {}
                 elif not isinstance(volatility_config, dict):
@@ -403,34 +435,62 @@ class FuturesRiskManager:
                     regime_configs = volatility_config.get("by_regime", {})
                     if symbol_regime and symbol_regime.lower() in regime_configs:
                         regime_config = regime_configs[symbol_regime.lower()]
-                        base_atr_percent = regime_config.get("base_atr_percent", base_atr_percent)
-                        min_multiplier = regime_config.get("min_multiplier", min_multiplier)
-                        max_multiplier = regime_config.get("max_multiplier", max_multiplier)
+                        base_atr_percent = regime_config.get(
+                            "base_atr_percent", base_atr_percent
+                        )
+                        min_multiplier = regime_config.get(
+                            "min_multiplier", min_multiplier
+                        )
+                        max_multiplier = regime_config.get(
+                            "max_multiplier", max_multiplier
+                        )
 
                     # Получаем ATR через signal_generator
                     current_atr_percent = None
                     try:
-                        if signal_generator and hasattr(signal_generator, "_get_market_data"):
-                            market_data = await signal_generator._get_market_data(symbol)
-                            if market_data and market_data.ohlcv_data and len(market_data.ohlcv_data) >= 14:
+                        if signal_generator and hasattr(
+                            signal_generator, "_get_market_data"
+                        ):
+                            market_data = await signal_generator._get_market_data(
+                                symbol
+                            )
+                            if (
+                                market_data
+                                and market_data.ohlcv_data
+                                and len(market_data.ohlcv_data) >= 14
+                            ):
                                 from src.indicators import ATR
 
                                 atr_indicator = ATR(period=14)
-                                high_data = [candle.high for candle in market_data.ohlcv_data]
-                                low_data = [candle.low for candle in market_data.ohlcv_data]
-                                close_data = [candle.close for candle in market_data.ohlcv_data]
+                                high_data = [
+                                    candle.high for candle in market_data.ohlcv_data
+                                ]
+                                low_data = [
+                                    candle.low for candle in market_data.ohlcv_data
+                                ]
+                                close_data = [
+                                    candle.close for candle in market_data.ohlcv_data
+                                ]
 
-                                atr_result = atr_indicator.calculate(high_data, low_data, close_data)
+                                atr_result = atr_indicator.calculate(
+                                    high_data, low_data, close_data
+                                )
                                 if atr_result and atr_result.value > 0:
                                     atr_value = atr_result.value
-                                    current_atr_percent = (atr_value / price) * 100  # ATR в % от цены
+                                    current_atr_percent = (
+                                        atr_value / price
+                                    ) * 100  # ATR в % от цены
                     except Exception as e:
                         logger.debug(f"⚠️ Не удалось получить ATR для {symbol}: {e}")
 
                     # Рассчитываем multiplier на основе волатильности
                     if current_atr_percent is not None and current_atr_percent > 0:
-                        raw_multiplier = base_atr_percent / (current_atr_percent / 100.0)
-                        volatility_multiplier = max(min_multiplier, min(raw_multiplier, max_multiplier))
+                        raw_multiplier = base_atr_percent / (
+                            current_atr_percent / 100.0
+                        )
+                        volatility_multiplier = max(
+                            min_multiplier, min(raw_multiplier, max_multiplier)
+                        )
 
                         logger.info(
                             f"  4a. Волатильность (ATR): текущая={current_atr_percent:.4f}%, "
@@ -448,17 +508,25 @@ class FuturesRiskManager:
                                 f"({volatility_multiplier:.2f}x)"
                             )
                     else:
-                        logger.debug(f"  4a. Волатильность: ATR не доступен для {symbol}, используем базовый размер")
+                        logger.debug(
+                            f"  4a. Волатильность: ATR не доступен для {symbol}, используем базовый размер"
+                        )
             except Exception as e:
                 logger.debug(f"⚠️ Ошибка расчета волатильности для {symbol}: {e}")
 
             # 4. ПРИМЕНЯЕМ ЛЕВЕРИДЖ (Futures) - из конфига!
             leverage = getattr(self.scalping_config, "leverage", None)
             if leverage is None or leverage <= 0:
-                logger.error("❌ leverage не указан в конфиге или <= 0! Проверьте config_futures.yaml")
-                raise ValueError("leverage должен быть указан в конфиге (например, leverage: 3)")
+                logger.error(
+                    "❌ leverage не указан в конфиге или <= 0! Проверьте config_futures.yaml"
+                )
+                raise ValueError(
+                    "leverage должен быть указан в конфиге (например, leverage: 3)"
+                )
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: base_usd_size это НОМИНАЛЬНАЯ стоимость (notional)
-            margin_required_initial = base_usd_size / leverage  # Требуемая маржа (в USD)
+            margin_required_initial = (
+                base_usd_size / leverage
+            )  # Требуемая маржа (в USD)
             margin_required = margin_required_initial
 
             # ✅ Пересчитываем min/max из номинальной стоимости в маржу для проверок
@@ -475,24 +543,42 @@ class FuturesRiskManager:
             adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
                 balance, symbol_regime, symbol, signal_generator=signal_generator
             )
-            max_margin_percent = adaptive_risk_params.get("max_margin_percent", 80.0) / 100.0
-            max_loss_per_trade_percent = adaptive_risk_params.get("max_loss_per_trade_percent", 2.0) / 100.0
-            max_margin_safety_percent = adaptive_risk_params.get("max_margin_safety_percent", 90.0) / 100.0
+            max_margin_percent = (
+                adaptive_risk_params.get("max_margin_percent", 80.0) / 100.0
+            )
+            max_loss_per_trade_percent = (
+                adaptive_risk_params.get("max_loss_per_trade_percent", 2.0) / 100.0
+            )
+            max_margin_safety_percent = (
+                adaptive_risk_params.get("max_margin_safety_percent", 90.0) / 100.0
+            )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем все ограничения размера позиции
             logger.info(f"📊 ДЕТАЛЬНЫЙ РАСЧЕТ РАЗМЕРА ПОЗИЦИИ для {symbol}:")
-            logger.info(f"  1. Балансовый профиль: {balance_profile['name']}, баланс=${balance:.2f}")
-            logger.info(f"  2. Базовый размер из конфига: base_usd_size=${base_usd_size:.2f} (notional)")
-            logger.info(f"  3. Лимиты из конфига: min=${min_usd_size:.2f}, max=${max_usd_size:.2f} (notional)")
-            logger.info(f"  4. Леверидж: {leverage}x → маржа до ограничений: ${margin_required_initial:.2f}")
-            logger.info(f"  5. Использованная маржа: ${used_margin:.2f}, доступная: ${balance - used_margin:.2f}")
+            logger.info(
+                f"  1. Балансовый профиль: {balance_profile['name']}, баланс=${balance:.2f}"
+            )
+            logger.info(
+                f"  2. Базовый размер из конфига: base_usd_size=${base_usd_size:.2f} (notional)"
+            )
+            logger.info(
+                f"  3. Лимиты из конфига: min=${min_usd_size:.2f}, max=${max_usd_size:.2f} (notional)"
+            )
+            logger.info(
+                f"  4. Леверидж: {leverage}x → маржа до ограничений: ${margin_required_initial:.2f}"
+            )
+            logger.info(
+                f"  5. Использованная маржа: ${used_margin:.2f}, доступная: ${balance - used_margin:.2f}"
+            )
 
             # ✅ МОДЕРНИЗАЦИЯ: Используем использованную маржу с биржи (актуальные данные)
             # 5. 🛡️ ЗАЩИТА: Max Margin Used (адаптивный процент из конфига)
             max_margin_allowed = balance * max_margin_percent
             available_margin = balance - used_margin
 
-            logger.info(f"  6. Max margin percent: {max_margin_percent*100:.1f}% → лимит: ${max_margin_allowed:.2f}")
+            logger.info(
+                f"  6. Max margin percent: {max_margin_percent*100:.1f}% → лимит: ${max_margin_allowed:.2f}"
+            )
             if used_margin + margin_required > max_margin_allowed:
                 margin_required_before = margin_required
                 margin_required = max(0, max_margin_allowed - used_margin)
@@ -532,7 +618,11 @@ class FuturesRiskManager:
             else:
                 sl_percent_decimal = sl_percent
 
-            max_safe_margin = max_loss_usd / sl_percent_decimal if sl_percent_decimal > 0 else float("inf")
+            max_safe_margin = (
+                max_loss_usd / sl_percent_decimal
+                if sl_percent_decimal > 0
+                else float("inf")
+            )
 
             logger.info(
                 f"  8. Max loss per trade: {max_loss_per_trade_percent*100:.1f}% (${max_loss_usd:.2f}) → max_safe_margin: ${max_safe_margin:.2f}"
@@ -546,7 +636,9 @@ class FuturesRiskManager:
 
             # 7. Проверка маржи (адаптивный процент безопасности из конфига - финальная проверка)
             max_margin_safety = balance * max_margin_safety_percent
-            logger.info(f"  9. Max margin safety: {max_margin_safety_percent*100:.1f}% → лимит: ${max_margin_safety:.2f}")
+            logger.info(
+                f"  9. Max margin safety: {max_margin_safety_percent*100:.1f}% → лимит: ${max_margin_safety:.2f}"
+            )
             if margin_required > max_margin_safety:
                 margin_required_before = margin_required
                 margin_required = max_margin_safety
@@ -556,7 +648,9 @@ class FuturesRiskManager:
 
             # 8. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем ограничения к МАРЖЕ (не к notional!)
             margin_before_final = margin_required
-            logger.info(f"  10. Финальные лимиты: min_margin=${min_margin_usd:.2f}, max_margin=${max_margin_usd:.2f}")
+            logger.info(
+                f"  10. Финальные лимиты: min_margin=${min_margin_usd:.2f}, max_margin=${max_margin_usd:.2f}"
+            )
             margin_usd = max(min_margin_usd, min(margin_required, max_margin_usd))
 
             logger.info(
@@ -564,7 +658,11 @@ class FuturesRiskManager:
             )
             if margin_usd < margin_required_initial:
                 reduction_pct = (
-                    ((margin_required_initial - margin_usd) / margin_required_initial * 100)
+                    (
+                        (margin_required_initial - margin_usd)
+                        / margin_required_initial
+                        * 100
+                    )
                     if margin_required_initial > 0
                     else 0
                 )
@@ -593,7 +691,9 @@ class FuturesRiskManager:
 
                 if rounded_size_in_contracts < min_sz:
                     rounded_size_in_contracts = min_sz
-                    logger.warning(f"⚠️ Размер после округления меньше минимума, используем минимум: {min_sz}")
+                    logger.warning(
+                        f"⚠️ Размер после округления меньше минимума, используем минимум: {min_sz}"
+                    )
 
                 real_position_size = rounded_size_in_contracts * ct_val
                 real_notional_usd = real_position_size * price
@@ -611,7 +711,9 @@ class FuturesRiskManager:
                     real_position_size = real_notional_usd / price
 
                     real_size_in_contracts = real_position_size / ct_val
-                    real_rounded_size_in_contracts = round_to_step(real_size_in_contracts, lot_sz)
+                    real_rounded_size_in_contracts = round_to_step(
+                        real_size_in_contracts, lot_sz
+                    )
                     if real_rounded_size_in_contracts < min_sz:
                         real_rounded_size_in_contracts = min_sz
                     real_position_size = real_rounded_size_in_contracts * ct_val
@@ -638,7 +740,9 @@ class FuturesRiskManager:
                     target_margin_usd = target_notional_usd / leverage
                     target_position_size = target_notional_usd / price
                     target_size_in_contracts = target_position_size / ct_val
-                    target_rounded_size_in_contracts = math.floor(target_size_in_contracts / lot_sz) * lot_sz
+                    target_rounded_size_in_contracts = (
+                        math.floor(target_size_in_contracts / lot_sz) * lot_sz
+                    )
 
                     if target_rounded_size_in_contracts < min_sz:
                         min_notional_usd = min_sz * ct_val * price
@@ -737,14 +841,22 @@ class FuturesRiskManager:
 
             # 10. 🛡️ ЗАЩИТА: Проверяем drawdown перед открытием
             if not await self._check_drawdown_protection():
-                logger.warning("⚠️ Drawdown protection активирован - пропускаем позицию")
+                logger.warning(
+                    "⚠️ Drawdown protection активирован - пропускаем позицию"
+                )
                 return 0.0
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: Проверяем emergency stop перед открытием
-            if self.orchestrator and hasattr(self.orchestrator, "_emergency_stop_active") and self.orchestrator._emergency_stop_active:
+            if (
+                self.orchestrator
+                and hasattr(self.orchestrator, "_emergency_stop_active")
+                and self.orchestrator._emergency_stop_active
+            ):
                 await self._check_emergency_stop_unlock()
                 if self.orchestrator._emergency_stop_active:
-                    logger.warning("⚠️ Emergency stop активен - пропускаем позицию (торговля заблокирована)")
+                    logger.warning(
+                        "⚠️ Emergency stop активен - пропускаем позицию (торговля заблокирована)"
+                    )
                     return 0.0
 
             logger.info(

@@ -27,7 +27,7 @@ from loguru import logger
 class DebugLogger:
     """
     Детальное логирование с поддержкой CSV экспорта.
-    
+
     Особенности:
     - Структурированные логи с префиксами (🔄 🔍 ❌ ✨ etc.)
     - CSV экспорт для анализа в Excel
@@ -81,8 +81,13 @@ class DebugLogger:
         # Создаем директорию для CSV (logs/futures/debug/)
         if self.csv_export:
             self.csv_dir.mkdir(parents=True, exist_ok=True)
-            csv_filename = self.csv_dir / f"debug_{self.session_start.strftime('%Y%m%d_%H%M%S')}.csv"
-            self.csv_file = open(csv_filename, "w", newline="", encoding="utf-8")  # noqa: SIM115
+            csv_filename = (
+                self.csv_dir
+                / f"debug_{self.session_start.strftime('%Y%m%d_%H%M%S')}.csv"
+            )
+            self.csv_file = open(
+                csv_filename, "w", newline="", encoding="utf-8"
+            )  # noqa: SIM115
             self.csv_writer = csv.DictWriter(
                 self.csv_file,
                 fieldnames=[
@@ -453,4 +458,3 @@ class DebugLogger:
             {"msg": message},
             level="error",
         )
-
