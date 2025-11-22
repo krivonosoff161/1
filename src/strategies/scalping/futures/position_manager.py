@@ -80,7 +80,100 @@ class FuturesPositionManager:
     def set_orchestrator(self, orchestrator):
         """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливает ссылку на orchestrator для доступа к trailing_sl_by_symbol"""
         self.orchestrator = orchestrator
-        logger.debug("✅ Orchestrator установлен в position_manager")
+    
+    def _get_adaptive_tp_percent(self, symbol: str, regime: Optional[str] = None) -> float:
+        """
+        ✅ КРИТИЧЕСКОЕ: Получает адаптивный TP% для символа и режима.
+        
+        Приоритет:
+        1. Per-regime TP (если режим определен)
+        2. Per-symbol TP (fallback)
+        3. Глобальный TP (fallback)
+        
+        Args:
+            symbol: Торговый символ
+            regime: Режим рынка (trending, ranging, choppy)
+            
+        Returns:
+            TP% для использования
+        """
+        # Глобальный TP (fallback)
+        tp_percent = self.scalping_config.tp_percent
+        
+        # Получаем режим из позиции, если не передан
+        if not regime:
+            if symbol in self.active_positions:
+                regime = self.active_positions[symbol].get("regime")
+            elif hasattr(self, "orchestrator") and self.orchestrator:
+                if hasattr(self.orchestrator, "signal_generator") and self.orchestrator.signal_generator:
+                    if hasattr(self.orchestrator.signal_generator, "regime_managers"):
+                        manager = self.orchestrator.signal_generator.regime_managers.get(symbol)
+                        if manager:
+                            regime = manager.get_current_regime()
+        
+        # Получаем tp_percent для символа и режима (если есть в symbol_profiles)
+        if symbol and self.symbol_profiles:
+            symbol_profile = self.symbol_profiles.get(symbol, {})
+            if symbol_profile:
+                # Конвертируем в dict если нужно
+                if not isinstance(symbol_profile, dict):
+                    if hasattr(symbol_profile, "dict"):
+                        symbol_dict = symbol_profile.dict()
+                    elif hasattr(symbol_profile, "__dict__"):
+                        symbol_dict = dict(symbol_profile.__dict__)
+                    else:
+                        symbol_dict = {}
+                else:
+                    symbol_dict = symbol_profile
+                
+                # 1. ✅ ПРИОРИТЕТ 1: Per-regime TP (если режим определен)
+                if regime:
+                    regime_lower = regime.lower() if isinstance(regime, str) else str(regime).lower()
+                    regime_profile = symbol_dict.get(regime_lower, {})
+                    
+                    if not isinstance(regime_profile, dict):
+                        if hasattr(regime_profile, "dict"):
+                            regime_profile = regime_profile.dict()
+                        elif hasattr(regime_profile, "__dict__"):
+                            regime_profile = dict(regime_profile.__dict__)
+                        else:
+                            regime_profile = {}
+                    
+                    regime_tp_percent = regime_profile.get("tp_percent")
+                    if regime_tp_percent is not None:
+                        try:
+                            tp_percent = float(regime_tp_percent)
+                            logger.info(
+                                f"✅ Per-regime TP для {symbol} ({regime}): {tp_percent}% "
+                                f"(глобальный: {self.scalping_config.tp_percent}%)"
+                            )
+                            return tp_percent
+                        except (ValueError, TypeError):
+                            logger.warning(
+                                f"⚠️ Не удалось конвертировать regime_tp_percent в float для {symbol} ({regime}): {regime_tp_percent}"
+                            )
+                
+                # 2. ✅ ПРИОРИТЕТ 2: Per-symbol TP (fallback, если режим не определен)
+                symbol_tp_percent = symbol_dict.get("tp_percent")
+                if symbol_tp_percent is not None:
+                    try:
+                        tp_percent = float(symbol_tp_percent)
+                        logger.info(
+                            f"📊 Per-symbol TP для {symbol}: {tp_percent}% "
+                            f"(глобальный: {self.scalping_config.tp_percent}%)"
+                        )
+                        return tp_percent
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"⚠️ Не удалось конвертировать symbol_tp_percent в float для {symbol}: {symbol_tp_percent}"
+                        )
+        
+        # 3. ✅ ПРИОРИТЕТ 3: Глобальный TP (fallback)
+        logger.debug(
+            f"📊 Используется глобальный TP для {symbol} (regime={regime or 'N/A'}): {tp_percent}% "
+            f"(symbol_profiles: {len(self.symbol_profiles) if self.symbol_profiles else 0} символов)"
+        )
+        return tp_percent
 
     async def initialize(self):
         """Инициализация менеджера позиций"""
@@ -773,7 +866,9 @@ class FuturesPositionManager:
                                 f"⚠️ Используем fallback расчет PnL% для {symbol}: {pnl_percent:.2f}% (от цены, а не от маржи) "
                                 f"(side={side}, position_side={position_side or 'N/A'})"
                             )
-                            tp_percent = self.scalping_config.tp_percent
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный TP вместо глобального
+                            regime = position.get("regime") or self.active_positions.get(symbol, {}).get("regime")
+                            tp_percent = self._get_adaptive_tp_percent(symbol, regime)
                             if pnl_percent >= tp_percent:
                                 logger.info(
                                     f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}%"
@@ -884,7 +979,9 @@ class FuturesPositionManager:
                                 f"⚠️ Fallback расчет PnL% для {symbol}: {pnl_percent:.2f}% "
                                 f"(side={side}, position_side={position_side or 'N/A'})"
                             )
-                            tp_percent = self.scalping_config.tp_percent
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный TP вместо глобального
+                            regime = position.get("regime") or self.active_positions.get(symbol, {}).get("regime")
+                            tp_percent = self._get_adaptive_tp_percent(symbol, regime)
                             if pnl_percent >= tp_percent:
                                 logger.info(
                                     f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}%"
@@ -955,11 +1052,12 @@ class FuturesPositionManager:
 
             # Получаем трейлинг стоп-лосс из orchestrator (если доступен)
             if hasattr(self, "orchestrator") and self.orchestrator:
-                trailing_sl_by_symbol = getattr(
-                    self.orchestrator, "trailing_sl_by_symbol", {}
-                )
-                if symbol in trailing_sl_by_symbol:
-                    tsl = trailing_sl_by_symbol[symbol]
+                # ✅ ИСПРАВЛЕНО: TSL теперь в trailing_sl_coordinator
+                if hasattr(self.orchestrator, "trailing_sl_coordinator"):
+                    tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                else:
+                    tsl = None
+                if tsl:
                     # Получаем текущую прибыль (net с комиссией)
                     profit_pct_net = tsl.get_profit_pct(
                         current_price, include_fees=True
@@ -980,99 +1078,14 @@ class FuturesPositionManager:
                             )
                             # ✅ ИСПРАВЛЕНО: НЕ возвращаемся, продолжаем проверку TP ниже
 
-            # ✅ НОВОЕ: Проверка Take Profit с поддержкой per-symbol и per-regime TP
-            tp_percent = self.scalping_config.tp_percent  # Глобальный (fallback)
-
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный TP вместо глобального
             # Получаем режим из позиции (сохранен при открытии)
             regime = position.get("regime") or self.active_positions.get(
                 symbol, {}
             ).get("regime")
-
-            # Получаем tp_percent для символа и режима (если есть в symbol_profiles)
-            if symbol and self.symbol_profiles:
-                symbol_profile = self.symbol_profiles.get(symbol, {})
-                if symbol_profile:
-                    # Конвертируем в dict если нужно
-                    if not isinstance(symbol_profile, dict):
-                        # Если это Pydantic модель или другой объект, пробуем разные способы
-                        if hasattr(symbol_profile, "dict"):
-                            symbol_dict = symbol_profile.dict()
-                        elif hasattr(symbol_profile, "__dict__"):
-                            symbol_dict = dict(symbol_profile.__dict__)
-                        else:
-                            symbol_dict = {}
-                    else:
-                        symbol_dict = symbol_profile
-
-                    # 1. ✅ ПРИОРИТЕТ 1: Per-regime TP (если режим определен)
-                    if regime:
-                        regime_lower = (
-                            regime.lower()
-                            if isinstance(regime, str)
-                            else str(regime).lower()
-                        )
-                        regime_profile = symbol_dict.get(regime_lower, {})
-
-                        # Конвертируем regime_profile в dict если нужно
-                        if not isinstance(regime_profile, dict):
-                            if hasattr(regime_profile, "dict"):
-                                regime_profile = regime_profile.dict()
-                            elif hasattr(regime_profile, "__dict__"):
-                                regime_profile = dict(regime_profile.__dict__)
-                            else:
-                                regime_profile = {}
-
-                        regime_tp_percent = regime_profile.get("tp_percent")
-                        if regime_tp_percent is not None:
-                            # ✅ ИСПРАВЛЕНИЕ: Проверяем тип перед конвертацией в float
-                            if isinstance(regime_tp_percent, (int, float)):
-                                tp_percent = float(regime_tp_percent)
-                                logger.info(
-                                    f"✅ Per-regime TP для {symbol} ({regime}): {tp_percent}% "
-                                    f"(глобальный: {self.scalping_config.tp_percent}%)"
-                                )
-                            elif isinstance(regime_tp_percent, str):
-                                try:
-                                    tp_percent = float(regime_tp_percent)
-                                    logger.info(
-                                        f"✅ Per-regime TP для {symbol} ({regime}): {tp_percent}% "
-                                        f"(глобальный: {self.scalping_config.tp_percent}%)"
-                                    )
-                                except (ValueError, TypeError):
-                                    logger.warning(
-                                        f"⚠️ Не удалось конвертировать regime_tp_percent в float для {symbol} ({regime}): {regime_tp_percent}"
-                                    )
-                            else:
-                                logger.warning(
-                                    f"⚠️ regime_tp_percent для {symbol} ({regime}) имеет неожиданный тип: {type(regime_tp_percent)}, значение: {regime_tp_percent}"
-                                )
-
-                    # 2. ✅ ПРИОРИТЕТ 2: Per-symbol TP (fallback, если режим не определен)
-                    if tp_percent == self.scalping_config.tp_percent:
-                        symbol_tp_percent = symbol_dict.get("tp_percent")
-                        if symbol_tp_percent is not None:
-                            # ✅ ИСПРАВЛЕНИЕ: Проверяем тип перед конвертацией в float
-                            if isinstance(symbol_tp_percent, (int, float)):
-                                tp_percent = float(symbol_tp_percent)
-                                logger.debug(
-                                    f"📊 Per-symbol TP для {symbol}: {tp_percent}% "
-                                    f"(глобальный: {self.scalping_config.tp_percent}%)"
-                                )
-                            elif isinstance(symbol_tp_percent, str):
-                                try:
-                                    tp_percent = float(symbol_tp_percent)
-                                    logger.debug(
-                                        f"📊 Per-symbol TP для {symbol}: {tp_percent}% "
-                                        f"(глобальный: {self.scalping_config.tp_percent}%)"
-                                    )
-                                except (ValueError, TypeError):
-                                    logger.warning(
-                                        f"⚠️ Не удалось конвертировать symbol_tp_percent в float для {symbol}: {symbol_tp_percent}"
-                                    )
-                            else:
-                                logger.warning(
-                                    f"⚠️ symbol_tp_percent для {symbol} имеет неожиданный тип: {type(symbol_tp_percent)}, значение: {symbol_tp_percent}"
-                                )
+            
+            # ✅ Используем вспомогательный метод для получения адаптивного TP
+            tp_percent = self._get_adaptive_tp_percent(symbol, regime)
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: TP должен быть выше минимального профита трейлинг стоп-лосс + комиссия
             # Если трейлинг стоп-лосс еще не активен (не достиг min_profit_to_close), то TP может сработать,
@@ -1215,27 +1228,56 @@ class FuturesPositionManager:
                     f"(с комиссией: {tp_percent_with_commission:.2f}%, нужно еще {tp_percent_with_commission - pnl_percent:.2f}%)"
                 )
 
-                # ✅ Big-profit exit: при крупной чистой прибыли — немедленное закрытие (игнор min_holding)
+                # ✅ Big-profit exit: при крупной чистой прибыли — закрытие с трейлинг стопом для удержания прибыльных позиций
                 try:
                     # ✅ ИСПРАВЛЕНО: Учитываем комиссию от маржи
                     net_pnl_percent = pnl_percent - commission_pct_from_margin
-                    alts = {"SOL-USDT", "DOGE-USDT", "XRP-USDT"}
-                    if symbol in alts:
-                        big_profit_threshold = float(
-                            getattr(
-                                self.scalping_config,
-                                "big_profit_exit_percent_alts",
-                                1.0,
+                    
+                    # ✅ НОВОЕ: Получаем big_profit_exit_percent из конфига по символу и режиму
+                    big_profit_threshold = None
+                    market_regime = None
+                    
+                    # Получаем текущий режим рынка
+                    if hasattr(self, "orchestrator") and self.orchestrator:
+                        if (
+                            hasattr(self.orchestrator, "signal_generator")
+                            and self.orchestrator.signal_generator
+                        ):
+                            regime_manager = getattr(
+                                self.orchestrator.signal_generator, "regime_manager", None
                             )
-                        )
-                    else:
-                        big_profit_threshold = float(
-                            getattr(
-                                self.scalping_config,
-                                "big_profit_exit_percent_majors",
-                                0.6,
+                            if regime_manager:
+                                regime_obj = regime_manager.get_current_regime()
+                                if regime_obj:
+                                    market_regime = regime_obj.lower()
+                    
+                    # Пытаемся получить параметр из symbol_profiles по символу и режиму
+                    if symbol in self.symbol_profiles:
+                        symbol_config = self.symbol_profiles[symbol]
+                        if market_regime and market_regime in symbol_config:
+                            regime_config = symbol_config[market_regime]
+                            if isinstance(regime_config, dict) and "big_profit_exit_percent" in regime_config:
+                                big_profit_threshold = float(regime_config["big_profit_exit_percent"])
+                    
+                    # Fallback на глобальные значения если не найдено
+                    if big_profit_threshold is None:
+                        alts = {"SOL-USDT", "DOGE-USDT", "XRP-USDT"}
+                        if symbol in alts:
+                            big_profit_threshold = float(
+                                getattr(
+                                    self.scalping_config,
+                                    "big_profit_exit_percent_alts",
+                                    2.0,  # Увеличенное значение по умолчанию
+                                )
                             )
-                        )
+                        else:
+                            big_profit_threshold = float(
+                                getattr(
+                                    self.scalping_config,
+                                    "big_profit_exit_percent_majors",
+                                    1.5,  # Увеличенное значение по умолчанию
+                                )
+                            )
 
                     # ✅ ИСПРАВЛЕНО: Добавлено детальное логирование Big-profit exit
                     progress = (
@@ -1251,10 +1293,120 @@ class FuturesPositionManager:
                             f"порог={big_profit_threshold:.2f}% ({progress:.0f}%)"
                         )
 
+                    # ✅ ПРАВКА #6: Big-profit exit с трейлинг стопом для удержания прибыльных позиций
+                    # Трейлинг стоп: отслеживаем максимальную прибыль и закрываем только если прибыль просела
+                    # ✅ ИСПРАВЛЕНО: position - это dict, используем проверку через "in" вместо hasattr
+                    if "_big_profit_max" not in position:
+                        position["_big_profit_max"] = net_pnl_percent  # Инициализируем максимум
+                        position["_big_profit_history"] = []  # История прибыли для определения резкого тренда
+                    else:
+                        # Обновляем максимум если прибыль выросла
+                        if net_pnl_percent > position["_big_profit_max"]:
+                            position["_big_profit_max"] = net_pnl_percent
+                    
+                    # ✅ НОВОЕ: Отслеживаем историю прибыли для определения резкого тренда
+                    if "_big_profit_history" not in position:
+                        position["_big_profit_history"] = []
+                    
+                    import time
+                    current_time = time.time()
+                    position["_big_profit_history"].append((current_time, net_pnl_percent))
+                    # Храним историю за последние 5 минут
+                    position["_big_profit_history"] = [
+                        (t, p) for t, p in position["_big_profit_history"]
+                        if current_time - t <= 300  # 5 минут
+                    ]
+                    
+                    # ✅ НОВОЕ: Определение резкого тренда (быстрый рост прибыли)
+                    strong_trend = False
+                    if len(position["_big_profit_history"]) >= 2:
+                        # Проверяем скорость роста прибыли
+                        oldest_time, oldest_profit = position["_big_profit_history"][0]
+                        newest_time, newest_profit = position["_big_profit_history"][-1]
+                        time_diff = max(newest_time - oldest_time, 1)  # Минимум 1 секунда
+                        profit_growth = newest_profit - oldest_profit
+                        growth_rate_per_minute = (profit_growth / time_diff) * 60  # % в минуту
+                        
+                        # Резкий тренд: прибыль растет быстрее 0.3% в минуту
+                        if growth_rate_per_minute > 0.3 and net_pnl_percent > 0:
+                            strong_trend = True
+                            logger.debug(
+                                f"🚀 Резкий тренд обнаружен {symbol}: скорость роста {growth_rate_per_minute:.2f}%/мин, "
+                                f"прибыль {net_pnl_percent:.2f}%"
+                            )
+                    
+                    # ✅ НОВОЕ: Продление позиций при резком тренде
+                    # Если резкий тренд активен - увеличиваем порог и трейлинг стоп проседание
+                    if strong_trend:
+                        big_profit_threshold = big_profit_threshold * 1.5  # Увеличиваем порог на 50%
+                        big_profit_trailing_pct = 0.4  # Увеличиваем проседание до 40% (вместо 30%)
+                    else:
+                        big_profit_trailing_pct = 0.3  # 30% проседание от максимума (стандарт)
+                    
+                    profit_drawdown = (position["_big_profit_max"] - net_pnl_percent) / position["_big_profit_max"] if position["_big_profit_max"] > 0 else 0
+                    
+                    should_close = False
+                    close_reason = ""
+                    
                     if net_pnl_percent >= big_profit_threshold:
+                        # Прибыль достигла порога - проверяем трейлинг
+                        if net_pnl_percent >= position["_big_profit_max"]:
+                            # Прибыль на максимуме - НЕ закрываем (ждем проседания)
+                            logger.debug(
+                                f"📈 Big-profit exit: {symbol} net={net_pnl_percent:.2f}% "
+                                f"(порог={big_profit_threshold:.2f}%, max={position['_big_profit_max']:.2f}%), "
+                                f"прибыль растет - держим позицию (трейлинг стоп активен)"
+                            )
+                        elif profit_drawdown >= big_profit_trailing_pct:
+                            # Прибыль просела на 30% от максимума - закрываем
+                            should_close = True
+                            close_reason = f"трейлинг стоп (проседание {profit_drawdown:.1%} от max={position['_big_profit_max']:.2f}%)"
+                        else:
+                            # Прибыль просела, но не достаточно - продолжаем держать
+                            logger.debug(
+                                f"📊 Big-profit exit: {symbol} net={net_pnl_percent:.2f}% "
+                                f"(порог={big_profit_threshold:.2f}%, max={position['_big_profit_max']:.2f}%), "
+                                f"проседание {profit_drawdown:.1%} < {big_profit_trailing_pct:.0%} - держим (трейлинг стоп)"
+                            )
+                    
+                    if should_close:
+                        # ✅ ИСПРАВЛЕНО: Проверка min_holding ПЕРЕД big_profit_exit
+                        import time
+                        min_holding_blocked = False
+                        if hasattr(self, "orchestrator") and self.orchestrator:
+                            # ✅ ИСПРАВЛЕНО: TSL теперь в trailing_sl_coordinator
+                            if hasattr(self.orchestrator, "trailing_sl_coordinator"):
+                                tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                            else:
+                                tsl = None
+                            if tsl and hasattr(tsl, "min_holding_minutes") and tsl.min_holding_minutes:
+                                if hasattr(tsl, "entry_timestamp") and tsl.entry_timestamp:
+                                    minutes_in_position = (time.time() - tsl.entry_timestamp) / 60.0
+                                    effective_min_holding = tsl.min_holding_minutes
+                                    # Учитываем extend_time_on_profit если позиция в прибыли
+                                    if (
+                                        hasattr(tsl, "extend_time_on_profit")
+                                        and tsl.extend_time_on_profit
+                                        and net_pnl_percent > 0
+                                        and hasattr(tsl, "extend_time_multiplier")
+                                    ):
+                                        effective_min_holding = effective_min_holding * tsl.extend_time_multiplier
+                                    
+                                    if minutes_in_position < effective_min_holding:
+                                        min_holding_blocked = True
+                                        logger.debug(
+                                            f"⏱️ Big-profit exit заблокирован: позиция держится "
+                                            f"{minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин "
+                                            f"(min_holding защита активна, net={net_pnl_percent:.2f}%)"
+                                        )
+                        
+                        if min_holding_blocked:
+                            return  # НЕ закрываем по big_profit_exit - min_holding защита активна!
+                        
                         logger.info(
                             f"💰 Big-profit exit: {symbol} net={net_pnl_percent:.2f}% "
-                            f"(порог={big_profit_threshold:.2f}%), закрываем reduce_only MARKET"
+                            f"(порог={big_profit_threshold:.2f}%, max={position['_big_profit_max']:.2f}%), "
+                            f"закрываем по {close_reason}"
                         )
                         await self._close_position_by_reason(
                             position, "big_profit_exit"
@@ -1362,6 +1514,39 @@ class FuturesPositionManager:
                     and pnl_percent > 0
                     and pnl_percent >= ptp_trigger
                 ):
+                    # ✅ ПРАВКА #1: Проверка min_holding ПЕРЕД Partial TP
+                    import time
+                    min_holding_blocked = False
+                    if hasattr(self, "orchestrator") and self.orchestrator:
+                        # ✅ ИСПРАВЛЕНО: TSL теперь в trailing_sl_coordinator
+                        if hasattr(self.orchestrator, "trailing_sl_coordinator"):
+                            tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                        else:
+                            tsl = None
+                        if tsl and hasattr(tsl, "min_holding_minutes") and tsl.min_holding_minutes:
+                            if hasattr(tsl, "entry_timestamp") and tsl.entry_timestamp:
+                                minutes_in_position = (time.time() - tsl.entry_timestamp) / 60.0
+                                effective_min_holding = tsl.min_holding_minutes
+                                # Учитываем extend_time_on_profit если позиция в прибыли
+                                if (
+                                    hasattr(tsl, "extend_time_on_profit")
+                                    and tsl.extend_time_on_profit
+                                    and pnl_percent > 0
+                                    and hasattr(tsl, "extend_time_multiplier")
+                                ):
+                                    effective_min_holding = effective_min_holding * tsl.extend_time_multiplier
+                                
+                                if minutes_in_position < effective_min_holding:
+                                    min_holding_blocked = True
+                                    logger.debug(
+                                        f"⏱️ Partial TP заблокирован: позиция держится "
+                                        f"{minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин "
+                                        f"(min_holding защита активна, pnl={pnl_percent:.2f}%)"
+                                    )
+                    
+                    if min_holding_blocked:
+                        return  # НЕ закрываем по Partial TP - min_holding защита активна!
+                    
                     # Рассчитываем размер и цену лимитного reduce-only ордера
                     size_abs = abs(size)
                     size_partial = max(0.0, min(size_abs * ptp_fraction, size_abs))
@@ -1732,9 +1917,11 @@ class FuturesPositionManager:
                         logger.debug(
                             f"✅ Позиция {symbol} удалена из orchestrator.active_positions"
                         )
-                    if symbol in self.orchestrator.trailing_sl_by_symbol:
-                        self.orchestrator.trailing_sl_by_symbol[symbol].reset()
-                        del self.orchestrator.trailing_sl_by_symbol[symbol]
+                    # ✅ ИСПРАВЛЕНО: TSL теперь в trailing_sl_coordinator
+                    if hasattr(self.orchestrator, "trailing_sl_coordinator"):
+                        tsl = self.orchestrator.trailing_sl_coordinator.remove_tsl(symbol)
+                        if tsl:
+                            tsl.reset()
                         logger.debug(
                             f"✅ TrailingStopLoss для {symbol} удален из orchestrator"
                         )

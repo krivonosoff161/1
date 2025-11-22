@@ -1,0 +1,2 @@
+timestamp,symbol,side,entry_price,exit_price,size,gross_pnl,commission,net_pnl,duration_sec,reason,win_rate
+2025-11-22T11:25:41.963810,SOL-USDT,short,126.9500,127.2600,1.48000000,-0.4588,0.1881,-0.6469,100.053758,trailing_stop,0.00
