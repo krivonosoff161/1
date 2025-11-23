@@ -2246,8 +2246,228 @@ class FuturesSignalGenerator:
 
             # ✅ УЛУЧШЕНИЕ: Проверяем направление движения цены (последние 3-5 свечей)
             price_direction = None  # "up", "down", "neutral"
-            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= 5:
+            reversal_detected = False  # ✅ НОВОЕ: Флаг обнаружения разворота
+            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= 7:
+                # ✅ НОВОЕ: Проверка на V-образный разворот (последние 7 свечей)
+                recent_candles = market_data.ohlcv_data[-7:]
+                highs = [c.high for c in recent_candles]
+                lows = [c.low for c in recent_candles]
+                closes = [c.close for c in recent_candles]
+                
+                # Находим максимальную и минимальную цену в окне
+                max_high_idx = highs.index(max(highs))
+                max_high = max(highs)
+                min_low_idx = lows.index(min(lows))
+                min_low = min(lows)
+                
+                # ✅ НОВОЕ: Проверка V-образного разворота
+                # V-образный разворот: сначала рост до максимума, потом падение
+                # Или наоборот: сначала падение до минимума, потом рост
+                
+                # ✅ АДАПТИВНО: Получаем reversal_threshold из конфига (ПРИОРИТЕТ: per-symbol > режим > fallback)
+                reversal_threshold = 0.0015  # Fallback: 0.15% для обнаружения разворота
+                try:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала проверяем per-symbol overrides из symbol_profiles
+                    symbol_profile_found = False
+                    try:
+                        adaptive_regime = getattr(
+                            self.scalping_config, "adaptive_regime", {}
+                        )
+                        adaptive_dict = (
+                            adaptive_regime
+                            if isinstance(adaptive_regime, dict)
+                            else (
+                                adaptive_regime.__dict__
+                                if hasattr(adaptive_regime, "__dict__")
+                                else {}
+                            )
+                        )
+                        symbol_profiles = adaptive_dict.get("symbol_profiles", {})
+
+                        if symbol and symbol_profiles and symbol in symbol_profiles:
+                            symbol_profile = symbol_profiles[symbol]
+                            symbol_profile_dict = (
+                                symbol_profile
+                                if isinstance(symbol_profile, dict)
+                                else (
+                                    symbol_profile.__dict__
+                                    if hasattr(symbol_profile, "__dict__")
+                                    else {}
+                                )
+                            )
+                            regime_profile = symbol_profile_dict.get(regime_name_ma, {})
+                            regime_profile_dict = (
+                                regime_profile
+                                if isinstance(regime_profile, dict)
+                                else (
+                                    regime_profile.__dict__
+                                    if hasattr(regime_profile, "__dict__")
+                                    else {}
+                                )
+                            )
+                            reversal_config = regime_profile_dict.get("reversal_detection", {})
+                            reversal_config_dict = (
+                                reversal_config
+                                if isinstance(reversal_config, dict)
+                                else (
+                                    reversal_config.__dict__
+                                    if hasattr(reversal_config, "__dict__")
+                                    else {}
+                                )
+                            )
+
+                            if "v_reversal_threshold" in reversal_config_dict:
+                                reversal_threshold = float(
+                                    reversal_config_dict["v_reversal_threshold"]
+                                ) / 100.0  # Конвертируем из процентов в доли
+                                symbol_profile_found = True
+                                logger.debug(
+                                    f"✅ PER-SYMBOL: v_reversal_threshold для {symbol} ({regime_name_ma}): {reversal_threshold:.4f} ({reversal_threshold*100:.2f}%)"
+                                )
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Не удалось получить per-symbol v_reversal_threshold для {symbol}: {e}"
+                        )
+
+                    # ✅ Если per-symbol не найден - используем глобальный порог режима
+                    if not symbol_profile_found:
+                        try:
+                            adaptive_regime = getattr(
+                                self.scalping_config, "adaptive_regime", {}
+                            )
+                            adaptive_dict = (
+                                adaptive_regime
+                                if isinstance(adaptive_regime, dict)
+                                else (
+                                    adaptive_regime.__dict__
+                                    if hasattr(adaptive_regime, "__dict__")
+                                    else {}
+                                )
+                            )
+
+                            # Ищем режим в конфиге
+                            regime_config = adaptive_dict.get(regime_name_ma, {})
+                            regime_config_dict = (
+                                regime_config
+                                if isinstance(regime_config, dict)
+                                else (
+                                    regime_config.__dict__
+                                    if hasattr(regime_config, "__dict__")
+                                    else {}
+                                )
+                            )
+
+                            # Получаем reversal_detection из режима
+                            reversal_config = regime_config_dict.get("reversal_detection", {})
+                            reversal_config_dict = (
+                                reversal_config
+                                if isinstance(reversal_config, dict)
+                                else (
+                                    reversal_config.__dict__
+                                    if hasattr(reversal_config, "__dict__")
+                                    else {}
+                                )
+                            )
+
+                            if "v_reversal_threshold" in reversal_config_dict:
+                                reversal_threshold = float(
+                                    reversal_config_dict["v_reversal_threshold"]
+                                ) / 100.0  # Конвертируем из процентов в доли
+                                logger.debug(
+                                    f"✅ ГЛОБАЛЬНЫЙ: v_reversal_threshold для {regime_name_ma}: {reversal_threshold:.4f} ({reversal_threshold*100:.2f}%)"
+                                )
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Не удалось получить глобальный v_reversal_threshold для {regime_name_ma}: {e}"
+                            )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Не удалось получить адаптивный v_reversal_threshold: {e}, используем fallback 0.15%"
+                    )
+                
+                # Проверка 1: Рост → Падение (V-образный разворот вниз)
+                if max_high_idx < len(recent_candles) - 2:  # Максимум не в последних 2 свечах
+                    # Проверяем падение после максимума
+                    price_after_max = closes[-1]
+                    drop_from_max = (max_high - price_after_max) / max_high if max_high > 0 else 0
+                    if drop_from_max > reversal_threshold:
+                        reversal_detected = True
+                        logger.warning(
+                            f"⚠️ V-образный разворот ВНИЗ обнаружен для {symbol}: "
+                            f"максимум на свече {max_high_idx} ({max_high:.2f}), "
+                            f"текущая цена {price_after_max:.2f}, падение {drop_from_max:.2%}"
+                        )
+                        # ✅ НОВОЕ: Записываем разворот в статистику
+                        if self.trading_statistics:
+                            try:
+                                self.trading_statistics.record_reversal(
+                                    symbol=symbol,
+                                    reversal_type="v_down",
+                                    regime=regime_name_ma or "unknown",
+                                    price_change=drop_from_max,
+                                    max_price=max_high,
+                                )
+                            except Exception as e:
+                                logger.debug(f"⚠️ Не удалось записать разворот в статистику: {e}")
+                
+                # Проверка 2: Падение → Рост (V-образный разворот вверх)
+                if min_low_idx < len(recent_candles) - 2:  # Минимум не в последних 2 свечах
+                    # Проверяем рост после минимума
+                    price_after_min = closes[-1]
+                    rise_from_min = (price_after_min - min_low) / min_low if min_low > 0 else 0
+                    if rise_from_min > reversal_threshold:
+                        reversal_detected = True
+                        logger.warning(
+                            f"⚠️ V-образный разворот ВВЕРХ обнаружен для {symbol}: "
+                            f"минимум на свече {min_low_idx} ({min_low:.2f}), "
+                            f"текущая цена {price_after_min:.2f}, рост {rise_from_min:.2%}"
+                        )
+                        # ✅ НОВОЕ: Записываем разворот в статистику
+                        if self.trading_statistics:
+                            try:
+                                self.trading_statistics.record_reversal(
+                                    symbol=symbol,
+                                    reversal_type="v_up",
+                                    regime=regime_name_ma or "unknown",
+                                    price_change=rise_from_min,
+                                    min_price=min_low,
+                                )
+                            except Exception as e:
+                                logger.debug(f"⚠️ Не удалось записать разворот в статистику: {e}")
+                
                 # Берем последние 5 свечей для определения направления
+                recent_candles_5 = market_data.ohlcv_data[-5:]
+                closes_5 = [c.close for c in recent_candles_5]
+
+                # Сравниваем первую и последнюю цену в окне
+                price_change = (
+                    (closes_5[-1] - closes_5[0]) / closes_5[0] if closes_5[0] > 0 else 0
+                )
+
+                # ✅ АДАПТИВНО: Порог изменения цены из конфига (определяется выше)
+                if price_change > price_change_threshold:  # Рост > порог
+                    price_direction = "up"
+                elif price_change < -price_change_threshold:  # Падение > порог
+                    price_direction = "down"
+                else:
+                    price_direction = "neutral"
+
+                # Также проверяем последние 3 свечи для более быстрой реакции
+                if len(recent_candles_5) >= 3:
+                    short_closes = [c.close for c in recent_candles_5[-3:]]
+                    short_change = (
+                        (short_closes[-1] - short_closes[0]) / short_closes[0]
+                        if short_closes[0] > 0
+                        else 0
+                    )
+                    # Если короткий тренд сильнее - используем его
+                    if abs(short_change) > abs(price_change) * 1.5:
+                        if short_change > price_change_threshold:
+                            price_direction = "up"
+                        elif short_change < -price_change_threshold:
+                            price_direction = "down"
+            elif market_data.ohlcv_data and len(market_data.ohlcv_data) >= 5:
+                # Fallback: используем старую логику для меньшего количества свечей
                 recent_candles = market_data.ohlcv_data[-5:]
                 closes = [c.close for c in recent_candles]
 
@@ -2284,7 +2504,7 @@ class FuturesSignalGenerator:
                 f"🔍 MA для {symbol}: EMA_12={ma_fast:.2f}, EMA_26={ma_slow:.2f}, "
                 f"цена={current_price:.2f}, ma_fast>ma_slow={ma_fast > ma_slow}, "
                 f"цена>ma_fast={current_price > ma_fast if ma_fast > 0 else False}, "
-                f"направление_цены={price_direction}"
+                f"направление_цены={price_direction}, разворот={reversal_detected}"
             )
 
             # ✅ УЛУЧШЕНИЕ: Проверка минимальной разницы EMA для генерации сигнала
@@ -2483,6 +2703,12 @@ class FuturesSignalGenerator:
                         f"⚠️ MA BULLISH сигнал ОТМЕНЕН для {symbol}: "
                         f"разница EMA слишком мала ({ma_difference_pct:.3f}% < {min_ma_difference_pct}%)"
                     )
+                # ✅ НОВОЕ: Блокируем BULLISH сигнал при V-образном развороте вниз
+                elif reversal_detected and price_direction == "down":
+                    logger.warning(
+                        f"🚨 MA BULLISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"обнаружен V-образный разворот ВНИЗ (направление={price_direction})"
+                    )
                 # ✅ УЛУЧШЕНИЕ: Не даем bullish сигнал если цена падает
                 elif price_direction == "down":
                     logger.debug(
@@ -2535,6 +2761,12 @@ class FuturesSignalGenerator:
                     logger.debug(
                         f"⚠️ MA BEARISH сигнал ОТМЕНЕН для {symbol}: "
                         f"разница EMA слишком мала ({ma_difference_pct:.3f}% < {min_ma_difference_pct}%)"
+                    )
+                # ✅ НОВОЕ: Блокируем BEARISH сигнал при V-образном развороте вверх
+                elif reversal_detected and price_direction == "up":
+                    logger.warning(
+                        f"🚨 MA BEARISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"обнаружен V-образный разворот ВВЕРХ (направление={price_direction})"
                     )
                 # ✅ УЛУЧШЕНИЕ: Не даем bearish сигнал если цена растет
                 elif price_direction == "up":
@@ -3050,6 +3282,10 @@ class FuturesSignalGenerator:
                 liquidity_snapshot = None
                 if self.liquidity_filter:
                     try:
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем направление сигнала в LiquidityFilter
+                        # Для LONG (buy): проверяем только bid volume
+                        # Для SHORT (sell): проверяем только ask volume
+                        signal_side = signal.get("side", "").lower()
                         (
                             liquidity_ok,
                             liquidity_snapshot,
@@ -3058,6 +3294,7 @@ class FuturesSignalGenerator:
                             regime=current_regime_name,
                             relax_multiplier=liquidity_relax,
                             thresholds_override=liquidity_override,
+                            signal_side=signal_side,  # ✅ НОВОЕ: Передаем направление сигнала
                         )
                         if not liquidity_ok:
                             continue

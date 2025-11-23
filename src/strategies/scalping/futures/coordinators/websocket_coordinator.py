@@ -249,6 +249,14 @@ class WebSocketCoordinator:
                         "upl": float(position_data.get("upl", "0")),
                         "uplRatio": float(position_data.get("uplRatio", "0")),
                     }
+                    # ✅ НОВОЕ: Сохраняем ADL данные (если доступны)
+                    # OKX API может возвращать adlRank или другие поля ADL
+                    adl_rank = position_data.get("adlRank") or position_data.get("adl")
+                    if adl_rank is not None:
+                        try:
+                            update_data["adl_rank"] = int(adl_rank)
+                        except (ValueError, TypeError):
+                            pass
                     # Обновляем entry_price из avgPx, если avgPx > 0
                     if avg_px > 0:
                         update_data["entry_price"] = avg_px
@@ -289,6 +297,23 @@ class WebSocketCoordinator:
                         ] = saved_order_type
                     if saved_post_only is not None:
                         self.active_positions_ref[symbol]["post_only"] = saved_post_only
+                    
+                    # ✅ НОВОЕ: Логируем ADL при обновлении позиции (если доступно)
+                    if "adl_rank" in update_data:
+                        adl_rank = update_data["adl_rank"]
+                        adl_status = "🔴 ВЫСОКИЙ" if adl_rank >= 4 else "🟡 СРЕДНИЙ" if adl_rank >= 2 else "🟢 НИЗКИЙ"
+                        logger.debug(
+                            f"📊 ADL для {symbol}: rank={adl_rank} ({adl_status}) "
+                            f"(upl={position_data.get('upl', '0')} USDT)"
+                        )
+                        
+                        # Предупреждение при высоком ADL
+                        if adl_rank >= 4:
+                            logger.warning(
+                                f"⚠️ ВЫСОКИЙ ADL для {symbol}: rank={adl_rank} "
+                                f"(риск автоматического сокращения позиции биржей)"
+                            )
+                    
                     logger.debug(
                         f"📊 Private WS: Позиция {symbol} обновлена (size={pos_size}, upl={position_data.get('upl', '0')})"
                     )
@@ -355,8 +380,21 @@ class WebSocketCoordinator:
             if symbol in self.active_positions_ref:
                 position = self.active_positions_ref.pop(symbol)
 
-                # Логируем закрытие
+                # ✅ НОВОЕ: Определяем причину закрытия
+                # Проверяем, была ли позиция закрыта из-за ADL
                 reason = "unknown"
+                
+                # Проверяем ADL перед закрытием (если был сохранен)
+                adl_rank = position.get("adl_rank")
+                if adl_rank is not None and adl_rank >= 4:  # Высокий ADL (4-5 столбцов)
+                    # Если позиция была закрыта биржей при высоком ADL, это может быть ADL
+                    # Но мы не можем точно определить без дополнительной информации от биржи
+                    # Поэтому логируем как "possible_adl" для статистики
+                    reason = "possible_adl"
+                    logger.warning(
+                        f"⚠️ Позиция {symbol} закрыта при высоком ADL (rank={adl_rank}). "
+                        f"Возможная причина: Auto-Deleveraging"
+                    )
 
                 # Получаем детали позиции для логирования
                 entry_price = position.get("entry_price", 0)
@@ -470,3 +508,4 @@ class WebSocketCoordinator:
         except Exception as e:
             logger.debug(f"⚠️ Ошибка получения цены для {symbol}: {e}")
             return None
+

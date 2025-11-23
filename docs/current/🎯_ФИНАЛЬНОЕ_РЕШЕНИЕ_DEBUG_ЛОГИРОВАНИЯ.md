@@ -370,3 +370,4 @@ logs/futures/debug/debug_YYYYMMDD_HHMMSS.csv
 **Готово!** 🎯  
 **Начинай интеграцию!** 🚀
 
+

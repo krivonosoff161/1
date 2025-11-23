@@ -451,26 +451,29 @@ class OKXFuturesClient:
                                 # Для SELL: минимум должен быть ближе к best_ask (внутри спреда)
                                 # Для BUY: максимум должен быть ближе к best_bid (внутри спреда)
                                 spread = best_ask - best_bid
-                                # ✅ ИСПРАВЛЕНО: Используем более консервативный подход
-                                # Для SELL: min_sell_price = best_bid + 50% спреда (ближе к best_ask)
-                                # Для BUY: max_buy_price = best_ask - 50% спреда (ближе к best_bid)
-                                # Это гарантирует, что цена внутри спреда и меньше вероятность выхода за лимиты
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем правильную логику для лимитов
+                                # Для BUY: max_buy_price должен быть близко к best_ask (можно покупать по best_ask)
+                                # Для SELL: min_sell_price должен быть близко к best_bid (можно продавать по best_bid)
+                                # НЕ используем best_ask - spread * 0.2 - это ставит ордер далеко от рынка!
                                 if spread > 0:
-                                    # Используем 80% спреда для большей безопасности
-                                    max_buy_price = best_ask - (
-                                        spread * 0.2
-                                    )  # На 20% ниже best_ask
-                                    min_sell_price = best_bid + (
-                                        spread * 0.2
-                                    )  # На 20% выше best_bid
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем более консервативные лимиты
+                                    # Проблема: OKX использует динамические лимиты, которые могут быть строже
+                                    # Решение: используем более широкие лимиты на основе спреда
+                                    # Для BUY: max_buy_price должен быть выше best_ask (но не слишком далеко)
+                                    # Для SELL: min_sell_price должен быть ниже best_bid (но не слишком далеко)
+                                    # Используем 0.5% от спреда для безопасности
+                                    max_buy_price = best_ask + (spread * 0.5)  # 50% от спреда выше best_ask
+                                    min_sell_price = best_bid - (spread * 0.5)  # 50% от спреда ниже best_bid
+                                    # ✅ ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Не позволяем лимитам быть слишком далеко от рынка
+                                    # Если спред очень большой, ограничиваем лимиты разумными значениями
+                                    if max_buy_price > best_ask * 1.01:  # Не более 1% выше best_ask
+                                        max_buy_price = best_ask * 1.01
+                                    if min_sell_price < best_bid * 0.99:  # Не более 1% ниже best_bid
+                                        min_sell_price = best_bid * 0.99
                                 else:
-                                    # Если спреда нет, используем старый метод с меньшим offset
-                                    max_buy_price = (
-                                        best_ask * 0.999
-                                    )  # На 0.1% ниже best_ask
-                                    min_sell_price = (
-                                        best_bid * 1.001
-                                    )  # На 0.1% выше best_bid
+                                    # Если спреда нет, используем минимальный offset
+                                    max_buy_price = best_ask * 1.001  # 0.1% выше best_ask
+                                    min_sell_price = best_bid * 0.999  # 0.1% ниже best_bid
 
                                 # Получаем текущую цену из тикера
                                 ticker_url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"

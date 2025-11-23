@@ -406,11 +406,26 @@ class FuturesRiskManager:
                     f"Слабый сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
                 )
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для прогрессивных профилей уменьшаем multiplier
+            # чтобы не перезаписывать прогрессивный расчет
+            is_progressive = balance_profile.get("progressive", False)
+            original_multiplier = strength_multiplier
+            if is_progressive:
+                # Для прогрессивных профилей используем меньший multiplier (0.8)
+                # чтобы прогрессивный расчет работал правильно
+                progressive_multiplier = 0.8  # 80% от обычного multiplier
+                strength_multiplier = 1.0 + (strength_multiplier - 1.0) * progressive_multiplier
+                logger.debug(
+                    f"📊 Прогрессивный профиль: уменьшаем multiplier до {strength_multiplier:.2f} "
+                    f"(было бы {original_multiplier:.2f} без прогрессивной адаптации)"
+                )
+            
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем multiplier, но ограничиваем max_usd_size!
             base_usd_size *= strength_multiplier
             base_usd_size = min(base_usd_size, max_usd_size)
             logger.debug(
-                f"💰 После multiplier: base_usd_size=${base_usd_size:.2f} (max=${max_usd_size:.2f})"
+                f"💰 После multiplier: base_usd_size=${base_usd_size:.2f} (max=${max_usd_size:.2f}, "
+                f"progressive={is_progressive}, multiplier={strength_multiplier:.2f})"
             )
 
             # ✅ ОПТИМИЗАЦИЯ #4: Динамический размер позиций на основе волатильности (ATR-based)

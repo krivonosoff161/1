@@ -57,3 +57,4 @@ def _get_trailing_sl_params(self, regime: Optional[str] = None) -> Dict[str, Any
 
 **Требуется детальная проверка кода ConfigManager.get_trailing_sl_params()!**
 
+

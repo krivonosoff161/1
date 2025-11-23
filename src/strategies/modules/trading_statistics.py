@@ -28,6 +28,8 @@ class TradingStatistics:
         self.lookback_hours = lookback_hours
         self.trades: List[Dict] = []
         self.signals: List[Dict] = []
+        # ✅ НОВОЕ: Статистика разворотов
+        self.reversals: List[Dict] = []  # Список обнаруженных разворотов
 
     def record_trade(
         self,
@@ -111,6 +113,103 @@ class TradingStatistics:
         # Очищаем старые сигналы
         cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
         self.signals = [s for s in self.signals if s["timestamp"] >= cutoff_time]
+
+    def record_reversal(
+        self,
+        symbol: str,
+        reversal_type: str,  # "v_down" или "v_up"
+        regime: str,
+        price_change: float,  # Процент изменения цены
+        max_price: Optional[float] = None,
+        min_price: Optional[float] = None,
+    ):
+        """
+        ✅ НОВОЕ: Запись обнаруженного разворота
+
+        Args:
+            symbol: Торговая пара
+            reversal_type: Тип разворота ("v_down" или "v_up")
+            regime: Режим рынка
+            price_change: Процент изменения цены
+            max_price: Максимальная цена (для v_down)
+            min_price: Минимальная цена (для v_up)
+        """
+        reversal = {
+            "symbol": symbol,
+            "reversal_type": reversal_type,
+            "regime": regime.lower(),
+            "price_change": price_change,
+            "max_price": max_price,
+            "min_price": min_price,
+            "timestamp": datetime.now(),
+        }
+        self.reversals.append(reversal)
+
+        # Очищаем старые развороты
+        cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
+        self.reversals = [r for r in self.reversals if r["timestamp"] >= cutoff_time]
+
+    def get_reversal_stats(
+        self, regime: Optional[str] = None, symbol: Optional[str] = None
+    ) -> Dict[str, any]:
+        """
+        ✅ НОВОЕ: Получить статистику разворотов
+
+        Args:
+            regime: Режим рынка (опционально)
+            symbol: Торговая пара (опционально)
+
+        Returns:
+            Словарь со статистикой разворотов
+        """
+        if not self.reversals:
+            return {
+                "total_reversals": 0,
+                "v_down_count": 0,
+                "v_up_count": 0,
+                "avg_price_change": 0.0,
+            }
+
+        # Фильтруем по символу и режиму
+        filtered_reversals = self.reversals
+        if symbol:
+            filtered_reversals = [
+                r for r in filtered_reversals if r["symbol"] == symbol
+            ]
+        if regime:
+            filtered_reversals = [
+                r
+                for r in filtered_reversals
+                if r["regime"].lower() == regime.lower()
+            ]
+
+        if not filtered_reversals:
+            return {
+                "total_reversals": 0,
+                "v_down_count": 0,
+                "v_up_count": 0,
+                "avg_price_change": 0.0,
+            }
+
+        v_down_count = sum(
+            1 for r in filtered_reversals if r["reversal_type"] == "v_down"
+        )
+        v_up_count = sum(
+            1 for r in filtered_reversals if r["reversal_type"] == "v_up"
+        )
+        avg_price_change = (
+            sum(r["price_change"] for r in filtered_reversals)
+            / len(filtered_reversals)
+            if filtered_reversals
+            else 0.0
+        )
+
+        return {
+            "total_reversals": len(filtered_reversals),
+            "v_down_count": v_down_count,
+            "v_up_count": v_up_count,
+            "avg_price_change": avg_price_change,
+        }
 
     def get_win_rate(
         self, regime: Optional[str] = None, symbol: Optional[str] = None

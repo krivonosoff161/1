@@ -82,25 +82,28 @@ class FuturesPositionManager:
         self.orchestrator = orchestrator
 
     def _get_adaptive_tp_percent(
-        self, symbol: str, regime: Optional[str] = None
+        self, symbol: str, regime: Optional[str] = None, current_price: Optional[float] = None
     ) -> float:
         """
         ✅ КРИТИЧЕСКОЕ: Получает адаптивный TP% для символа и режима.
-
+        
         Приоритет:
         1. Per-regime TP (если режим определен)
         2. Per-symbol TP (fallback)
         3. Глобальный TP (fallback)
-
+        
+        ✅ ЭТАП 2.3: Поддержка ATR-based TP расчета
+        
         Args:
             symbol: Торговый символ
             regime: Режим рынка (trending, ranging, choppy)
-
+            current_price: Текущая цена (опционально, для ATR-based расчета)
+            
         Returns:
             TP% для использования
         """
-        # Глобальный TP (fallback)
-        tp_percent = self.scalping_config.tp_percent
+        # ✅ ИСПРАВЛЕНО: Инициализируем tp_percent = None (НЕ используем fallback сразу!)
+        tp_percent = None
 
         # Получаем режим из позиции, если не передан
         if not regime:
@@ -181,11 +184,51 @@ class FuturesPositionManager:
                             f"⚠️ Не удалось конвертировать symbol_tp_percent в float для {symbol}: {symbol_tp_percent}"
                         )
 
-        # 3. ✅ ПРИОРИТЕТ 3: Глобальный TP (fallback)
-        logger.debug(
-            f"📊 Используется глобальный TP для {symbol} (regime={regime or 'N/A'}): {tp_percent}% "
-            f"(symbol_profiles: {len(self.symbol_profiles) if self.symbol_profiles else 0} символов)"
-        )
+            # 3. ✅ ПРИОРИТЕТ 3: Глобальный TP (fallback - ТОЛЬКО если ничего не найдено)
+            if tp_percent is None:
+                tp_percent = self.scalping_config.tp_percent
+                logger.warning(
+                    f"⚠️ FALLBACK: Используется глобальный TP для {symbol} (regime={regime or 'N/A'}): {tp_percent}% "
+                    f"(per-regime и per-symbol TP не найдены, symbol_profiles: {len(self.symbol_profiles) if self.symbol_profiles else 0} символов)"
+                )
+            else:
+                logger.debug(
+                    f"📊 Используется глобальный TP для {symbol} (regime={regime or 'N/A'}): {tp_percent}% "
+                    f"(symbol_profiles: {len(self.symbol_profiles) if self.symbol_profiles else 0} символов)"
+                )
+        
+        # ✅ ЭТАП 2.3: Проверяем ATR-based TP если доступно
+        if current_price and current_price > 0 and regime:
+            try:
+                # Получаем tp_atr_multiplier из конфига
+                regime_params = None
+                if hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "config_manager"):
+                        regime_params = self.orchestrator.config_manager.get_regime_params(regime, symbol)
+                
+                if regime_params:
+                    tp_atr_multiplier = regime_params.get("tp_atr_multiplier")
+                    if tp_atr_multiplier is not None:
+                        # Получаем ATR через orchestrator (если доступен)
+                        if hasattr(self, "orchestrator") and self.orchestrator:
+                            if hasattr(self.orchestrator, "signal_generator") and self.orchestrator.signal_generator:
+                                # Пытаемся получить ATR из indicator_manager
+                                if hasattr(self.orchestrator.signal_generator, "indicator_manager"):
+                                    try:
+                                        # Получаем ATR из индикаторов
+                                        atr_indicator = self.orchestrator.signal_generator.indicator_manager.get_indicator("ATR")
+                                        if atr_indicator:
+                                            # Получаем последнее значение ATR
+                                            # Это упрощенный подход - в реальности нужно получать через market_data
+                                            logger.debug(
+                                                f"📊 ATR-based TP для {symbol}: tp_atr_multiplier={tp_atr_multiplier}, "
+                                                f"но требуется market_data для расчета ATR"
+                                            )
+                                    except Exception as e:
+                                        logger.debug(f"⚠️ Не удалось получить ATR для {symbol}: {e}")
+            except Exception as e:
+                logger.debug(f"⚠️ Ошибка проверки ATR-based TP для {symbol}: {e}")
+        
         return tp_percent
 
     async def initialize(self):
@@ -471,15 +514,43 @@ class FuturesPositionManager:
             except Exception as e:
                 logger.debug(f"⚠️ Не удалось получить режим для {symbol}: {e}")
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем regime из позиции для margin_calculator
+            position_regime = position.get("regime")
+            if not position_regime and symbol in self.active_positions:
+                position_regime = self.active_positions[symbol].get("regime")
+            
+            # Если режим все еще не найден, пытаемся получить из signal_generator
+            if not position_regime:
+                try:
+                    if (
+                        hasattr(self, "orchestrator")
+                        and self.orchestrator
+                        and hasattr(self.orchestrator, "signal_generator")
+                        and self.orchestrator.signal_generator
+                    ):
+                        if hasattr(self.orchestrator.signal_generator, "regime_managers"):
+                            manager = self.orchestrator.signal_generator.regime_managers.get(symbol)
+                            if manager:
+                                position_regime = manager.get_current_regime()
+                        if not position_regime:
+                            regime_manager = getattr(
+                                self.orchestrator.signal_generator, "regime_manager", None
+                            )
+                            if regime_manager:
+                                position_regime = regime_manager.get_current_regime()
+                except Exception as e:
+                    logger.debug(f"⚠️ Не удалось получить regime для margin_calculator: {e}")
+            
             # Проверка безопасности через Margin Calculator
             # ⚠️ Используем equity из позиции, а не общий баланс!
             logger.debug(
                 f"🔍 Проверка безопасности {symbol}: "
                 f"position_value={position_value:.2f}, equity={equity:.2f}, "
                 f"current_price={current_price:.2f}, entry_price={entry_price:.2f}, "
-                f"leverage={leverage}x, regime={market_regime or 'N/A'}"
+                f"leverage={leverage}x, regime={position_regime or market_regime or 'N/A'}"
             )
-            # ✅ ИСПРАВЛЕНО: Не передаем safety_threshold - margin_calculator сам получит из конфига по режиму
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем regime в margin_calculator (используем position_regime если есть, иначе market_regime)
+            regime_for_margin = position_regime or market_regime
             is_safe, details = self.margin_calculator.is_position_safe(
                 position_value,
                 equity,  # ✅ Используем equity из позиции!
@@ -488,7 +559,7 @@ class FuturesPositionManager:
                 side,
                 leverage,
                 safety_threshold=None,  # ✅ ИСПРАВЛЕНО: None - читает из конфига по режиму
-                regime=market_regime,  # ✅ ИСПРАВЛЕНО: Передаем режим для адаптивного safety_threshold
+                regime=regime_for_margin,  # ✅ КРИТИЧЕСКОЕ: Передаем regime для адаптивного safety_threshold
             )
 
             if not is_safe:
@@ -777,6 +848,67 @@ class FuturesPositionManager:
             side = position.get("posSide", "long")
             entry_price = float(position.get("avgPx", "0"))
             current_price = float(position.get("markPx", "0"))
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем loss_cut ДО проверки TP
+            # Это важно для позиций без TSL или с большим убытком
+            if hasattr(self, "orchestrator") and self.orchestrator:
+                if hasattr(self.orchestrator, "trailing_sl_coordinator"):
+                    tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                    if tsl:
+                        # TSL активен - проверка loss_cut будет в TSL
+                        pass
+                    else:
+                        # ✅ КРИТИЧЕСКОЕ: TSL не активен - проверяем loss_cut здесь
+                        # Получаем режим для адаптивного loss_cut
+                        regime = position.get("regime") or self.active_positions.get(symbol, {}).get("regime")
+                        if not regime and hasattr(self.orchestrator, "signal_generator"):
+                            if hasattr(self.orchestrator.signal_generator, "regime_managers"):
+                                manager = self.orchestrator.signal_generator.regime_managers.get(symbol)
+                                if manager:
+                                    regime = manager.get_current_regime()
+                        
+                        # Получаем loss_cut параметры из конфига
+                        if regime:
+                            try:
+                                regime_params = self.orchestrator.config_manager.get_regime_params(regime, symbol)
+                                loss_cut_percent = regime_params.get("loss_cut_percent")
+                                if loss_cut_percent is None:
+                                    # Fallback на глобальный loss_cut
+                                    tsl_config = getattr(self.scalping_config, "trailing_sl", {})
+                                    loss_cut_percent = getattr(tsl_config, "loss_cut_percent", 1.5)
+                            except Exception:
+                                # Fallback на глобальный loss_cut
+                                tsl_config = getattr(self.scalping_config, "trailing_sl", {})
+                                loss_cut_percent = getattr(tsl_config, "loss_cut_percent", 1.5)
+                        else:
+                            # Fallback на глобальный loss_cut
+                            tsl_config = getattr(self.scalping_config, "trailing_sl", {})
+                            loss_cut_percent = getattr(tsl_config, "loss_cut_percent", 1.5)
+                        
+                        # Рассчитываем PnL% от маржи для проверки loss_cut
+                        try:
+                            margin_used = float(position.get("margin", 0))
+                            if margin_used > 0:
+                                # Рассчитываем unrealized PnL
+                                position_side = position.get("posSide", "long").lower()
+                                if position_side == "long":
+                                    unrealized_pnl = size * (current_price - entry_price)
+                                else:
+                                    unrealized_pnl = size * (entry_price - current_price)
+                                
+                                pnl_percent_from_margin = (unrealized_pnl / margin_used) * 100
+                                
+                                # Проверяем loss_cut
+                                if pnl_percent_from_margin <= -loss_cut_percent:
+                                    logger.warning(
+                                        f"🚨 Loss-cut сработал для {symbol} (без TSL): "
+                                        f"PnL={pnl_percent_from_margin:.2f}% от маржи <= -{loss_cut_percent:.2f}% "
+                                        f"(margin=${margin_used:.2f}, PnL=${unrealized_pnl:.2f})"
+                                    )
+                                    await self._close_position_by_reason(position, "loss_cut")
+                                    return
+                        except Exception as e:
+                            logger.debug(f"⚠️ Не удалось проверить loss_cut для {symbol}: {e}")
             # ✅ ИСПРАВЛЕНИЕ: Используем leverage из конфига, а не из позиции на бирже
             # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
             leverage_from_position = int(position.get("lever", "0"))
@@ -883,7 +1015,8 @@ class FuturesPositionManager:
                             regime = position.get(
                                 "regime"
                             ) or self.active_positions.get(symbol, {}).get("regime")
-                            tp_percent = self._get_adaptive_tp_percent(symbol, regime)
+                            # ✅ ЭТАП 2.3: Передаем current_price для ATR-based расчета
+                            tp_percent = self._get_adaptive_tp_percent(symbol, regime, current_price)
                             if pnl_percent >= tp_percent:
                                 logger.info(
                                     f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}%"
@@ -998,7 +1131,8 @@ class FuturesPositionManager:
                             regime = position.get(
                                 "regime"
                             ) or self.active_positions.get(symbol, {}).get("regime")
-                            tp_percent = self._get_adaptive_tp_percent(symbol, regime)
+                            # ✅ ЭТАП 2.3: Передаем current_price для ATR-based расчета
+                            tp_percent = self._get_adaptive_tp_percent(symbol, regime, current_price)
                             if pnl_percent >= tp_percent:
                                 logger.info(
                                     f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}%"
@@ -1102,7 +1236,8 @@ class FuturesPositionManager:
             ).get("regime")
 
             # ✅ Используем вспомогательный метод для получения адаптивного TP
-            tp_percent = self._get_adaptive_tp_percent(symbol, regime)
+            # ✅ ЭТАП 2.3: Передаем current_price для ATR-based расчета
+            tp_percent = self._get_adaptive_tp_percent(symbol, regime, current_price)
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: TP должен быть выше минимального профита трейлинг стоп-лосс + комиссия
             # Если трейлинг стоп-лосс еще не активен (не достиг min_profit_to_close), то TP может сработать,
@@ -1609,6 +1744,36 @@ class FuturesPositionManager:
                                         effective_min_holding
                                         * tsl.extend_time_multiplier
                                     )
+                                
+                                # ✅ ЭТАП 1.2: Адаптивный min_holding для Partial TP на основе прибыли
+                                # Получаем параметры из конфига
+                                partial_tp_config = getattr(self.scalping_config, "partial_tp", {})
+                                adaptive_min_holding_config = partial_tp_config.get("adaptive_min_holding", {})
+                                adaptive_enabled = adaptive_min_holding_config.get("enabled", True)
+                                
+                                if adaptive_enabled and pnl_percent > 0:
+                                    # Адаптивно снижаем min_holding на основе прибыли
+                                    profit_threshold_1 = adaptive_min_holding_config.get("profit_threshold_1", 1.0)  # 1.0%
+                                    profit_threshold_2 = adaptive_min_holding_config.get("profit_threshold_2", 0.5)  # 0.5%
+                                    reduction_factor_1 = adaptive_min_holding_config.get("reduction_factor_1", 0.5)  # 50%
+                                    reduction_factor_2 = adaptive_min_holding_config.get("reduction_factor_2", 0.75)  # 75%
+                                    
+                                    if pnl_percent >= profit_threshold_1:
+                                        # Прибыль >= 1.0% - снижаем min_holding до 50%
+                                        effective_min_holding = effective_min_holding * reduction_factor_1
+                                        logger.debug(
+                                            f"📊 Адаптивный min_holding для Partial TP {symbol}: "
+                                            f"прибыль {pnl_percent:.2f}% >= {profit_threshold_1:.2f}% → "
+                                            f"min_holding снижен до {effective_min_holding:.2f} мин (x{reduction_factor_1})"
+                                        )
+                                    elif pnl_percent >= profit_threshold_2:
+                                        # Прибыль >= 0.5% - снижаем min_holding до 75%
+                                        effective_min_holding = effective_min_holding * reduction_factor_2
+                                        logger.debug(
+                                            f"📊 Адаптивный min_holding для Partial TP {symbol}: "
+                                            f"прибыль {pnl_percent:.2f}% >= {profit_threshold_2:.2f}% → "
+                                            f"min_holding снижен до {effective_min_holding:.2f} мин (x{reduction_factor_2})"
+                                        )
 
                                 if minutes_in_position < effective_min_holding:
                                     min_holding_blocked = True

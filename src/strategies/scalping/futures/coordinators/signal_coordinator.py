@@ -1670,7 +1670,7 @@ class SignalCoordinator:
                         side=position_side_for_storage,
                         entry_price=real_entry_price,
                         size=position_size,
-                        order_id=order_id,
+                        regime=regime,
                     )
 
                 return True

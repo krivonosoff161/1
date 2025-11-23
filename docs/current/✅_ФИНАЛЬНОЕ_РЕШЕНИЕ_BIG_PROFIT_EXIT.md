@@ -151,3 +151,4 @@ big_profit_exit_percent_alts: 2.0     # SOL/DOGE/XRP (увеличено в 3.33
 
 **Статус:** ✅ ГОТОВО К ТЕСТИРОВАНИЮ
 
+

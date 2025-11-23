@@ -61,6 +61,7 @@ class LiquidityFilter:
         regime: Optional[str] = None,
         relax_multiplier: float = 1.0,
         thresholds_override: Optional[Dict[str, float]] = None,
+        signal_side: Optional[str] = None,  # ✅ НОВОЕ: Направление сигнала ("buy"/"sell" или "long"/"short")
     ) -> Tuple[bool, Optional[LiquiditySnapshot]]:
         if not self.config.enabled:
             return True, None
@@ -118,19 +119,36 @@ class LiquidityFilter:
             self._register_block(symbol)
             return False, snapshot
 
-        if snapshot.best_bid_volume_usd < thresholds["min_best_bid_volume_usd"]:
-            logger.info(
-                f"⛔ LiquidityFilter: {symbol} отклонён — объём на лучшем bid {snapshot.best_bid_volume_usd:,.0f} < {thresholds['min_best_bid_volume_usd']:,.0f} (regime={regime_label})"
-            )
-            self._register_block(symbol)
-            return False, snapshot
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем объемы в зависимости от направления сигнала
+        # Для LONG (buy): нужен объем на bid (чтобы купить)
+        # Для SHORT (sell): нужен объем на ask (чтобы продать)
+        signal_side_normalized = None
+        if signal_side:
+            signal_side_normalized = signal_side.lower()
+            if signal_side_normalized in ["buy", "long"]:
+                signal_side_normalized = "buy"
+            elif signal_side_normalized in ["sell", "short"]:
+                signal_side_normalized = "sell"
+        
+        # Проверяем bid volume только для LONG сигналов
+        if signal_side_normalized != "sell":  # Для LONG или если направление не указано (обратная совместимость)
+            if snapshot.best_bid_volume_usd < thresholds["min_best_bid_volume_usd"]:
+                logger.info(
+                    f"⛔ LiquidityFilter: {symbol} отклонён — объём на лучшем bid {snapshot.best_bid_volume_usd:,.0f} < {thresholds['min_best_bid_volume_usd']:,.0f} "
+                    f"(regime={regime_label}, side={'LONG' if signal_side_normalized == 'buy' else 'unknown'})"
+                )
+                self._register_block(symbol)
+                return False, snapshot
 
-        if snapshot.best_ask_volume_usd < thresholds["min_best_ask_volume_usd"]:
-            logger.info(
-                f"⛔ LiquidityFilter: {symbol} отклонён — объём на лучшем ask {snapshot.best_ask_volume_usd:,.0f} < {thresholds['min_best_ask_volume_usd']:,.0f} (regime={regime_label})"
-            )
-            self._register_block(symbol)
-            return False, snapshot
+        # Проверяем ask volume только для SHORT сигналов
+        if signal_side_normalized != "buy":  # Для SHORT или если направление не указано (обратная совместимость)
+            if snapshot.best_ask_volume_usd < thresholds["min_best_ask_volume_usd"]:
+                logger.info(
+                    f"⛔ LiquidityFilter: {symbol} отклонён — объём на лучшем ask {snapshot.best_ask_volume_usd:,.0f} < {thresholds['min_best_ask_volume_usd']:,.0f} "
+                    f"(regime={regime_label}, side={'SHORT' if signal_side_normalized == 'sell' else 'unknown'})"
+                )
+                self._register_block(symbol)
+                return False, snapshot
 
         if (
             snapshot.depth_bid_usd < thresholds["min_orderbook_depth_usd"]
@@ -200,6 +218,37 @@ class LiquidityFilter:
             depth_ask_usd = sum(
                 float(price) * float(size) for price, size, *_ in orderbook["asks"]
             )
+            
+            # ✅ ЭТАП 1.3: Fallback на 24h volume для XRP-USDT если orderbook volume = 0
+            best_bid_volume_usd = best_bid_price * best_bid_size
+            best_ask_volume_usd = best_ask_price * best_ask_size
+            
+            # Получаем параметры fallback из конфига
+            fallback_config = getattr(self.config, "volume_fallback", {})
+            fallback_enabled = fallback_config.get("enabled", True)
+            fallback_symbols = fallback_config.get("symbols", ["XRP-USDT"])
+            fallback_percent = fallback_config.get("fallback_percent", 0.001)  # 0.1% от дневного объема
+            
+            if (
+                fallback_enabled
+                and symbol in fallback_symbols
+                and (best_bid_volume_usd == 0 or best_ask_volume_usd == 0)
+                and daily_volume_usd > 0
+            ):
+                # Используем 24h volume как fallback
+                fallback_volume_usd = daily_volume_usd * fallback_percent
+                if best_bid_volume_usd == 0:
+                    best_bid_volume_usd = fallback_volume_usd
+                    logger.debug(
+                        f"📊 LiquidityFilter fallback для {symbol}: best_bid_volume_usd = 0, "
+                        f"используем {fallback_percent:.3%} от 24h volume = {fallback_volume_usd:.2f} USD"
+                    )
+                if best_ask_volume_usd == 0:
+                    best_ask_volume_usd = fallback_volume_usd
+                    logger.debug(
+                        f"📊 LiquidityFilter fallback для {symbol}: best_ask_volume_usd = 0, "
+                        f"используем {fallback_percent:.3%} от 24h volume = {fallback_volume_usd:.2f} USD"
+                    )
 
             snapshot = LiquiditySnapshot(
                 symbol=symbol,
@@ -207,8 +256,8 @@ class LiquidityFilter:
                 daily_volume_usd=daily_volume_usd,
                 best_bid_price=best_bid_price,
                 best_ask_price=best_ask_price,
-                best_bid_volume_usd=best_bid_price * best_bid_size,
-                best_ask_volume_usd=best_ask_price * best_ask_size,
+                best_bid_volume_usd=best_bid_volume_usd,
+                best_ask_volume_usd=best_ask_volume_usd,
                 depth_bid_usd=depth_bid_usd,
                 depth_ask_usd=depth_ask_usd,
                 timestamp=time.time(),

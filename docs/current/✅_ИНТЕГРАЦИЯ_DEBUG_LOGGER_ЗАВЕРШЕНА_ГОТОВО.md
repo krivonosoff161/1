@@ -216,3 +216,4 @@ logs/futures/debug/debug_YYYYMMDD_HHMMSS.csv
 
 **Всё готово! Запускай бота и смотри CSV!** 🚀
 
+

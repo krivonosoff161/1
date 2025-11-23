@@ -57,6 +57,13 @@ scalping:
     trigger_percent: 0.4     # 0.4% (по умолчанию, переопределяется по режимам)
     post_only: true
     limit_offset_bps: 7.0    # 0.07% от текущей цены для ускорения исполнения maker
+    # ✅ ЭТАП 1.2: Адаптивный min_holding для Partial TP на основе прибыли
+    adaptive_min_holding:
+      enabled: true          # Включить адаптивный min_holding
+      profit_threshold_1: 1.0  # Прибыль >= 1.0% → снижаем min_holding до 50%
+      profit_threshold_2: 0.5  # Прибыль >= 0.5% → снижаем min_holding до 75%
+      reduction_factor_1: 0.5  # Коэффициент снижения для threshold_1 (50%)
+      reduction_factor_2: 0.75 # Коэффициент снижения для threshold_2 (75%)
     # ✅ ОПТИМИЗАЦИЯ #5: Адаптивные параметры по режимам
     by_regime:
       trending:
@@ -144,12 +151,12 @@ scalping:
       threshold: 1500.0
       min_balance: 500.0
       size_at_min: 50.0
-      size_at_max: 150.0  # ✅ ОПТИМИЗАЦИЯ #1: Снижено с 250 до 150 для соответствия max_position_usd
+      size_at_max: 200.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 150 до 200 (+33%) для активного использования баланса
       base_position_usd: 100.0  # Для обратной совместимости
       min_position_usd: 50.0
-      max_position_usd: 150.0  # ✅ КРИТИЧЕСКОЕ #1: Снижено с 500 до 150 (соответствует max_position_percent 18% при балансе $833, разброс 3x вместо 10x)
+      max_position_usd: 250.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 200 до 250 (+25%) для активного использования баланса
       max_open_positions: 5
-      max_position_percent: 18.0  # ✅ PHASE 1: Увеличено с 15 до 18 (+20%)
+      max_position_percent: 25.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 18 до 25 (+39%) для активного использования баланса
       progressive: true  # ✅ ВАРИАНТ B: Прогрессивная адаптация
     medium:  # $1500 - $3000
       threshold: 3000.0
@@ -185,9 +192,9 @@ scalping:
       lookback_candles: 50  # Меньше свечей для Futures (быстрее)
       adx_period: 9  # Быстрый ADX для Futures
     
-    # Trending режим (тренд) - КАЧЕСТВЕННАЯ ТОРГОВЛЯ
+    # Trending режим (тренд) - ОПТИМИЗИРОВАНО ДЛЯ АКТИВНОЙ ТОРГОВЛИ
     trending:
-      min_score_threshold: 3.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 2.5 до 3.0 (+20%) - строже фильтрация для повышения win rate
+      min_score_threshold: 1.6  # ✅ ОПТИМИЗИРОВАНО: Снижено с 3.0 до 1.6 (-47%) для активной торговли и сбора статистики
       max_trades_per_hour: 25  # Увеличиваем лимит сделок в тренде
       position_size_multiplier: 1.1
       tp_atr_multiplier: 1.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.6 до 1.0 (+67%) - больше прибыль на сделку
@@ -244,7 +251,7 @@ scalping:
     
     # Ranging режим (флэт) - КАЧЕСТВЕННАЯ ТОРГОВЛЯ
     ranging:
-      min_score_threshold: 2.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 1.5 до 2.0 (+33%) - строже фильтрация для повышения win rate
+      min_score_threshold: 1.6  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.0 до 1.6 (-20%) для активной торговли и сбора статистики
       max_trades_per_hour: 15  # Больше сделок в боковике
       position_size_multiplier: 1.0
       tp_atr_multiplier: 0.8  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.5 до 0.8 (+60%) - больше прибыль на сделку
@@ -270,7 +277,7 @@ scalping:
         ema_slow: 25
         atr_period: 14
         min_volatility_atr: 0.0003
-        min_ma_difference_pct: 0.03  # ✅ ИЗМЕНЕНО: Увеличено с 0.02% до 0.03% для ranging (меньше слабых сигналов) (ИЗМЕНЕНО 22.11.2025)
+        min_ma_difference_pct: 0.02  # ✅ ОПТИМИЗИРОВАНО: Снижено с 0.03% до 0.02% (-33%) для ranging (адаптивно)
       
       modules:
         multi_timeframe:
@@ -299,7 +306,7 @@ scalping:
     
     # Choppy режим (хаос) - КАЧЕСТВЕННАЯ ТОРГОВЛЯ
     choppy:
-      min_score_threshold: 2.5  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Снижено с 3.0 до 2.5 (-17%, но все еще строже чем было 2.0) - баланс между качеством и возможностями
+      min_score_threshold: 1.8  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.5 до 1.8 (-28%) для активной торговли и сбора статистики
       max_trades_per_hour: 6  # Больше сделок даже в хаосе
       position_size_multiplier: 0.8
       tp_atr_multiplier: 0.9  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.3 до 0.9 (+200%) - больше прибыль на сделку
@@ -365,7 +372,7 @@ scalping:
             min_breakout_percent: 0.003
             max_wick_ratio: 0.35
           arm:
-            min_score_threshold: 2.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 1.6 до 2.0 (+25%) - строже фильтрация
+            min_score_threshold: 2.2  # ✅ ОПТИМИЗИРОВАНО: Снижено с 3.0 до 2.2 (-27%) для BTC-USDT trending (адаптивно)
             position_size_multiplier: 1.2
             tp_atr_multiplier: 1.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.65 до 1.0 (+54%) - больше прибыль на сделку
             sl_atr_multiplier: 0.5  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.45 до 0.5 (+11%) - больше места для откатов
@@ -406,7 +413,7 @@ scalping:
             min_breakout_percent: 0.003
             max_wick_ratio: 0.35
           arm:
-            min_score_threshold: 2.5  # ✅ ИЗМЕНЕНО: Увеличено с 1.8 до 2.5 (+39%) - строже фильтрация (ИЗМЕНЕНО 22.11.2025)
+            min_score_threshold: 2.0  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.5 до 2.0 (-20%) для BTC-USDT ranging (адаптивно)
             position_size_multiplier: 1.05
             tp_atr_multiplier: 0.8  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.55 до 0.8 (+45%) - больше прибыль на сделку
             sl_atr_multiplier: 0.45  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.35 до 0.45 (+29%) - больше места для откатов
@@ -450,7 +457,7 @@ scalping:
           tp_percent: 4.0  # ✅ ЗАДАЧА #5: Увеличено с 3.2% до 4.0% (+25%) для BTC/ETH/SOL - больше места для прибыли в хаосе
           big_profit_exit_percent: 1.5  # ✅ НОВОЕ: 1.5% для BTC в choppy (быстрее фиксировать в хаосе)
           arm:
-            min_score_threshold: 2.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 1.6 до 2.0 (+25%) - строже фильтрация
+            min_score_threshold: 1.6  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.0 до 1.6 (-20%) для BTC-USDT choppy (адаптивно)
             position_size_multiplier: 0.90
             tp_atr_multiplier: 0.6  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.40 до 0.6 (+50%) - больше прибыль на сделку
             sl_atr_multiplier: 0.4  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.30 до 0.4 (+33%) - больше места для откатов
@@ -488,7 +495,7 @@ scalping:
             min_breakout_percent: 0.003
             max_wick_ratio: 0.35
           arm:
-            min_score_threshold: 2.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 1.6 до 2.0 (+25%) - строже фильтрация
+            min_score_threshold: 1.6  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.0 до 1.6 (-20%) для ETH-USDT trending (адаптивно)
             position_size_multiplier: 1.15
             tp_atr_multiplier: 1.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.60 до 1.0 (+67%) - больше прибыль на сделку
             sl_atr_multiplier: 0.5  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.40 до 0.5 (+25%) - больше места для откатов
@@ -567,7 +574,7 @@ scalping:
           tp_percent: 4.0  # ✅ ЗАДАЧА #5: Увеличено с 3.2% до 4.0% (+25%) для BTC/ETH/SOL - больше места для прибыли в хаосе
           big_profit_exit_percent: 1.5  # ✅ НОВОЕ: 1.5% для ETH в choppy (быстрее фиксировать в хаосе)
           arm:
-            min_score_threshold: 2.2  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 1.7 до 2.2 (+29%) - строже фильтрация
+            min_score_threshold: 1.7  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.2 до 1.7 (-23%) для ETH-USDT choppy (адаптивно)
             position_size_multiplier: 0.85
             tp_atr_multiplier: 0.6  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.35 до 0.6 (+71%) - больше прибыль на сделку
             sl_atr_multiplier: 0.4  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Увеличено с 0.28 до 0.4 (+43%) - больше места для откатов
@@ -602,7 +609,7 @@ scalping:
           indicators:
             min_ma_difference_pct: 0.09   # для тренда оставляем близко к базовому
           arm:
-            min_score_threshold: 1.5  # ✅ ГИБРИДНЫЙ ПОДХОД: Увеличено с 1.3 до 1.5 (+15%) - улучшение фильтров
+            min_score_threshold: 1.3  # ✅ ОПТИМИЗИРОВАНО: Снижено с 1.5 до 1.3 (-13%) для SOL-USDT trending (адаптивно)
             position_size_multiplier: 1.1
             tp_atr_multiplier: 0.55
             sl_atr_multiplier: 0.35
@@ -632,9 +639,9 @@ scalping:
           tp_percent: 3.5  # ✅ ЗАДАЧА #5: Увеличено с 3.25% до 3.5% (+8%) для BTC/ETH/SOL - больше места для прибыли в боковике
           big_profit_exit_percent: 2.5  # ✅ ИЗМЕНЕНО: 2.5% для SOL в ranging (было 2.5%, оставляем) (ИЗМЕНЕНО 22.11.2025)
           indicators:
-            min_ma_difference_pct: 0.03  # ✅ ИЗМЕНЕНО: Увеличено с 0.02% до 0.03% для ranging (меньше слабых сигналов) (ИЗМЕНЕНО 22.11.2025)
+            min_ma_difference_pct: 0.02  # ✅ ОПТИМИЗИРОВАНО: Снижено с 0.03% до 0.02% (-33%) для SOL-USDT ranging (адаптивно)
           arm:
-            min_score_threshold: 2.5  # ✅ ИЗМЕНЕНО: Увеличено с 1.0 до 2.5 (+150%) - строже фильтрация (ИЗМЕНЕНО 22.11.2025)
+            min_score_threshold: 1.7  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.5 до 1.7 (-32%) для SOL-USDT ranging (адаптивно)
             position_size_multiplier: 1.0
             tp_atr_multiplier: 0.45
             sl_atr_multiplier: 0.30
@@ -707,7 +714,7 @@ scalping:
           indicators:
             min_ma_difference_pct: 0.09
           arm:
-            min_score_threshold: 1.4  # ✅ ГИБРИДНЫЙ ПОДХОД: Увеличено с 1.2 до 1.4 (+17%) - улучшение фильтров
+            min_score_threshold: 1.2  # ✅ ОПТИМИЗИРОВАНО: Снижено с 1.4 до 1.2 (-14%) для DOGE-USDT trending (адаптивно)
             position_size_multiplier: 1.05
             tp_atr_multiplier: 0.52
             sl_atr_multiplier: 0.32
@@ -743,9 +750,9 @@ scalping:
           tp_percent: 4.0  # ✅ ЗАДАЧА #5: Увеличено с 3.25% до 4.0% (+23%) для DOGE - больше места для прибыли в боковике
           big_profit_exit_percent: 2.5  # ✅ НОВОЕ: 2.5% для DOGE в ranging (альты = немного выше)
           indicators:
-            min_ma_difference_pct: 0.03  # ✅ ИЗМЕНЕНО: Увеличено с 0.02% до 0.03% для ranging (меньше слабых сигналов) (ИЗМЕНЕНО 22.11.2025)
+            min_ma_difference_pct: 0.02  # ✅ ОПТИМИЗИРОВАНО: Снижено с 0.03% до 0.02% (-33%) для SOL-USDT ranging (адаптивно)
           arm:
-            min_score_threshold: 2.5  # ✅ ИЗМЕНЕНО: Увеличено с 1.0 до 2.5 (+150%) - строже фильтрация (ИЗМЕНЕНО 22.11.2025)
+            min_score_threshold: 1.6  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.5 до 1.6 (-36%) для DOGE-USDT ranging (адаптивно)
             position_size_multiplier: 1.0
             tp_atr_multiplier: 0.42
             sl_atr_multiplier: 0.28
@@ -831,7 +838,7 @@ scalping:
           indicators:
             min_ma_difference_pct: 0.09
           arm:
-            min_score_threshold: 1.4  # ✅ ГИБРИДНЫЙ ПОДХОД: Увеличено с 1.2 до 1.4 (+17%) - улучшение фильтров
+            min_score_threshold: 1.2  # ✅ ОПТИМИЗИРОВАНО: Снижено с 1.4 до 1.2 (-14%) для XRP-USDT trending (адаптивно)
             position_size_multiplier: 1.05
             tp_atr_multiplier: 0.50
             sl_atr_multiplier: 0.32
@@ -867,9 +874,9 @@ scalping:
           tp_percent: 4.0  # ✅ ЗАДАЧА #5: Увеличено с 3.25% до 4.0% (+23%) для XRP - больше места для прибыли в боковике
           big_profit_exit_percent: 2.5  # ✅ НОВОЕ: 2.5% для XRP в ranging (альты = немного выше)
           indicators:
-            min_ma_difference_pct: 0.03  # ✅ ИЗМЕНЕНО: Увеличено с 0.02% до 0.03% для ranging (меньше слабых сигналов) (ИЗМЕНЕНО 22.11.2025)
+            min_ma_difference_pct: 0.02  # ✅ ОПТИМИЗИРОВАНО: Снижено с 0.03% до 0.02% (-33%) для SOL-USDT ranging (адаптивно)
           arm:
-            min_score_threshold: 2.5  # ✅ ИЗМЕНЕНО: Увеличено с 1.0 до 2.5 (+150%) - строже фильтрация (ИЗМЕНЕНО 22.11.2025)
+            min_score_threshold: 1.5  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.5 до 1.5 (-40%) для XRP-USDT ranging (адаптивно)
             position_size_multiplier: 1.0
             tp_atr_multiplier: 0.40
             sl_atr_multiplier: 0.26
@@ -952,6 +959,80 @@ scalping:
   enable_bollinger_filter: true
   enable_ma_filter: true
   
+  # ✅ Order Executor - Лимитные ордера (ПЕРЕМЕЩЕНО из futures_modules)
+  order_executor:
+    limit_order:
+      # ✅ АДАПТИВНО: Базовые параметры
+      limit_offset_percent: 0.05  # ✅ АДАПТИВНО: Базовый offset 0.05% (для быстрого исполнения)
+      max_wait_seconds: 60  # Максимальное время ожидания лимитного ордера (60 сек)
+      auto_cancel_enabled: true  # Автоматическая отмена после таймаута
+      auto_replace_enabled: true  # Автоматическая замена ордера с новой ценой
+      replace_with_market: true  # Заменять на рыночный ордер после таймаута
+      post_only: false  # Гарантирует maker fee (0.02% вместо 0.05%), но может не исполниться сразу
+      
+      # ✅ АДАПТИВНО: Параметры по режимам рынка
+      by_regime:
+        trending:
+          limit_offset_percent: 0.08  # ✅ АДАПТИВНО: 0.08% для trending (быстрее исполнение в тренде)
+          max_wait_seconds: 45  # ✅ АДАПТИВНО: 45 сек (быстрее отмена в тренде)
+          use_market_order: false  # Используем лимитные ордера в тренде
+        ranging:
+          limit_offset_percent: 0.12  #  ИСПРАВЛЕНО: Увеличено с 0.08% до 0.12% (быстрее исполнение, меньше отмен)
+          max_wait_seconds: 120  #  ИСПРАВЛЕНО: Увеличено с 90 до 120 сек (больше времени для ranging)
+          post_only: true  #  ИСПРАВЛЕНО: Maker fee 0.02% вместо taker 0.05% (экономия 0.06% за сделку)
+        choppy:
+          limit_offset_percent: 0.10  # ✅ АДАПТИВНО: 0.10% для choppy (быстрее исполнение в хаосе)
+          max_wait_seconds: 30  # ✅ АДАПТИВНО: 30 сек (быстрее отмена в хаосе)
+          use_market_order: false  # Используем лимитные ордера в хаосе (но с большим offset)
+      
+      # ✅ НОВОЕ: Настройки для каждой пары (приоритет выше, чем by_regime)
+      by_symbol:
+        "BTC-USDT":
+          limit_offset_percent: 0.03  # ✅ Маленький offset для высокой ликвидности BTC
+          by_regime:
+            trending:
+              limit_offset_percent: 0.05  # ✅ В тренде можно чуть больше для гарантии
+            ranging:
+              limit_offset_percent: 0.08   # ✅ В боковике больше для гарантии исполнения
+            choppy:
+              limit_offset_percent: 0.06    # ✅ В хаосе средний offset
+        "ETH-USDT":
+          limit_offset_percent: 0.04  # ✅ Немного больше для ETH
+          by_regime:
+            trending:
+              limit_offset_percent: 0.06
+            ranging:
+              limit_offset_percent: 0.10
+            choppy:
+              limit_offset_percent: 0.08
+        "SOL-USDT":
+          limit_offset_percent: 0.05  # ✅ Средний offset для SOL
+          by_regime:
+            trending:
+              limit_offset_percent: 0.08
+            ranging:
+              limit_offset_percent: 0.12
+            choppy:
+              limit_offset_percent: 0.10
+        "DOGE-USDT":
+          limit_offset_percent: 0.08  # ✅ Больший offset для высокой волатильности DOGE
+          by_regime:
+            trending:
+              limit_offset_percent: 0.10
+            ranging:
+              limit_offset_percent: 0.15
+            choppy:
+              limit_offset_percent: 0.12
+        "XRP-USDT":
+          limit_offset_percent: 0.10  # ✅ Больший offset для низкой ликвидности XRP
+          by_regime:
+            trending:
+              limit_offset_percent: 0.12
+            ranging:
+              limit_offset_percent: 0.18
+            choppy:
+              limit_offset_percent: 0.15
+  
   # RSI параметры (адаптированы для Futures)
   rsi_period: 14
   rsi_oversold: 25  # Более строгие уровни
@@ -1016,13 +1097,13 @@ risk:
       max_margin_safety_percent: 90.0  # 90% безопасности
       min_time_between_orders_seconds: 20  # Быстрее в тренде (20 секунд вместо 30)
       
-      # Strength multipliers для тренда (более агрессивные)
+      # Strength multipliers для тренда (более агрессивные, но уменьшены для прогрессивных профилей)
       strength_multipliers:
         conflict: 0.6  # Конфликт: 60% (было 50%)
-        very_strong: 1.6  # Сильный сигнал: 160% (было 150%)
-        strong: 1.3  # Хороший сигнал: 130% (было 120%)
-        medium: 1.1  # Средний сигнал: 110% (было 100%)
-        weak: 0.9  # Слабый сигнал: 90% (было 80%)
+        very_strong: 1.4  # ✅ ИСПРАВЛЕНО: Сильный сигнал: 140% (было 160%) - для прогрессивных профилей
+        strong: 1.2  # ✅ ИСПРАВЛЕНО: Хороший сигнал: 120% (было 130%) - для прогрессивных профилей
+        medium: 1.05  # ✅ ИСПРАВЛЕНО: Средний сигнал: 105% (было 110%) - для прогрессивных профилей
+        weak: 0.95  # ✅ ИСПРАВЛЕНО: Слабый сигнал: 95% (было 90%) - для прогрессивных профилей
       
       # Пороги силы сигнала для тренда
       strength_thresholds:
@@ -1033,18 +1114,18 @@ risk:
     ranging:
       # Параметры риска для флэта (стандартные)
       max_loss_per_trade_percent: 2.0  # Стандартный риск во флэте (2.0%)
-      max_margin_percent: 85.0  # ✅ PHASE 1: Увеличено с 80 до 85 (+6%)
+      max_margin_percent: 90.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 85 до 90 (+6%) для активного использования баланса
       max_drawdown_percent: 7.0  # ✅ PHASE 1: Увеличено с 5 до 7 (+40%)
       max_margin_safety_percent: 90.0  # 90% безопасности
       min_time_between_orders_seconds: 30  # Стандартная скорость (30 секунд)
       
-      # Strength multipliers для флэта (стандартные)
+      # Strength multipliers для флэта (стандартные, уменьшены для прогрессивных профилей)
       strength_multipliers:
         conflict: 0.5  # Конфликт: 50%
-        very_strong: 1.5  # Сильный сигнал: 150%
-        strong: 1.2  # Хороший сигнал: 120%
+        very_strong: 1.3  # ✅ ИСПРАВЛЕНО: Сильный сигнал: 130% (было 150%) - для прогрессивных профилей
+        strong: 1.1  # ✅ ИСПРАВЛЕНО: Хороший сигнал: 110% (было 120%) - для прогрессивных профилей
         medium: 1.0  # Средний сигнал: 100%
-        weak: 0.8  # Слабый сигнал: 80%
+        weak: 0.9  # ✅ ИСПРАВЛЕНО: Слабый сигнал: 90% (было 80%) - для прогрессивных профилей
       
       # Пороги силы сигнала для флэта
       strength_thresholds:
@@ -1055,18 +1136,18 @@ risk:
     choppy:
       # Параметры риска для хаоса (больше риск, меньше уверенности)
       max_loss_per_trade_percent: 2.5  # Больше риск в хаосе (2.5% вместо 2.0%)
-      max_margin_percent: 80.0  # ✅ PHASE 1: Увеличено с 75 до 80 (+7%)
+      max_margin_percent: 85.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 80 до 85 (+6%) для активного использования баланса
       max_drawdown_percent: 8.0  # ✅ PHASE 1: Увеличено с 6 до 8 (+33%)
       max_margin_safety_percent: 85.0  # 85% безопасности (строже в хаосе)
       min_time_between_orders_seconds: 45  # Медленнее в хаосе (45 секунд вместо 30)
       
-      # Strength multipliers для хаоса (более консервативные)
+      # Strength multipliers для хаоса (более консервативные, уменьшены для прогрессивных профилей)
       strength_multipliers:
         conflict: 0.4  # Конфликт: 40% (меньше риск в хаосе)
-        very_strong: 1.4  # Сильный сигнал: 140% (меньше размер в хаосе)
-        strong: 1.1  # Хороший сигнал: 110% (меньше размер в хаосе)
-        medium: 0.9  # Средний сигнал: 90% (меньше размер в хаосе)
-        weak: 0.7  # Слабый сигнал: 70% (меньше размер в хаосе)
+        very_strong: 1.2  # ✅ ИСПРАВЛЕНО: Сильный сигнал: 120% (было 140%) - для прогрессивных профилей
+        strong: 1.0  # ✅ ИСПРАВЛЕНО: Хороший сигнал: 100% (было 110%) - для прогрессивных профилей
+        medium: 0.95  # ✅ ИСПРАВЛЕНО: Средний сигнал: 95% (было 90%) - для прогрессивных профилей
+        weak: 0.85  # ✅ ИСПРАВЛЕНО: Слабый сигнал: 85% (было 70%) - для прогрессивных профилей
       
       # Пороги силы сигнала для хаоса (выше пороги)
       strength_thresholds:
@@ -1153,31 +1234,7 @@ futures_modules:
     max_spread_percent: 0.05  # Максимальный спред (0.05%)
     order_timeout: 30.0  # Таймаут ордера (30 сек)
   
-  # Order Executor - Лимитные ордера
-  order_executor:
-    limit_order:
-      # ✅ АДАПТИВНО: Базовые параметры
-      limit_offset_percent: 0.05  # ✅ АДАПТИВНО: Базовый offset 0.05% (для быстрого исполнения)
-      max_wait_seconds: 60  # Максимальное время ожидания лимитного ордера (60 сек)
-      auto_cancel_enabled: true  # Автоматическая отмена после таймаута
-      auto_replace_enabled: true  # Автоматическая замена ордера с новой ценой
-      replace_with_market: true  # Заменять на рыночный ордер после таймаута
-      post_only: false  # Гарантирует maker fee (0.02% вместо 0.05%), но может не исполниться сразу
-      
-      # ✅ АДАПТИВНО: Параметры по режимам рынка
-      by_regime:
-        trending:
-          limit_offset_percent: 0.08  # ✅ АДАПТИВНО: 0.08% для trending (быстрее исполнение в тренде)
-          max_wait_seconds: 45  # ✅ АДАПТИВНО: 45 сек (быстрее отмена в тренде)
-          use_market_order: false  # Используем лимитные ордера в тренде
-        ranging:
-          limit_offset_percent: 0.12  #  ИСПРАВЛЕНО: Увеличено с 0.08% до 0.12% (быстрее исполнение, меньше отмен)
-          max_wait_seconds: 120  #  ИСПРАВЛЕНО: Увеличено с 90 до 120 сек (больше времени для ranging)
-          post_only: true  #  ИСПРАВЛЕНО: Maker fee 0.02% вместо taker 0.05% (экономия 0.06% за сделку)
-        choppy:
-          limit_offset_percent: 0.10  # ✅ АДАПТИВНО: 0.10% для choppy (быстрее исполнение в хаосе)
-          max_wait_seconds: 30  # ✅ АДАПТИВНО: 30 сек (быстрее отмена в хаосе)
-          use_market_order: false  # Используем лимитные ордера в хаосе (но с большим offset)
+  # ✅ УДАЛЕНО: order_executor перемещен в секцию scalping (строка ~957)
   
   # ✅ АДАПТИВНО: Emergency Stop - автоматическая разблокировка после блокировки
   emergency_stop:
@@ -1212,6 +1269,10 @@ futures_modules:
       max_tp_percent: 5.0  # Максимальный TP (5%)
       use_indicators: true  # Использовать индикаторы для подтверждения тренда
     reversal_detection:
+      # ✅ ЭТАП 1.1: Анализ разворота Order Flow
+      order_flow:
+        enabled: true          # Включить анализ разворота Order Flow
+        reversal_threshold: 0.15  # Порог изменения delta для определения разворота (15%)
       enabled: true
       min_reversal_duration_seconds: 60  # Минимальная длительность отскока
       rsi_check: true
@@ -1433,6 +1494,11 @@ futures_modules:
     max_consecutive_blocks: 5
     relax_multiplier: 0.25
     relax_duration_seconds: 45
+    # ✅ ЭТАП 1.3: Fallback на 24h volume для символов с нулевым orderbook volume
+    volume_fallback:
+      enabled: true          # Включить fallback на 24h volume
+      symbols: ["XRP-USDT"]  # Символы, для которых использовать fallback
+      fallback_percent: 0.001 # 0.1% от дневного объема как fallback
     regime_multipliers:
       trending:
         min_daily_volume_multiplier: 1.0

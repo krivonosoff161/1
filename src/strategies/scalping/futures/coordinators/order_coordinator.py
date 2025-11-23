@@ -61,21 +61,30 @@ class OrderCoordinator:
             order_executor_config = getattr(self.scalping_config, "order_executor", {})
             limit_order_config = order_executor_config.get("limit_order", {})
 
-            # Получаем текущий режим рынка
-            current_regime = "ranging"  # Fallback
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем текущий режим рынка правильно
+            current_regime = None
             try:
                 if self.signal_generator:
-                    regime_obj = (
-                        self.signal_generator.regime_manager.get_current_regime()
-                    )
-                    if regime_obj:
-                        current_regime = (
-                            regime_obj.lower()
-                            if isinstance(regime_obj, str)
-                            else str(regime_obj).lower()
-                        )
-            except:
-                pass
+                    # Пробуем получить режим из per-symbol manager (если есть)
+                    if hasattr(self.signal_generator, "regime_managers"):
+                        # Для каждого символа может быть свой режим, но для order_coordinator используем глобальный
+                        pass
+                    # Получаем глобальный режим
+                    if hasattr(self.signal_generator, "regime_manager") and self.signal_generator.regime_manager:
+                        regime_obj = self.signal_generator.regime_manager.get_current_regime()
+                        if regime_obj:
+                            current_regime = (
+                                regime_obj.lower()
+                                if isinstance(regime_obj, str)
+                                else str(regime_obj).lower()
+                            )
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось получить режим для OrderCoordinator: {e}")
+            
+            # Fallback на 'ranging' только если режим не найден
+            if not current_regime:
+                current_regime = "ranging"
+                logger.debug(f"⚠️ OrderCoordinator: режим не найден, используется fallback 'ranging'")
 
             # Получаем параметры по режиму
             regime_limit_config = limit_order_config.get("by_regime", {}).get(
@@ -372,3 +381,4 @@ class OrderCoordinator:
         """
         if normalized_symbol in self.last_orders_cache:
             self.last_orders_cache[normalized_symbol]["status"] = "closed"
+

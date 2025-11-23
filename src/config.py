@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 from dotenv import load_dotenv
+from loguru import logger
 from pydantic import BaseModel, Field
 
 # Load environment variables
@@ -219,6 +220,12 @@ class ScalpingConfig(BaseModel):
 
     # Balance Profiles - адаптивные параметры по размеру баланса
     balance_profiles: Dict[str, BalanceProfile] = Field(default_factory=dict)
+    
+    # ✅ НОВОЕ: Order Executor конфигурация
+    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем Dict без Optional, чтобы Pydantic загружал из YAML
+    # Проблема: Pydantic v2 с extra="allow" может не загружать поля с default_factory=dict
+    # Решение: Используем обычный Dict с проверкой в коде
+    order_executor: Dict[str, Any] = Field(default_factory=dict)
 
     # PHASE 1 Modules (flexible dict для хранения настроек модулей)
     multi_timeframe_enabled: bool = Field(default=False)
@@ -243,6 +250,14 @@ class ScalpingConfig(BaseModel):
     balance_checker: Dict = Field(default_factory=dict)
     adaptive_regime_enabled: bool = Field(default=False)
     adaptive_regime: AdaptiveRegimeConfig = Field(default_factory=AdaptiveRegimeConfig)
+    
+    # ✅ НОВОЕ: Order Executor конфигурация
+    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем Dict с default_factory=dict
+    # Pydantic v2 с extra="allow" должен загружать дополнительные поля из YAML
+    order_executor: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Конфигурация order_executor с limit_order и by_symbol/by_regime"
+    )
 
 
 class TradingConfig(BaseModel):
@@ -589,7 +604,42 @@ class BotConfig(BaseModel):
         # Replace environment variable placeholders
         raw_config = cls._substitute_env_vars(raw_config)
 
-        return cls(**raw_config)
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Убеждаемся, что order_executor загружается из YAML
+        # Проблема: Pydantic v2 может не загружать дополнительные поля даже с extra="allow"
+        # если они определены в модели с default=None или default_factory
+        # Решение: Явно проверяем наличие order_executor в raw_config и убеждаемся, что он передается
+        # Если order_executor есть в YAML, но не определен в модели явно, Pydantic может его игнорировать
+        # Поэтому мы явно проверяем и логируем для диагностики
+        if "scalping" in raw_config and isinstance(raw_config["scalping"], dict):
+            scalping_raw = raw_config["scalping"]
+            if "order_executor" in scalping_raw:
+                # order_executor есть в YAML, Pydantic должен загрузить его благодаря extra="allow"
+                # Но если он определен в модели с default=None, Pydantic может использовать default
+                # Поэтому убеждаемся, что он передается явно
+                pass  # Pydantic должен загрузить автоматически с extra="allow"
+
+        config_obj = cls(**raw_config)
+        
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если order_executor не загрузился через Pydantic,
+        # загружаем его вручную из raw_config
+        if hasattr(config_obj, "scalping") and "scalping" in raw_config:
+            scalping_raw = raw_config["scalping"]
+            if "order_executor" in scalping_raw:
+                order_executor_raw = scalping_raw["order_executor"]
+                # Проверяем, загрузился ли order_executor в scalping_config
+                # Проверяем не только None, но и пустой словарь {}
+                order_executor_current = getattr(config_obj.scalping, "order_executor", None)
+                if order_executor_current is None or (isinstance(order_executor_current, dict) and len(order_executor_current) == 0):
+                    # Если не загрузился или пустой, устанавливаем вручную
+                    logger.debug(f"✅ order_executor вручную устанавливается в scalping_config (было: {order_executor_current})")
+                    if isinstance(config_obj.scalping, dict):
+                        config_obj.scalping["order_executor"] = order_executor_raw
+                    else:
+                        # Для Pydantic модели устанавливаем через setattr (более надежно, чем __dict__)
+                        setattr(config_obj.scalping, "order_executor", order_executor_raw)
+                        logger.debug(f"✅ order_executor установлен через setattr: {type(getattr(config_obj.scalping, 'order_executor', None))}")
+        
+        return config_obj
 
     @staticmethod
     def _substitute_env_vars(obj: Any) -> Any:

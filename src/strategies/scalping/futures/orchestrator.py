@@ -423,6 +423,7 @@ class FuturesScalpingOrchestrator:
             active_positions_ref=self.active_positions,
             fast_adx=self.fast_adx,
             position_manager=self.position_manager,
+            order_flow=self.order_flow,  # ✅ ЭТАП 1.1: Передаем OrderFlowIndicator для анализа разворота
         )
         # Для совместимости с существующими модулями (PositionManager)
         self.trailing_sl_by_symbol = self.trailing_sl_coordinator.trailing_sl_by_symbol
@@ -1281,6 +1282,33 @@ class FuturesScalpingOrchestrator:
             active_position = self.active_positions.setdefault(symbol, {})
             if "entry_time" not in active_position:
                 active_position["entry_time"] = timestamp
+            
+            # ✅ НОВОЕ: Сохраняем ADL данные (если доступны из API)
+            adl_rank = pos.get("adlRank") or pos.get("adl")
+            if adl_rank is not None:
+                try:
+                    active_position["adl_rank"] = int(adl_rank)
+                except (ValueError, TypeError):
+                    pass
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем режим в позицию для адаптивных TP
+            regime = None
+            if hasattr(
+                self.signal_generator, "regime_managers"
+            ) and symbol in getattr(self.signal_generator, "regime_managers", {}):
+                manager = self.signal_generator.regime_managers.get(symbol)
+                if manager:
+                    regime = manager.get_current_regime()
+            # Fallback на глобальный режим если per-symbol режим не найден
+            if not regime:
+                if (
+                    hasattr(self.signal_generator, "regime_manager")
+                    and self.signal_generator.regime_manager
+                ):
+                    try:
+                        regime = self.signal_generator.regime_manager.get_current_regime()
+                    except Exception:
+                        pass
+            
             active_position.update(
                 {
                     "instId": inst_id,
@@ -1291,8 +1319,25 @@ class FuturesScalpingOrchestrator:
                     "entry_price": effective_price,
                     "margin": margin,
                     "timestamp": timestamp,
+                    "regime": regime,  # ✅ КРИТИЧЕСКОЕ: Сохраняем режим для адаптивных TP
                 }
             )
+            
+            # ✅ НОВОЕ: Логируем ADL для всех позиций (если доступно)
+            if "adl_rank" in active_position:
+                adl_rank = active_position["adl_rank"]
+                adl_status = "🔴 ВЫСОКИЙ" if adl_rank >= 4 else "🟡 СРЕДНИЙ" if adl_rank >= 2 else "🟢 НИЗКИЙ"
+                logger.info(
+                    f"📊 ADL для {symbol}: rank={adl_rank} ({adl_status}) "
+                    f"(PnL={pos.get('upl', '0')} USDT, margin={margin:.2f} USDT)"
+                )
+                
+                # Предупреждение при высоком ADL
+                if adl_rank >= 4:
+                    logger.warning(
+                        f"⚠️ ВЫСОКИЙ ADL для {symbol}: rank={adl_rank} "
+                        f"(риск автоматического сокращения позиции биржей)"
+                    )
 
             if not self.trailing_sl_coordinator.get_tsl(symbol):
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем position_side ("long"/"short") в initialize_trailing_stop
@@ -1510,6 +1555,116 @@ class FuturesScalpingOrchestrator:
             positions_copy = dict(self.active_positions)
             for symbol, position in positions_copy.items():
                 await self.position_manager.manage_position(position)
+            
+            # ✅ НОВОЕ: Периодический мониторинг ADL для всех позиций
+            # Логируем ADL для всех открытых позиций раз в минуту
+            if hasattr(self, "_last_adl_log_time"):
+                if time.time() - self._last_adl_log_time < 60:  # Раз в минуту
+                    return
+            else:
+                self._last_adl_log_time = 0
+            
+            # Получаем актуальные данные позиций с биржи для ADL
+            try:
+                exchange_positions = await self.client.get_positions()
+                adl_summary = []
+                for pos in exchange_positions or []:
+                    pos_size = float(pos.get("pos", "0") or 0)
+                    if abs(pos_size) < 1e-8:
+                        continue
+                    inst_id = pos.get("instId", "")
+                    if not inst_id:
+                        continue
+                    symbol = inst_id.replace("-SWAP", "")
+                    adl_rank = pos.get("adlRank") or pos.get("adl")
+                    if adl_rank is not None:
+                        try:
+                            adl_rank = int(adl_rank)
+                            upl = float(pos.get("upl", "0") or 0)
+                            margin = float(pos.get("margin", "0") or 0)
+                            adl_status = "🔴 ВЫСОКИЙ" if adl_rank >= 4 else "🟡 СРЕДНИЙ" if adl_rank >= 2 else "🟢 НИЗКИЙ"
+                            adl_summary.append({
+                                "symbol": symbol,
+                                "adl_rank": adl_rank,
+                                "status": adl_status,
+                                "upl": upl,
+                                "margin": margin
+                            })
+                            # Обновляем ADL в active_positions
+                            if symbol in self.active_positions:
+                                self.active_positions[symbol]["adl_rank"] = adl_rank
+                        except (ValueError, TypeError):
+                            pass
+                
+                # Логируем сводку ADL для всех позиций
+                if adl_summary:
+                    adl_info = ", ".join([
+                        f"{item['symbol']}: {item['status']} (rank={item['adl_rank']}, PnL={item['upl']:.2f} USDT)"
+                        for item in adl_summary
+                    ])
+                    logger.info(f"📊 ADL мониторинг всех позиций: {adl_info}")
+                    
+                    # Предупреждение при высоком ADL на любой позиции
+                    high_adl_positions = [item for item in adl_summary if item['adl_rank'] >= 4]
+                    if high_adl_positions:
+                        high_adl_info = ", ".join([
+                            f"{item['symbol']} (rank={item['adl_rank']})"
+                            for item in high_adl_positions
+                        ])
+                        logger.warning(
+                            f"⚠️ ВЫСОКИЙ ADL обнаружен для позиций: {high_adl_info} "
+                            f"(риск автоматического сокращения биржей)"
+                        )
+                
+                self._last_adl_log_time = time.time()
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось получить ADL данные: {e}")
+            
+            # ✅ НОВОЕ: Периодический мониторинг статистики разворотов (раз в 5 минут)
+            if hasattr(self, "_last_reversal_stats_log_time"):
+                if time.time() - self._last_reversal_stats_log_time < 300:  # Раз в 5 минут
+                    pass
+                else:
+                    try:
+                        if self.trading_statistics:
+                            # Получаем статистику разворотов для всех символов и режимов
+                            all_symbols = list(set(self.active_positions.keys()))
+                            if all_symbols:
+                                reversal_summary = []
+                                for symbol in all_symbols:
+                                    stats = self.trading_statistics.get_reversal_stats(
+                                        symbol=symbol
+                                    )
+                                    if stats["total_reversals"] > 0:
+                                        reversal_summary.append(
+                                            f"{symbol}: {stats['total_reversals']} разворотов "
+                                            f"(↓{stats['v_down_count']}, ↑{stats['v_up_count']}, "
+                                            f"avg={stats['avg_price_change']:.2%})"
+                                        )
+                                
+                                if reversal_summary:
+                                    reversal_info = ", ".join(reversal_summary)
+                                    logger.info(
+                                        f"📊 Статистика разворотов: {reversal_info}"
+                                    )
+                            
+                            # Общая статистика по режимам
+                            for regime in ["trending", "ranging", "choppy"]:
+                                stats = self.trading_statistics.get_reversal_stats(
+                                    regime=regime
+                                )
+                                if stats["total_reversals"] > 0:
+                                    logger.info(
+                                        f"📊 Развороты в режиме {regime}: "
+                                        f"{stats['total_reversals']} разворотов "
+                                        f"(↓{stats['v_down_count']}, ↑{stats['v_up_count']})"
+                                    )
+                    
+                        self._last_reversal_stats_log_time = time.time()
+                    except Exception as e:
+                        logger.debug(f"⚠️ Не удалось получить статистику разворотов: {e}")
+            else:
+                self._last_reversal_stats_log_time = 0
 
         except Exception as e:
             logger.error(f"Ошибка управления позициями: {e}")
