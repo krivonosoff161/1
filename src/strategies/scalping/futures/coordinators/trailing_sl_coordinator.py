@@ -557,10 +557,15 @@ class TrailingSLCoordinator:
                     trend_strength = trend_analysis["combined"]
                     
                     if self._tsl_log_count.get(symbol, 0) % 10 == 0:
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #6: Исправление форматирования f-string
+                        adx_val = trend_analysis.get('adx')
+                        adx_str = f"{adx_val:.2f}" if adx_val is not None else 'N/A'
+                        order_flow_val = trend_analysis.get('order_flow')
+                        order_flow_str = f"{order_flow_val:.2f}" if order_flow_val is not None else 'N/A'
                         logger.debug(
                             f"📊 Анализ силы тренда для {symbol}: "
-                            f"ADX={trend_analysis['adx']:.2f if trend_analysis['adx'] else 'N/A'}, "
-                            f"OrderFlow={trend_analysis['order_flow']:.2f if trend_analysis['order_flow'] else 'N/A'}, "
+                            f"ADX={adx_str}, "
+                            f"OrderFlow={order_flow_str}, "
                             f"Combined={trend_analysis['combined']:.2f}"
                         )
             except Exception as e:

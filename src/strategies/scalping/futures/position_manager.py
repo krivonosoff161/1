@@ -9,6 +9,7 @@ Futures Position Manager для скальпинг стратегии.
 """
 
 import asyncio
+import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -231,6 +232,127 @@ class FuturesPositionManager:
         
         return tp_percent
 
+    def _get_adaptive_sl_percent(
+        self, symbol: str, regime: Optional[str] = None
+    ) -> float:
+        """
+        ✅ КРИТИЧЕСКОЕ: Получает адаптивный SL% для символа и режима.
+        
+        Приоритет (ТОЧНО как для TP):
+        1. Per-regime SL (если режим определен)
+        2. Per-symbol SL (fallback)
+        3. Глобальный SL (fallback)
+        
+        Args:
+            symbol: Торговый символ
+            regime: Режим рынка (trending, ranging, choppy)
+            
+        Returns:
+            SL% для использования
+        """
+        # ✅ ИСПРАВЛЕНО: Инициализируем sl_percent = None (НЕ используем fallback сразу!)
+        sl_percent = None
+
+        # Получаем режим из позиции, если не передан
+        if not regime:
+            if symbol in self.active_positions:
+                regime = self.active_positions[symbol].get("regime")
+            elif hasattr(self, "orchestrator") and self.orchestrator:
+                if (
+                    hasattr(self.orchestrator, "signal_generator")
+                    and self.orchestrator.signal_generator
+                ):
+                    if hasattr(self.orchestrator.signal_generator, "regime_managers"):
+                        manager = (
+                            self.orchestrator.signal_generator.regime_managers.get(
+                                symbol
+                            )
+                        )
+                        if manager:
+                            regime = manager.get_current_regime()
+
+        # Получаем sl_percent для символа и режима (если есть в symbol_profiles)
+        if symbol and self.symbol_profiles:
+            symbol_profile = self.symbol_profiles.get(symbol, {})
+            if symbol_profile:
+                # Конвертируем в dict если нужно
+                if not isinstance(symbol_profile, dict):
+                    if hasattr(symbol_profile, "dict"):
+                        symbol_dict = symbol_profile.dict()
+                    elif hasattr(symbol_profile, "__dict__"):
+                        symbol_dict = dict(symbol_profile.__dict__)
+                    else:
+                        symbol_dict = {}
+                else:
+                    symbol_dict = symbol_profile
+
+                # 1. ✅ ПРИОРИТЕТ 1: Per-regime SL (если режим определен)
+                if regime:
+                    regime_lower = (
+                        regime.lower()
+                        if isinstance(regime, str)
+                        else str(regime).lower()
+                    )
+                    regime_profile = symbol_dict.get(regime_lower, {})
+
+                    if not isinstance(regime_profile, dict):
+                        if hasattr(regime_profile, "dict"):
+                            regime_profile = regime_profile.dict()
+                        elif hasattr(regime_profile, "__dict__"):
+                            regime_profile = dict(regime_profile.__dict__)
+                        else:
+                            regime_profile = {}
+
+                    regime_sl_percent = regime_profile.get("sl_percent")
+                    if regime_sl_percent is not None:
+                        try:
+                            sl_percent = float(regime_sl_percent)
+                            logger.info(
+                                f"✅ Per-regime SL для {symbol} ({regime}): {sl_percent}% "
+                                f"(глобальный: {self.scalping_config.sl_percent}%)"
+                            )
+                            return sl_percent
+                        except (ValueError, TypeError):
+                            logger.warning(
+                                f"⚠️ Не удалось конвертировать regime_sl_percent в float для {symbol} ({regime}): {regime_sl_percent}"
+                            )
+
+                # 2. ✅ ПРИОРИТЕТ 2: Per-symbol SL (fallback, если режим не определен)
+                symbol_sl_percent = symbol_dict.get("sl_percent")
+                if symbol_sl_percent is not None:
+                    try:
+                        sl_percent = float(symbol_sl_percent)
+                        logger.info(
+                            f"📊 Per-symbol SL для {symbol}: {sl_percent}% "
+                            f"(глобальный: {self.scalping_config.sl_percent}%)"
+                        )
+                        return sl_percent
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"⚠️ Не удалось конвертировать symbol_sl_percent в float для {symbol}: {symbol_sl_percent}"
+                        )
+
+            # 3. ✅ ПРИОРИТЕТ 3: Глобальный SL (fallback - ТОЛЬКО если ничего не найдено)
+            if sl_percent is None:
+                sl_percent = self.scalping_config.sl_percent
+                logger.warning(
+                    f"⚠️ FALLBACK: Используется глобальный SL для {symbol} (regime={regime or 'N/A'}): {sl_percent}% "
+                    f"(per-regime и per-symbol SL не найдены, symbol_profiles: {len(self.symbol_profiles) if self.symbol_profiles else 0} символов)"
+                )
+            else:
+                logger.debug(
+                    f"📊 Используется глобальный SL для {symbol} (regime={regime or 'N/A'}): {sl_percent}% "
+                    f"(symbol_profiles: {len(self.symbol_profiles) if self.symbol_profiles else 0} символов)"
+                )
+        else:
+            # Если symbol_profiles нет, используем глобальный SL
+            sl_percent = self.scalping_config.sl_percent
+            logger.debug(
+                f"📊 Используется глобальный SL для {symbol} (symbol_profiles нет): {sl_percent}%"
+            )
+
+        return sl_percent
+
     async def initialize(self):
         """Инициализация менеджера позиций"""
         try:
@@ -333,6 +455,46 @@ class FuturesPositionManager:
             side = position.get("posSide", "long")
             entry_price = float(position.get("avgPx", "0"))
             current_price = float(position.get("markPx", "0"))
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #8: Задержка перед проверкой маржи для новых позиций
+            # Позиции, открытые менее 10 секунд назад, пропускаем проверку маржи
+            position_open_time = None
+            try:
+                # Пробуем получить время открытия из active_positions
+                if symbol in self.active_positions:
+                    pos_data = self.active_positions[symbol]
+                    if isinstance(pos_data, dict):
+                        position_open_time = pos_data.get("open_time") or pos_data.get("timestamp")
+                
+                # Если не нашли в active_positions, пробуем получить из позиции биржи
+                if not position_open_time:
+                    # OKX может возвращать время в разных форматах
+                    utime_str = position.get("utime", "")
+                    ctime_str = position.get("ctime", "")
+                    if utime_str:
+                        try:
+                            position_open_time = float(utime_str) / 1000.0  # Конвертируем из миллисекунд
+                        except (ValueError, TypeError):
+                            pass
+                    elif ctime_str:
+                        try:
+                            position_open_time = float(ctime_str) / 1000.0
+                        except (ValueError, TypeError):
+                            pass
+                
+                # Если нашли время открытия, проверяем задержку
+                if position_open_time:
+                    time_since_open = time.time() - position_open_time
+                    min_check_delay = 10.0  # Минимум 10 секунд перед проверкой маржи
+                    if time_since_open < min_check_delay:
+                        logger.debug(
+                            f"⏳ Позиция {symbol} открыта {time_since_open:.1f} секунд назад, "
+                            f"пропускаем проверку маржи (минимум {min_check_delay} секунд)"
+                        )
+                        return  # Пропускаем проверку для новых позиций
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось проверить время открытия позиции {symbol}: {e}")
+                # При ошибке продолжаем проверку
             # ✅ ИСПРАВЛЕНИЕ: Используем leverage из конфига, а не из позиции на бирже
             # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
             leverage_from_position = int(position.get("lever", "0"))
@@ -640,6 +802,132 @@ class FuturesPositionManager:
         except Exception as e:
             logger.error(f"Ошибка проверки безопасности позиции: {e}")
 
+    async def _check_sl(self, position: Dict[str, Any]) -> bool:
+        """
+        ✅ НОВОЕ: Проверка адаптивного Stop Loss (SL)
+        
+        Логика:
+        - Проверяется ТОЛЬКО если TSL не активен
+        - Проверяется ПОСЛЕ min_holding (защита от преждевременного закрытия)
+        - Более строгий стоп чем loss_cut (срабатывает раньше)
+        
+        Args:
+            position: Данные позиции с биржи
+            
+        Returns:
+            True если нужно закрыть позицию по SL
+        """
+        try:
+            symbol = position.get("instId", "").replace("-SWAP", "")
+            size = float(position.get("pos", "0"))
+            entry_price = float(position.get("avgPx", "0"))
+            current_price = float(position.get("markPx", "0"))
+            
+            if size == 0 or entry_price == 0 or current_price == 0:
+                return False
+            
+            # ✅ Проверяем только если TSL не активен
+            if hasattr(self, "orchestrator") and self.orchestrator:
+                if hasattr(self.orchestrator, "trailing_sl_coordinator"):
+                    tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                    if tsl:
+                        # TSL активен - проверка SL не нужна (TSL приоритетнее)
+                        return False
+            
+            # ✅ Получаем режим для адаптивного SL
+            regime = position.get("regime") or self.active_positions.get(symbol, {}).get("regime")
+            if not regime and hasattr(self, "orchestrator") and self.orchestrator:
+                if hasattr(self.orchestrator, "signal_generator"):
+                    if hasattr(self.orchestrator.signal_generator, "regime_managers"):
+                        manager = self.orchestrator.signal_generator.regime_managers.get(symbol)
+                        if manager:
+                            regime = manager.get_current_regime()
+            
+            # ✅ Получаем адаптивный SL
+            sl_percent = self._get_adaptive_sl_percent(symbol, regime)
+            
+            # ✅ Проверяем min_holding (защита от преждевременного закрытия)
+            minutes_in_position = 0
+            if symbol in self.active_positions:
+                entry_time = self.active_positions[symbol].get("entry_time")
+                if entry_time:
+                    if isinstance(entry_time, datetime):
+                        minutes_in_position = (datetime.now() - entry_time).total_seconds() / 60.0
+                    else:
+                        try:
+                            minutes_in_position = (time.time() - entry_time) / 60.0
+                        except (TypeError, ValueError):
+                            pass
+            
+            # ✅ Получаем min_holding из конфига (адаптивно по режиму)
+            min_holding_minutes = 0.5  # Fallback
+            if regime and hasattr(self, "orchestrator") and self.orchestrator:
+                try:
+                    tsl_config = getattr(self.scalping_config, "trailing_sl", {})
+                    if not isinstance(tsl_config, dict):
+                        tsl_config = getattr(tsl_config, "__dict__", {})
+                    
+                    by_regime = tsl_config.get("by_regime", {})
+                    if regime.lower() in by_regime:
+                        regime_tsl = by_regime[regime.lower()]
+                        if isinstance(regime_tsl, dict):
+                            min_holding_minutes = regime_tsl.get("min_holding_minutes", 0.5)
+                        elif hasattr(regime_tsl, "min_holding_minutes"):
+                            min_holding_minutes = getattr(regime_tsl, "min_holding_minutes", 0.5)
+                except Exception as e:
+                    logger.debug(f"⚠️ Не удалось получить min_holding_minutes из конфига для {symbol} ({regime}): {e}")
+            
+            # ✅ Проверяем min_holding защиту
+            if minutes_in_position < min_holding_minutes:
+                logger.debug(
+                    f"⏱️ SL заблокирован для {symbol}: позиция держится "
+                    f"{minutes_in_position:.2f} мин < {min_holding_minutes:.2f} мин "
+                    f"(min_holding защита активна, sl_percent={sl_percent:.2f}%)"
+                )
+                return False  # НЕ закрываем - min_holding защита активна
+            
+            # ✅ Рассчитываем PnL% от маржи (ТОЧНАЯ КОПИЯ логики loss_cut строки 934-940)
+            try:
+                margin_used = float(position.get("margin", 0))
+                if margin_used > 0:
+                    # ✅ КРИТИЧЕСКОЕ: size в контрактах, нужно перевести в монеты через ctVal
+                    try:
+                        inst_details = await self.client.get_instrument_details(symbol)
+                        ct_val = float(inst_details.get("ctVal", 0.01))
+                        size_in_coins = abs(size) * ct_val
+                    except Exception:
+                        # Fallback: предполагаем что size уже в монетах (для совместимости)
+                        size_in_coins = abs(size)
+                    
+                    position_side = position.get("posSide", "long").lower()
+                    if position_side == "long":
+                        unrealized_pnl = size_in_coins * (current_price - entry_price)
+                    else:  # short
+                        unrealized_pnl = size_in_coins * (entry_price - current_price)
+                    
+                    pnl_percent_from_margin = (unrealized_pnl / margin_used) * 100
+                    
+                    # ✅ Проверяем SL
+                    if pnl_percent_from_margin <= -sl_percent:
+                        logger.warning(
+                            f"🚨 SL сработал для {symbol}: "
+                            f"PnL={pnl_percent_from_margin:.2f}% от маржи <= -{sl_percent:.2f}% "
+                            f"(margin=${margin_used:.2f}, PnL=${unrealized_pnl:.2f}, "
+                            f"время в позиции: {minutes_in_position:.2f} мин, regime={regime or 'N/A'})"
+                        )
+                        await self._close_position_by_reason(position, "sl")
+                        return True
+                else:
+                    logger.debug(f"⚠️ margin_used=0 для {symbol}, пропускаем проверку SL")
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось проверить SL для {symbol}: {e}")
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки SL для {symbol}: {e}", exc_info=True)
+            return False
+
     async def _check_tp_sl(self, position: Dict[str, Any]):
         """Проверка Take Profit и Stop Loss (DEPRECATED - используется _check_tp_only)"""
         # Этот метод оставлен для совместимости, но теперь используется _check_tp_only
@@ -849,7 +1137,12 @@ class FuturesPositionManager:
             entry_price = float(position.get("avgPx", "0"))
             current_price = float(position.get("markPx", "0"))
             
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем loss_cut ДО проверки TP
+            # ✅ НОВОЕ: Проверка адаптивного SL (ПЕРЕД loss_cut - более строгий стоп)
+            sl_should_close = await self._check_sl(position)
+            if sl_should_close:
+                return  # Закрыли по SL, выходим
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем loss_cut ДО проверки TP (ПОСЛЕ SL - мягкий стоп)
             # Это важно для позиций без TSL или с большим убытком
             if hasattr(self, "orchestrator") and self.orchestrator:
                 if hasattr(self.orchestrator, "trailing_sl_coordinator"):
@@ -1471,8 +1764,6 @@ class FuturesPositionManager:
                     if "_big_profit_history" not in position:
                         position["_big_profit_history"] = []
 
-                    import time
-
                     current_time = time.time()
                     position["_big_profit_history"].append(
                         (current_time, net_pnl_percent)
@@ -1553,8 +1844,6 @@ class FuturesPositionManager:
 
                     if should_close:
                         # ✅ ИСПРАВЛЕНО: Проверка min_holding ПЕРЕД big_profit_exit
-                        import time
-
                         min_holding_blocked = False
                         if hasattr(self, "orchestrator") and self.orchestrator:
                             # ✅ ИСПРАВЛЕНО: TSL теперь в trailing_sl_coordinator
@@ -1712,8 +2001,6 @@ class FuturesPositionManager:
                     and pnl_percent >= ptp_trigger
                 ):
                     # ✅ ПРАВКА #1: Проверка min_holding ПЕРЕД Partial TP
-                    import time
-
                     min_holding_blocked = False
                     if hasattr(self, "orchestrator") and self.orchestrator:
                         # ✅ ИСПРАВЛЕНО: TSL теперь в trailing_sl_coordinator
@@ -1789,6 +2076,29 @@ class FuturesPositionManager:
                     # Рассчитываем размер и цену лимитного reduce-only ордера
                     size_abs = abs(size)
                     size_partial = max(0.0, min(size_abs * ptp_fraction, size_abs))
+                    
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #4: Проверка минимального размера перед Partial TP
+                    if size_partial > 0:
+                        try:
+                            # Получаем минимальный размер для символа
+                            inst_details = await self.client.get_instrument_details(symbol)
+                            min_sz = float(inst_details.get("minSz", 0.01))
+                            
+                            if size_partial < min_sz:
+                                logger.debug(
+                                    f"⚠️ Partial TP пропущен для {symbol}: размер {size_partial:.6f} контрактов "
+                                    f"< минимума {min_sz:.6f} контрактов (fraction={ptp_fraction:.1%}, "
+                                    f"size_abs={size_abs:.6f})"
+                                )
+                                return  # Пропускаем Partial TP, если размер меньше минимума
+                        except Exception as e:
+                            logger.warning(
+                                f"⚠️ Не удалось получить минимальный размер для {symbol}: {e}, "
+                                f"пропускаем проверку"
+                            )
+                            # При ошибке лучше пропустить Partial TP, чем попытаться закрыть слишком маленькую позицию
+                            return
+                    
                     if size_partial > 0:
                         # Цена с небольшим сдвигом в сторону тейк-профита
                         offset = ptp_offset_bps / 10000.0
@@ -1890,9 +2200,17 @@ class FuturesPositionManager:
                         if signal_gen:
                             market_data = await signal_gen._get_market_data(symbol)
                             if market_data and market_data.ohlcv_data:
-                                # Вычисляем ADX через FastADX
-                                adx_value = fast_adx.calculate(market_data.ohlcv_data)
-                                if adx_value:
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: Используем правильные методы FastADX
+                                # Обновляем FastADX с данными свечей
+                                for candle in market_data.ohlcv_data:
+                                    fast_adx.update(
+                                        high=candle.high,
+                                        low=candle.low,
+                                        close=candle.close
+                                    )
+                                # Получаем ADX значение
+                                adx_value = fast_adx.get_current_adx()
+                                if adx_value and adx_value > 0:
                                     # Нормализуем ADX к 0-1 (ADX обычно 0-100)
                                     # Сильный тренд = ADX > 25, очень сильный = ADX > 50
                                     trend_strength = min(

@@ -3740,3 +3740,575 @@ timestamp,event_type,symbol,data
 18:10:16.187,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=8.7370 | min_hold=60.0000 | profit=-0.0029
 18:10:17.770,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=8.7633 | min_hold=60.0000 | profit=-0.0029
 18:10:17.771,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=11.7409 | min_hold=60.0000 | profit=-0.0039
+18:10:25.032,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=8.8844 | min_hold=60.0000 | profit=-0.0029
+18:10:25.032,tsl_check,BTC-USDT,minutes=69.1767 | profit=-0.0070 | price=86339.6000 | sl=85371.2300 | close=False
+18:10:25.283,tsl_check,BTC-USDT,minutes=69.1809 | profit=-0.0043 | price=86574.8000 | sl=85371.2300 | close=False
+18:10:26.116,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=11.8800 | min_hold=120.0000 | profit=0.0106
+18:10:26.665,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=8.9116 | min_hold=120.0000 | profit=0.0021
+18:10:30.446,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=8.9746 | min_hold=60.0000 | profit=-0.0029
+18:10:31.231,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=8.9877 | min_hold=60.0000 | profit=-0.0029
+18:10:31.234,tsl_check,BTC-USDT,minutes=69.2801 | profit=-0.0069 | price=86350.0000 | sl=85371.2300 | close=False
+18:10:32.137,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.0026 | min_hold=60.0000 | profit=-0.0029
+18:10:32.188,tsl_check,BTC-USDT,minutes=69.2960 | profit=-0.0069 | price=86350.0000 | sl=85371.2300 | close=False
+18:10:32.240,tsl_check,BTC-USDT,minutes=69.2968 | profit=-0.0069 | price=86350.0000 | sl=85371.2300 | close=False
+18:10:33.798,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.0305 | min_hold=60.0000 | profit=-0.0029
+18:10:33.798,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.0305 | min_hold=60.0000 | profit=-0.0029
+18:10:33.798,tsl_check,BTC-USDT,minutes=69.3228 | profit=-0.0069 | price=86350.0000 | sl=85371.2300 | close=False
+18:10:33.798,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.0305 | min_hold=60.0000 | profit=-0.0030
+18:10:37.668,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.0950 | min_hold=60.0000 | profit=-0.0030
+18:10:37.669,tsl_check,BTC-USDT,minutes=69.3873 | profit=-0.0074 | price=86301.9000 | sl=85371.2300 | close=False
+18:10:37.671,tsl_check,BTC-USDT,minutes=69.3874 | profit=-0.0071 | price=86334.6000 | sl=85371.2300 | close=False
+18:10:38.444,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.1079 | min_hold=60.0000 | profit=-0.0032
+18:10:39.991,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.1337 | min_hold=60.0000 | profit=-0.0032
+18:10:40.778,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.1468 | min_hold=60.0000 | profit=-0.0032
+18:10:40.778,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.1468 | min_hold=60.0000 | profit=-0.0032
+18:10:40.778,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.1468 | min_hold=60.0000 | profit=-0.0032
+18:10:42.359,tsl_check,BTC-USDT,minutes=69.4655 | profit=-0.0037 | price=86628.0000 | sl=85371.2300 | close=False
+18:10:43.158,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=12.1640 | min_hold=120.0000 | profit=0.0095
+18:10:43.557,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.1931 | min_hold=120.0000 | profit=0.0009
+18:10:49.357,tsl_check,BTC-USDT,minutes=69.5821 | profit=-0.0069 | price=86348.5000 | sl=85371.2300 | close=False
+18:10:49.362,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.2898 | min_hold=60.0000 | profit=-0.0031
+18:10:49.363,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.2899 | min_hold=60.0000 | profit=-0.0031
+18:10:49.364,tsl_check,BTC-USDT,minutes=69.5822 | profit=-0.0073 | price=86315.2000 | sl=85371.2300 | close=False
+18:10:49.365,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.2899 | min_hold=60.0000 | profit=-0.0032
+18:10:49.366,tsl_check,BTC-USDT,minutes=69.5823 | profit=-0.0073 | price=86315.2000 | sl=85371.2300 | close=False
+18:10:51.735,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3294 | min_hold=60.0000 | profit=-0.0032
+18:10:51.735,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3294 | min_hold=60.0000 | profit=-0.0031
+18:10:51.744,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3294 | min_hold=60.0000 | profit=-0.0031
+18:10:51.744,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3296 | min_hold=60.0000 | profit=-0.0031
+18:10:51.744,tsl_check,BTC-USDT,minutes=69.6219 | profit=-0.0068 | price=86357.6000 | sl=85371.2300 | close=False
+18:10:51.744,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=12.3071 | min_hold=60.0000 | profit=-0.0007
+18:10:52.505,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3423 | min_hold=60.0000 | profit=-0.0031
+18:10:52.505,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3423 | min_hold=60.0000 | profit=-0.0031
+18:10:52.505,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3423 | min_hold=60.0000 | profit=-0.0031
+18:10:52.505,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3423 | min_hold=60.0000 | profit=-0.0032
+18:10:52.517,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3424 | min_hold=60.0000 | profit=-0.0032
+18:10:53.271,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3550 | min_hold=60.0000 | profit=-0.0032
+18:10:53.271,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3550 | min_hold=60.0000 | profit=-0.0032
+18:10:53.285,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3553 | min_hold=60.0000 | profit=-0.0032
+18:10:53.287,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3553 | min_hold=60.0000 | profit=-0.0032
+18:10:53.288,tsl_check,BTC-USDT,minutes=69.6476 | profit=-0.0068 | price=86360.0000 | sl=85371.2300 | close=False
+18:10:53.291,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3554 | min_hold=60.0000 | profit=-0.0032
+18:10:54.060,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3682 | min_hold=60.0000 | profit=-0.0032
+18:10:54.063,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3682 | min_hold=60.0000 | profit=-0.0032
+18:10:54.063,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3682 | min_hold=60.0000 | profit=-0.0032
+18:10:54.064,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3682 | min_hold=60.0000 | profit=-0.0032
+18:10:54.835,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3811 | min_hold=60.0000 | profit=-0.0032
+18:10:54.839,tsl_check,BTC-USDT,minutes=69.6735 | profit=-0.0068 | price=86360.0000 | sl=85371.2300 | close=False
+18:10:54.843,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3812 | min_hold=60.0000 | profit=-0.0032
+18:10:54.843,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3812 | min_hold=60.0000 | profit=-0.0032
+18:10:54.843,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3812 | min_hold=60.0000 | profit=-0.0031
+18:10:54.843,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.3812 | min_hold=60.0000 | profit=-0.0031
+18:10:55.623,tsl_check,BTC-USDT,minutes=69.6866 | profit=-0.0067 | price=86365.8000 | sl=85371.2300 | close=False
+18:10:56.384,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4069 | min_hold=60.0000 | profit=-0.0031
+18:10:56.385,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4069 | min_hold=60.0000 | profit=-0.0031
+18:10:56.387,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4070 | min_hold=60.0000 | profit=-0.0031
+18:10:56.387,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4070 | min_hold=60.0000 | profit=-0.0031
+18:10:57.233,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4210 | min_hold=60.0000 | profit=-0.0031
+18:10:57.236,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4211 | min_hold=60.0000 | profit=-0.0031
+18:10:57.237,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=12.3987 | min_hold=120.0000 | profit=0.0010
+18:10:57.239,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4212 | min_hold=60.0000 | profit=-0.0032
+18:10:57.239,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4212 | min_hold=60.0000 | profit=-0.0032
+18:10:57.239,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4212 | min_hold=60.0000 | profit=-0.0032
+18:10:57.239,tsl_check,BTC-USDT,minutes=69.7135 | profit=-0.0067 | price=86366.9000 | sl=85371.2300 | close=False
+18:10:57.239,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4212 | min_hold=60.0000 | profit=-0.0032
+18:10:58.022,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4342 | min_hold=60.0000 | profit=-0.0032
+18:10:58.025,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4342 | min_hold=60.0000 | profit=-0.0032
+18:10:58.026,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4343 | min_hold=60.0000 | profit=-0.0032
+18:10:58.026,tsl_check,BTC-USDT,minutes=69.7266 | profit=-0.0064 | price=86389.9000 | sl=85371.2300 | close=False
+18:10:58.026,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4343 | min_hold=60.0000 | profit=-0.0032
+18:10:58.792,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4470 | min_hold=60.0000 | profit=-0.0032
+18:10:58.793,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4470 | min_hold=60.0000 | profit=-0.0032
+18:10:58.795,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4471 | min_hold=60.0000 | profit=-0.0032
+18:10:58.795,tsl_check,BTC-USDT,minutes=69.7394 | profit=-0.0064 | price=86389.9000 | sl=85371.2300 | close=False
+18:11:00.334,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4727 | min_hold=60.0000 | profit=-0.0032
+18:11:00.335,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4728 | min_hold=60.0000 | profit=-0.0032
+18:11:00.337,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4728 | min_hold=60.0000 | profit=-0.0032
+18:11:00.338,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4728 | min_hold=60.0000 | profit=-0.0032
+18:11:00.371,tsl_check,BTC-USDT,minutes=69.7657 | profit=-0.0033 | price=86659.9000 | sl=85371.2300 | close=False
+18:11:01.107,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4856 | min_hold=60.0000 | profit=-0.0032
+18:11:01.153,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=12.4639 | min_hold=120.0000 | profit=0.0094
+18:11:01.539,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.4928 | min_hold=120.0000 | profit=0.0008
+18:11:05.731,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.5627 | min_hold=60.0000 | profit=-0.0032
+18:11:05.732,tsl_check,BTC-USDT,minutes=69.8550 | profit=-0.0064 | price=86389.9000 | sl=85371.2300 | close=False
+18:11:05.734,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.5627 | min_hold=60.0000 | profit=-0.0032
+18:11:05.735,tsl_check,BTC-USDT,minutes=69.8551 | profit=-0.0064 | price=86389.9000 | sl=85371.2300 | close=False
+18:11:05.736,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=12.5403 | min_hold=60.0000 | profit=-0.0036
+18:11:06.912,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.5824 | min_hold=60.0000 | profit=-0.0032
+18:11:08.132,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.6027 | min_hold=60.0000 | profit=-0.0032
+18:11:08.132,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.6027 | min_hold=60.0000 | profit=-0.0031
+18:11:08.132,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.6027 | min_hold=60.0000 | profit=-0.0031
+18:11:08.143,tsl_check,BTC-USDT,minutes=69.8952 | profit=-0.0064 | price=86390.0000 | sl=85371.2300 | close=False
+18:11:08.146,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.6029 | min_hold=60.0000 | profit=-0.0031
+18:11:08.148,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.6030 | min_hold=60.0000 | profit=-0.0031
+18:11:08.150,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.6030 | min_hold=60.0000 | profit=-0.0031
+18:11:09.029,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.6177 | min_hold=60.0000 | profit=-0.0031
+18:11:12.955,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.6831 | min_hold=60.0000 | profit=-0.0031
+18:11:12.963,tsl_check,BTC-USDT,minutes=69.9756 | profit=-0.0064 | price=86390.0000 | sl=85371.2300 | close=False
+18:11:12.966,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.6833 | min_hold=60.0000 | profit=-0.0031
+18:11:12.969,tsl_check,BTC-USDT,minutes=69.9757 | profit=-0.0064 | price=86390.0000 | sl=85371.2300 | close=False
+18:11:14.648,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7113 | min_hold=60.0000 | profit=-0.0031
+18:11:15.710,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7290 | min_hold=60.0000 | profit=-0.0031
+18:11:15.712,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7290 | min_hold=60.0000 | profit=-0.0031
+18:11:16.519,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7425 | min_hold=60.0000 | profit=-0.0031
+18:11:17.330,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7560 | min_hold=60.0000 | profit=-0.0031
+18:11:18.873,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7817 | min_hold=60.0000 | profit=-0.0031
+18:11:19.406,tsl_check,BTC-USDT,minutes=70.0829 | profit=-0.0034 | price=86656.8000 | sl=85371.2300 | close=False
+18:11:19.676,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7951 | min_hold=60.0000 | profit=-0.0031
+18:11:19.676,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7951 | min_hold=60.0000 | profit=-0.0032
+18:11:19.676,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7951 | min_hold=60.0000 | profit=-0.0032
+18:11:19.676,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7951 | min_hold=60.0000 | profit=-0.0032
+18:11:19.676,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.7951 | min_hold=60.0000 | profit=-0.0032
+18:11:20.172,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=12.7809 | min_hold=120.0000 | profit=0.0094
+18:11:20.472,tsl_check,BTC-USDT,minutes=70.1007 | profit=-0.0065 | price=86380.0000 | sl=85371.2300 | close=False
+18:11:20.555,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.8098 | min_hold=120.0000 | profit=0.0009
+18:11:26.385,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=9.9069 | min_hold=60.0000 | profit=-0.0032
+18:11:32.622,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.0109 | min_hold=60.0000 | profit=-0.0032
+18:11:33.398,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.0238 | min_hold=60.0000 | profit=-0.0032
+18:11:34.131,tsl_check,BTC-USDT,minutes=70.3284 | profit=-0.0064 | price=86391.2000 | sl=85371.2300 | close=False
+18:11:34.530,tsl_check,BTC-USDT,minutes=70.3350 | profit=-0.0034 | price=86655.1000 | sl=85371.2300 | close=False
+18:11:34.914,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=13.0266 | min_hold=60.0000 | profit=-0.0005
+18:11:34.914,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.0491 | min_hold=60.0000 | profit=-0.0032
+18:11:34.914,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.0491 | min_hold=60.0000 | profit=-0.0032
+18:11:34.914,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.0491 | min_hold=60.0000 | profit=-0.0032
+18:11:34.929,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.0493 | min_hold=60.0000 | profit=-0.0032
+18:11:34.931,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.0493 | min_hold=60.0000 | profit=-0.0032
+18:11:34.931,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.0493 | min_hold=60.0000 | profit=-0.0032
+18:11:35.081,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=13.0294 | min_hold=120.0000 | profit=0.0090
+18:11:35.440,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.0578 | min_hold=120.0000 | profit=0.0007
+18:11:44.568,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.2100 | min_hold=60.0000 | profit=-0.0032
+18:11:44.703,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.2122 | min_hold=60.0000 | profit=-0.0032
+18:11:44.787,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.2136 | min_hold=60.0000 | profit=-0.0032
+18:11:44.866,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.2149 | min_hold=60.0000 | profit=-0.0032
+18:11:44.938,tsl_check,BTC-USDT,minutes=70.5085 | profit=-0.0064 | price=86391.2000 | sl=85371.2300 | close=False
+18:11:55.859,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.3981 | min_hold=60.0000 | profit=-0.0032
+18:12:00.829,tsl_check,BTC-USDT,minutes=70.7733 | profit=-0.0028 | price=86709.0000 | sl=85371.2300 | close=False
+18:12:01.508,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=13.4697 | min_hold=120.0000 | profit=0.0082
+18:12:01.679,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.4952 | min_hold=60.0000 | profit=-0.0032
+18:12:01.681,tsl_check,BTC-USDT,minutes=70.7875 | profit=-0.0064 | price=86391.2000 | sl=85371.2300 | close=False
+18:12:01.697,tsl_check,BTC-USDT,minutes=70.7878 | profit=-0.0064 | price=86391.2000 | sl=85371.2300 | close=False
+18:12:01.709,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.4957 | min_hold=60.0000 | profit=-0.0032
+18:12:01.713,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.4957 | min_hold=60.0000 | profit=-0.0032
+18:12:01.725,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.4959 | min_hold=60.0000 | profit=-0.0032
+18:12:01.729,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.4960 | min_hold=60.0000 | profit=-0.0032
+18:12:01.842,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.4979 | min_hold=120.0000 | profit=0.0001
+18:12:02.506,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5089 | min_hold=60.0000 | profit=-0.0032
+18:12:02.510,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5090 | min_hold=60.0000 | profit=-0.0032
+18:12:04.156,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5364 | min_hold=60.0000 | profit=-0.0032
+18:12:04.177,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5368 | min_hold=60.0000 | profit=-0.0032
+18:12:04.189,tsl_check,BTC-USDT,minutes=70.8293 | profit=-0.0064 | price=86391.2000 | sl=85371.2300 | close=False
+18:12:04.195,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5371 | min_hold=60.0000 | profit=-0.0034
+18:12:04.978,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=13.5277 | min_hold=60.0000 | profit=-0.0039
+18:12:04.993,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5504 | min_hold=60.0000 | profit=-0.0034
+18:12:05.027,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5510 | min_hold=60.0000 | profit=-0.0034
+18:12:05.980,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5668 | min_hold=60.0000 | profit=-0.0033
+18:12:06.195,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5704 | min_hold=60.0000 | profit=-0.0033
+18:12:06.292,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5720 | min_hold=60.0000 | profit=-0.0033
+18:12:07.223,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.5875 | min_hold=60.0000 | profit=-0.0033
+18:12:07.259,tsl_check,BTC-USDT,minutes=70.8805 | profit=-0.0064 | price=86392.6000 | sl=85371.2300 | close=False
+18:12:08.837,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.6144 | min_hold=60.0000 | profit=-0.0033
+18:12:08.839,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.6145 | min_hold=60.0000 | profit=-0.0034
+18:12:13.234,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.6877 | min_hold=60.0000 | profit=-0.0034
+18:12:13.235,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.6878 | min_hold=60.0000 | profit=-0.0034
+18:12:14.854,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.7145 | min_hold=60.0000 | profit=-0.0034
+18:12:16.441,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.7412 | min_hold=60.0000 | profit=-0.0034
+18:12:16.448,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.7412 | min_hold=60.0000 | profit=-0.0034
+18:12:16.520,tsl_check,BTC-USDT,minutes=71.0348 | profit=-0.0030 | price=86685.2000 | sl=85371.2300 | close=False
+18:12:17.171,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=13.7309 | min_hold=120.0000 | profit=0.0084
+18:12:17.256,tsl_check,BTC-USDT,minutes=71.0471 | profit=-0.0064 | price=86395.3000 | sl=85371.2300 | close=False
+18:12:17.467,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.7583 | min_hold=120.0000 | profit=0.0002
+18:12:18.057,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.7681 | min_hold=60.0000 | profit=-0.0034
+18:12:18.906,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.7822 | min_hold=60.0000 | profit=-0.0033
+18:12:18.917,tsl_check,BTC-USDT,minutes=71.0748 | profit=-0.0064 | price=86395.8000 | sl=85371.2300 | close=False
+18:12:18.919,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.7825 | min_hold=60.0000 | profit=-0.0033
+18:12:19.981,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=10.8002 | min_hold=60.0000 | profit=-0.0033
+18:12:37.294,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.0887 | min_hold=60.0000 | profit=-0.0033
+18:12:37.296,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.0888 | min_hold=60.0000 | profit=-0.0033
+18:12:37.306,tsl_check,BTC-USDT,minutes=71.3813 | profit=-0.0063 | price=86397.0000 | sl=85371.2300 | close=False
+18:12:37.311,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=14.0666 | min_hold=60.0000 | profit=-0.0007
+18:12:37.991,tsl_check,BTC-USDT,minutes=71.3927 | profit=-0.0063 | price=86397.0000 | sl=85371.2300 | close=False
+18:12:38.010,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.1006 | min_hold=60.0000 | profit=-0.0033
+18:12:38.023,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.1008 | min_hold=60.0000 | profit=-0.0033
+18:12:38.025,tsl_check,BTC-USDT,minutes=71.3933 | profit=-0.0063 | price=86397.0000 | sl=85371.2300 | close=False
+18:12:38.692,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.1120 | min_hold=60.0000 | profit=-0.0033
+18:12:38.695,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.1121 | min_hold=60.0000 | profit=-0.0033
+18:12:38.708,tsl_check,BTC-USDT,minutes=71.4046 | profit=-0.0063 | price=86398.2000 | sl=85371.2300 | close=False
+18:12:38.710,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.1123 | min_hold=60.0000 | profit=-0.0033
+18:12:38.711,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.1123 | min_hold=60.0000 | profit=-0.0033
+18:12:40.041,tsl_check,BTC-USDT,minutes=71.4269 | profit=-0.0065 | price=86380.0000 | sl=85371.2300 | close=False
+18:12:40.215,tsl_check,BTC-USDT,minutes=71.4298 | profit=-0.0037 | price=86628.9000 | sl=85371.2300 | close=False
+18:12:40.894,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=14.1263 | min_hold=120.0000 | profit=0.0093
+18:12:41.235,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.1544 | min_hold=120.0000 | profit=0.0008
+18:12:46.102,tsl_check,BTC-USDT,minutes=71.5279 | profit=-0.0065 | price=86380.0000 | sl=85371.2300 | close=False
+18:12:46.122,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.2359 | min_hold=60.0000 | profit=-0.0033
+18:12:46.150,tsl_check,BTC-USDT,minutes=71.5287 | profit=-0.0063 | price=86398.2000 | sl=85371.2300 | close=False
+18:12:46.253,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.2381 | min_hold=60.0000 | profit=-0.0033
+18:12:46.273,tsl_check,BTC-USDT,minutes=71.5307 | profit=-0.0063 | price=86400.0000 | sl=85371.2300 | close=False
+18:12:46.339,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.2395 | min_hold=60.0000 | profit=-0.0033
+18:12:47.198,tsl_check,BTC-USDT,minutes=71.5461 | profit=-0.0063 | price=86400.0000 | sl=85371.2300 | close=False
+18:12:48.189,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.2703 | min_hold=60.0000 | profit=-0.0033
+18:12:48.255,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.2714 | min_hold=60.0000 | profit=-0.0023
+18:12:49.968,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.3000 | min_hold=60.0000 | profit=-0.0028
+18:12:50.005,tsl_check,BTC-USDT,minutes=71.5929 | profit=-0.0063 | price=86401.8000 | sl=85371.2300 | close=False
+18:12:50.104,tsl_check,BTC-USDT,minutes=71.5946 | profit=-0.0063 | price=86401.8000 | sl=85371.2300 | close=False
+18:12:50.244,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.3045 | min_hold=60.0000 | profit=-0.0028
+18:12:50.314,tsl_check,BTC-USDT,minutes=71.5981 | profit=-0.0063 | price=86401.8000 | sl=85371.2300 | close=False
+18:12:52.199,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.3372 | min_hold=60.0000 | profit=-0.0029
+18:12:52.204,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.3372 | min_hold=60.0000 | profit=-0.0029
+18:12:53.000,tsl_check,BTC-USDT,minutes=71.6428 | profit=-0.0063 | price=86401.8000 | sl=85371.2300 | close=False
+18:12:53.004,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.3505 | min_hold=60.0000 | profit=-0.0029
+18:12:53.005,tsl_check,BTC-USDT,minutes=71.6429 | profit=-0.0063 | price=86402.0000 | sl=85371.2300 | close=False
+18:12:55.066,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.3849 | min_hold=60.0000 | profit=-0.0029
+18:12:55.999,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4005 | min_hold=60.0000 | profit=-0.0029
+18:12:56.736,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4128 | min_hold=60.0000 | profit=-0.0029
+18:12:56.833,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=14.3920 | min_hold=60.0000 | profit=-0.0039
+18:12:56.885,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4152 | min_hold=60.0000 | profit=-0.0037
+18:12:56.931,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=14.3935 | min_hold=60.0000 | profit=-0.0039
+18:12:58.210,tsl_check,BTC-USDT,minutes=71.7297 | profit=-0.0037 | price=86629.0000 | sl=85371.2300 | close=False
+18:12:58.879,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=14.4261 | min_hold=120.0000 | profit=0.0093
+18:12:59.231,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4544 | min_hold=120.0000 | profit=0.0008
+18:12:59.672,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4617 | min_hold=60.0000 | profit=-0.0037
+18:12:59.672,tsl_check,BTC-USDT,minutes=71.7540 | profit=-0.0061 | price=86421.7000 | sl=85371.2300 | close=False
+18:12:59.672,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4617 | min_hold=60.0000 | profit=-0.0037
+18:12:59.672,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4617 | min_hold=60.0000 | profit=-0.0037
+18:12:59.672,tsl_check,BTC-USDT,minutes=71.7540 | profit=-0.0061 | price=86421.7000 | sl=85371.2300 | close=False
+18:13:01.581,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4935 | min_hold=60.0000 | profit=-0.0037
+18:13:01.649,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4947 | min_hold=60.0000 | profit=-0.0037
+18:13:01.661,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4948 | min_hold=60.0000 | profit=-0.0037
+18:13:01.665,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.4949 | min_hold=60.0000 | profit=-0.0037
+18:13:02.932,tsl_check,BTC-USDT,minutes=71.8084 | profit=-0.0061 | price=86421.7000 | sl=85371.2300 | close=False
+18:13:04.394,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.5403 | min_hold=60.0000 | profit=-0.0037
+18:13:04.431,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.5410 | min_hold=60.0000 | profit=-0.0037
+18:13:04.458,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.5415 | min_hold=60.0000 | profit=-0.0037
+18:13:05.189,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.5537 | min_hold=60.0000 | profit=-0.0037
+18:13:05.193,tsl_check,BTC-USDT,minutes=71.8461 | profit=-0.0061 | price=86421.7000 | sl=85371.2300 | close=False
+18:13:05.945,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.5662 | min_hold=60.0000 | profit=-0.0037
+18:13:06.635,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.5777 | min_hold=60.0000 | profit=-0.0034
+18:13:06.674,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.5784 | min_hold=60.0000 | profit=-0.0034
+18:13:08.108,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.6023 | min_hold=60.0000 | profit=-0.0034
+18:13:08.791,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.6137 | min_hold=60.0000 | profit=-0.0034
+18:13:08.794,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.6137 | min_hold=60.0000 | profit=-0.0034
+18:13:08.796,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.6138 | min_hold=60.0000 | profit=-0.0034
+18:13:08.797,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.6138 | min_hold=60.0000 | profit=-0.0034
+18:13:10.879,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.6485 | min_hold=60.0000 | profit=-0.0034
+18:13:10.888,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.6486 | min_hold=60.0000 | profit=-0.0034
+18:13:10.894,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.6487 | min_hold=60.0000 | profit=-0.0034
+18:13:16.669,tsl_check,BTC-USDT,minutes=72.0373 | profit=-0.0036 | price=86639.4000 | sl=85371.2300 | close=False
+18:13:17.316,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=14.7333 | min_hold=120.0000 | profit=0.0090
+18:13:17.566,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.7599 | min_hold=120.0000 | profit=0.0007
+18:13:20.121,tsl_check,BTC-USDT,minutes=72.0949 | profit=-0.0061 | price=86421.7000 | sl=85371.2300 | close=False
+18:13:20.122,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.8025 | min_hold=60.0000 | profit=-0.0034
+18:13:24.266,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.8716 | min_hold=60.0000 | profit=-0.0034
+18:13:28.041,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9345 | min_hold=60.0000 | profit=-0.0034
+18:13:28.043,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9346 | min_hold=60.0000 | profit=-0.0034
+18:13:28.044,tsl_check,BTC-USDT,minutes=72.2269 | profit=-0.0061 | price=86415.4000 | sl=85371.2300 | close=False
+18:13:28.046,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9346 | min_hold=60.0000 | profit=-0.0034
+18:13:28.047,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9346 | min_hold=60.0000 | profit=-0.0020
+18:13:28.048,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9346 | min_hold=60.0000 | profit=-0.0015
+18:13:28.562,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=14.9208 | min_hold=60.0000 | profit=-0.0028
+18:13:28.563,tsl_check,BTC-USDT,minutes=72.2356 | profit=-0.0061 | price=86415.4000 | sl=85371.2300 | close=False
+18:13:29.232,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9543 | min_hold=60.0000 | profit=-0.0022
+18:13:29.928,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9660 | min_hold=60.0000 | profit=-0.0022
+18:13:30.534,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9761 | min_hold=60.0000 | profit=-0.0018
+18:13:30.536,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9761 | min_hold=60.0000 | profit=-0.0018
+18:13:31.059,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=11.9848 | min_hold=60.0000 | profit=-0.0023
+18:13:31.311,tsl_check,BTC-USDT,minutes=72.2814 | profit=-0.0036 | price=86639.4000 | sl=85371.2300 | close=False
+18:13:31.926,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=14.9768 | min_hold=120.0000 | profit=0.0090
+18:13:32.176,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.0034 | min_hold=120.0000 | profit=0.0008
+18:13:32.347,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.0063 | min_hold=60.0000 | profit=-0.0023
+18:13:33.013,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.0174 | min_hold=60.0000 | profit=-0.0023
+18:13:33.683,tsl_check,BTC-USDT,minutes=72.3209 | profit=-0.0071 | price=86328.0000 | sl=85371.2300 | close=False
+18:13:34.275,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=15.0160 | min_hold=60.0000 | profit=-0.0028
+18:13:34.275,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.0384 | min_hold=60.0000 | profit=-0.0023
+18:13:34.275,tsl_check,BTC-USDT,minutes=72.3308 | profit=-0.0067 | price=86366.9000 | sl=85371.2300 | close=False
+18:13:40.964,tsl_check,BTC-USDT,minutes=72.4422 | profit=-0.0067 | price=86366.9000 | sl=85371.2300 | close=False
+18:13:46.180,tsl_check,BTC-USDT,minutes=72.5292 | profit=-0.0071 | price=86334.6000 | sl=85371.2300 | close=False
+18:13:46.183,tsl_check,BTC-USDT,minutes=72.5292 | profit=-0.0071 | price=86328.6000 | sl=85371.2300 | close=False
+18:13:46.184,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.2369 | min_hold=60.0000 | profit=-0.0023
+18:13:46.185,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.2369 | min_hold=60.0000 | profit=-0.0023
+18:13:47.321,tsl_check,BTC-USDT,minutes=72.5482 | profit=-0.0032 | price=86669.7000 | sl=85371.2300 | close=False
+18:13:47.993,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=15.2446 | min_hold=120.0000 | profit=0.0088
+18:13:48.324,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.2726 | min_hold=120.0000 | profit=0.0005
+18:13:52.310,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.3390 | min_hold=60.0000 | profit=-0.0023
+18:13:55.682,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.3952 | min_hold=60.0000 | profit=-0.0023
+18:13:56.411,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.4074 | min_hold=60.0000 | profit=-0.0023
+18:13:57.153,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.4197 | min_hold=60.0000 | profit=-0.0023
+18:13:57.240,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.4212 | min_hold=60.0000 | profit=-0.0023
+18:13:57.969,tsl_check,BTC-USDT,minutes=72.7256 | profit=-0.0067 | price=86366.9000 | sl=85371.2300 | close=False
+18:13:58.608,tsl_check,BTC-USDT,minutes=72.7363 | profit=-0.0067 | price=86366.9000 | sl=85371.2300 | close=False
+18:13:59.274,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.4551 | min_hold=60.0000 | profit=-0.0023
+18:13:59.909,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.4657 | min_hold=60.0000 | profit=-0.0023
+18:14:01.240,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.4878 | min_hold=60.0000 | profit=-0.0023
+18:14:01.240,tsl_check,BTC-USDT,minutes=72.7802 | profit=-0.0066 | price=86378.9000 | sl=85371.2300 | close=False
+18:14:01.891,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.4987 | min_hold=60.0000 | profit=-0.0023
+18:14:01.891,tsl_check,BTC-USDT,minutes=72.7910 | profit=-0.0066 | price=86378.9000 | sl=85371.2300 | close=False
+18:14:01.898,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.4987 | min_hold=60.0000 | profit=-0.0023
+18:14:01.898,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.4988 | min_hold=60.0000 | profit=-0.0023
+18:14:02.214,tsl_check,BTC-USDT,minutes=72.7964 | profit=-0.0031 | price=86674.8000 | sl=85371.2300 | close=False
+18:14:02.809,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=15.4915 | min_hold=120.0000 | profit=0.0086
+18:14:03.133,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.5194 | min_hold=120.0000 | profit=0.0001
+18:14:07.441,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.5912 | min_hold=60.0000 | profit=-0.0023
+18:14:08.143,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.6029 | min_hold=60.0000 | profit=-0.0023
+18:14:14.306,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.7056 | min_hold=60.0000 | profit=-0.0023
+18:14:14.308,tsl_check,BTC-USDT,minutes=72.9980 | profit=-0.0065 | price=86381.0000 | sl=85371.2300 | close=False
+18:14:14.319,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.7058 | min_hold=60.0000 | profit=-0.0023
+18:14:14.924,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.7159 | min_hold=60.0000 | profit=-0.0023
+18:14:14.925,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.7159 | min_hold=60.0000 | profit=-0.0023
+18:14:16.208,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.7373 | min_hold=60.0000 | profit=-0.0023
+18:14:16.217,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.7374 | min_hold=60.0000 | profit=-0.0023
+18:14:16.218,tsl_check,BTC-USDT,minutes=73.0298 | profit=-0.0065 | price=86381.0000 | sl=85371.2300 | close=False
+18:14:17.025,tsl_check,BTC-USDT,minutes=73.0433 | profit=-0.0031 | price=86678.5000 | sl=85371.2300 | close=False
+18:14:17.620,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=15.7384 | min_hold=120.0000 | profit=0.0087
+18:14:17.952,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.7664 | min_hold=120.0000 | profit=0.0003
+18:14:20.120,tsl_check,BTC-USDT,minutes=73.0948 | profit=-0.0065 | price=86381.0000 | sl=85371.2300 | close=False
+18:14:20.133,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.8027 | min_hold=60.0000 | profit=-0.0025
+18:14:23.950,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.8663 | min_hold=60.0000 | profit=-0.0025
+18:14:24.544,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.8762 | min_hold=60.0000 | profit=-0.0025
+18:14:24.547,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.8763 | min_hold=60.0000 | profit=-0.0025
+18:14:24.551,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.8763 | min_hold=60.0000 | profit=-0.0025
+18:14:25.981,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.9002 | min_hold=60.0000 | profit=-0.0025
+18:14:27.535,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=15.9037 | min_hold=60.0000 | profit=-0.0008
+18:14:27.535,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.9261 | min_hold=60.0000 | profit=-0.0025
+18:14:27.545,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=15.9038 | min_hold=120.0000 | profit=0.0007
+18:14:27.546,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.9263 | min_hold=60.0000 | profit=-0.0025
+18:14:28.079,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.9351 | min_hold=60.0000 | profit=-0.0025
+18:14:29.437,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.9578 | min_hold=60.0000 | profit=-0.0025
+18:14:29.437,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=12.9578 | min_hold=60.0000 | profit=-0.0025
+18:14:32.873,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.0150 | min_hold=60.0000 | profit=-0.0025
+18:14:32.873,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.0151 | min_hold=60.0000 | profit=-0.0025
+18:14:34.941,tsl_check,BTC-USDT,minutes=73.3419 | profit=-0.0032 | price=86669.5000 | sl=85371.2300 | close=False
+18:14:35.619,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.0384 | min_hold=120.0000 | profit=0.0087
+18:14:35.938,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.0661 | min_hold=120.0000 | profit=0.0004
+18:14:37.894,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.0987 | min_hold=60.0000 | profit=-0.0025
+18:14:37.894,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.0987 | min_hold=60.0000 | profit=-0.0025
+18:14:37.894,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.0987 | min_hold=60.0000 | profit=-0.0025
+18:14:37.894,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.0987 | min_hold=60.0000 | profit=-0.0025
+18:14:37.894,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.0987 | min_hold=60.0000 | profit=-0.0026
+18:14:38.492,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.1087 | min_hold=60.0000 | profit=-0.0028
+18:14:39.190,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.1203 | min_hold=60.0000 | profit=-0.0028
+18:14:39.191,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.1203 | min_hold=60.0000 | profit=-0.0028
+18:14:39.192,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.0979 | min_hold=120.0000 | profit=0.0007
+18:14:39.193,tsl_check,BTC-USDT,minutes=73.4127 | profit=-0.0065 | price=86381.0000 | sl=85371.2300 | close=False
+18:14:43.942,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.1995 | min_hold=60.0000 | profit=-0.0028
+18:14:43.942,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.1995 | min_hold=60.0000 | profit=-0.0028
+18:14:43.942,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.1995 | min_hold=60.0000 | profit=-0.0028
+18:14:43.942,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.1771 | min_hold=60.0000 | profit=-0.0002
+18:14:49.587,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.2936 | min_hold=60.0000 | profit=-0.0028
+18:14:50.725,tsl_check,BTC-USDT,minutes=73.6049 | profit=-0.0033 | price=86660.5000 | sl=85371.2300 | close=False
+18:14:50.962,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3165 | min_hold=60.0000 | profit=-0.0028
+18:14:50.962,tsl_check,BTC-USDT,minutes=73.6089 | profit=-0.0065 | price=86385.4000 | sl=85371.2300 | close=False
+18:14:50.962,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3165 | min_hold=60.0000 | profit=-0.0028
+18:14:50.962,tsl_check,BTC-USDT,minutes=73.6089 | profit=-0.0065 | price=86385.4000 | sl=85371.2300 | close=False
+18:14:50.962,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3165 | min_hold=60.0000 | profit=-0.0028
+18:14:50.962,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3165 | min_hold=60.0000 | profit=-0.0028
+18:14:50.962,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.2941 | min_hold=60.0000 | profit=-0.0039
+18:14:51.411,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.3016 | min_hold=120.0000 | profit=0.0087
+18:14:51.560,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3265 | min_hold=60.0000 | profit=-0.0028
+18:14:51.560,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3265 | min_hold=60.0000 | profit=-0.0028
+18:14:51.560,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3265 | min_hold=60.0000 | profit=-0.0028
+18:14:51.560,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3265 | min_hold=60.0000 | profit=-0.0028
+18:14:51.769,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3300 | min_hold=120.0000 | profit=0.0003
+18:14:52.188,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3370 | min_hold=60.0000 | profit=-0.0028
+18:14:52.188,tsl_check,BTC-USDT,minutes=73.6293 | profit=-0.0065 | price=86380.0000 | sl=85371.2300 | close=False
+18:14:52.188,tsl_check,BTC-USDT,minutes=73.6293 | profit=-0.0065 | price=86380.0000 | sl=85371.2300 | close=False
+18:14:52.897,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3488 | min_hold=60.0000 | profit=-0.0028
+18:14:52.897,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.3263 | min_hold=120.0000 | profit=0.0007
+18:14:52.897,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3488 | min_hold=60.0000 | profit=-0.0028
+18:14:53.588,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3603 | min_hold=60.0000 | profit=-0.0028
+18:14:53.588,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.3603 | min_hold=60.0000 | profit=-0.0028
+18:14:59.393,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.4570 | min_hold=60.0000 | profit=-0.0029
+18:14:59.393,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.4570 | min_hold=60.0000 | profit=-0.0024
+18:14:59.393,tsl_check,BTC-USDT,minutes=73.7494 | profit=-0.0065 | price=86386.6000 | sl=85371.2300 | close=False
+18:14:59.975,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.4667 | min_hold=60.0000 | profit=-0.0028
+18:14:59.975,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.4667 | min_hold=60.0000 | profit=-0.0028
+18:14:59.975,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.4667 | min_hold=60.0000 | profit=-0.0028
+18:15:00.683,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.4785 | min_hold=60.0000 | profit=-0.0029
+18:15:00.683,tsl_check,BTC-USDT,minutes=73.7709 | profit=-0.0064 | price=86389.5000 | sl=85371.2300 | close=False
+18:15:05.616,tsl_check,BTC-USDT,minutes=73.8531 | profit=-0.0035 | price=86640.1000 | sl=85371.2300 | close=False
+18:15:05.868,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.5650 | min_hold=60.0000 | profit=-0.0024
+18:15:05.868,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.5425 | min_hold=60.0000 | profit=-0.0002
+18:15:05.868,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.5650 | min_hold=60.0000 | profit=-0.0024
+18:15:05.868,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.5650 | min_hold=60.0000 | profit=-0.0024
+18:15:05.868,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.5650 | min_hold=60.0000 | profit=-0.0024
+18:15:05.868,tsl_check,BTC-USDT,minutes=73.8573 | profit=-0.0065 | price=86380.0000 | sl=85371.2300 | close=False
+18:15:05.868,tsl_check,BTC-USDT,minutes=73.8573 | profit=-0.0065 | price=86380.0000 | sl=85371.2300 | close=False
+18:15:05.868,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.5650 | min_hold=60.0000 | profit=-0.0027
+18:15:05.868,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.5650 | min_hold=60.0000 | profit=-0.0027
+18:15:05.868,tsl_check,BTC-USDT,minutes=73.8573 | profit=-0.0065 | price=86380.0000 | sl=85371.2300 | close=False
+18:15:06.225,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.5485 | min_hold=120.0000 | profit=0.0089
+18:15:06.451,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.5747 | min_hold=60.0000 | profit=-0.0027
+18:15:06.563,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.5766 | min_hold=120.0000 | profit=0.0004
+18:15:07.124,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.5859 | min_hold=60.0000 | profit=-0.0027
+18:15:07.124,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.5635 | min_hold=120.0000 | profit=0.0014
+18:15:07.140,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.5637 | min_hold=120.0000 | profit=0.0021
+18:15:07.140,tsl_check,BTC-USDT,minutes=73.8785 | profit=-0.0068 | price=86354.0000 | sl=85371.2300 | close=False
+18:15:11.730,tsl_check,BTC-USDT,minutes=73.9550 | profit=-0.0068 | price=86354.0000 | sl=85371.2300 | close=False
+18:15:11.730,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.6402 | min_hold=120.0000 | profit=0.0022
+18:15:11.730,tsl_check,BTC-USDT,minutes=73.9550 | profit=-0.0068 | price=86354.0000 | sl=85371.2300 | close=False
+18:15:11.730,tsl_check,BTC-USDT,minutes=73.9550 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:15:12.391,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.6737 | min_hold=60.0000 | profit=-0.0027
+18:15:12.391,tsl_check,BTC-USDT,minutes=73.9660 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:15:12.391,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.6737 | min_hold=60.0000 | profit=-0.0023
+18:15:12.391,tsl_check,BTC-USDT,minutes=73.9660 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:15:16.175,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.7368 | min_hold=60.0000 | profit=-0.0017
+18:15:16.175,tsl_check,BTC-USDT,minutes=74.0291 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:15:16.175,tsl_check,BTC-USDT,minutes=74.0291 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:15:19.724,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.7959 | min_hold=60.0000 | profit=-0.0022
+18:15:19.724,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.7959 | min_hold=60.0000 | profit=-0.0022
+18:15:20.404,tsl_check,BTC-USDT,minutes=74.0996 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:15:20.404,tsl_check,BTC-USDT,minutes=74.0996 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:15:20.404,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.8072 | min_hold=60.0000 | profit=-0.0023
+18:15:20.404,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.8072 | min_hold=60.0000 | profit=-0.0023
+18:15:20.704,tsl_check,BTC-USDT,minutes=74.1046 | profit=-0.0033 | price=86664.9000 | sl=85371.2300 | close=False
+18:15:21.345,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=16.8005 | min_hold=120.0000 | profit=0.0086
+18:15:21.616,tsl_check,BTC-USDT,minutes=74.1198 | profit=-0.0070 | price=86337.4000 | sl=85371.2300 | close=False
+18:15:21.616,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.8274 | min_hold=60.0000 | profit=-0.0023
+18:15:21.664,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.8282 | min_hold=120.0000 | profit=0.0001
+18:15:29.067,tsl_check,BTC-USDT,minutes=74.2440 | profit=-0.0070 | price=86337.4000 | sl=85371.2300 | close=False
+18:15:29.067,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.9516 | min_hold=60.0000 | profit=-0.0023
+18:15:29.067,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.9516 | min_hold=60.0000 | profit=-0.0023
+18:15:30.649,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.9780 | min_hold=60.0000 | profit=-0.0023
+18:15:30.651,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.9780 | min_hold=60.0000 | profit=-0.0023
+18:15:30.653,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.9780 | min_hold=60.0000 | profit=-0.0018
+18:15:30.653,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.9781 | min_hold=60.0000 | profit=-0.0017
+18:15:31.435,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=13.9910 | min_hold=60.0000 | profit=-0.0022
+18:15:32.193,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.0037 | min_hold=60.0000 | profit=-0.0022
+18:15:36.025,tsl_check,BTC-USDT,minutes=74.3599 | profit=-0.0036 | price=86636.6000 | sl=85371.2300 | close=False
+18:15:36.623,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=17.0551 | min_hold=120.0000 | profit=0.0090
+18:15:36.874,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.0817 | min_hold=120.0000 | profit=0.0006
+18:15:37.929,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.0993 | min_hold=60.0000 | profit=-0.0017
+18:15:37.930,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.0993 | min_hold=60.0000 | profit=-0.0017
+18:15:37.931,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.0994 | min_hold=60.0000 | profit=-0.0023
+18:15:37.932,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.0994 | min_hold=60.0000 | profit=-0.0023
+18:15:38.788,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.1136 | min_hold=60.0000 | profit=-0.0023
+18:15:41.195,tsl_check,BTC-USDT,minutes=74.4461 | profit=-0.0070 | price=86339.6000 | sl=85371.2300 | close=False
+18:15:41.196,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.1538 | min_hold=60.0000 | profit=-0.0023
+18:15:41.968,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.1666 | min_hold=60.0000 | profit=-0.0023
+18:15:42.763,tsl_check,BTC-USDT,minutes=74.4722 | profit=-0.0070 | price=86339.6000 | sl=85371.2300 | close=False
+18:15:42.763,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.1799 | min_hold=60.0000 | profit=-0.0023
+18:15:42.768,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.1799 | min_hold=60.0000 | profit=-0.0023
+18:15:42.768,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.1800 | min_hold=60.0000 | profit=-0.0023
+18:15:43.601,tsl_check,BTC-USDT,minutes=74.4862 | profit=-0.0069 | price=86350.0000 | sl=85371.2300 | close=False
+18:15:43.604,tsl_check,BTC-USDT,minutes=74.4862 | profit=-0.0069 | price=86350.0000 | sl=85371.2300 | close=False
+18:15:43.607,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.1939 | min_hold=60.0000 | profit=-0.0023
+18:15:43.610,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.1940 | min_hold=60.0000 | profit=-0.0023
+18:15:44.371,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2067 | min_hold=60.0000 | profit=-0.0023
+18:15:45.141,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2195 | min_hold=60.0000 | profit=-0.0023
+18:15:45.141,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2195 | min_hold=60.0000 | profit=-0.0023
+18:15:45.141,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2195 | min_hold=60.0000 | profit=-0.0023
+18:15:45.155,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2195 | min_hold=60.0000 | profit=-0.0023
+18:15:45.963,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=17.2108 | min_hold=60.0000 | profit=-0.0008
+18:15:46.780,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2468 | min_hold=60.0000 | profit=-0.0027
+18:15:46.781,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=17.2244 | min_hold=60.0000 | profit=-0.0024
+18:15:46.783,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2469 | min_hold=60.0000 | profit=-0.0021
+18:15:46.784,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2469 | min_hold=60.0000 | profit=-0.0021
+18:15:46.785,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2469 | min_hold=60.0000 | profit=-0.0021
+18:15:47.551,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2597 | min_hold=60.0000 | profit=-0.0021
+18:15:47.552,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2597 | min_hold=60.0000 | profit=-0.0021
+18:15:47.554,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2597 | min_hold=60.0000 | profit=-0.0021
+18:15:47.555,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2598 | min_hold=60.0000 | profit=-0.0022
+18:15:47.557,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2598 | min_hold=60.0000 | profit=-0.0022
+18:15:48.416,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2741 | min_hold=60.0000 | profit=-0.0022
+18:15:49.222,tsl_check,BTC-USDT,minutes=74.5799 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:15:49.226,tsl_check,BTC-USDT,minutes=74.5799 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:15:49.228,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2876 | min_hold=60.0000 | profit=-0.0015
+18:15:49.229,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2877 | min_hold=60.0000 | profit=-0.0015
+18:15:49.230,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2877 | min_hold=60.0000 | profit=-0.0020
+18:15:49.232,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.2877 | min_hold=60.0000 | profit=-0.0020
+18:15:49.981,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3002 | min_hold=60.0000 | profit=-0.0015
+18:15:49.984,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3002 | min_hold=60.0000 | profit=-0.0020
+18:15:50.775,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3134 | min_hold=60.0000 | profit=-0.0022
+18:15:51.276,tsl_check,BTC-USDT,minutes=74.6141 | profit=-0.0035 | price=86647.1000 | sl=85371.2300 | close=False
+18:15:51.964,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=17.3108 | min_hold=120.0000 | profit=0.0091
+18:15:52.289,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3386 | min_hold=120.0000 | profit=0.0007
+18:15:52.577,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3434 | min_hold=60.0000 | profit=-0.0022
+18:15:52.579,tsl_check,BTC-USDT,minutes=74.6358 | profit=-0.0070 | price=86339.6000 | sl=85371.2300 | close=False
+18:15:52.581,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3435 | min_hold=60.0000 | profit=-0.0022
+18:15:52.581,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3435 | min_hold=60.0000 | profit=-0.0022
+18:15:52.582,tsl_check,BTC-USDT,minutes=74.6359 | profit=-0.0070 | price=86339.6000 | sl=85371.2300 | close=False
+18:15:53.346,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3563 | min_hold=60.0000 | profit=-0.0022
+18:15:53.347,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3563 | min_hold=60.0000 | profit=-0.0015
+18:15:53.349,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3563 | min_hold=60.0000 | profit=-0.0021
+18:15:53.350,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3563 | min_hold=60.0000 | profit=-0.0021
+18:15:54.185,tsl_check,BTC-USDT,minutes=74.6626 | profit=-0.0070 | price=86339.6000 | sl=85371.2300 | close=False
+18:15:54.185,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3702 | min_hold=60.0000 | profit=-0.0021
+18:15:54.185,tsl_check,BTC-USDT,minutes=74.6626 | profit=-0.0068 | price=86359.3000 | sl=85371.2300 | close=False
+18:15:54.185,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3702 | min_hold=60.0000 | profit=-0.0021
+18:15:54.199,tsl_check,BTC-USDT,minutes=74.6628 | profit=-0.0068 | price=86359.3000 | sl=85371.2300 | close=False
+18:15:54.977,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3834 | min_hold=60.0000 | profit=-0.0021
+18:15:54.978,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3835 | min_hold=60.0000 | profit=-0.0022
+18:15:54.979,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3835 | min_hold=60.0000 | profit=-0.0022
+18:15:54.980,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.3835 | min_hold=60.0000 | profit=-0.0022
+18:16:03.485,tsl_check,BTC-USDT,minutes=74.8176 | profit=-0.0068 | price=86360.0000 | sl=85371.2300 | close=False
+18:16:03.486,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.5253 | min_hold=60.0000 | profit=-0.0022
+18:16:06.494,tsl_check,BTC-USDT,minutes=74.8677 | profit=-0.0039 | price=86611.9000 | sl=85371.2300 | close=False
+18:16:07.182,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=17.5644 | min_hold=120.0000 | profit=0.0097
+18:16:07.382,tsl_check,BTC-USDT,minutes=74.8825 | profit=-0.0068 | price=86360.0000 | sl=85371.2300 | close=False
+18:16:07.431,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.5910 | min_hold=120.0000 | profit=0.0012
+18:16:12.552,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.6764 | min_hold=60.0000 | profit=-0.0022
+18:16:12.552,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.6764 | min_hold=60.0000 | profit=-0.0022
+18:16:14.078,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.7018 | min_hold=60.0000 | profit=-0.0022
+18:16:15.625,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.7276 | min_hold=60.0000 | profit=-0.0023
+18:16:16.401,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.7405 | min_hold=60.0000 | profit=-0.0023
+18:16:17.164,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.7532 | min_hold=60.0000 | profit=-0.0023
+18:16:17.166,tsl_check,BTC-USDT,minutes=75.0456 | profit=-0.0068 | price=86360.0000 | sl=85371.2300 | close=False
+18:16:18.647,tsl_check,BTC-USDT,minutes=75.0703 | profit=-0.0067 | price=86366.9000 | sl=85371.2300 | close=False
+18:16:18.648,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.7780 | min_hold=60.0000 | profit=-0.0023
+18:16:18.650,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.7780 | min_hold=60.0000 | profit=-0.0023
+18:16:18.650,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.7780 | min_hold=60.0000 | profit=-0.0023
+18:16:20.179,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.8035 | min_hold=60.0000 | profit=-0.0023
+18:16:20.182,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.8035 | min_hold=60.0000 | profit=-0.0023
+18:16:20.183,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.8036 | min_hold=60.0000 | profit=-0.0023
+18:16:20.946,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.8163 | min_hold=60.0000 | profit=-0.0023
+18:16:20.947,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.8163 | min_hold=60.0000 | profit=-0.0023
+18:16:21.361,tsl_check,BTC-USDT,minutes=75.1155 | profit=-0.0039 | price=86608.9000 | sl=85371.2300 | close=False
+18:16:21.674,tsl_check,BTC-USDT,minutes=75.1207 | profit=-0.0067 | price=86366.9000 | sl=85371.2300 | close=False
+18:16:21.993,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=17.8113 | min_hold=120.0000 | profit=0.0097
+18:16:22.329,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.8393 | min_hold=120.0000 | profit=0.0012
+18:16:25.614,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.8940 | min_hold=60.0000 | profit=-0.0023
+18:16:25.615,tsl_check,BTC-USDT,minutes=75.1864 | profit=-0.0067 | price=86366.9000 | sl=85371.2300 | close=False
+18:16:25.616,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.8941 | min_hold=60.0000 | profit=-0.0025
+18:16:29.441,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=17.9354 | min_hold=120.0000 | profit=0.0003
+18:16:29.442,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.9579 | min_hold=60.0000 | profit=-0.0025
+18:16:30.219,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.9708 | min_hold=60.0000 | profit=-0.0025
+18:16:30.223,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.9709 | min_hold=60.0000 | profit=-0.0025
+18:16:30.978,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.9834 | min_hold=60.0000 | profit=-0.0025
+18:16:31.775,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.9967 | min_hold=60.0000 | profit=-0.0025
+18:16:31.775,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=17.9743 | min_hold=60.0000 | profit=-0.0018
+18:16:31.775,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=14.9967 | min_hold=60.0000 | profit=-0.0027
+18:16:32.549,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=17.9872 | min_hold=60.0000 | profit=-0.0039
+18:16:33.346,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.0229 | min_hold=60.0000 | profit=-0.0027
+18:16:34.129,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.0360 | min_hold=60.0000 | profit=-0.0027
+18:16:34.131,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.0360 | min_hold=60.0000 | profit=-0.0027
+18:16:35.655,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.0614 | min_hold=60.0000 | profit=-0.0027
+18:16:35.655,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.0614 | min_hold=60.0000 | profit=-0.0027
+18:16:36.219,tsl_check,BTC-USDT,minutes=75.3632 | profit=-0.0037 | price=86623.0000 | sl=85371.2300 | close=False
+18:16:36.803,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=18.0581 | min_hold=120.0000 | profit=0.0094
+18:16:37.116,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.0858 | min_hold=120.0000 | profit=0.0008
+18:16:38.040,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.1012 | min_hold=60.0000 | profit=-0.0027
+18:16:38.041,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.1012 | min_hold=60.0000 | profit=-0.0027
+18:16:38.043,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.1012 | min_hold=60.0000 | profit=-0.0027
+18:16:39.549,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.1263 | min_hold=60.0000 | profit=-0.0027
+18:16:39.552,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.1264 | min_hold=60.0000 | profit=-0.0027
+18:16:40.314,tsl_check,BTC-USDT,minutes=75.4314 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:16:46.233,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.2377 | min_hold=60.0000 | profit=-0.0027
+18:16:46.234,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.2377 | min_hold=60.0000 | profit=-0.0027
+18:16:53.207,tsl_check,BTC-USDT,minutes=75.6463 | profit=-0.0036 | price=86639.5000 | sl=85371.2300 | close=False
+18:16:53.396,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.3571 | min_hold=60.0000 | profit=-0.0027
+18:16:53.993,tsl_check,SOL-USDT,check=min_holding_BLOCKED | minutes=18.3446 | min_hold=120.0000 | profit=0.0090
+18:16:54.156,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.3698 | min_hold=60.0000 | profit=-0.0027
+18:16:54.157,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.3698 | min_hold=60.0000 | profit=-0.0027
+18:16:54.159,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.3698 | min_hold=60.0000 | profit=-0.0027
+18:16:54.371,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.3733 | min_hold=120.0000 | profit=0.0006
+18:16:54.961,tsl_check,BTC-USDT,minutes=75.6755 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:16:54.962,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.3832 | min_hold=60.0000 | profit=-0.0027
+18:16:55.792,tsl_check,BTC-USDT,minutes=75.6894 | profit=-0.0071 | price=86330.8000 | sl=85371.2300 | close=False
+18:16:55.793,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.3970 | min_hold=60.0000 | profit=-0.0027
+18:16:55.795,tsl_check,BTC-USDT,minutes=75.6894 | profit=-0.0071 | price=86330.8000 | sl=85371.2300 | close=False
+18:16:55.796,tsl_check,BTC-USDT,minutes=75.6894 | profit=-0.0076 | price=86292.3000 | sl=85371.2300 | close=False
+18:16:55.797,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.3971 | min_hold=60.0000 | profit=-0.0027
+18:16:55.798,tsl_check,BTC-USDT,minutes=75.6895 | profit=-0.0073 | price=86315.2000 | sl=85371.2300 | close=False
+18:16:55.799,tsl_check,ETH-USDT,check=min_holding_BLOCKED | minutes=15.3971 | min_hold=60.0000 | profit=-0.0027
+18:16:56.236,close,BTC-USDT,exit=86640.0000 | pnl_usd=0.0000 | pnl_pct=-0.0025 | time_min=75.6904 | reason=ws_unknown
+18:16:57.633,close,ETH-USDT,exit=2819.1200 | pnl_usd=0.0000 | pnl_pct=0.0014 | time_min=15.4214 | reason=ws_unknown
+18:16:58.456,close,SOL-USDT,exit=131.1200 | pnl_usd=0.0000 | pnl_pct=0.0098 | time_min=18.4123 | reason=ws_unknown

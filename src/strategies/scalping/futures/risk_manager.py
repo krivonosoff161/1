@@ -167,7 +167,40 @@ class FuturesRiskManager:
 
             balance_profile = self.config_manager.get_balance_profile(balance)
 
-            base_usd_size = balance_profile["base_position_usd"]
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Прогрессивная интерполяция размера позиции на основе баланса
+            is_progressive = balance_profile.get("progressive", False)
+            if is_progressive:
+                # Для прогрессивных профилей интерполируем между size_at_min и size_at_max
+                size_at_min = balance_profile.get("size_at_min", balance_profile.get("min_position_usd", 50.0))
+                size_at_max = balance_profile.get("size_at_max", balance_profile.get("max_position_usd", 200.0))
+                min_balance = balance_profile.get("min_balance", 500.0)
+                max_balance = balance_profile.get("threshold", balance_profile.get("max_balance", 1500.0))
+                
+                # Линейная интерполяция: size = size_at_min + (size_at_max - size_at_min) * (balance - min_balance) / (max_balance - min_balance)
+                if max_balance > min_balance:
+                    balance_range = max_balance - min_balance
+                    size_range = size_at_max - size_at_min
+                    # Ограничиваем баланс в пределах [min_balance, max_balance]
+                    clamped_balance = max(min_balance, min(balance, max_balance))
+                    # Интерполируем размер
+                    interpolated_size = size_at_min + (size_range * (clamped_balance - min_balance) / balance_range)
+                    base_usd_size = interpolated_size
+                    logger.info(
+                        f"📊 Прогрессивный расчет размера для баланса ${balance:.2f}: "
+                        f"${size_at_min:.2f} → ${size_at_max:.2f} (range: ${min_balance:.2f}-${max_balance:.2f}) "
+                        f"→ base_size=${base_usd_size:.2f}"
+                    )
+                else:
+                    # Если диапазон некорректен, используем base_position_usd
+                    base_usd_size = balance_profile.get("base_position_usd", size_at_min)
+                    logger.warning(
+                        f"⚠️ Некорректный диапазон баланса для прогрессивного расчета ({min_balance}-{max_balance}), "
+                        f"используем base_position_usd=${base_usd_size:.2f}"
+                    )
+            else:
+                # Для не-прогрессивных профилей используем base_position_usd
+                base_usd_size = balance_profile["base_position_usd"]
+            
             min_usd_size = balance_profile["min_position_usd"]
             max_usd_size = balance_profile["max_position_usd"]
 
@@ -407,13 +440,12 @@ class FuturesRiskManager:
                 )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для прогрессивных профилей уменьшаем multiplier
-            # чтобы не перезаписывать прогрессивный расчет
-            is_progressive = balance_profile.get("progressive", False)
+            # чтобы не перезаписывать прогрессивный расчет (уже выполнен выше при расчете base_usd_size)
             original_multiplier = strength_multiplier
             if is_progressive:
-                # Для прогрессивных профилей используем меньший multiplier (0.8)
-                # чтобы прогрессивный расчет работал правильно
-                progressive_multiplier = 0.8  # 80% от обычного multiplier
+                # Для прогрессивных профилей используем меньший multiplier (0.9 вместо 0.8)
+                # чтобы прогрессивный расчет работал правильно, но множители все равно влияли
+                progressive_multiplier = 0.9  # 90% от обычного multiplier (увеличено с 0.8)
                 strength_multiplier = 1.0 + (strength_multiplier - 1.0) * progressive_multiplier
                 logger.debug(
                     f"📊 Прогрессивный профиль: уменьшаем multiplier до {strength_multiplier:.2f} "
@@ -873,6 +905,41 @@ class FuturesRiskManager:
                         "⚠️ Emergency stop активен - пропускаем позицию (торговля заблокирована)"
                     )
                     return 0.0
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #5: Проверка минимального размера перед возвратом
+            if symbol and price > 0:
+                try:
+                    # Получаем детали инструмента для проверки минимального размера
+                    inst_details = await self.client.get_instrument_details(symbol)
+                    ct_val = float(inst_details.get("ctVal", 0.01))
+                    min_sz = float(inst_details.get("minSz", 0.01))
+                    
+                    # Конвертируем размер из монет в контракты
+                    size_in_contracts = position_size / ct_val if ct_val > 0 else 0
+                    
+                    if size_in_contracts < min_sz:
+                        # Размер меньше минимума - увеличиваем до минимума
+                        min_size_in_coins = min_sz * ct_val
+                        logger.warning(
+                            f"⚠️ Рассчитанный размер позиции {symbol} меньше минимума биржи: "
+                            f"{size_in_contracts:.6f} контрактов < {min_sz:.6f} контрактов. "
+                            f"Увеличиваем до минимума: {position_size:.6f} → {min_size_in_coins:.6f} монет"
+                        )
+                        position_size = min_size_in_coins
+                        
+                        # Пересчитываем notional и margin для нового размера
+                        notional_usd = position_size * price
+                        margin_usd = notional_usd / leverage if leverage > 0 else notional_usd
+                        
+                        logger.info(
+                            f"💰 РАСЧЕТ СКОРРЕКТИРОВАН: position_size={position_size:.6f} монет "
+                            f"({min_sz:.6f} контрактов), notional=${notional_usd:.2f}, margin=${margin_usd:.2f}"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ Не удалось проверить минимальный размер для {symbol}: {e}, "
+                        f"используем рассчитанный размер {position_size:.6f} монет"
+                    )
 
             logger.info(
                 f"💰 ФИНАЛЬНЫЙ РАСЧЕТ: balance=${balance:.2f}, "
