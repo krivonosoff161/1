@@ -59,7 +59,9 @@ class SignalValidator:
 
             # 1. Проверка минимальной силы сигнала
             strength = signal.get("strength", 0)
-            min_strength = signal.get("min_strength", 0.3)  # Может быть в сигнале или конфиге
+            min_strength = signal.get(
+                "min_strength", 0.3
+            )  # Может быть в сигнале или конфиге
             if strength < min_strength:
                 logger.debug(
                     f"🔍 SignalValidator: Сигнал {symbol} не прошел проверку силы "
@@ -70,7 +72,9 @@ class SignalValidator:
             # 2. Проверка наличия цены
             price = signal.get("price")
             if not price or price <= 0:
-                logger.warning(f"⚠️ SignalValidator: Сигнал {symbol} не содержит валидную цену")
+                logger.warning(
+                    f"⚠️ SignalValidator: Сигнал {symbol} не содержит валидную цену"
+                )
                 return False
 
             # 3. Проверка направления
@@ -84,12 +88,18 @@ class SignalValidator:
             # 4. Проверка рисков через RiskManager
             if self.risk_manager:
                 try:
-                    is_risk_ok = await self._check_risks(signal, regime, balance_profile)
+                    is_risk_ok = await self._check_risks(
+                        signal, regime, balance_profile
+                    )
                     if not is_risk_ok:
-                        logger.debug(f"🔍 SignalValidator: Сигнал {symbol} не прошел проверку рисков")
+                        logger.debug(
+                            f"🔍 SignalValidator: Сигнал {symbol} не прошел проверку рисков"
+                        )
                         return False
                 except Exception as e:
-                    logger.warning(f"⚠️ SignalValidator: Ошибка проверки рисков для {symbol}: {e}")
+                    logger.warning(
+                        f"⚠️ SignalValidator: Ошибка проверки рисков для {symbol}: {e}"
+                    )
 
             # 5. Проверка баланса через BalanceChecker
             if self.balance_checker:
@@ -101,10 +111,14 @@ class SignalValidator:
                         )
                         return False
                 except Exception as e:
-                    logger.warning(f"⚠️ SignalValidator: Ошибка проверки баланса для {symbol}: {e}")
+                    logger.warning(
+                        f"⚠️ SignalValidator: Ошибка проверки баланса для {symbol}: {e}"
+                    )
 
             # 6. Проверка лимитов открытых позиций
-            max_open_positions = signal.get("max_open_positions", 5)  # Может быть в конфиге
+            max_open_positions = signal.get(
+                "max_open_positions", 5
+            )  # Может быть в конфиге
             current_positions_count = signal.get("current_positions_count", 0)
             if current_positions_count >= max_open_positions:
                 logger.debug(
@@ -163,4 +177,3 @@ class SignalValidator:
         # Делегируем проверку в BalanceChecker
         # TODO: Реализовать после интеграции с BalanceChecker
         return True
-

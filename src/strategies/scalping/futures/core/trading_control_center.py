@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 from .data_registry import DataRegistry
-from .position_registry import PositionRegistry, PositionMetadata
+from .position_registry import PositionMetadata, PositionRegistry
 
 
 class TradingControlCenter:
@@ -129,7 +129,9 @@ class TradingControlCenter:
         if signal:
             logger.debug(f"✅ TradingControlCenter: Сгенерирован сигнал для {symbol}")
         else:
-            logger.debug(f"ℹ️ TradingControlCenter: Сигнал для {symbol} не сгенерирован")
+            logger.debug(
+                f"ℹ️ TradingControlCenter: Сигнал для {symbol} не сгенерирован"
+            )
 
         return signal
 
@@ -160,7 +162,9 @@ class TradingControlCenter:
         if success:
             logger.info(f"✅ TradingControlCenter: Позиция {symbol} открыта")
         else:
-            logger.warning(f"⚠️ TradingControlCenter: Не удалось открыть позицию {symbol}")
+            logger.warning(
+                f"⚠️ TradingControlCenter: Не удалось открыть позицию {symbol}"
+            )
 
         return success
 
@@ -215,9 +219,13 @@ class TradingControlCenter:
         success = await self.exit_analyzer.close_position(symbol, reason, decision)
 
         if success:
-            logger.info(f"✅ TradingControlCenter: Позиция {symbol} закрыта (reason={reason})")
+            logger.info(
+                f"✅ TradingControlCenter: Позиция {symbol} закрыта (reason={reason})"
+            )
         else:
-            logger.warning(f"⚠️ TradingControlCenter: Не удалось закрыть позицию {symbol}")
+            logger.warning(
+                f"⚠️ TradingControlCenter: Не удалось закрыть позицию {symbol}"
+            )
 
         return success
 
@@ -244,7 +252,9 @@ class TradingControlCenter:
         """
         await self.data_registry.update_regime(symbol, regime, params)
 
-    async def update_balance(self, balance: float, profile: Optional[str] = None) -> None:
+    async def update_balance(
+        self, balance: float, profile: Optional[str] = None
+    ) -> None:
         """
         Обновить баланс и профиль баланса.
 
@@ -253,4 +263,3 @@ class TradingControlCenter:
             profile: Профиль баланса (small, medium, large)
         """
         await self.data_registry.update_balance(balance, profile)
-

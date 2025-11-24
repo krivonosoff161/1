@@ -161,4 +161,3 @@ class StructuredLogger:
                 f"❌ StructuredLogger: Ошибка логирования сигнала для {symbol}: {e}",
                 exc_info=True,
             )
-

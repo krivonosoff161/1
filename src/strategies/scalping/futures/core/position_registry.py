@@ -147,7 +147,11 @@ class PositionRegistry:
             Данные позиции или None
         """
         async with self._lock:
-            return self._positions.get(symbol, {}).copy() if symbol in self._positions else None
+            return (
+                self._positions.get(symbol, {}).copy()
+                if symbol in self._positions
+                else None
+            )
 
     async def get_metadata(self, symbol: str) -> Optional[PositionMetadata]:
         """
@@ -163,7 +167,10 @@ class PositionRegistry:
             return self._metadata.get(symbol)
 
     async def update_position(
-        self, symbol: str, position_updates: Optional[Dict[str, Any]] = None, metadata_updates: Optional[Dict[str, Any]] = None
+        self,
+        symbol: str,
+        position_updates: Optional[Dict[str, Any]] = None,
+        metadata_updates: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Обновить позицию и/или метаданные.
@@ -193,7 +200,9 @@ class PositionRegistry:
                             setattr(self._metadata[symbol], key, value)
                 else:
                     # Создаем новые метаданные
-                    self._metadata[symbol] = PositionMetadata.from_dict(metadata_updates)
+                    self._metadata[symbol] = PositionMetadata.from_dict(
+                        metadata_updates
+                    )
 
             logger.debug(f"✅ PositionRegistry: Обновлена позиция {symbol}")
 
@@ -267,7 +276,11 @@ class PositionRegistry:
         Returns:
             Данные позиции или None
         """
-        return self._positions.get(symbol, {}).copy() if symbol in self._positions else None
+        return (
+            self._positions.get(symbol, {}).copy()
+            if symbol in self._positions
+            else None
+        )
 
     def get_metadata_sync(self, symbol: str) -> Optional[PositionMetadata]:
         """
@@ -296,4 +309,3 @@ class PositionRegistry:
             True если позиция зарегистрирована
         """
         return symbol in self._positions
-

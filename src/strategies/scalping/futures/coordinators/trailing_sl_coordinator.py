@@ -81,11 +81,15 @@ class TrailingSLCoordinator:
         )
         self.fast_adx = fast_adx
         self.position_manager = position_manager
-        self.order_flow = order_flow  # ✅ ЭТАП 1.1: OrderFlowIndicator для анализа разворота
+        self.order_flow = (
+            order_flow  # ✅ ЭТАП 1.1: OrderFlowIndicator для анализа разворота
+        )
         self.exit_analyzer = exit_analyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
-        
+
         # ✅ ЭТАП 1.1: История delta для анализа разворота Order Flow
-        self._order_flow_delta_history: Dict[str, list] = {}  # symbol -> [(timestamp, delta), ...]
+        self._order_flow_delta_history: Dict[
+            str, list
+        ] = {}  # symbol -> [(timestamp, delta), ...]
 
         # TSL для каждой позиции
         self.trailing_sl_by_symbol: Dict[str, TrailingStopLoss] = {}
@@ -513,7 +517,7 @@ class TrailingSLCoordinator:
                 "adx": None,
                 "order_flow": None,
                 "multi_timeframe": None,
-                "combined": None
+                "combined": None,
             }
 
             try:
@@ -523,48 +527,73 @@ class TrailingSLCoordinator:
                     if adx_value and adx_value > 0:
                         trend_analysis["adx"] = min(adx_value / 100.0, 1.0)
                         trend_strength = trend_analysis["adx"]
-                
+
                 # 2. Order Flow анализ
                 if self.order_flow:
                     try:
                         current_delta = self.order_flow.get_delta()
                         avg_delta = self.order_flow.get_avg_delta(periods=10)
                         delta_trend = self.order_flow.get_delta_trend()
-                        
+
                         # Определяем силу тренда по Order Flow
                         if position_side.lower() == "long":
                             # Для LONG: положительный delta = сильный тренд
                             if current_delta > 0.1 and delta_trend == "long":
-                                trend_analysis["order_flow"] = min(abs(current_delta) * 2, 1.0)
+                                trend_analysis["order_flow"] = min(
+                                    abs(current_delta) * 2, 1.0
+                                )
                             elif current_delta > 0.05:
-                                trend_analysis["order_flow"] = min(abs(current_delta) * 1.5, 0.7)
+                                trend_analysis["order_flow"] = min(
+                                    abs(current_delta) * 1.5, 0.7
+                                )
                         elif position_side.lower() == "short":
                             # Для SHORT: отрицательный delta = сильный тренд
                             if current_delta < -0.1 and delta_trend == "short":
-                                trend_analysis["order_flow"] = min(abs(current_delta) * 2, 1.0)
+                                trend_analysis["order_flow"] = min(
+                                    abs(current_delta) * 2, 1.0
+                                )
                             elif current_delta < -0.05:
-                                trend_analysis["order_flow"] = min(abs(current_delta) * 1.5, 0.7)
+                                trend_analysis["order_flow"] = min(
+                                    abs(current_delta) * 1.5, 0.7
+                                )
                     except Exception as e:
                         logger.debug(f"⚠️ Ошибка анализа Order Flow для {symbol}: {e}")
-                
+
                 # 3. Комбинированный анализ силы тренда
-                if trend_analysis["adx"] is not None or trend_analysis["order_flow"] is not None:
+                if (
+                    trend_analysis["adx"] is not None
+                    or trend_analysis["order_flow"] is not None
+                ):
                     # Взвешенная комбинация: ADX 60%, Order Flow 40%
                     adx_weight = 0.6
                     of_weight = 0.4
-                    
-                    adx_val = trend_analysis["adx"] if trend_analysis["adx"] is not None else 0.5
-                    of_val = trend_analysis["order_flow"] if trend_analysis["order_flow"] is not None else 0.5
-                    
-                    trend_analysis["combined"] = (adx_val * adx_weight) + (of_val * of_weight)
+
+                    adx_val = (
+                        trend_analysis["adx"]
+                        if trend_analysis["adx"] is not None
+                        else 0.5
+                    )
+                    of_val = (
+                        trend_analysis["order_flow"]
+                        if trend_analysis["order_flow"] is not None
+                        else 0.5
+                    )
+
+                    trend_analysis["combined"] = (adx_val * adx_weight) + (
+                        of_val * of_weight
+                    )
                     trend_strength = trend_analysis["combined"]
-                    
+
                     if self._tsl_log_count.get(symbol, 0) % 10 == 0:
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #6: Исправление форматирования f-string
-                        adx_val = trend_analysis.get('adx')
-                        adx_str = f"{adx_val:.2f}" if adx_val is not None else 'N/A'
-                        order_flow_val = trend_analysis.get('order_flow')
-                        order_flow_str = f"{order_flow_val:.2f}" if order_flow_val is not None else 'N/A'
+                        adx_val = trend_analysis.get("adx")
+                        adx_str = f"{adx_val:.2f}" if adx_val is not None else "N/A"
+                        order_flow_val = trend_analysis.get("order_flow")
+                        order_flow_str = (
+                            f"{order_flow_val:.2f}"
+                            if order_flow_val is not None
+                            else "N/A"
+                        )
                         logger.debug(
                             f"📊 Анализ силы тренда для {symbol}: "
                             f"ADX={adx_str}, "
@@ -650,7 +679,8 @@ class TrailingSLCoordinator:
                             # Продолжаем - TSL будет адаптироваться
                 except Exception as e:
                     logger.error(
-                        f"❌ ExitAnalyzer: Ошибка анализа для {symbol}: {e}", exc_info=True
+                        f"❌ ExitAnalyzer: Ошибка анализа для {symbol}: {e}",
+                        exc_info=True,
                     )
 
             should_close_by_sl, close_reason = tsl.should_close_position(
@@ -667,35 +697,50 @@ class TrailingSLCoordinator:
                     try:
                         current_delta = self.order_flow.get_delta()
                         avg_delta = self.order_flow.get_avg_delta(periods=10)
-                        
+
                         # Сохраняем историю delta для анализа разворота
                         if symbol not in self._order_flow_delta_history:
                             self._order_flow_delta_history[symbol] = []
-                        self._order_flow_delta_history[symbol].append((time.time(), current_delta))
+                        self._order_flow_delta_history[symbol].append(
+                            (time.time(), current_delta)
+                        )
                         # Храним историю за последние 5 минут
                         cutoff_time = time.time() - 300
                         self._order_flow_delta_history[symbol] = [
-                            (t, d) for t, d in self._order_flow_delta_history[symbol]
+                            (t, d)
+                            for t, d in self._order_flow_delta_history[symbol]
                             if t > cutoff_time
                         ]
-                        
+
                         # Получаем параметры из конфига
                         reversal_config = getattr(
                             self.scalping_config, "position_manager", {}
                         ).get("reversal_detection", {})
                         order_flow_config = reversal_config.get("order_flow", {})
                         enabled = order_flow_config.get("enabled", True)
-                        reversal_threshold = order_flow_config.get("reversal_threshold", 0.15)  # 15% изменение delta
-                        
+                        reversal_threshold = order_flow_config.get(
+                            "reversal_threshold", 0.15
+                        )  # 15% изменение delta
+
                         if enabled and len(self._order_flow_delta_history[symbol]) >= 2:
                             # Анализируем изменение delta за последние периоды
-                            recent_deltas = [d for _, d in self._order_flow_delta_history[symbol][-10:]]
+                            recent_deltas = [
+                                d
+                                for _, d in self._order_flow_delta_history[symbol][-10:]
+                            ]
                             if len(recent_deltas) >= 2:
                                 # Проверяем разворот: для LONG позиции delta должен был быть положительным и стать отрицательным
                                 if position_side.lower() == "long":
                                     # Для LONG: разворот = delta был > threshold и стал < -threshold
-                                    prev_delta = recent_deltas[-2] if len(recent_deltas) >= 2 else avg_delta
-                                    if prev_delta > reversal_threshold and current_delta < -reversal_threshold:
+                                    prev_delta = (
+                                        recent_deltas[-2]
+                                        if len(recent_deltas) >= 2
+                                        else avg_delta
+                                    )
+                                    if (
+                                        prev_delta > reversal_threshold
+                                        and current_delta < -reversal_threshold
+                                    ):
                                         order_flow_reversal_detected = True
                                         logger.info(
                                             f"🔄 Order Flow разворот обнаружен для {symbol} LONG: "
@@ -704,8 +749,15 @@ class TrailingSLCoordinator:
                                         )
                                 elif position_side.lower() == "short":
                                     # Для SHORT: разворот = delta был < -threshold и стал > threshold
-                                    prev_delta = recent_deltas[-2] if len(recent_deltas) >= 2 else avg_delta
-                                    if prev_delta < -reversal_threshold and current_delta > reversal_threshold:
+                                    prev_delta = (
+                                        recent_deltas[-2]
+                                        if len(recent_deltas) >= 2
+                                        else avg_delta
+                                    )
+                                    if (
+                                        prev_delta < -reversal_threshold
+                                        and current_delta > reversal_threshold
+                                    ):
                                         order_flow_reversal_detected = True
                                         logger.info(
                                             f"🔄 Order Flow разворот обнаружен для {symbol} SHORT: "
@@ -713,8 +765,10 @@ class TrailingSLCoordinator:
                                             f"(продавцы → покупатели, закрываем позицию)"
                                         )
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка анализа Order Flow разворота для {symbol}: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Ошибка анализа Order Flow разворота для {symbol}: {e}"
+                        )
+
                 # Если Order Flow показывает разворот - закрываем позицию (не блокируем)
                 if order_flow_reversal_detected:
                     logger.info(
@@ -728,7 +782,9 @@ class TrailingSLCoordinator:
                                 datetime.now() - entry_time
                             ).total_seconds() / 60.0
                         elif tsl.entry_timestamp > 0:
-                            minutes_in_position = (time.time() - tsl.entry_timestamp) / 60.0
+                            minutes_in_position = (
+                                time.time() - tsl.entry_timestamp
+                            ) / 60.0
                         else:
                             minutes_in_position = 0.0
                         self.debug_logger.log_position_close(
@@ -742,9 +798,11 @@ class TrailingSLCoordinator:
                             reason="order_flow_reversal",
                         )
                     if self._has_position(symbol):
-                        await self.close_position_callback(symbol, "order_flow_reversal")
+                        await self.close_position_callback(
+                            symbol, "order_flow_reversal"
+                        )
                     return
-                
+
                 reversal_config = getattr(
                     self.scalping_config, "position_manager", {}
                 ).get("reversal_detection", {})
@@ -1200,7 +1258,8 @@ class TrailingSLCoordinator:
                 if (
                     extend_time_if_profitable
                     and not time_extended
-                    and profit_pct >= min_profit_for_extension  # ✅ ИСПРАВЛЕНО: >= вместо > (0.44% >= 0.5% = false, но это правильно, нужно >= 0.5%)
+                    and profit_pct
+                    >= min_profit_for_extension  # ✅ ИСПРАВЛЕНО: >= вместо > (0.44% >= 0.5% = false, но это правильно, нужно >= 0.5%)
                 ):
                     original_max_holding = max_holding_minutes
                     extension_minutes = original_max_holding * (
@@ -1212,8 +1271,12 @@ class TrailingSLCoordinator:
                     # ✅ Обновляем также в orchestrator.active_positions для синхронизации
                     if hasattr(self, "orchestrator") and self.orchestrator:
                         if symbol in self.orchestrator.active_positions:
-                            self.orchestrator.active_positions[symbol]["time_extended"] = True
-                            self.orchestrator.active_positions[symbol]["max_holding_minutes"] = new_max_holding
+                            self.orchestrator.active_positions[symbol][
+                                "time_extended"
+                            ] = True
+                            self.orchestrator.active_positions[symbol][
+                                "max_holding_minutes"
+                            ] = new_max_holding
                     logger.info(
                         f"✅ Позиция {symbol} в прибыли {profit_pct:.2%} "
                         f"(>={min_profit_for_extension:.2%}), продлеваем время на "
@@ -1227,7 +1290,10 @@ class TrailingSLCoordinator:
                     min_profit_to_close = getattr(tsl, "min_profit_to_close", None)
 
                 # ✅ ИСПРАВЛЕНО: Если прибыль большая, НЕ закрываем по времени (используем trailing stop)
-                if min_profit_to_close is not None and profit_pct >= min_profit_to_close:
+                if (
+                    min_profit_to_close is not None
+                    and profit_pct >= min_profit_to_close
+                ):
                     logger.info(
                         f"✅ Позиция {symbol} удерживается {time_held:.1f} минут "
                         f"(лимит: {actual_max_holding:.1f} минут), "

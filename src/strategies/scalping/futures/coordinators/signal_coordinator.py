@@ -245,7 +245,9 @@ class SignalCoordinator:
                         original_side = signal.get("original_side", "")
                         side_switched = signal.get("side_switched_by_adx", False)
                         if side_switched and original_side:
-                            original_position_side = "long" if original_side.lower() == "buy" else "short"
+                            original_position_side = (
+                                "long" if original_side.lower() == "buy" else "short"
+                            )
                             logger.warning(
                                 f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
                                 f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
@@ -421,35 +423,40 @@ class SignalCoordinator:
                     if (
                         p.get("instId", "") == inst_id
                         or p.get("instId", "") == symbol
-                        or p.get("instId", "").replace("-", "") == inst_id.replace("-", "")
+                        or p.get("instId", "").replace("-", "")
+                        == inst_id.replace("-", "")
                     )
                     and abs(float(p.get("pos", "0"))) > 0.000001
                 ]
-                
+
                 if len(symbol_positions) > 0:
                     # Определяем направление сигнала и позиции
                     signal_side = side.lower()
                     signal_is_long = signal_side in ["buy", "long"]
                     signal_is_short = signal_side in ["sell", "short"]
-                    
+
                     pos_side = symbol_positions[0].get("posSide", "").lower()
                     if not pos_side or pos_side not in ["long", "short"]:
                         pos_size_raw = float(symbol_positions[0].get("pos", "0"))
                         pos_side = "long" if pos_size_raw > 0 else "short"
-                    
+
                     pos_is_long = pos_side == "long"
                     pos_is_short = pos_side == "short"
-                    
+
                     # Если сигнал в том же направлении - пропускаем
-                    if (signal_is_long and pos_is_long) or (signal_is_short and pos_is_short):
+                    if (signal_is_long and pos_is_long) or (
+                        signal_is_short and pos_is_short
+                    ):
                         logger.debug(
                             f"⚠️ Позиция {symbol} {pos_side.upper()} уже открыта, "
                             f"сигнал в том же направлении - пропускаем"
                         )
                         return
-                    
+
                     # Если сигнал в противоположном направлении - закрываем старую и открываем новую
-                    if (signal_is_long and pos_is_short) or (signal_is_short and pos_is_long):
+                    if (signal_is_long and pos_is_short) or (
+                        signal_is_short and pos_is_long
+                    ):
                         logger.info(
                             f"🔄 Сигнал {signal_side.upper()} для {symbol}, "
                             f"закрываем старую позицию {pos_side.upper()} перед открытием новой"
@@ -457,7 +464,7 @@ class SignalCoordinator:
                         pos_to_close = symbol_positions[0]
                         pos_size = abs(float(pos_to_close.get("pos", "0")))
                         close_side = "sell" if pos_side == "long" else "buy"
-                        
+
                         close_result = await self.client.place_futures_order(
                             symbol=symbol,
                             side=close_side,
@@ -466,18 +473,18 @@ class SignalCoordinator:
                             reduce_only=True,
                             size_in_contracts=True,
                         )
-                        
+
                         if close_result.get("code") != "0":
                             logger.error(
                                 f"❌ Не удалось закрыть позицию {symbol} {pos_side.upper()}: {close_result.get('msg', 'Неизвестная ошибка')}"
                             )
                             return  # Не открываем новую позицию, если не удалось закрыть старую
-                        
+
                         logger.info(
                             f"✅ Позиция {symbol} {pos_side.upper()} закрыта, открываем новую {signal_side.upper()}"
                         )
                         await asyncio.sleep(1)  # Даем время на закрытие
-                        
+
             except Exception as e:
                 logger.debug(
                     f"⚠️ Не удалось проверить активную позицию для {symbol}: {e}"
@@ -552,7 +559,7 @@ class SignalCoordinator:
             # Используем блокировку по символу для предотвращения race condition
             if symbol not in self.signal_locks_ref:
                 self.signal_locks_ref[symbol] = asyncio.Lock()
-            
+
             async with self.signal_locks_ref[symbol]:
                 # Проверяем позиции еще раз непосредственно перед открытием
                 try:
@@ -564,34 +571,45 @@ class SignalCoordinator:
                         if (
                             p.get("instId", "") == inst_id
                             or p.get("instId", "") == symbol
-                            or p.get("instId", "").replace("-", "") == inst_id.replace("-", "")
+                            or p.get("instId", "").replace("-", "")
+                            == inst_id.replace("-", "")
                         )
                         and abs(float(p.get("pos", "0"))) > 0.000001
                     ]
-                    
+
                     if len(symbol_positions) > 0:
                         # Проверяем противоположные позиции
                         has_long = any(
                             p.get("posSide", "").lower() == "long"
-                            or (float(p.get("pos", "0")) > 0 and p.get("posSide", "").lower() not in ["long", "short"])
+                            or (
+                                float(p.get("pos", "0")) > 0
+                                and p.get("posSide", "").lower()
+                                not in ["long", "short"]
+                            )
                             for p in symbol_positions
                         )
                         has_short = any(
                             p.get("posSide", "").lower() == "short"
-                            or (float(p.get("pos", "0")) < 0 and p.get("posSide", "").lower() not in ["long", "short"])
+                            or (
+                                float(p.get("pos", "0")) < 0
+                                and p.get("posSide", "").lower()
+                                not in ["long", "short"]
+                            )
                             for p in symbol_positions
                         )
-                        
+
                         signal_side = side.lower()
                         signal_is_long = signal_side in ["buy", "long"]
                         signal_is_short = signal_side in ["sell", "short"]
-                        
+
                         # Если есть противоположные позиции - закрываем их
                         if has_long and has_short:
                             logger.warning(
                                 f"🚨 Обнаружены противоположные позиции для {symbol} перед открытием, закрываем одну из них"
                             )
-                            await self._close_opposite_position(symbol, symbol_positions)
+                            await self._close_opposite_position(
+                                symbol, symbol_positions
+                            )
                             # После закрытия проверяем еще раз
                             await asyncio.sleep(1)  # Даем время на закрытие
                             positions = await self.client.get_positions()
@@ -601,11 +619,12 @@ class SignalCoordinator:
                                 if (
                                     p.get("instId", "") == inst_id
                                     or p.get("instId", "") == symbol
-                                    or p.get("instId", "").replace("-", "") == inst_id.replace("-", "")
+                                    or p.get("instId", "").replace("-", "")
+                                    == inst_id.replace("-", "")
                                 )
                                 and abs(float(p.get("pos", "0"))) > 0.000001
                             ]
-                        
+
                         # Проверяем, есть ли позиция в том же направлении
                         if signal_is_long and has_long:
                             logger.warning(
@@ -617,19 +636,30 @@ class SignalCoordinator:
                                 f"⚠️ Позиция {symbol} SHORT уже открыта перед открытием новой, пропускаем"
                             )
                             return
-                        elif (signal_is_long and has_short) or (signal_is_short and has_long):
+                        elif (signal_is_long and has_short) or (
+                            signal_is_short and has_long
+                        ):
                             # Есть позиция в противоположном направлении - закрываем её перед открытием новой
                             logger.info(
                                 f"🔄 Закрываем противоположную позицию {symbol} перед открытием новой"
                             )
                             pos_to_close = symbol_positions[0]
                             pos_side_to_close = pos_to_close.get("posSide", "").lower()
-                            if not pos_side_to_close or pos_side_to_close not in ["long", "short"]:
-                                pos_side_to_close = "long" if float(pos_to_close.get("pos", "0")) > 0 else "short"
-                            
-                            close_side = "sell" if pos_side_to_close == "long" else "buy"
+                            if not pos_side_to_close or pos_side_to_close not in [
+                                "long",
+                                "short",
+                            ]:
+                                pos_side_to_close = (
+                                    "long"
+                                    if float(pos_to_close.get("pos", "0")) > 0
+                                    else "short"
+                                )
+
+                            close_side = (
+                                "sell" if pos_side_to_close == "long" else "buy"
+                            )
                             pos_size = abs(float(pos_to_close.get("pos", "0")))
-                            
+
                             close_result = await self.client.place_futures_order(
                                 symbol=symbol,
                                 side=close_side,
@@ -638,18 +668,18 @@ class SignalCoordinator:
                                 reduce_only=True,
                                 size_in_contracts=True,
                             )
-                            
+
                             if close_result.get("code") != "0":
                                 logger.error(
                                     f"❌ Не удалось закрыть противоположную позицию {symbol} {pos_side_to_close.upper()}: {close_result.get('msg', 'Неизвестная ошибка')}"
                                 )
                                 return  # Не открываем новую позицию, если не удалось закрыть старую
-                            
+
                             logger.info(
                                 f"✅ Противоположная позиция {symbol} {pos_side_to_close.upper()} закрыта, открываем новую"
                             )
                             await asyncio.sleep(1)  # Даем время на закрытие
-                            
+
                 except Exception as e:
                     logger.warning(
                         f"⚠️ Ошибка дополнительной проверки позиций для {symbol} перед открытием: {e}"
@@ -893,7 +923,9 @@ class SignalCoordinator:
                                     f"{positions_info}. allow_concurrent=false, АВТОМАТИЧЕСКИ ЗАКРЫВАЕМ одну из позиций."
                                 )
                                 # Закрываем одну из противоположных позиций
-                                await self._close_opposite_position(symbol, symbol_positions)
+                                await self._close_opposite_position(
+                                    symbol, symbol_positions
+                                )
                                 return  # Блокируем генерацию сигналов после закрытия
                             else:
                                 # Только одна позиция (нет противоположных) - блокируем новые сигналы
@@ -1099,9 +1131,15 @@ class SignalCoordinator:
                                 # Позиция в том же направлении - блокируем
                                 # ✅ ЛОГИРОВАНИЕ: Показываем, было ли переключение направления ADX
                                 original_side = signal.get("original_side", "")
-                                side_switched = signal.get("side_switched_by_adx", False)
+                                side_switched = signal.get(
+                                    "side_switched_by_adx", False
+                                )
                                 if side_switched and original_side:
-                                    original_position_side = "long" if original_side.lower() == "buy" else "short"
+                                    original_position_side = (
+                                        "long"
+                                        if original_side.lower() == "buy"
+                                        else "short"
+                                    )
                                     logger.warning(
                                         f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
                                         f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
@@ -1345,7 +1383,9 @@ class SignalCoordinator:
                         original_side = signal.get("original_side", "")
                         side_switched = signal.get("side_switched_by_adx", False)
                         if side_switched and original_side:
-                            original_position_side = "long" if original_side.lower() == "buy" else "short"
+                            original_position_side = (
+                                "long" if original_side.lower() == "buy" else "short"
+                            )
                             logger.warning(
                                 f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
                                 f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
@@ -1908,9 +1948,13 @@ class SignalCoordinator:
                 pos_side = pos.get("posSide", "").lower()
                 pos_size = float(pos.get("pos", "0"))
 
-                if pos_side == "long" or (pos_size > 0 and pos_side not in ["long", "short"]):
+                if pos_side == "long" or (
+                    pos_size > 0 and pos_side not in ["long", "short"]
+                ):
                     long_pos = pos
-                elif pos_side == "short" or (pos_size < 0 and pos_side not in ["long", "short"]):
+                elif pos_side == "short" or (
+                    pos_size < 0 and pos_side not in ["long", "short"]
+                ):
                     short_pos = pos
 
             if not long_pos or not short_pos:
@@ -1945,7 +1989,7 @@ class SignalCoordinator:
             # Закрываем позицию через client
             # Для закрытия используем reduce_only=True и указываем posSide
             close_side = "sell" if pos_side_to_close == "long" else "buy"
-            
+
             result = await self.client.place_futures_order(
                 symbol=symbol,
                 side=close_side,

@@ -18,12 +18,12 @@ from loguru import logger
 from src.config import BotConfig, ScalpingConfig
 from src.indicators import IndicatorManager
 from src.models import OHLCV, MarketData
-from .adaptivity.regime_manager import AdaptiveRegimeManager
 from src.strategies.modules.correlation_filter import CorrelationFilter
 from src.strategies.modules.multi_timeframe import MultiTimeframeFilter
 from src.strategies.modules.pivot_points import PivotPointsFilter
 from src.strategies.modules.volume_profile_filter import VolumeProfileFilter
 
+from .adaptivity.regime_manager import AdaptiveRegimeManager
 from .filters import (FundingRateFilter, LiquidityFilter, MomentumFilter,
                       OrderFlowFilter, VolatilityRegimeFilter)
 # ✅ РЕФАКТОРИНГ: Импортируем FilterManager
@@ -195,7 +195,7 @@ class FuturesSignalGenerator:
         self.volatility_filter = None
         self.momentum_filter = None  # ✅ НОВОЕ: Momentum Filter
         self.impulse_config = None
-        
+
         # ✅ РЕФАКТОРИНГ: FilterManager для координации всех фильтров
         self.filter_manager = FilterManager()
 
@@ -645,7 +645,8 @@ class FuturesSignalGenerator:
 
             # ✅ Инициализация ADX Filter (ПРОВЕРКА ТРЕНДА)
             try:
-                from src.strategies.modules.adx_filter import ADXFilter, ADXFilterConfig
+                from src.strategies.modules.adx_filter import (ADXFilter,
+                                                               ADXFilterConfig)
 
                 # Получаем параметры ADX из текущего режима
                 regime_name_adx = "ranging"  # Fallback
@@ -2329,17 +2330,17 @@ class FuturesSignalGenerator:
                 highs = [c.high for c in recent_candles]
                 lows = [c.low for c in recent_candles]
                 closes = [c.close for c in recent_candles]
-                
+
                 # Находим максимальную и минимальную цену в окне
                 max_high_idx = highs.index(max(highs))
                 max_high = max(highs)
                 min_low_idx = lows.index(min(lows))
                 min_low = min(lows)
-                
+
                 # ✅ НОВОЕ: Проверка V-образного разворота
                 # V-образный разворот: сначала рост до максимума, потом падение
                 # Или наоборот: сначала падение до минимума, потом рост
-                
+
                 # ✅ АДАПТИВНО: Получаем reversal_threshold из конфига (ПРИОРИТЕТ: per-symbol > режим > fallback)
                 reversal_threshold = 0.0015  # Fallback: 0.15% для обнаружения разворота
                 try:
@@ -2381,7 +2382,9 @@ class FuturesSignalGenerator:
                                     else {}
                                 )
                             )
-                            reversal_config = regime_profile_dict.get("reversal_detection", {})
+                            reversal_config = regime_profile_dict.get(
+                                "reversal_detection", {}
+                            )
                             reversal_config_dict = (
                                 reversal_config
                                 if isinstance(reversal_config, dict)
@@ -2393,9 +2396,10 @@ class FuturesSignalGenerator:
                             )
 
                             if "v_reversal_threshold" in reversal_config_dict:
-                                reversal_threshold = float(
-                                    reversal_config_dict["v_reversal_threshold"]
-                                ) / 100.0  # Конвертируем из процентов в доли
+                                reversal_threshold = (
+                                    float(reversal_config_dict["v_reversal_threshold"])
+                                    / 100.0
+                                )  # Конвертируем из процентов в доли
                                 symbol_profile_found = True
                                 logger.debug(
                                     f"✅ PER-SYMBOL: v_reversal_threshold для {symbol} ({regime_name_ma}): {reversal_threshold:.4f} ({reversal_threshold*100:.2f}%)"
@@ -2434,7 +2438,9 @@ class FuturesSignalGenerator:
                             )
 
                             # Получаем reversal_detection из режима
-                            reversal_config = regime_config_dict.get("reversal_detection", {})
+                            reversal_config = regime_config_dict.get(
+                                "reversal_detection", {}
+                            )
                             reversal_config_dict = (
                                 reversal_config
                                 if isinstance(reversal_config, dict)
@@ -2446,9 +2452,10 @@ class FuturesSignalGenerator:
                             )
 
                             if "v_reversal_threshold" in reversal_config_dict:
-                                reversal_threshold = float(
-                                    reversal_config_dict["v_reversal_threshold"]
-                                ) / 100.0  # Конвертируем из процентов в доли
+                                reversal_threshold = (
+                                    float(reversal_config_dict["v_reversal_threshold"])
+                                    / 100.0
+                                )  # Конвертируем из процентов в доли
                                 logger.debug(
                                     f"✅ ГЛОБАЛЬНЫЙ: v_reversal_threshold для {regime_name_ma}: {reversal_threshold:.4f} ({reversal_threshold*100:.2f}%)"
                                 )
@@ -2460,12 +2467,16 @@ class FuturesSignalGenerator:
                     logger.debug(
                         f"⚠️ Не удалось получить адаптивный v_reversal_threshold: {e}, используем fallback 0.15%"
                     )
-                
+
                 # Проверка 1: Рост → Падение (V-образный разворот вниз)
-                if max_high_idx < len(recent_candles) - 2:  # Максимум не в последних 2 свечах
+                if (
+                    max_high_idx < len(recent_candles) - 2
+                ):  # Максимум не в последних 2 свечах
                     # Проверяем падение после максимума
                     price_after_max = closes[-1]
-                    drop_from_max = (max_high - price_after_max) / max_high if max_high > 0 else 0
+                    drop_from_max = (
+                        (max_high - price_after_max) / max_high if max_high > 0 else 0
+                    )
                     if drop_from_max > reversal_threshold:
                         reversal_detected = True
                         logger.warning(
@@ -2484,13 +2495,19 @@ class FuturesSignalGenerator:
                                     max_price=max_high,
                                 )
                             except Exception as e:
-                                logger.debug(f"⚠️ Не удалось записать разворот в статистику: {e}")
-                
+                                logger.debug(
+                                    f"⚠️ Не удалось записать разворот в статистику: {e}"
+                                )
+
                 # Проверка 2: Падение → Рост (V-образный разворот вверх)
-                if min_low_idx < len(recent_candles) - 2:  # Минимум не в последних 2 свечах
+                if (
+                    min_low_idx < len(recent_candles) - 2
+                ):  # Минимум не в последних 2 свечах
                     # Проверяем рост после минимума
                     price_after_min = closes[-1]
-                    rise_from_min = (price_after_min - min_low) / min_low if min_low > 0 else 0
+                    rise_from_min = (
+                        (price_after_min - min_low) / min_low if min_low > 0 else 0
+                    )
                     if rise_from_min > reversal_threshold:
                         reversal_detected = True
                         logger.warning(
@@ -2509,8 +2526,10 @@ class FuturesSignalGenerator:
                                     min_price=min_low,
                                 )
                             except Exception as e:
-                                logger.debug(f"⚠️ Не удалось записать разворот в статистику: {e}")
-                
+                                logger.debug(
+                                    f"⚠️ Не удалось записать разворот в статистику: {e}"
+                                )
+
                 # Берем последние 5 свечей для определения направления
                 recent_candles_5 = market_data.ohlcv_data[-5:]
                 closes_5 = [c.close for c in recent_candles_5]
@@ -3090,15 +3109,16 @@ class FuturesSignalGenerator:
             # ✅ РЕФАКТОРИНГ: Используем FilterManager если он настроен
             use_filter_manager = (
                 self.filter_manager
-                and self.filter_manager.adx_filter is not None  # Хотя бы один фильтр подключен
+                and self.filter_manager.adx_filter
+                is not None  # Хотя бы один фильтр подключен
             )
-            
+
             if use_filter_manager:
                 # Используем новый FilterManager
                 return await self._apply_filters_via_manager(
                     symbol, signals, market_data, current_positions
                 )
-            
+
             # Fallback на старую логику
             filtered_signals = []
 
@@ -3215,9 +3235,9 @@ class FuturesSignalGenerator:
                             logger.debug(f"🔍 Сигнал {symbol} отфильтрован ARM")
                             continue
                     except Exception as e:
-                            logger.debug(
-                                f"⚠️ Ошибка проверки ARM для {symbol}: {e}, пропускаем фильтр"
-                            )
+                        logger.debug(
+                            f"⚠️ Ошибка проверки ARM для {symbol}: {e}, пропускаем фильтр"
+                        )
 
                 # ✅ Проверка ADX: Сила и направление тренда (ПЕРЕД другими фильтрами)
                 if self.adx_filter:
@@ -3227,9 +3247,8 @@ class FuturesSignalGenerator:
                             regime_params = regime_manager.get_current_parameters()
                             if regime_params and hasattr(regime_params, "modules"):
                                 adx_modules = regime_params.modules
-                                from src.strategies.modules.adx_filter import (
-                                    ADXFilterConfig,
-                                )
+                                from src.strategies.modules.adx_filter import \
+                                    ADXFilterConfig
 
                                 adx_new_config = ADXFilterConfig(
                                     enabled=True,
@@ -3263,9 +3282,7 @@ class FuturesSignalGenerator:
                             else []
                         )
                         if not candles:
-                            logger.warning(
-                                f"⚠️ Нет свечей для ADX проверки {symbol}"
-                            )
+                            logger.warning(f"⚠️ Нет свечей для ADX проверки {symbol}")
                             continue
 
                         # Конвертируем OHLCV в dict для ADX фильтра
@@ -3565,7 +3582,7 @@ class FuturesSignalGenerator:
             logger.error(f"Ошибка применения фильтров: {e}", exc_info=True)
             # В случае ошибки возвращаем сигналы без фильтрации
             return signals
-    
+
     async def _apply_filters_via_manager(
         self,
         symbol: str,
@@ -3575,25 +3592,25 @@ class FuturesSignalGenerator:
     ) -> List[Dict[str, Any]]:
         """
         ✅ РЕФАКТОРИНГ: Применение фильтров через FilterManager.
-        
+
         Args:
             symbol: Торговая пара
             signals: Список сигналов
             market_data: Рыночные данные
             current_positions: Текущие открытые позиции
-            
+
         Returns:
             Отфильтрованный список сигналов
         """
         try:
             filtered_signals = []
-            
+
             # Получаем режим для FilterManager
             regime_manager = self.regime_managers.get(symbol) or self.regime_manager
             current_regime_name = (
                 regime_manager.get_current_regime() if regime_manager else None
             )
-            
+
             # Получаем параметры режима
             regime_params = None
             if regime_manager:
@@ -3603,7 +3620,7 @@ class FuturesSignalGenerator:
                         regime_params = self._to_dict(regime_params_obj)
                 except:
                     pass
-            
+
             for signal in signals:
                 # ✅ КОНФИГУРИРУЕМАЯ Блокировка SHORT/LONG сигналов
                 signal_side = signal.get("side", "").lower()
@@ -3624,7 +3641,7 @@ class FuturesSignalGenerator:
                         f"allow_long_positions={allow_long}"
                     )
                     continue
-                
+
                 # Применяем все фильтры через FilterManager
                 filtered_signal = await self.filter_manager.apply_all_filters(
                     symbol=symbol,
@@ -3634,20 +3651,27 @@ class FuturesSignalGenerator:
                     regime=current_regime_name,
                     regime_params=regime_params,
                 )
-                
+
                 if filtered_signal:
                     # Адаптация под Futures специфику
-                    futures_signal = await self._adapt_signal_for_futures(filtered_signal)
+                    futures_signal = await self._adapt_signal_for_futures(
+                        filtered_signal
+                    )
                     filtered_signals.append(futures_signal)
-            
+
             return filtered_signals
-            
+
         except Exception as e:
-            logger.error(f"Ошибка применения фильтров через FilterManager для {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"Ошибка применения фильтров через FilterManager для {symbol}: {e}",
+                exc_info=True,
+            )
             # Fallback на старую логику при ошибке
             logger.warning(f"⚠️ Fallback на старую логику фильтрации для {symbol}")
-            return await self._apply_filters_legacy(symbol, signals, market_data, current_positions)
-    
+            return await self._apply_filters_legacy(
+                symbol, signals, market_data, current_positions
+            )
+
     async def _apply_filters_legacy(
         self,
         symbol: str,
@@ -3657,7 +3681,7 @@ class FuturesSignalGenerator:
     ) -> List[Dict[str, Any]]:
         """
         ✅ LEGACY: Старая логика применения фильтров (fallback).
-        
+
         Сохранена для обратной совместимости.
         """
         # Переименовываем старую логику в legacy метод
@@ -3778,9 +3802,9 @@ class FuturesSignalGenerator:
                             logger.debug(f"🔍 Сигнал {symbol} отфильтрован ARM")
                             continue
                     except Exception as e:
-                            logger.debug(
-                                f"⚠️ Ошибка проверки ARM для {symbol}: {e}, пропускаем фильтр"
-                            )
+                        logger.debug(
+                            f"⚠️ Ошибка проверки ARM для {symbol}: {e}, пропускаем фильтр"
+                        )
 
                 # ✅ Проверка ADX: Сила и направление тренда (ПЕРЕД другими фильтрами)
                 if self.adx_filter:
@@ -3790,9 +3814,8 @@ class FuturesSignalGenerator:
                             regime_params = regime_manager.get_current_parameters()
                             if regime_params and hasattr(regime_params, "modules"):
                                 adx_modules = regime_params.modules
-                                from src.strategies.modules.adx_filter import (
-                                    ADXFilterConfig,
-                                )
+                                from src.strategies.modules.adx_filter import \
+                                    ADXFilterConfig
 
                                 adx_new_config = ADXFilterConfig(
                                     enabled=True,
@@ -3826,9 +3849,7 @@ class FuturesSignalGenerator:
                             else []
                         )
                         if not candles:
-                            logger.warning(
-                                f"⚠️ Нет свечей для ADX проверки {symbol}"
-                            )
+                            logger.warning(f"⚠️ Нет свечей для ADX проверки {symbol}")
                             continue
 
                         # Конвертируем OHLCV в dict для ADX фильтра
@@ -3931,11 +3952,11 @@ class FuturesSignalGenerator:
                                     self.mtf_filter.update_parameters(mtf_new_config)
 
                             if not self.mtf_filter.check_entry(
-                                symbol, signal.get("side", "").lower(), signal.get("price")
+                                symbol,
+                                signal.get("side", "").lower(),
+                                signal.get("price"),
                             ):
-                                logger.debug(
-                                    f"🔍 Сигнал {symbol} отфильтрован MTF"
-                                )
+                                logger.debug(f"🔍 Сигнал {symbol} отфильтрован MTF")
                                 continue
                         except Exception as e:
                             logger.debug(
@@ -3949,9 +3970,7 @@ class FuturesSignalGenerator:
                         if not self.pivot_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
-                            logger.debug(
-                                f"🔍 Сигнал {symbol} отфильтрован Pivot Points"
-                            )
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован Pivot Points")
                             continue
                     except Exception as e:
                         logger.debug(
@@ -3984,14 +4003,13 @@ class FuturesSignalGenerator:
                             if isinstance(liquidity_params, dict):
                                 liquidity_params = liquidity_params.copy()
                                 liquidity_params["min_spread"] = (
-                                    liquidity_params.get("min_spread", 0.001) * liquidity_relax
+                                    liquidity_params.get("min_spread", 0.001)
+                                    * liquidity_relax
                                 )
                         if not self.liquidity_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
-                            logger.debug(
-                                f"🔍 Сигнал {symbol} отфильтрован Liquidity"
-                            )
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован Liquidity")
                             continue
                     except Exception as e:
                         logger.debug(
@@ -4007,17 +4025,17 @@ class FuturesSignalGenerator:
                             if isinstance(order_flow_params, dict):
                                 order_flow_params = order_flow_params.copy()
                                 order_flow_params["long_threshold"] = (
-                                    order_flow_params.get("long_threshold", 0.1) * order_flow_relax
+                                    order_flow_params.get("long_threshold", 0.1)
+                                    * order_flow_relax
                                 )
                                 order_flow_params["short_threshold"] = (
-                                    order_flow_params.get("short_threshold", -0.1) * order_flow_relax
+                                    order_flow_params.get("short_threshold", -0.1)
+                                    * order_flow_relax
                                 )
                         if not self.order_flow_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
-                            logger.debug(
-                                f"🔍 Сигнал {symbol} отфильтрован Order Flow"
-                            )
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован Order Flow")
                             continue
                     except Exception as e:
                         logger.debug(
@@ -4031,9 +4049,7 @@ class FuturesSignalGenerator:
                         if not self.funding_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
-                            logger.debug(
-                                f"🔍 Сигнал {symbol} отфильтрован Funding Rate"
-                            )
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован Funding Rate")
                             continue
                     except Exception as e:
                         logger.debug(
@@ -4047,9 +4063,7 @@ class FuturesSignalGenerator:
                         if not self.volatility_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
-                            logger.debug(
-                                f"🔍 Сигнал {symbol} отфильтрован Volatility"
-                            )
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован Volatility")
                             continue
                     except Exception as e:
                         logger.debug(

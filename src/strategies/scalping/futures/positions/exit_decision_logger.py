@@ -47,7 +47,9 @@ class ExitDecisionLogger:
         """
         try:
             # Создаем имя файла: {symbol}_{timestamp}.json
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]  # Миллисекунды
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[
+                :-3
+            ]  # Миллисекунды
             filename = f"{symbol}_{timestamp}.json"
             filepath = self.log_dir / filename
 
@@ -91,4 +93,3 @@ class ExitDecisionLogger:
                 f"❌ ExitDecisionLogger: Ошибка логирования решения для {symbol}: {e}",
                 exc_info=True,
             )
-

@@ -79,7 +79,11 @@ class DataRegistry:
             Рыночные данные или None
         """
         async with self._lock:
-            return self._market_data.get(symbol, {}).copy() if symbol in self._market_data else None
+            return (
+                self._market_data.get(symbol, {}).copy()
+                if symbol in self._market_data
+                else None
+            )
 
     async def get_price(self, symbol: str) -> Optional[float]:
         """
@@ -166,7 +170,9 @@ class DataRegistry:
         """
         async with self._lock:
             return (
-                self._indicators.get(symbol, {}).copy() if symbol in self._indicators else None
+                self._indicators.get(symbol, {}).copy()
+                if symbol in self._indicators
+                else None
             )
 
     # ==================== REGIMES ====================
@@ -194,9 +200,7 @@ class DataRegistry:
                 self._regimes[symbol]["params"] = params.copy()
             self._regimes[symbol]["updated_at"] = datetime.now()
 
-            logger.debug(
-                f"✅ DataRegistry: Обновлен режим для {symbol}: {regime}"
-            )
+            logger.debug(f"✅ DataRegistry: Обновлен режим для {symbol}: {regime}")
 
     async def get_regime(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
@@ -209,7 +213,11 @@ class DataRegistry:
             {regime: str, params: dict, updated_at: datetime} или None
         """
         async with self._lock:
-            return self._regimes.get(symbol, {}).copy() if symbol in self._regimes else None
+            return (
+                self._regimes.get(symbol, {}).copy()
+                if symbol in self._regimes
+                else None
+            )
 
     async def get_regime_name(self, symbol: str) -> Optional[str]:
         """
@@ -368,4 +376,3 @@ class DataRegistry:
             Профиль баланса или None
         """
         return self._balance.get("profile") if self._balance else None
-

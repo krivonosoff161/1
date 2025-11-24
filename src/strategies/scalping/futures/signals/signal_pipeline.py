@@ -91,7 +91,9 @@ class SignalPipeline:
                     filtered_signals.append(filtered_signal)
 
             if not filtered_signals:
-                logger.debug(f"ℹ️ SignalPipeline: Все сигналы отфильтрованы для {symbol}")
+                logger.debug(
+                    f"ℹ️ SignalPipeline: Все сигналы отфильтрованы для {symbol}"
+                )
                 return None
 
             # 3. Выбираем лучший сигнал (по силе)
@@ -117,7 +119,10 @@ class SignalPipeline:
             return best_signal
 
         except Exception as e:
-            logger.error(f"❌ SignalPipeline: Ошибка генерации сигнала для {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"❌ SignalPipeline: Ошибка генерации сигнала для {symbol}: {e}",
+                exc_info=True,
+            )
             return None
 
     async def _generate_base_signals(
@@ -167,4 +172,3 @@ class SignalPipeline:
                 exc_info=True,
             )
             return []
-

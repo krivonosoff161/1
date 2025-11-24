@@ -144,7 +144,9 @@ class FilterManager:
                 logger.warning(f"⚠️ Ошибка ADX фильтра для {symbol}: {e}")
 
         # 2. Volatility Filter (проверка волатильности)
-        if self.volatility_filter and not is_impulse:  # Импульсы могут обходить волатильность
+        if (
+            self.volatility_filter and not is_impulse
+        ):  # Импульсы могут обходить волатильность
             try:
                 volatility_params = filters_profile.get("volatility", {})
                 if not await self._apply_volatility_filter(
@@ -191,7 +193,9 @@ class FilterManager:
                 if not await self._apply_pivot_points_filter(
                     symbol, signal, market_data, pivot_params
                 ):
-                    logger.debug(f"🔍 Сигнал {symbol} отфильтрован Pivot Points фильтром")
+                    logger.debug(
+                        f"🔍 Сигнал {symbol} отфильтрован Pivot Points фильтром"
+                    )
                     return None
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Pivot Points фильтра для {symbol}: {e}")
@@ -203,13 +207,17 @@ class FilterManager:
                 if not await self._apply_volume_profile_filter(
                     symbol, signal, market_data, vp_params
                 ):
-                    logger.debug(f"🔍 Сигнал {symbol} отфильтрован Volume Profile фильтром")
+                    logger.debug(
+                        f"🔍 Сигнал {symbol} отфильтрован Volume Profile фильтром"
+                    )
                     return None
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Volume Profile фильтра для {symbol}: {e}")
 
         # 7. Liquidity Filter (проверка ликвидности)
-        liquidity_relax = float(impulse_relax.get("liquidity", 1.0)) if is_impulse else 1.0
+        liquidity_relax = (
+            float(impulse_relax.get("liquidity", 1.0)) if is_impulse else 1.0
+        )
         if self.liquidity_filter:
             try:
                 liquidity_params = filters_profile.get("liquidity", {})
@@ -224,7 +232,9 @@ class FilterManager:
         # ==================== MARKET FILTERS ====================
 
         # 8. Order Flow Filter (проверка потока ордеров)
-        order_flow_relax = float(impulse_relax.get("order_flow", 1.0)) if is_impulse else 1.0
+        order_flow_relax = (
+            float(impulse_relax.get("order_flow", 1.0)) if is_impulse else 1.0
+        )
         if self.order_flow_filter:
             try:
                 order_flow_params = filters_profile.get("order_flow", {})
@@ -243,7 +253,9 @@ class FilterManager:
                 if not await self._apply_funding_rate_filter(
                     symbol, signal, funding_params
                 ):
-                    logger.debug(f"🔍 Сигнал {symbol} отфильтрован Funding Rate фильтром")
+                    logger.debug(
+                        f"🔍 Сигнал {symbol} отфильтрован Funding Rate фильтром"
+                    )
                     return None
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Funding Rate фильтра для {symbol}: {e}")
@@ -274,7 +286,9 @@ class FilterManager:
         else:
             return None
 
-        candles = market_data.ohlcv_data if market_data and market_data.ohlcv_data else []
+        candles = (
+            market_data.ohlcv_data if market_data and market_data.ohlcv_data else []
+        )
         if not candles:
             return signal  # Нет свечей - пропускаем фильтр
 
@@ -286,7 +300,9 @@ class FilterManager:
             )
 
         # Проверяем через ADX фильтр
-        adx_result = self.adx_filter.check_trend_strength(symbol, order_side, candles_dict)
+        adx_result = self.adx_filter.check_trend_strength(
+            symbol, order_side, candles_dict
+        )
 
         if not adx_result.allowed:
             # ✅ ИСПРАВЛЕНО: Блокируем сигнал против тренда (не переключаем направление)
@@ -297,7 +313,9 @@ class FilterManager:
             )
             return None  # Блокируем сигнал
         else:
-            logger.debug(f"✅ ADX подтвердил {signal_side_str.upper()} сигнал для {symbol}")
+            logger.debug(
+                f"✅ ADX подтвердил {signal_side_str.upper()} сигнал для {symbol}"
+            )
 
         return signal
 
@@ -345,7 +363,7 @@ class FilterManager:
         # ✅ ИСПРАВЛЕНИЕ: Используем is_signal_valid или правильные аргументы для check_entry
         try:
             # Проверяем наличие метода is_signal_valid
-            if hasattr(self.correlation_filter, 'is_signal_valid'):
+            if hasattr(self.correlation_filter, "is_signal_valid"):
                 return await self.correlation_filter.is_signal_valid(signal, None)
             else:
                 # Используем check_entry с правильными аргументами
@@ -354,7 +372,7 @@ class FilterManager:
                 result = await self.correlation_filter.check_entry(
                     symbol, signal_side, current_positions
                 )
-                return result.allowed if hasattr(result, 'allowed') else result
+                return result.allowed if hasattr(result, "allowed") else result
         except Exception as e:
             logger.warning(f"⚠️ Ошибка Correlation фильтра для {symbol}: {e}")
             return True  # При ошибке пропускаем фильтр
@@ -372,22 +390,28 @@ class FilterManager:
 
         # ✅ ИСПРАВЛЕНИЕ: Используем is_signal_valid или правильные аргументы
         try:
-            if hasattr(self.pivot_points_filter, 'is_signal_valid'):
-                return await self.pivot_points_filter.is_signal_valid(signal, market_data)
+            if hasattr(self.pivot_points_filter, "is_signal_valid"):
+                return await self.pivot_points_filter.is_signal_valid(
+                    signal, market_data
+                )
             else:
                 # ✅ ИСПРАВЛЕНИЕ: Правильный порядок аргументов (symbol, current_price, signal_side)
                 price = signal.get("price")
                 if not price:
                     return True
-                side = signal.get("side", "").upper()  # "BUY" -> "LONG", "SELL" -> "SHORT"
+                side = signal.get(
+                    "side", ""
+                ).upper()  # "BUY" -> "LONG", "SELL" -> "SHORT"
                 if side == "BUY":
                     signal_side = "LONG"
                 elif side == "SELL":
                     signal_side = "SHORT"
                 else:
                     signal_side = side
-                result = await self.pivot_points_filter.check_entry(symbol, price, signal_side)
-                return result.allowed if hasattr(result, 'allowed') else result
+                result = await self.pivot_points_filter.check_entry(
+                    symbol, price, signal_side
+                )
+                return result.allowed if hasattr(result, "allowed") else result
         except Exception as e:
             logger.warning(f"⚠️ Ошибка Pivot Points фильтра для {symbol}: {e}")
             return True  # При ошибке пропускаем фильтр
@@ -406,15 +430,17 @@ class FilterManager:
         # ✅ ИСПРАВЛЕНИЕ: Используем is_signal_valid или правильные аргументы для check_entry
         try:
             # Проверяем наличие метода is_signal_valid
-            if hasattr(self.volume_profile_filter, 'is_signal_valid'):
-                return await self.volume_profile_filter.is_signal_valid(signal, market_data)
+            if hasattr(self.volume_profile_filter, "is_signal_valid"):
+                return await self.volume_profile_filter.is_signal_valid(
+                    signal, market_data
+                )
             else:
                 # Используем check_entry с правильными аргументами (только symbol и price)
                 price = signal.get("price")
                 if not price:
                     return True
                 result = await self.volume_profile_filter.check_entry(symbol, price)
-                return result.allowed if hasattr(result, 'allowed') else result
+                return result.allowed if hasattr(result, "allowed") else result
         except Exception as e:
             logger.warning(f"⚠️ Ошибка Volume Profile фильтра для {symbol}: {e}")
             return True  # При ошибке пропускаем фильтр
@@ -461,4 +487,3 @@ class FilterManager:
         # Логика проверки funding rate
         # TODO: Реализовать после изучения FundingRateFilter
         return True
-

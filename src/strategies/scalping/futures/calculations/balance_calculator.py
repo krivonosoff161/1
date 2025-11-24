@@ -53,9 +53,7 @@ class BalanceCalculator:
         else:
             profile = "large"
 
-        logger.debug(
-            f"📊 BalanceCalculator: Баланс ${balance:.2f} → профиль: {profile}"
-        )
+        logger.debug(f"📊 BalanceCalculator: Баланс ${balance:.2f} → профиль: {profile}")
 
         return profile
 
@@ -121,4 +119,3 @@ class BalanceCalculator:
         }
 
         return boosts.get(profile.lower(), 1.0)
-

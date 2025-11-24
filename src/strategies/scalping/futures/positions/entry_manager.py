@@ -89,14 +89,18 @@ class EntryManager:
             )
 
             if not position_size or position_size <= 0:
-                logger.warning(f"⚠️ EntryManager: Невалидный размер позиции для {symbol}")
+                logger.warning(
+                    f"⚠️ EntryManager: Невалидный размер позиции для {symbol}"
+                )
                 return False
 
             # 2. Размещение ордера на бирже через OrderExecutor
             order_result = await self._place_order(signal, position_size)
 
             if not order_result or not order_result.get("success"):
-                logger.error(f"❌ EntryManager: Не удалось разместить ордер для {symbol}")
+                logger.error(
+                    f"❌ EntryManager: Не удалось разместить ордер для {symbol}"
+                )
                 return False
 
             # 3. Получаем данные открытой позиции
@@ -202,7 +206,10 @@ class EntryManager:
             # Метод зависит от реализации OrderExecutor
             if hasattr(self.order_executor, "execute_signal"):
                 result = await self.order_executor.execute_signal(signal, position_size)
-                return {"success": result is not None, "order_id": result.get("order_id") if result else None}
+                return {
+                    "success": result is not None,
+                    "order_id": result.get("order_id") if result else None,
+                }
             elif hasattr(self.order_executor, "place_order"):
                 # Прямое размещение ордера
                 side = signal.get("side", "").lower()
@@ -216,7 +223,10 @@ class EntryManager:
                     quantity=position_size,
                 )
 
-                return {"success": order is not None, "order_id": order.id if order else None}
+                return {
+                    "success": order is not None,
+                    "order_id": order.id if order else None,
+                }
             else:
                 logger.error(
                     "❌ EntryManager: OrderExecutor не имеет метода execute_signal или place_order"
@@ -224,7 +234,9 @@ class EntryManager:
                 return None
 
         except Exception as e:
-            logger.error(f"❌ EntryManager: Ошибка размещения ордера: {e}", exc_info=True)
+            logger.error(
+                f"❌ EntryManager: Ошибка размещения ордера: {e}", exc_info=True
+            )
             return None
 
     async def _get_position_data(
@@ -250,4 +262,3 @@ class EntryManager:
             "size": order_result.get("size", 0.0),
             "margin_used": order_result.get("margin_used", 0.0),
         }
-

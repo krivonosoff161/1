@@ -229,7 +229,11 @@ class RegimeCalculator:
         # Получаем multiplier из конфига
         if self.symbol_profiles and symbol in self.symbol_profiles:
             symbol_profile = self.symbol_profiles.get(symbol, {})
-            symbol_dict = self._to_dict(symbol_profile) if not isinstance(symbol_profile, dict) else symbol_profile
+            symbol_dict = (
+                self._to_dict(symbol_profile)
+                if not isinstance(symbol_profile, dict)
+                else symbol_profile
+            )
 
             # Per-regime multiplier
             if regime:
@@ -288,4 +292,3 @@ class RegimeCalculator:
             return dict(obj.__dict__)
         else:
             return {}
-

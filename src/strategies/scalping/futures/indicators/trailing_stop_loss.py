@@ -494,7 +494,7 @@ class TrailingStopLoss:
             if profit_pct <= -critical_loss_cut_from_price:
                 # ✅ ЗАЩИТА: Минимальная задержка даже для критических убытков (5 секунд)
                 min_critical_hold_seconds = self.min_critical_hold_seconds or 5.0
-                
+
                 if seconds_in_position < min_critical_hold_seconds:
                     logger.debug(
                         f"⏱️ Критический loss_cut заблокирован (min_hold защита): "
@@ -511,19 +511,24 @@ class TrailingStopLoss:
                             will_close=False,  # Блокировано min_hold
                         )
                     return False, None  # НЕ закрываем - минимальная задержка
-                
+
                 # ✅ ЗАЩИТА: Проверяем, что убыток не из-за комиссии
                 # Если profit_pct очень близок к -critical_loss_cut_from_price (в пределах комиссии),
                 # возможно это просто комиссия, а не реальный убыток
-                commission_threshold = self.trading_fee_rate * 1.5  # 1.5x комиссия как буфер
-                if abs(profit_pct + critical_loss_cut_from_price) < commission_threshold:
+                commission_threshold = (
+                    self.trading_fee_rate * 1.5
+                )  # 1.5x комиссия как буфер
+                if (
+                    abs(profit_pct + critical_loss_cut_from_price)
+                    < commission_threshold
+                ):
                     logger.debug(
                         f"⚠️ Критический loss_cut может быть из-за комиссии: "
                         f"profit_pct={profit_pct:.4f}, critical={critical_loss_cut_from_price:.4f}, "
                         f"разница={abs(profit_pct + critical_loss_cut_from_price):.4f} < {commission_threshold:.4f}"
                     )
                     # Продолжаем, но логируем предупреждение
-                
+
                 loss_from_margin = abs(profit_pct) * self.leverage
                 logger.warning(
                     f"🚨 Loss-cut КРИТИЧЕСКИЙ (2x): прибыль {profit_pct:.2%} от цены "

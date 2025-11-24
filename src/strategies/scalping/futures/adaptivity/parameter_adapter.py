@@ -128,4 +128,3 @@ class ParameterAdapter:
             value = value * size_boost
 
         return value
-

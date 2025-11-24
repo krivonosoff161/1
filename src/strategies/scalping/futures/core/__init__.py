@@ -8,7 +8,7 @@ Core модули - ядро системы управления торговл�
 """
 
 from .data_registry import DataRegistry
-from .position_registry import PositionRegistry, PositionMetadata
+from .position_registry import PositionMetadata, PositionRegistry
 from .trading_control_center import TradingControlCenter
 
 __all__ = [
@@ -17,4 +17,3 @@ __all__ = [
     "PositionMetadata",
     "TradingControlCenter",
 ]
-

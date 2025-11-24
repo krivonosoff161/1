@@ -143,4 +143,3 @@ class LoggerFactory:
             )
 
         return custom_logger
-

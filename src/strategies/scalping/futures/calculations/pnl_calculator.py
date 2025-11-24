@@ -38,13 +38,23 @@ class PnLCalculator:
 
         if config:
             # Загружаем комиссии из конфига
-            commission_config = getattr(config, "scalping", {}).get("commission", {}) or getattr(config, "commission", {})
+            commission_config = getattr(config, "scalping", {}).get(
+                "commission", {}
+            ) or getattr(config, "commission", {})
             if isinstance(commission_config, dict):
-                self.maker_fee_rate = commission_config.get("maker_fee_rate", self.maker_fee_rate)
-                self.taker_fee_rate = commission_config.get("taker_fee_rate", self.taker_fee_rate)
+                self.maker_fee_rate = commission_config.get(
+                    "maker_fee_rate", self.maker_fee_rate
+                )
+                self.taker_fee_rate = commission_config.get(
+                    "taker_fee_rate", self.taker_fee_rate
+                )
             elif hasattr(commission_config, "maker_fee_rate"):
-                self.maker_fee_rate = getattr(commission_config, "maker_fee_rate", self.maker_fee_rate)
-                self.taker_fee_rate = getattr(commission_config, "taker_fee_rate", self.taker_fee_rate)
+                self.maker_fee_rate = getattr(
+                    commission_config, "maker_fee_rate", self.maker_fee_rate
+                )
+                self.taker_fee_rate = getattr(
+                    commission_config, "taker_fee_rate", self.taker_fee_rate
+                )
 
         logger.info(
             f"✅ PnLCalculator инициализирован "
@@ -82,7 +92,9 @@ class PnLCalculator:
         """
         try:
             # 1. Конвертация размера из контрактов в монеты
-            size_in_coins = await self._convert_contracts_to_coins(symbol, size_in_contracts)
+            size_in_coins = await self._convert_contracts_to_coins(
+                symbol, size_in_contracts
+            )
 
             # 2. Расчет комиссий
             entry_commission, exit_commission = self._calculate_commissions(
@@ -211,4 +223,3 @@ class PnLCalculator:
         exit_commission = notional_exit * exit_commission_rate
 
         return entry_commission, exit_commission
-

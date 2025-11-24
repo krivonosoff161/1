@@ -101,7 +101,9 @@ class PositionMonitor:
         except asyncio.CancelledError:
             logger.debug("🛑 PositionMonitor: Цикл мониторинга отменен")
         except Exception as e:
-            logger.error(f"❌ PositionMonitor: Ошибка в цикле мониторинга: {e}", exc_info=True)
+            logger.error(
+                f"❌ PositionMonitor: Ошибка в цикле мониторинга: {e}", exc_info=True
+            )
 
     async def check_all_positions(self) -> None:
         """
@@ -116,9 +118,7 @@ class PositionMonitor:
             if not all_positions:
                 return
 
-            logger.debug(
-                f"🔍 PositionMonitor: Проверка {len(all_positions)} позиций"
-            )
+            logger.debug(f"🔍 PositionMonitor: Проверка {len(all_positions)} позиций")
 
             # Проверяем каждую позицию
             for symbol in all_positions.keys():
@@ -146,7 +146,9 @@ class PositionMonitor:
         """
         try:
             if not self.exit_analyzer:
-                logger.debug(f"ℹ️ PositionMonitor: ExitAnalyzer не установлен для {symbol}")
+                logger.debug(
+                    f"ℹ️ PositionMonitor: ExitAnalyzer не установлен для {symbol}"
+                )
                 return None
 
             # Проверяем, что позиция существует
@@ -171,4 +173,3 @@ class PositionMonitor:
                 exc_info=True,
             )
             return None
-

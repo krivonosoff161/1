@@ -64,9 +64,14 @@ class ExitAnalyzer:
                 # MTF фильтр может быть в signal_generator
                 if hasattr(signal_generator, "mtf_filter"):
                     self.mtf_filter = signal_generator.mtf_filter
-                elif hasattr(signal_generator, "filter_manager") and signal_generator.filter_manager:
-                    self.mtf_filter = getattr(signal_generator.filter_manager, "mtf_filter", None)
-            
+                elif (
+                    hasattr(signal_generator, "filter_manager")
+                    and signal_generator.filter_manager
+                ):
+                    self.mtf_filter = getattr(
+                        signal_generator.filter_manager, "mtf_filter", None
+                    )
+
             # Получаем scalping_config из orchestrator
             if hasattr(orchestrator, "scalping_config"):
                 self.scalping_config = orchestrator.scalping_config
@@ -99,35 +104,53 @@ class ExitAnalyzer:
 
             # Получаем режим рынка
             regime = None
-            if metadata and hasattr(metadata, 'regime'):
+            if metadata and hasattr(metadata, "regime"):
                 regime = metadata.regime
             elif isinstance(position, dict):
                 regime = position.get("regime")
-            
+
             # Если режим не найден, получаем из DataRegistry или signal_generator
             if not regime:
                 regime_data = await self.data_registry.get_regime(symbol)
                 if regime_data:
-                    if hasattr(regime_data, 'regime'):
+                    if hasattr(regime_data, "regime"):
                         regime = regime_data.regime
                     elif isinstance(regime_data, dict):
                         regime = regime_data.get("regime")
-            
+
             # Если все еще не найден, пробуем из signal_generator
             if not regime and self.signal_generator:
                 try:
-                    if hasattr(self.signal_generator, "regime_managers") and symbol in self.signal_generator.regime_managers:
+                    if (
+                        hasattr(self.signal_generator, "regime_managers")
+                        and symbol in self.signal_generator.regime_managers
+                    ):
                         regime_manager = self.signal_generator.regime_managers[symbol]
                         regime_obj = regime_manager.get_current_regime()
                         if regime_obj:
-                            regime = regime_obj.value.lower() if hasattr(regime_obj, 'value') else str(regime_obj).lower()
-                    elif hasattr(self.signal_generator, "regime_manager") and self.signal_generator.regime_manager:
-                        regime_obj = self.signal_generator.regime_manager.get_current_regime()
+                            regime = (
+                                regime_obj.value.lower()
+                                if hasattr(regime_obj, "value")
+                                else str(regime_obj).lower()
+                            )
+                    elif (
+                        hasattr(self.signal_generator, "regime_manager")
+                        and self.signal_generator.regime_manager
+                    ):
+                        regime_obj = (
+                            self.signal_generator.regime_manager.get_current_regime()
+                        )
                         if regime_obj:
-                            regime = regime_obj.value.lower() if hasattr(regime_obj, 'value') else str(regime_obj).lower()
+                            regime = (
+                                regime_obj.value.lower()
+                                if hasattr(regime_obj, "value")
+                                else str(regime_obj).lower()
+                            )
                 except Exception as e:
-                    logger.debug(f"⚠️ ExitAnalyzer: Не удалось получить режим из signal_generator: {e}")
-            
+                    logger.debug(
+                        f"⚠️ ExitAnalyzer: Не удалось получить режим из signal_generator: {e}"
+                    )
+
             # Fallback на ranging
             if not regime:
                 regime = "ranging"
@@ -163,8 +186,10 @@ class ExitAnalyzer:
             # Логируем решение
             if decision and self.exit_decision_logger:
                 try:
-                    if hasattr(self.exit_decision_logger, 'log_decision'):
-                        self.exit_decision_logger.log_decision(symbol, decision, position)
+                    if hasattr(self.exit_decision_logger, "log_decision"):
+                        self.exit_decision_logger.log_decision(
+                            symbol, decision, position
+                        )
                 except Exception as e:
                     logger.debug(f"⚠️ ExitAnalyzer: Ошибка логирования решения: {e}")
 
@@ -179,7 +204,11 @@ class ExitAnalyzer:
     # ==================== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ====================
 
     def _calculate_pnl_percent(
-        self, entry_price: float, current_price: float, position_side: str, include_fees: bool = True
+        self,
+        entry_price: float,
+        current_price: float,
+        position_side: str,
+        include_fees: bool = True,
     ) -> float:
         """
         Расчет PnL% с учетом комиссии.
@@ -211,8 +240,10 @@ class ExitAnalyzer:
                 if isinstance(commission_config, dict):
                     trading_fee_rate = commission_config.get("trading_fee_rate", 0.0010)
                 elif hasattr(commission_config, "trading_fee_rate"):
-                    trading_fee_rate = getattr(commission_config, "trading_fee_rate", 0.0010)
-            
+                    trading_fee_rate = getattr(
+                        commission_config, "trading_fee_rate", 0.0010
+                    )
+
             net_profit_pct = gross_profit_pct - trading_fee_rate
             return net_profit_pct
         else:
@@ -239,16 +270,24 @@ class ExitAnalyzer:
                     symbol_config = symbol_profiles[symbol]
                     if isinstance(symbol_config, dict) and regime in symbol_config:
                         regime_config = symbol_config[regime]
-                        if isinstance(regime_config, dict) and "tp_percent" in regime_config:
+                        if (
+                            isinstance(regime_config, dict)
+                            and "tp_percent" in regime_config
+                        ):
                             return float(regime_config["tp_percent"])
 
                 # Fallback на by_regime
                 by_regime = self.config_manager.to_dict(
-                    getattr(self.scalping_config, "by_regime", {}) if self.scalping_config else {}
+                    getattr(self.scalping_config, "by_regime", {})
+                    if self.scalping_config
+                    else {}
                 )
                 if regime in by_regime:
                     regime_config = by_regime[regime]
-                    if isinstance(regime_config, dict) and "tp_percent" in regime_config:
+                    if (
+                        isinstance(regime_config, dict)
+                        and "tp_percent" in regime_config
+                    ):
                         return float(regime_config["tp_percent"])
 
                 # Fallback на глобальный TP
@@ -284,7 +323,7 @@ class ExitAnalyzer:
 
         if self.scalping_config:
             return float(getattr(self.scalping_config, config_key, default_value))
-        
+
         return default_value
 
     def _get_partial_tp_params(self, regime: str) -> Dict[str, Any]:
@@ -309,17 +348,25 @@ class ExitAnalyzer:
                 if isinstance(partial_tp_config, dict):
                     params["enabled"] = partial_tp_config.get("enabled", False)
                     params["fraction"] = partial_tp_config.get("fraction", 0.6)
-                    params["trigger_percent"] = partial_tp_config.get("trigger_percent", 0.4)
+                    params["trigger_percent"] = partial_tp_config.get(
+                        "trigger_percent", 0.4
+                    )
 
                     # Пробуем получить параметры по режиму
                     by_regime = partial_tp_config.get("by_regime", {})
                     if regime in by_regime:
                         regime_config = by_regime[regime]
                         if isinstance(regime_config, dict):
-                            params["fraction"] = regime_config.get("fraction", params["fraction"])
-                            params["trigger_percent"] = regime_config.get("trigger_percent", params["trigger_percent"])
+                            params["fraction"] = regime_config.get(
+                                "fraction", params["fraction"]
+                            )
+                            params["trigger_percent"] = regime_config.get(
+                                "trigger_percent", params["trigger_percent"]
+                            )
             except Exception as e:
-                logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения partial_tp параметров: {e}")
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Ошибка получения partial_tp параметров: {e}"
+                )
 
         return params
 
@@ -389,7 +436,10 @@ class ExitAnalyzer:
 
                 if position_side.lower() == "long":
                     # Для LONG: разворот = delta был положительным и стал отрицательным
-                    if current_delta < -reversal_threshold and avg_delta > reversal_threshold:
+                    if (
+                        current_delta < -reversal_threshold
+                        and avg_delta > reversal_threshold
+                    ):
                         reversal_detected = True
                         logger.debug(
                             f"🔄 ExitAnalyzer: Order Flow разворот обнаружен для {symbol} LONG: "
@@ -397,14 +447,19 @@ class ExitAnalyzer:
                         )
                 elif position_side.lower() == "short":
                     # Для SHORT: разворот = delta был отрицательным и стал положительным
-                    if current_delta > reversal_threshold and avg_delta < -reversal_threshold:
+                    if (
+                        current_delta > reversal_threshold
+                        and avg_delta < -reversal_threshold
+                    ):
                         reversal_detected = True
                         logger.debug(
                             f"🔄 ExitAnalyzer: Order Flow разворот обнаружен для {symbol} SHORT: "
                             f"delta {avg_delta:.3f} → {current_delta:.3f}"
                         )
             except Exception as e:
-                logger.debug(f"⚠️ ExitAnalyzer: Ошибка проверки Order Flow разворота для {symbol}: {e}")
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Ошибка проверки Order Flow разворота для {symbol}: {e}"
+                )
 
         # Проверка MTF разворота
         if self.mtf_filter and not reversal_detected:
@@ -413,7 +468,9 @@ class ExitAnalyzer:
                 # Пока упрощенная проверка - можно расширить позже
                 pass  # TODO: Реализовать проверку MTF разворота
             except Exception as e:
-                logger.debug(f"⚠️ ExitAnalyzer: Ошибка проверки MTF разворота для {symbol}: {e}")
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Ошибка проверки MTF разворота для {symbol}: {e}"
+                )
 
         return reversal_detected
 
@@ -448,15 +505,21 @@ class ExitAnalyzer:
             # 1. Получаем данные позиции
             position_side = None
             entry_price = None
-            if metadata and hasattr(metadata, 'position_side'):
+            if metadata and hasattr(metadata, "position_side"):
                 position_side = metadata.position_side
                 entry_price = metadata.entry_price
             elif isinstance(position, dict):
-                position_side = position.get("position_side") or position.get("posSide", "long")
-                entry_price = float(position.get("avgPx") or position.get("entry_price") or 0)
+                position_side = position.get("position_side") or position.get(
+                    "posSide", "long"
+                )
+                entry_price = float(
+                    position.get("avgPx") or position.get("entry_price") or 0
+                )
 
             if not entry_price or entry_price == 0:
-                logger.warning(f"⚠️ ExitAnalyzer: Не удалось получить entry_price для {symbol}")
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Не удалось получить entry_price для {symbol}"
+                )
                 return None
 
             if not position_side:
@@ -533,7 +596,9 @@ class ExitAnalyzer:
                     }
 
             # 6. Проверка разворота (Order Flow, MTF)
-            reversal_detected = await self._check_reversal_signals(symbol, position_side)
+            reversal_detected = await self._check_reversal_signals(
+                symbol, position_side
+            )
             if reversal_detected:
                 logger.info(
                     f"🔄 ExitAnalyzer TRENDING: Разворот обнаружен для {symbol}, закрываем позицию "
@@ -566,7 +631,8 @@ class ExitAnalyzer:
 
         except Exception as e:
             logger.error(
-                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме TRENDING: {e}", exc_info=True
+                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме TRENDING: {e}",
+                exc_info=True,
             )
             return None
 
@@ -601,15 +667,21 @@ class ExitAnalyzer:
             # 1. Получаем данные позиции
             position_side = None
             entry_price = None
-            if metadata and hasattr(metadata, 'position_side'):
+            if metadata and hasattr(metadata, "position_side"):
                 position_side = metadata.position_side
                 entry_price = metadata.entry_price
             elif isinstance(position, dict):
-                position_side = position.get("position_side") or position.get("posSide", "long")
-                entry_price = float(position.get("avgPx") or position.get("entry_price") or 0)
+                position_side = position.get("position_side") or position.get(
+                    "posSide", "long"
+                )
+                entry_price = float(
+                    position.get("avgPx") or position.get("entry_price") or 0
+                )
 
             if not entry_price or entry_price == 0:
-                logger.warning(f"⚠️ ExitAnalyzer: Не удалось получить entry_price для {symbol}")
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Не удалось получить entry_price для {symbol}"
+                )
                 return None
 
             if not position_side:
@@ -667,8 +739,12 @@ class ExitAnalyzer:
                     }
 
             # 6. Проверка разворота (Order Flow, MTF) - в ranging режиме более строго
-            reversal_detected = await self._check_reversal_signals(symbol, position_side)
-            if reversal_detected and pnl_percent > 0.3:  # Закрываем только если есть прибыль
+            reversal_detected = await self._check_reversal_signals(
+                symbol, position_side
+            )
+            if (
+                reversal_detected and pnl_percent > 0.3
+            ):  # Закрываем только если есть прибыль
                 logger.info(
                     f"🔄 ExitAnalyzer RANGING: Разворот обнаружен для {symbol}, закрываем позицию "
                     f"(profit={pnl_percent:.2f}%)"
@@ -685,7 +761,8 @@ class ExitAnalyzer:
 
         except Exception as e:
             logger.error(
-                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме RANGING: {e}", exc_info=True
+                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме RANGING: {e}",
+                exc_info=True,
             )
             return None
 
@@ -720,15 +797,21 @@ class ExitAnalyzer:
             # 1. Получаем данные позиции
             position_side = None
             entry_price = None
-            if metadata and hasattr(metadata, 'position_side'):
+            if metadata and hasattr(metadata, "position_side"):
                 position_side = metadata.position_side
                 entry_price = metadata.entry_price
             elif isinstance(position, dict):
-                position_side = position.get("position_side") or position.get("posSide", "long")
-                entry_price = float(position.get("avgPx") or position.get("entry_price") or 0)
+                position_side = position.get("position_side") or position.get(
+                    "posSide", "long"
+                )
+                entry_price = float(
+                    position.get("avgPx") or position.get("entry_price") or 0
+                )
 
             if not entry_price or entry_price == 0:
-                logger.warning(f"⚠️ ExitAnalyzer: Не удалось получить entry_price для {symbol}")
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Не удалось получить entry_price для {symbol}"
+                )
                 return None
 
             if not position_side:
@@ -772,7 +855,9 @@ class ExitAnalyzer:
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.3)
                 if pnl_percent >= trigger_percent:
-                    fraction = partial_tp_params.get("fraction", 0.7)  # Закрываем больше позиции
+                    fraction = partial_tp_params.get(
+                        "fraction", 0.7
+                    )  # Закрываем больше позиции
                     logger.info(
                         f"📊 ExitAnalyzer CHOPPY: Partial TP триггер достигнут для {symbol}: "
                         f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции"
@@ -786,7 +871,9 @@ class ExitAnalyzer:
                     }
 
             # 6. Проверка разворота (Order Flow, MTF) - в choppy режиме закрываем сразу
-            reversal_detected = await self._check_reversal_signals(symbol, position_side)
+            reversal_detected = await self._check_reversal_signals(
+                symbol, position_side
+            )
             if reversal_detected:
                 logger.info(
                     f"🔄 ExitAnalyzer CHOPPY: Разворот обнаружен для {symbol}, закрываем позицию "
@@ -804,7 +891,8 @@ class ExitAnalyzer:
 
         except Exception as e:
             logger.error(
-                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме CHOPPY: {e}", exc_info=True
+                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме CHOPPY: {e}",
+                exc_info=True,
             )
             return None
 
@@ -831,4 +919,3 @@ class ExitAnalyzer:
         except Exception as e:
             logger.error(f"❌ ExitAnalyzer: Ошибка закрытия позиции {symbol}: {e}")
             return False
-

@@ -112,8 +112,7 @@ class ADXFilter:
                     plus_di=plus_di,
                     minus_di=minus_di,
                     reason=(
-                        f"Weak trend: ADX={adx:.1f} < "
-                        f"{self.config.adx_threshold}"
+                        f"Weak trend: ADX={adx:.1f} < " f"{self.config.adx_threshold}"
                     ),
                 )
 
@@ -204,8 +203,10 @@ class ADXFilter:
         minus_di_vals = 100 * minus_di_smooth / atr
 
         # DX
-        dx = 100 * np.abs(plus_di_vals - minus_di_vals) / (
-            plus_di_vals + minus_di_vals + 1e-10
+        dx = (
+            100
+            * np.abs(plus_di_vals - minus_di_vals)
+            / (plus_di_vals + minus_di_vals + 1e-10)
         )
 
         # ADX = сглаженный DX
@@ -329,4 +330,3 @@ class ADXFilter:
             f"   adx_threshold: {old_threshold} → {new_config.adx_threshold}\n"
             f"   di_difference: {old_di} → {new_config.di_difference}"
         )
-

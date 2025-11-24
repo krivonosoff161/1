@@ -86,8 +86,10 @@ class PositionSizer:
 
             # 2. Режимный множитель
             if self.regime_calculator:
-                regime_multiplier = self.regime_calculator.calculate_position_size_multiplier(
-                    symbol, regime, balance_profile
+                regime_multiplier = (
+                    self.regime_calculator.calculate_position_size_multiplier(
+                        symbol, regime, balance_profile
+                    )
                 )
             else:
                 regime_multiplier = self._get_default_regime_multiplier(regime)
@@ -128,7 +130,9 @@ class PositionSizer:
             return None
 
     def _get_risk_per_trade(
-        self, regime: Optional[str] = None, regime_params: Optional[Dict[str, Any]] = None
+        self,
+        regime: Optional[str] = None,
+        regime_params: Optional[Dict[str, Any]] = None,
     ) -> float:
         """
         Получить процент риска на сделку.
@@ -151,7 +155,9 @@ class PositionSizer:
 
         if self.config and hasattr(self.config, "risk"):
             risk_config = self.config.risk
-            risk = getattr(risk_config, "risk_per_trade_percent", default_risk * 100) / 100
+            risk = (
+                getattr(risk_config, "risk_per_trade_percent", default_risk * 100) / 100
+            )
             return risk
 
         return default_risk
@@ -176,4 +182,3 @@ class PositionSizer:
             return multipliers.get(regime.lower(), 1.0)
 
         return 1.0
-
