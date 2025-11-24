@@ -22,9 +22,16 @@ from src.clients.futures_client import OKXFuturesClient
 from src.config import BotConfig
 # Futures-специфичные модули безопасности
 from src.strategies.modules.liquidation_guard import LiquidationGuard
-from src.strategies.modules.margin_calculator import MarginCalculator
 from src.strategies.modules.slippage_guard import SlippageGuard
 from src.strategies.modules.trading_statistics import TradingStatistics
+
+# ✅ РЕФАКТОРИНГ: Импортируем новые модули
+from .calculations.margin_calculator import MarginCalculator
+from .core.data_registry import DataRegistry
+from .core.position_registry import PositionRegistry
+from .core.trading_control_center import TradingControlCenter
+from .logging.logger_factory import LoggerFactory
+from .logging.structured_logger import StructuredLogger
 
 from ..spot.performance_tracker import PerformanceTracker
 from .config.config_manager import ConfigManager
@@ -33,6 +40,7 @@ from .coordinators.signal_coordinator import SignalCoordinator
 from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
 from .coordinators.websocket_coordinator import WebSocketCoordinator
 from .indicators.fast_adx import FastADX
+from .positions.exit_analyzer import ExitAnalyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
 from .indicators.funding_rate_monitor import FundingRateMonitor
 from .indicators.order_flow_indicator import OrderFlowIndicator
 from .order_executor import FuturesOrderExecutor
@@ -69,14 +77,31 @@ class FuturesScalpingOrchestrator:
         # ✅ ЭТАП 1: Config Manager для работы с конфигурацией
         self.config_manager = ConfigManager(config)
 
-        # ✅ DEBUG LOGGER для полного трейсирования
-        from src.strategies.modules.debug_logger import DebugLogger
+        # ✅ РЕФАКТОРИНГ: Настройка логирования через LoggerFactory
+        LoggerFactory.setup_futures_logging(
+            log_dir="logs/futures",
+            log_level="DEBUG",
+        )
+
+        # ✅ РЕФАКТОРИНГ: DEBUG LOGGER из нового модуля
+        from .logging.debug_logger import DebugLogger
 
         self.debug_logger = DebugLogger(
             enabled=True,  # Включить для диагностики
             csv_export=True,  # Экспортировать в logs/futures/debug/
             csv_dir="logs/futures/debug",  # ✅ Папка внутри futures (как основные логи)
             verbose=True,  # DEBUG уровень логирования
+        )
+
+        # ✅ РЕФАКТОРИНГ: StructuredLogger для структурированных логов
+        self.structured_logger = StructuredLogger(log_dir="logs/futures/structured")
+
+        # ✅ РЕФАКТОРИНГ: Инициализация Core модулей
+        self.position_registry = PositionRegistry()
+        self.data_registry = DataRegistry()
+        self.trading_control_center = TradingControlCenter(
+            position_registry=self.position_registry,
+            data_registry=self.data_registry,
         )
 
         # 🛡️ Защиты риска
@@ -247,6 +272,13 @@ class FuturesScalpingOrchestrator:
         # для доступа к trailing_sl_by_symbol при проверке TP
         if hasattr(self.position_manager, "set_orchestrator"):
             self.position_manager.set_orchestrator(self)
+        
+        # ✅ РЕФАКТОРИНГ: Устанавливаем PositionRegistry и DataRegistry в position_manager
+        if hasattr(self.position_manager, "set_position_registry"):
+            self.position_manager.set_position_registry(self.position_registry)
+        if hasattr(self.position_manager, "set_data_registry"):
+            self.position_manager.set_data_registry(self.data_registry)
+        
         # ✅ НОВОЕ: Передаем symbol_profiles в position_manager для per-symbol TP
         # (инициализируем после создания symbol_profiles)
         self.performance_tracker = PerformanceTracker()
@@ -299,6 +331,18 @@ class FuturesScalpingOrchestrator:
             long_threshold=of_long,
             short_threshold=of_short,
         )
+
+        # ✅ НОВОЕ: Инициализация ExitAnalyzer после создания fast_adx и order_flow
+        # (position_registry и data_registry уже созданы выше)
+        self.exit_analyzer = ExitAnalyzer(
+            position_registry=self.position_registry,
+            data_registry=self.data_registry,
+            exit_decision_logger=None,  # Можно добавить позже
+            orchestrator=self,  # Передаем orchestrator для доступа к модулям
+            config_manager=self.config_manager,
+            signal_generator=self.signal_generator,
+        )
+        logger.info("✅ ExitAnalyzer инициализирован в orchestrator")
 
         # ✅ АДАПТИВНО: FundingRateMonitor параметры из конфига
         funding_config = getattr(config, "futures_modules", {})
@@ -424,6 +468,7 @@ class FuturesScalpingOrchestrator:
             fast_adx=self.fast_adx,
             position_manager=self.position_manager,
             order_flow=self.order_flow,  # ✅ ЭТАП 1.1: Передаем OrderFlowIndicator для анализа разворота
+            exit_analyzer=self.exit_analyzer,  # ✅ НОВОЕ: Передаем ExitAnalyzer для анализа закрытия
         )
         # Для совместимости с существующими модулями (PositionManager)
         self.trailing_sl_by_symbol = self.trailing_sl_coordinator.trailing_sl_by_symbol

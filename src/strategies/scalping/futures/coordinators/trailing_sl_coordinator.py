@@ -48,6 +48,7 @@ class TrailingSLCoordinator:
         fast_adx=None,
         position_manager=None,
         order_flow=None,  # ✅ ЭТАП 1.1: OrderFlowIndicator для анализа разворота
+        exit_analyzer=None,  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
     ):
         """
         Инициализация TrailingSLCoordinator.
@@ -65,6 +66,7 @@ class TrailingSLCoordinator:
             fast_adx: FastADX индикатор (опционально)
             position_manager: PositionManager для profit harvesting (опционально)
             order_flow: OrderFlowIndicator для анализа разворота (опционально)
+            exit_analyzer: ExitAnalyzer для анализа закрытия (опционально)
         """
         self.config_manager = config_manager
         self.debug_logger = debug_logger
@@ -80,6 +82,7 @@ class TrailingSLCoordinator:
         self.fast_adx = fast_adx
         self.position_manager = position_manager
         self.order_flow = order_flow  # ✅ ЭТАП 1.1: OrderFlowIndicator для анализа разворота
+        self.exit_analyzer = exit_analyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
         
         # ✅ ЭТАП 1.1: История delta для анализа разворота Order Flow
         self._order_flow_delta_history: Dict[str, list] = {}  # symbol -> [(timestamp, delta), ...]
@@ -607,6 +610,48 @@ class TrailingSLCoordinator:
                     f"⚠️ Позиция {symbol} уже закрыта или закрывается, пропускаем проверку TSL"
                 )
                 return
+
+            # ✅ НОВОЕ: Вызываем ExitAnalyzer для анализа закрытия перед проверкой TSL
+            exit_decision = None
+            if self.exit_analyzer:
+                try:
+                    exit_decision = await self.exit_analyzer.analyze_position(symbol)
+                    if exit_decision:
+                        action = exit_decision.get("action")
+                        reason = exit_decision.get("reason", "exit_analyzer")
+                        decision_pnl = exit_decision.get("pnl_pct", profit_pct)
+
+                        logger.info(
+                            f"🎯 ExitAnalyzer решение для {symbol}: action={action}, "
+                            f"reason={reason}, pnl={decision_pnl:.2%}"
+                        )
+
+                        # Если ExitAnalyzer решил закрыть - закрываем сразу
+                        if action == "close":
+                            logger.info(
+                                f"✅ ExitAnalyzer: Закрываем {symbol} (reason={reason}, pnl={decision_pnl:.2%})"
+                            )
+                            if self._has_position(symbol):
+                                await self.close_position_callback(symbol, reason)
+                            return
+                        # Если ExitAnalyzer решил частично закрыть - обрабатываем (TODO: реализовать partial close)
+                        elif action == "partial_close":
+                            fraction = exit_decision.get("fraction", 0.5)
+                            logger.info(
+                                f"📊 ExitAnalyzer: Частичное закрытие {symbol} ({fraction*100:.0f}%, reason={reason})"
+                            )
+                            # TODO: Реализовать частичное закрытие позиции
+                        # Если ExitAnalyzer решил продлить TP - продолжаем (TSL уже адаптируется)
+                        elif action == "extend_tp":
+                            new_tp = exit_decision.get("new_tp")
+                            logger.info(
+                                f"📈 ExitAnalyzer: Продлеваем TP для {symbol} до {new_tp:.2f}% (reason={reason})"
+                            )
+                            # Продолжаем - TSL будет адаптироваться
+                except Exception as e:
+                    logger.error(
+                        f"❌ ExitAnalyzer: Ошибка анализа для {symbol}: {e}", exc_info=True
+                    )
 
             should_close_by_sl, close_reason = tsl.should_close_position(
                 current_price,
@@ -1151,10 +1196,11 @@ class TrailingSLCoordinator:
 
             if time_held >= actual_max_holding:
                 time_extended = position.get("time_extended", False)
+                # ✅ ИСПРАВЛЕНО: Проверяем продление ВАЖНЕЕ чем закрытие
                 if (
                     extend_time_if_profitable
                     and not time_extended
-                    and profit_pct > min_profit_for_extension
+                    and profit_pct >= min_profit_for_extension  # ✅ ИСПРАВЛЕНО: >= вместо > (0.44% >= 0.5% = false, но это правильно, нужно >= 0.5%)
                 ):
                     original_max_holding = max_holding_minutes
                     extension_minutes = original_max_holding * (
@@ -1163,10 +1209,15 @@ class TrailingSLCoordinator:
                     new_max_holding = original_max_holding + extension_minutes
                     position["time_extended"] = True
                     position["max_holding_minutes"] = new_max_holding
+                    # ✅ Обновляем также в orchestrator.active_positions для синхронизации
+                    if hasattr(self, "orchestrator") and self.orchestrator:
+                        if symbol in self.orchestrator.active_positions:
+                            self.orchestrator.active_positions[symbol]["time_extended"] = True
+                            self.orchestrator.active_positions[symbol]["max_holding_minutes"] = new_max_holding
                     logger.info(
-                        f"⏰ Позиция {symbol} в прибыли {profit_pct:.2%} "
-                        f"(>{min_profit_for_extension:.2%}), продлеваем время на "
-                        f"{extension_minutes:.1f} минут (до {new_max_holding:.1f})"
+                        f"✅ Позиция {symbol} в прибыли {profit_pct:.2%} "
+                        f"(>={min_profit_for_extension:.2%}), продлеваем время на "
+                        f"{extension_minutes:.1f} минут (с {original_max_holding:.1f} до {new_max_holding:.1f} минут)"
                     )
                     return
 
@@ -1175,29 +1226,42 @@ class TrailingSLCoordinator:
                 if tsl:
                     min_profit_to_close = getattr(tsl, "min_profit_to_close", None)
 
-                if min_profit_to_close is not None and profit_pct > min_profit_to_close:
+                # ✅ ИСПРАВЛЕНО: Если прибыль большая, НЕ закрываем по времени (используем trailing stop)
+                if min_profit_to_close is not None and profit_pct >= min_profit_to_close:
                     logger.info(
-                        f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
+                        f"✅ Позиция {symbol} удерживается {time_held:.1f} минут "
                         f"(лимит: {actual_max_holding:.1f} минут), "
-                        f"но прибыль {profit_pct:.2%} > min_profit_to_close "
-                        f"{min_profit_to_close:.2%}, не закрываем"
+                        f"но прибыль {profit_pct:.2%} >= min_profit_to_close "
+                        f"{min_profit_to_close:.2%}, НЕ закрываем по времени (используем trailing stop)"
                     )
                     return
 
+                # ✅ ИСПРАВЛЕНО: Убыточные позиции НЕ закрываем по времени (ждем TP/SL или разворота)
                 if profit_pct <= 0:
                     logger.info(
                         f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
                         f"(лимит: {actual_max_holding:.1f} минут), "
-                        f"прибыль {profit_pct:.2%} <= 0%, не закрываем по времени"
+                        f"прибыль {profit_pct:.2%} <= 0%, НЕ закрываем по времени (ждем TP/SL)"
                     )
                     return
 
-                logger.info(
-                    f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
-                    f"(лимит: {actual_max_holding:.1f} минут), "
-                    f"прибыль: {profit_pct:.2%}, закрываем по времени"
-                )
-                await self.close_position_callback(symbol, "max_holding_time")
+                # ✅ ИСПРАВЛЕНО: Закрываем ТОЛЬКО если прибыль мала (< min_profit_for_extension) И время вышло
+                if profit_pct < min_profit_for_extension:
+                    logger.warning(
+                        f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
+                        f"(лимит: {actual_max_holding:.1f} минут), "
+                        f"прибыль {profit_pct:.2%} < {min_profit_for_extension:.2%} (min для продления), закрываем по времени"
+                    )
+                    await self.close_position_callback(symbol, "max_holding_time")
+                else:
+                    # ✅ Если прибыль >= min_profit_for_extension, но не продлеваем (возможно, уже продлена)
+                    # Используем trailing stop вместо закрытия по времени
+                    logger.info(
+                        f"✅ Позиция {symbol} удерживается {time_held:.1f} минут "
+                        f"(лимит: {actual_max_holding:.1f} минут), "
+                        f"прибыль {profit_pct:.2%} >= {min_profit_for_extension:.2%}, НЕ закрываем (используем trailing stop)"
+                    )
+                    return
 
         except Exception as e:
             logger.error(f"Ошибка проверки времени жизни позиции {symbol}: {e}")

@@ -1,3 +1,0 @@
-timestamp,event_type,symbol,data
-11:58:54.820,tsl_create,BTC-USDT,regime=ranging | entry=84268.0000 | side=long | min_hold=40.0000 | timeout=90.0000
-11:58:54.821,config,BTC-USDT,regime=ranging | min_holding=40.0000 | timeout=90.0000 | loss_cut=3.0000 | timeout_loss=2.0000 | tp_atr_mult=None | initial_trail=0.0200

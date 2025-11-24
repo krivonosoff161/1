@@ -18,8 +18,7 @@ from loguru import logger
 from src.config import BotConfig, ScalpingConfig
 from src.indicators import IndicatorManager
 from src.models import OHLCV, MarketData
-from src.strategies.modules.adaptive_regime_manager import \
-    AdaptiveRegimeManager
+from .adaptivity.regime_manager import AdaptiveRegimeManager
 from src.strategies.modules.correlation_filter import CorrelationFilter
 from src.strategies.modules.multi_timeframe import MultiTimeframeFilter
 from src.strategies.modules.pivot_points import PivotPointsFilter
@@ -27,6 +26,8 @@ from src.strategies.modules.volume_profile_filter import VolumeProfileFilter
 
 from .filters import (FundingRateFilter, LiquidityFilter, MomentumFilter,
                       OrderFlowFilter, VolatilityRegimeFilter)
+# ✅ РЕФАКТОРИНГ: Импортируем FilterManager
+from .signals.filter_manager import FilterManager
 
 
 class FuturesSignalGenerator:
@@ -194,6 +195,9 @@ class FuturesSignalGenerator:
         self.volatility_filter = None
         self.momentum_filter = None  # ✅ НОВОЕ: Momentum Filter
         self.impulse_config = None
+        
+        # ✅ РЕФАКТОРИНГ: FilterManager для координации всех фильтров
+        self.filter_manager = FilterManager()
 
         modules_config = getattr(self.config, "futures_modules", None)
         if modules_config:
@@ -315,8 +319,7 @@ class FuturesSignalGenerator:
             ohlcv_data: Исторические свечи для инициализации ARM
         """
         try:
-            from src.strategies.modules.adaptive_regime_manager import \
-                RegimeConfig
+            from .adaptivity.regime_manager import RegimeConfig
 
             # Инициализация ARM
             # ⚠️ ИСПРАВЛЕНИЕ: adaptive_regime находится в config.scalping, а не в config
@@ -360,7 +363,7 @@ class FuturesSignalGenerator:
                     self._extract_regime_params = extract_regime_params
                     self._adaptive_regime_dict = adaptive_regime_dict
 
-                    from src.strategies.modules.adaptive_regime_manager import (
+                    from .adaptivity.regime_manager import (
                         IndicatorParameters, ModuleParameters,
                         RegimeParameters)
 
@@ -639,6 +642,57 @@ class FuturesSignalGenerator:
             except Exception as e:
                 logger.warning(f"⚠️ MTF инициализация не удалась: {e}")
                 self.mtf_filter = None
+
+            # ✅ Инициализация ADX Filter (ПРОВЕРКА ТРЕНДА)
+            try:
+                from src.strategies.modules.adx_filter import ADXFilter, ADXFilterConfig
+
+                # Получаем параметры ADX из текущего режима
+                regime_name_adx = "ranging"  # Fallback
+                try:
+                    if hasattr(self, "regime_manager") and self.regime_manager:
+                        regime_obj = self.regime_manager.get_current_regime()
+                        if regime_obj:
+                            regime_name_adx = (
+                                regime_obj.lower()
+                                if isinstance(regime_obj, str)
+                                else str(regime_obj).lower()
+                            )
+                except:
+                    pass
+
+                # Получаем параметры из режима
+                regime_params = None
+                if hasattr(self, "regime_manager") and self.regime_manager:
+                    try:
+                        regime_params = self.regime_manager.get_current_parameters()
+                    except:
+                        pass
+
+                adx_threshold = 18.0  # Fallback
+                adx_di_difference = 1.5  # Fallback
+
+                if regime_params and hasattr(regime_params, "modules"):
+                    adx_modules = regime_params.modules
+                    adx_threshold = getattr(adx_modules, "adx_threshold", adx_threshold)
+                    adx_di_difference = getattr(
+                        adx_modules, "adx_di_difference", adx_di_difference
+                    )
+
+                adx_config = ADXFilterConfig(
+                    enabled=True,
+                    adx_threshold=adx_threshold,
+                    di_difference=adx_di_difference,
+                )
+
+                self.adx_filter = ADXFilter(config=adx_config)
+                logger.info(
+                    f"✅ ADX Filter инициализирован: "
+                    f"threshold={adx_threshold}, di_difference={adx_di_difference}"
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ ADX Filter инициализация не удалась: {e}")
+                self.adx_filter = None
 
             # ✅ Инициализация Correlation Filter
             try:
@@ -1102,6 +1156,28 @@ class FuturesSignalGenerator:
                     f"⚠️ Volume Profile Filter инициализация не удалась: {e}"
                 )
                 self.volume_filter = None
+
+            # ✅ РЕФАКТОРИНГ: Подключаем все фильтры к FilterManager
+            if self.filter_manager:
+                if self.adx_filter:
+                    self.filter_manager.set_adx_filter(self.adx_filter)
+                if self.mtf_filter:
+                    self.filter_manager.set_mtf_filter(self.mtf_filter)
+                if self.correlation_filter:
+                    self.filter_manager.set_correlation_filter(self.correlation_filter)
+                if self.pivot_filter:
+                    self.filter_manager.set_pivot_points_filter(self.pivot_filter)
+                if self.volume_filter:
+                    self.filter_manager.set_volume_profile_filter(self.volume_filter)
+                if self.liquidity_filter:
+                    self.filter_manager.set_liquidity_filter(self.liquidity_filter)
+                if self.order_flow_filter:
+                    self.filter_manager.set_order_flow_filter(self.order_flow_filter)
+                if self.funding_filter:
+                    self.filter_manager.set_funding_rate_filter(self.funding_filter)
+                if self.volatility_filter:
+                    self.filter_manager.set_volatility_filter(self.volatility_filter)
+                logger.info("✅ FilterManager: Все фильтры подключены")
 
             self.is_initialized = True
             logger.info("✅ FuturesSignalGenerator инициализирован")
@@ -3011,6 +3087,19 @@ class FuturesSignalGenerator:
             current_positions: Текущие открытые позиции для CorrelationFilter
         """
         try:
+            # ✅ РЕФАКТОРИНГ: Используем FilterManager если он настроен
+            use_filter_manager = (
+                self.filter_manager
+                and self.filter_manager.adx_filter is not None  # Хотя бы один фильтр подключен
+            )
+            
+            if use_filter_manager:
+                # Используем новый FilterManager
+                return await self._apply_filters_via_manager(
+                    symbol, signals, market_data, current_positions
+                )
+            
+            # Fallback на старую логику
             filtered_signals = []
 
             for signal in signals:
@@ -3126,8 +3215,92 @@ class FuturesSignalGenerator:
                             logger.debug(f"🔍 Сигнал {symbol} отфильтрован ARM")
                             continue
                     except Exception as e:
-                        logger.debug(
-                            f"⚠️ Ошибка проверки ARM для {symbol}: {e}, пропускаем фильтр"
+                            logger.debug(
+                                f"⚠️ Ошибка проверки ARM для {symbol}: {e}, пропускаем фильтр"
+                            )
+
+                # ✅ Проверка ADX: Сила и направление тренда (ПЕРЕД другими фильтрами)
+                if self.adx_filter:
+                    try:
+                        # Получаем параметры ADX из текущего режима перед проверкой
+                        if regime_manager:
+                            regime_params = regime_manager.get_current_parameters()
+                            if regime_params and hasattr(regime_params, "modules"):
+                                adx_modules = regime_params.modules
+                                from src.strategies.modules.adx_filter import (
+                                    ADXFilterConfig,
+                                )
+
+                                adx_new_config = ADXFilterConfig(
+                                    enabled=True,
+                                    adx_threshold=getattr(
+                                        adx_modules, "adx_threshold", 18.0
+                                    ),
+                                    di_difference=getattr(
+                                        adx_modules, "adx_di_difference", 1.5
+                                    ),
+                                )
+                                self.adx_filter.config = adx_new_config
+
+                        # Преобразуем side сигнала в OrderSide
+                        signal_side_str = signal.get("side", "").lower()
+                        from src.models import OrderSide
+
+                        if signal_side_str == "buy":
+                            order_side = OrderSide.BUY  # LONG
+                        elif signal_side_str == "sell":
+                            order_side = OrderSide.SELL  # SHORT
+                        else:
+                            logger.warning(
+                                f"⚠️ Неизвестное направление сигнала для {symbol}: {signal_side_str}"
+                            )
+                            continue
+
+                        # Получаем свечи из market_data
+                        candles = (
+                            market_data.ohlcv_data
+                            if market_data and market_data.ohlcv_data
+                            else []
+                        )
+                        if not candles:
+                            logger.warning(
+                                f"⚠️ Нет свечей для ADX проверки {symbol}"
+                            )
+                            continue
+
+                        # Конвертируем OHLCV в dict для ADX фильтра
+                        candles_dict = []
+                        for candle in candles:
+                            candles_dict.append(
+                                {
+                                    "high": candle.high,
+                                    "low": candle.low,
+                                    "close": candle.close,
+                                }
+                            )
+
+                        # Проверяем тренд через ADX
+                        adx_result = self.adx_filter.check_trend_strength(
+                            symbol, order_side, candles_dict
+                        )
+
+                        if not adx_result.allowed:
+                            # ✅ ИСПРАВЛЕНО: Блокируем сигнал против тренда (не переключаем направление)
+                            logger.warning(
+                                f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol}: "
+                                f"сигнал против тренда ({adx_result.reason if hasattr(adx_result, 'reason') else 'ADX не разрешил'}, "
+                                f"ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f})"
+                            )
+                            continue  # Блокируем сигнал
+                        else:
+                            logger.debug(
+                                f"✅ ADX подтвердил {signal_side_str.upper()} сигнал для {symbol}: "
+                                f"{adx_result.reason} (ADX={adx_result.adx_value:.1f}, "
+                                f"+DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f})"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Ошибка проверки ADX для {symbol}: {e}, пропускаем фильтр"
                         )
 
                 # ✅ Проверка корреляции (если фильтр инициализирован)
@@ -3390,6 +3563,507 @@ class FuturesSignalGenerator:
 
         except Exception as e:
             logger.error(f"Ошибка применения фильтров: {e}", exc_info=True)
+            # В случае ошибки возвращаем сигналы без фильтрации
+            return signals
+    
+    async def _apply_filters_via_manager(
+        self,
+        symbol: str,
+        signals: List[Dict[str, Any]],
+        market_data: MarketData,
+        current_positions: Dict = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        ✅ РЕФАКТОРИНГ: Применение фильтров через FilterManager.
+        
+        Args:
+            symbol: Торговая пара
+            signals: Список сигналов
+            market_data: Рыночные данные
+            current_positions: Текущие открытые позиции
+            
+        Returns:
+            Отфильтрованный список сигналов
+        """
+        try:
+            filtered_signals = []
+            
+            # Получаем режим для FilterManager
+            regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+            current_regime_name = (
+                regime_manager.get_current_regime() if regime_manager else None
+            )
+            
+            # Получаем параметры режима
+            regime_params = None
+            if regime_manager:
+                try:
+                    regime_params_obj = regime_manager.get_current_parameters()
+                    if regime_params_obj:
+                        regime_params = self._to_dict(regime_params_obj)
+                except:
+                    pass
+            
+            for signal in signals:
+                # ✅ КОНФИГУРИРУЕМАЯ Блокировка SHORT/LONG сигналов
+                signal_side = signal.get("side", "").lower()
+                allow_short = getattr(
+                    self.config.scalping, "allow_short_positions", True
+                )
+                allow_long = getattr(self.config.scalping, "allow_long_positions", True)
+
+                if signal_side == "sell" and not allow_short:
+                    logger.debug(
+                        f"⛔ SHORT сигнал заблокирован для {symbol}: "
+                        f"allow_short_positions={allow_short}"
+                    )
+                    continue
+                elif signal_side == "buy" and not allow_long:
+                    logger.debug(
+                        f"⛔ LONG сигнал заблокирован для {symbol}: "
+                        f"allow_long_positions={allow_long}"
+                    )
+                    continue
+                
+                # Применяем все фильтры через FilterManager
+                filtered_signal = await self.filter_manager.apply_all_filters(
+                    symbol=symbol,
+                    signal=signal,
+                    market_data=market_data,
+                    current_positions=current_positions,
+                    regime=current_regime_name,
+                    regime_params=regime_params,
+                )
+                
+                if filtered_signal:
+                    # Адаптация под Futures специфику
+                    futures_signal = await self._adapt_signal_for_futures(filtered_signal)
+                    filtered_signals.append(futures_signal)
+            
+            return filtered_signals
+            
+        except Exception as e:
+            logger.error(f"Ошибка применения фильтров через FilterManager для {symbol}: {e}", exc_info=True)
+            # Fallback на старую логику при ошибке
+            logger.warning(f"⚠️ Fallback на старую логику фильтрации для {symbol}")
+            return await self._apply_filters_legacy(symbol, signals, market_data, current_positions)
+    
+    async def _apply_filters_legacy(
+        self,
+        symbol: str,
+        signals: List[Dict[str, Any]],
+        market_data: MarketData,
+        current_positions: Dict = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        ✅ LEGACY: Старая логика применения фильтров (fallback).
+        
+        Сохранена для обратной совместимости.
+        """
+        # Переименовываем старую логику в legacy метод
+        # Вся существующая логика остается здесь
+        try:
+            filtered_signals = []
+
+            for signal in signals:
+                # ✅ КОНФИГУРИРУЕМАЯ Блокировка SHORT/LONG сигналов по конфигу (по умолчанию разрешены обе стороны)
+                signal_side = signal.get("side", "").lower()
+                allow_short = getattr(
+                    self.config.scalping, "allow_short_positions", True
+                )
+                allow_long = getattr(self.config.scalping, "allow_long_positions", True)
+
+                if signal_side == "sell" and not allow_short:
+                    logger.debug(
+                        f"⛔ SHORT сигнал заблокирован для {symbol}: "
+                        f"allow_short_positions={allow_short} (только LONG стратегия)"
+                    )
+                    continue
+                elif signal_side == "buy" and not allow_long:
+                    logger.debug(
+                        f"⛔ LONG сигнал заблокирован для {symbol}: "
+                        f"allow_long_positions={allow_long} (только SHORT стратегия)"
+                    )
+                    continue
+
+                # ✅ Добавляем текущие позиции в сигнал для CorrelationFilter
+                if current_positions:
+                    signal["current_positions"] = current_positions
+
+                impulse_relax = signal.get("impulse_relax") or {}
+                is_impulse = signal.get("is_impulse", False)
+
+                regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+                current_regime_name = (
+                    regime_manager.get_current_regime() if regime_manager else None
+                )
+                if current_regime_name:
+                    signal["regime"] = current_regime_name
+
+                symbol_profile = self.symbol_profiles.get(symbol, {})
+                regime_key = (current_regime_name or "ranging").lower()
+                regime_profile = symbol_profile.get(regime_key, {})
+                filters_profile = self._to_dict(regime_profile.get("filters", {}))
+
+                # ✅ ИСПРАВЛЕНИЕ: Объединяем режим-специфичные параметры из by_regime с per-symbol overrides
+                if (
+                    hasattr(self, "_extract_regime_params")
+                    and self._extract_regime_params
+                ):
+                    base_regime_params = self._extract_regime_params(regime_key)
+                    base_regime_filters = self._to_dict(
+                        base_regime_params.get("filters", {})
+                    )
+                    # Объединяем: сначала базовые параметры режима, затем per-symbol overrides
+                    filters_profile = self._deep_merge_dict(
+                        base_regime_filters, filters_profile
+                    )
+
+                liquidity_override = self._to_dict(filters_profile.get("liquidity", {}))
+                order_flow_override = self._to_dict(
+                    filters_profile.get("order_flow", {})
+                )
+                funding_override = self._to_dict(filters_profile.get("funding", {}))
+                volatility_override = self._to_dict(
+                    filters_profile.get("volatility", {})
+                )
+
+                symbol_impulse_profile = self._to_dict(
+                    regime_profile.get("impulse", {})
+                )
+                if is_impulse and symbol_impulse_profile:
+                    override_relax = self._to_dict(
+                        symbol_impulse_profile.get("relax", {})
+                    )
+                    if override_relax:
+                        impulse_relax.update(override_relax)
+                    override_trailing = self._to_dict(
+                        symbol_impulse_profile.get("trailing", {})
+                    )
+                    if override_trailing:
+                        merged_trailing = self._deep_merge_dict(
+                            signal.get("impulse_trailing", {}), override_trailing
+                        )
+                        signal["impulse_trailing"] = merged_trailing
+
+                liquidity_relax = 1.0
+                order_flow_relax = 1.0
+                if is_impulse:
+                    try:
+                        liquidity_relax = float(impulse_relax.get("liquidity", 1.0))
+                    except (TypeError, ValueError):
+                        liquidity_relax = 1.0
+                    try:
+                        order_flow_relax = float(impulse_relax.get("order_flow", 1.0))
+                    except (TypeError, ValueError):
+                        order_flow_relax = 1.0
+                bypass_correlation = bool(
+                    is_impulse and impulse_relax.get("bypass_correlation", False)
+                )
+                bypass_mtf = bool(
+                    is_impulse and impulse_relax.get("allow_mtf_bypass", False)
+                )
+
+                # ✅ ИСПРАВЛЕНИЕ: Проверяем что фильтры инициализированы перед вызовом
+                # Проверка режима рынка (используем персональный ARM для символа если есть)
+                regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+                current_regime_name = (
+                    regime_manager.get_current_regime() if regime_manager else None
+                )
+                if regime_manager:
+                    try:
+                        if not await regime_manager.is_signal_valid(
+                            signal, market_data
+                        ):
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован ARM")
+                            continue
+                    except Exception as e:
+                            logger.debug(
+                                f"⚠️ Ошибка проверки ARM для {symbol}: {e}, пропускаем фильтр"
+                            )
+
+                # ✅ Проверка ADX: Сила и направление тренда (ПЕРЕД другими фильтрами)
+                if self.adx_filter:
+                    try:
+                        # Получаем параметры ADX из текущего режима перед проверкой
+                        if regime_manager:
+                            regime_params = regime_manager.get_current_parameters()
+                            if regime_params and hasattr(regime_params, "modules"):
+                                adx_modules = regime_params.modules
+                                from src.strategies.modules.adx_filter import (
+                                    ADXFilterConfig,
+                                )
+
+                                adx_new_config = ADXFilterConfig(
+                                    enabled=True,
+                                    adx_threshold=getattr(
+                                        adx_modules, "adx_threshold", 18.0
+                                    ),
+                                    di_difference=getattr(
+                                        adx_modules, "adx_di_difference", 1.5
+                                    ),
+                                )
+                                self.adx_filter.config = adx_new_config
+
+                        # Преобразуем side сигнала в OrderSide
+                        signal_side_str = signal.get("side", "").lower()
+                        from src.models import OrderSide
+
+                        if signal_side_str == "buy":
+                            order_side = OrderSide.BUY  # LONG
+                        elif signal_side_str == "sell":
+                            order_side = OrderSide.SELL  # SHORT
+                        else:
+                            logger.warning(
+                                f"⚠️ Неизвестное направление сигнала для {symbol}: {signal_side_str}"
+                            )
+                            continue
+
+                        # Получаем свечи из market_data
+                        candles = (
+                            market_data.ohlcv_data
+                            if market_data and market_data.ohlcv_data
+                            else []
+                        )
+                        if not candles:
+                            logger.warning(
+                                f"⚠️ Нет свечей для ADX проверки {symbol}"
+                            )
+                            continue
+
+                        # Конвертируем OHLCV в dict для ADX фильтра
+                        candles_dict = []
+                        for candle in candles:
+                            candles_dict.append(
+                                {
+                                    "high": candle.high,
+                                    "low": candle.low,
+                                    "close": candle.close,
+                                }
+                            )
+
+                        # Проверяем тренд через ADX
+                        adx_result = self.adx_filter.check_trend_strength(
+                            symbol, order_side, candles_dict
+                        )
+
+                        if not adx_result.allowed:
+                            # ✅ ИСПРАВЛЕНО: Блокируем сигнал против тренда (не переключаем направление)
+                            logger.warning(
+                                f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol}: "
+                                f"сигнал против тренда ({adx_result.reason if hasattr(adx_result, 'reason') else 'ADX не разрешил'}, "
+                                f"ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f})"
+                            )
+                            continue  # Блокируем сигнал
+                        else:
+                            logger.debug(
+                                f"✅ ADX подтвердил {signal_side_str.upper()} сигнал для {symbol}: "
+                                f"{adx_result.reason} (ADX={adx_result.adx_value:.1f}, "
+                                f"+DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f})"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Ошибка проверки ADX для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                # ✅ Проверка корреляции (если фильтр инициализирован)
+                # Обновляем параметры CorrelationFilter из текущего режима перед проверкой
+                if self.correlation_filter:
+                    if bypass_correlation:
+                        logger.debug(
+                            f"🔓 CorrelationFilter пропущен (impulse) для {symbol}"
+                        )
+                    else:
+                        try:
+                            # Получаем параметры CorrelationFilter из текущего режима ARM
+                            if regime_manager:
+                                regime_params = regime_manager.get_current_parameters()
+                                if regime_params and hasattr(regime_params, "modules"):
+                                    # Обновляем параметры CorrelationFilter из текущего режима
+                                    from src.strategies.modules.correlation_filter import \
+                                        CorrelationFilterConfig
+
+                                    corr_modules = regime_params.modules
+                                    corr_new_config = CorrelationFilterConfig(
+                                        enabled=True,
+                                        correlation_threshold=corr_modules.correlation_threshold,
+                                        max_correlated_positions=corr_modules.max_correlated_positions,
+                                        block_same_direction_only=corr_modules.block_same_direction_only,
+                                    )
+                                    self.correlation_filter.update_parameters(
+                                        corr_new_config
+                                    )
+
+                            if not await self.correlation_filter.is_signal_valid(
+                                signal, market_data
+                            ):
+                                logger.debug(
+                                    f"🔍 Сигнал {symbol} отфильтрован CorrelationFilter"
+                                )
+                                continue
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Ошибка проверки CorrelationFilter для {symbol}: {e}, пропускаем фильтр"
+                            )
+
+                # ✅ Проверка мультитаймфрейма (если фильтр инициализирован)
+                # Обновляем параметры MTF из текущего режима перед проверкой
+                if self.mtf_filter:
+                    if bypass_mtf:
+                        logger.info(f"🔓 MTF пропущен (impulse) для {symbol}")
+                    else:
+                        try:
+                            # Получаем параметры MTF из текущего режима ARM
+                            if regime_manager:
+                                regime_params = regime_manager.get_current_parameters()
+                                if regime_params and hasattr(regime_params, "modules"):
+                                    mtf_modules = regime_params.modules
+                                    # Обновляем параметры MTF из текущего режима
+                                    from src.strategies.modules.multi_timeframe import \
+                                        MultiTimeframeConfig
+
+                                    mtf_new_config = MultiTimeframeConfig(
+                                        enabled=True,
+                                        block_neutral=mtf_modules.mtf_block_neutral,
+                                        score_bonus=mtf_modules.mtf_score_bonus,
+                                        confirmation_timeframe=mtf_modules.mtf_confirmation_timeframe,
+                                    )
+                                    self.mtf_filter.update_parameters(mtf_new_config)
+
+                            if not self.mtf_filter.check_entry(
+                                symbol, signal.get("side", "").lower(), signal.get("price")
+                            ):
+                                logger.debug(
+                                    f"🔍 Сигнал {symbol} отфильтрован MTF"
+                                )
+                                continue
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Ошибка проверки MTF для {symbol}: {e}, пропускаем фильтр"
+                            )
+
+                # ✅ Проверка Pivot Points (если фильтр инициализирован)
+                if self.pivot_filter:
+                    try:
+                        pivot_params = filters_profile.get("pivot_points", {})
+                        if not self.pivot_filter.check_entry(
+                            symbol, signal.get("side", "").lower(), signal.get("price")
+                        ):
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован Pivot Points"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки Pivot Points для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                # ✅ Проверка Volume Profile (если фильтр инициализирован)
+                if self.volume_filter:
+                    try:
+                        vp_params = filters_profile.get("volume_profile", {})
+                        if not self.volume_filter.check_entry(
+                            symbol, signal.get("side", "").lower(), signal.get("price")
+                        ):
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован Volume Profile"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки Volume Profile для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                # ✅ Проверка Liquidity (если фильтр инициализирован)
+                if self.liquidity_filter:
+                    try:
+                        liquidity_params = filters_profile.get("liquidity", {})
+                        # Применяем relax для импульсов
+                        if liquidity_relax < 1.0:
+                            # Ослабляем параметры ликвидности
+                            if isinstance(liquidity_params, dict):
+                                liquidity_params = liquidity_params.copy()
+                                liquidity_params["min_spread"] = (
+                                    liquidity_params.get("min_spread", 0.001) * liquidity_relax
+                                )
+                        if not self.liquidity_filter.check_entry(
+                            symbol, signal.get("side", "").lower(), signal.get("price")
+                        ):
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован Liquidity"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки Liquidity для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                # ✅ Проверка Order Flow (если фильтр инициализирован)
+                if self.order_flow_filter:
+                    try:
+                        order_flow_params = filters_profile.get("order_flow", {})
+                        # Применяем relax для импульсов
+                        if order_flow_relax < 1.0:
+                            if isinstance(order_flow_params, dict):
+                                order_flow_params = order_flow_params.copy()
+                                order_flow_params["long_threshold"] = (
+                                    order_flow_params.get("long_threshold", 0.1) * order_flow_relax
+                                )
+                                order_flow_params["short_threshold"] = (
+                                    order_flow_params.get("short_threshold", -0.1) * order_flow_relax
+                                )
+                        if not self.order_flow_filter.check_entry(
+                            symbol, signal.get("side", "").lower(), signal.get("price")
+                        ):
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован Order Flow"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки Order Flow для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                # ✅ Проверка Funding Rate (если фильтр инициализирован)
+                if self.funding_filter:
+                    try:
+                        funding_params = filters_profile.get("funding", {})
+                        if not self.funding_filter.check_entry(
+                            symbol, signal.get("side", "").lower(), signal.get("price")
+                        ):
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован Funding Rate"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки Funding Rate для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                # ✅ Проверка Volatility (если фильтр инициализирован)
+                if self.volatility_filter:
+                    try:
+                        volatility_params = filters_profile.get("volatility", {})
+                        if not self.volatility_filter.check_entry(
+                            symbol, signal.get("side", "").lower(), signal.get("price")
+                        ):
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован Volatility"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Ошибка проверки Volatility для {symbol}: {e}, пропускаем фильтр"
+                        )
+
+                # Адаптация под Futures специфику
+                futures_signal = await self._adapt_signal_for_futures(signal)
+                filtered_signals.append(futures_signal)
+
+            return filtered_signals
+
+        except Exception as e:
+            logger.error(f"Ошибка применения фильтров (legacy): {e}", exc_info=True)
             # В случае ошибки возвращаем сигналы без фильтрации
             return signals
 

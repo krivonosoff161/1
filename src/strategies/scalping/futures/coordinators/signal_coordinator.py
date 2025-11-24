@@ -241,11 +241,24 @@ class SignalCoordinator:
                                     f"⚠️ Не удалось обновить max_size_limiter для {symbol}: {e}"
                                 )
 
-                        logger.warning(
-                            f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
-                            f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
-                            f"(на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!)"
-                        )
+                        # ✅ ЛОГИРОВАНИЕ: Показываем, было ли переключение направления ADX
+                        original_side = signal.get("original_side", "")
+                        side_switched = signal.get("side_switched_by_adx", False)
+                        if side_switched and original_side:
+                            original_position_side = "long" if original_side.lower() == "buy" else "short"
+                            logger.warning(
+                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
+                                f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                                f"(ADX переключил направление с {original_position_side.upper()} → {signal_position_side.upper()}, "
+                                f"но позиция уже открыта в этом направлении. "
+                                f"На OKX Futures ордера в одном направлении объединяются, комиссия накапливается!)"
+                            )
+                        else:
+                            logger.warning(
+                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
+                                f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                                f"(на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!)"
+                            )
                         continue
                     elif len(symbol_positions) == 0:
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Позиции нет на бирже - очищаем max_size_limiter если там есть устаревшие данные
@@ -1084,10 +1097,22 @@ class SignalCoordinator:
 
                             if actual_side == signal_position_side:
                                 # Позиция в том же направлении - блокируем
-                                logger.warning(
-                                    f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
-                                    f"БЛОКИРУЕМ новый {signal_side.upper()} ордер (позиция в том же направлении)"
-                                )
+                                # ✅ ЛОГИРОВАНИЕ: Показываем, было ли переключение направления ADX
+                                original_side = signal.get("original_side", "")
+                                side_switched = signal.get("side_switched_by_adx", False)
+                                if side_switched and original_side:
+                                    original_position_side = "long" if original_side.lower() == "buy" else "short"
+                                    logger.warning(
+                                        f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
+                                        f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                                        f"(ADX переключил направление с {original_position_side.upper()} → {signal_position_side.upper()}, "
+                                        f"но позиция уже открыта в этом направлении)"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
+                                        f"БЛОКИРУЕМ новый {signal_side.upper()} ордер (позиция в том же направлении)"
+                                    )
                                 return False
                             elif not allow_concurrent:
                                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #2: Позиция в другом направлении, allow_concurrent=false - БЛОКИРУЕМ открытие новой
@@ -1316,11 +1341,23 @@ class SignalCoordinator:
                         pos_size = abs(
                             float(position_in_signal_direction.get("pos", "0"))
                         )
-                        logger.warning(
-                            f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
-                            f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
-                            f"(на OKX Futures ордера в одном направлении объединяются, что увеличивает комиссию)"
-                        )
+                        # ✅ ЛОГИРОВАНИЕ: Показываем, было ли переключение направления ADX
+                        original_side = signal.get("original_side", "")
+                        side_switched = signal.get("side_switched_by_adx", False)
+                        if side_switched and original_side:
+                            original_position_side = "long" if original_side.lower() == "buy" else "short"
+                            logger.warning(
+                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
+                                f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                                f"(ADX переключил направление с {original_position_side.upper()} → {signal_position_side.upper()}, "
+                                f"но позиция уже открыта. На OKX Futures ордера объединяются, увеличивая комиссию)"
+                            )
+                        else:
+                            logger.warning(
+                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
+                                f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                                f"(на OKX Futures ордера в одном направлении объединяются, что увеличивает комиссию)"
+                            )
                         return False
                     else:
                         # Позиция есть, но в другом направлении - очищаем max_size_limiter для корректной проверки

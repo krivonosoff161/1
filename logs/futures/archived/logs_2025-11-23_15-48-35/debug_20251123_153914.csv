@@ -1,5 +1,0 @@
-timestamp,event_type,symbol,data
-15:41:52.808,tsl_create,BTC-USDT,regime=ranging | entry=86541.9000 | side=short | min_hold=60.0000 | timeout=120.0000
-15:41:52.808,config,BTC-USDT,regime=ranging | min_holding=60.0000 | timeout=120.0000 | loss_cut=4.0000 | timeout_loss=2.0000 | tp_atr_mult=None | initial_trail=0.0200
-15:46:01.315,tsl_create,DOGE-USDT,regime=ranging | entry=0.1455 | side=long | min_hold=60.0000 | timeout=120.0000
-15:46:01.330,config,DOGE-USDT,regime=ranging | min_holding=60.0000 | timeout=120.0000 | loss_cut=4.0000 | timeout_loss=2.0000 | tp_atr_mult=None | initial_trail=0.0200

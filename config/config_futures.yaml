@@ -235,7 +235,7 @@ scalping:
           fail_open_cooldown_seconds: 60
         correlation_filter:
           threshold: 0.7
-          max_correlated_positions: 3
+          max_correlated_positions: 5  # ✅ УВЕЛИЧЕНО: С 3 до 5 для разрешения всех 5 торгуемых пар
           block_same_direction_only: true
         pivot_points:
           level_tolerance_percent: 0.2
@@ -291,7 +291,7 @@ scalping:
           fail_open_cooldown_seconds: 60
         correlation_filter:
           threshold: 0.8
-          max_correlated_positions: 4
+          max_correlated_positions: 5  # ✅ УВЕЛИЧЕНО: С 4 до 5 для разрешения всех 5 торгуемых пар
           block_same_direction_only: true
         pivot_points:
           level_tolerance_percent: 0.25
@@ -347,7 +347,7 @@ scalping:
           fail_open_cooldown_seconds: 60
         correlation_filter:
           threshold: 0.85
-          max_correlated_positions: 6
+          max_correlated_positions: 6  # ✅ ОСТАВЛЕНО: 6 достаточно для всех пар с запасом
           block_same_direction_only: false
         pivot_points:
           level_tolerance_percent: 0.3
@@ -856,12 +856,20 @@ scalping:
           sl_percent: 1.8  # ✅ НОВОЕ: Адаптивный SL для XRP в trending
           big_profit_exit_percent: 3.0  # ✅ НОВОЕ: 3.0% для XRP в trending (альты более волатильные)
           indicators:
-            min_ma_difference_pct: 0.09
+            min_ma_difference_pct: 0.015  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 0.09 до 0.015 (-83%) для низкой волатильности
           arm:
-            min_score_threshold: 1.2  # ✅ ОПТИМИЗИРОВАНО: Снижено с 1.4 до 1.2 (-14%) для XRP-USDT trending (адаптивно)
+            min_score_threshold: 0.9  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 1.2 до 0.9 (-25%) для низкой волатильности
             position_size_multiplier: 1.05
             tp_atr_multiplier: 0.50
             sl_atr_multiplier: 0.32
+          indicators:
+            min_ma_difference_pct: 0.015  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 0.02 до 0.015 (-25%) для низкой волатильности
+          modules:
+            adx_filter:
+              adx_threshold: 12.0  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 18.0 до 12.0 (-33%) для низкой волатильности
+              di_difference: 1.0   # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 1.5 до 1.0 (-33%) для менее строгого направления
+            multi_timeframe:
+              block_neutral: false  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Не блокировать при нейтральном тренде
           position:
             base_position_usd: 24.0
             min_position_usd: 16.0
@@ -883,7 +891,7 @@ scalping:
             volatility:
               min_range_percent: 0.044  # ✅ СНИЖЕНО на 60% (было 0.11)
               max_range_percent: 9.69  # ✅ УВЕЛИЧЕНО на 67% (было 5.8)
-              min_atr_percent: 0.0076  # ✅ СНИЖЕНО на 60% (было 0.019)
+              min_atr_percent: 0.005  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 0.0076 до 0.005 (-34%) для низкой волатильности
           impulse:
             relax:
               liquidity: 0.38
@@ -895,12 +903,24 @@ scalping:
           sl_percent: 2.0  # ✅ НОВОЕ: Адаптивный SL для XRP в ranging (жесткий стоп после min_holding)
           big_profit_exit_percent: 2.5  # ✅ НОВОЕ: 2.5% для XRP в ranging (альты = немного выше)
           indicators:
-            min_ma_difference_pct: 0.02  # ✅ ОПТИМИЗИРОВАНО: Снижено с 0.03% до 0.02% (-33%) для SOL-USDT ranging (адаптивно)
+            min_ma_difference_pct: 0.015  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 0.02 до 0.015 (-25%) для низкой волатильности
           arm:
-            min_score_threshold: 1.5  # ✅ ОПТИМИЗИРОВАНО: Снижено с 2.5 до 1.5 (-40%) для XRP-USDT ranging (адаптивно)
+            min_score_threshold: 1.0  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 1.5 до 1.0 (-33%) для низкой волатильности
             position_size_multiplier: 1.0
             tp_atr_multiplier: 0.40
             sl_atr_multiplier: 0.26
+          modules:
+            adx_filter:
+              adx_threshold: 10.0  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 18.0 до 10.0 (-44%) для низкой волатильности
+              di_difference: 0.8   # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 1.5 до 0.8 (-47%) для менее строгого направления
+            multi_timeframe:
+              block_opposite: false
+              block_neutral: false  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Не блокировать при нейтральном тренде
+              score_bonus: 1
+              confirmation_timeframe: "5m"
+              fail_open_enabled: true
+              fail_open_blocks: 2
+              fail_open_cooldown_seconds: 45
           position:
             base_position_usd: 22.0
             min_position_usd: 14.0
@@ -922,15 +942,7 @@ scalping:
             volatility:
               min_range_percent: 0.036  # ✅ СНИЖЕНО на 60% (было 0.09)
               max_range_percent: 10.19  # ✅ УВЕЛИЧЕНО на 67% (было 6.1)
-              min_atr_percent: 0.0064  # ✅ СНИЖЕНО на 60% (было 0.016)
-          modules:
-            multi_timeframe:
-              block_opposite: false
-              score_bonus: 1
-              confirmation_timeframe: "5m"
-              fail_open_enabled: true
-              fail_open_blocks: 2
-              fail_open_cooldown_seconds: 45
+              min_atr_percent: 0.004  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 0.0064 до 0.004 (-38%) для низкой волатильности
           impulse:
             relax:
               liquidity: 0.36
@@ -942,10 +954,16 @@ scalping:
           sl_percent: 1.5  # ✅ НОВОЕ: Адаптивный SL для XRP в choppy (быстрое закрытие убытков)
           big_profit_exit_percent: 2.0  # ✅ НОВОЕ: 2.0% для XRP в choppy (альты = стандартный порог)
           arm:
-            min_score_threshold: 1.1  # ✅ ГИБРИДНЫЙ ПОДХОД: Увеличено с 1.0 до 1.1 (+10%) - улучшение фильтров
+            min_score_threshold: 0.8  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 1.1 до 0.8 (-27%) для низкой волатильности
             position_size_multiplier: 0.78
             tp_atr_multiplier: 0.24
             sl_atr_multiplier: 0.20
+          modules:
+            adx_filter:
+              adx_threshold: 8.0   # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 18.0 до 8.0 (-56%) для низкой волатильности
+              di_difference: 0.5   # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 1.5 до 0.5 (-67%) для менее строгого направления
+            multi_timeframe:
+              block_neutral: false  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Не блокировать при нейтральном тренде
           position:
             base_position_usd: 18.0
             min_position_usd: 12.0
@@ -967,7 +985,7 @@ scalping:
             volatility:
               min_range_percent: 0.032  # ✅ СНИЖЕНО на 60% (было 0.08)
               max_range_percent: 10.69  # ✅ УВЕЛИЧЕНО на 67% (было 6.4)
-              min_atr_percent: 0.0056  # ✅ СНИЖЕНО на 60% (было 0.014)
+              min_atr_percent: 0.003  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Снижено с 0.0056 до 0.003 (-46%) для низкой волатильности
           impulse:
             relax:
               liquidity: 0.35

@@ -391,10 +391,23 @@ class TrailingStopLoss:
         else:
             gross_profit_pct = (self.entry_price - current_price) / self.entry_price
 
-        # Вычитаем комиссию (открытие + закрытие)
+        # ✅ ИСПРАВЛЕНИЕ: Не учитываем комиссию в первые 10 секунд после открытия
+        # (это время для установления реальной цены, учитывая спред и проскальзывание)
         if include_fees:
-            net_profit_pct = gross_profit_pct - self.trading_fee_rate
-            return net_profit_pct
+            seconds_since_open = (
+                (time.time() - self.entry_timestamp) if self.entry_timestamp > 0 else 0
+            )
+            if seconds_since_open < 10.0:
+                # В первые 10 секунд не учитываем комиссию (учитываем только спред)
+                logger.debug(
+                    f"⏱️ Позиция открыта {seconds_since_open:.1f} сек назад, "
+                    f"комиссия не учитывается в profit_pct (учитываем только спред)"
+                )
+                return gross_profit_pct
+            else:
+                # После 10 секунд учитываем комиссию
+                net_profit_pct = gross_profit_pct - self.trading_fee_rate
+                return net_profit_pct
         else:
             return gross_profit_pct
 
@@ -470,22 +483,54 @@ class TrailingStopLoss:
             # Применяем множитель продления времени для прибыльных позиций
             effective_min_holding = effective_min_holding * self.extend_time_multiplier
 
-        # ✅ ПРАВКА #2: Проверка min_holding ПЕРЕД loss_cut (кроме критических убытков)
-        # ✅ КРИТИЧЕСКОЕ: Критический 2x loss_cut закрываем НЕМЕДЛЕННО (защита от катастроф)
+        # ✅ ПРАВКА #2: Проверка min_holding ПЕРЕД loss_cut (включая критические убытки)
+        # ✅ ИСПРАВЛЕНО: Критический 2x loss_cut тоже проверяем с минимальной задержкой
         seconds_in_position = minutes_in_position * 60.0
         if self.loss_cut_percent is not None:
             loss_cut_from_price = self.loss_cut_percent / self.leverage
-            critical_loss_cut_from_price = (self.loss_cut_percent * 2.0) / self.leverage
+            critical_loss_cut_from_price = loss_cut_from_price * 2.0
 
-            # ✅ КРИТИЧЕСКОЕ: Критический убыток (2x loss_cut) закрываем НЕМЕДЛЕННО
+            # ✅ ИСПРАВЛЕНО: Критический убыток (2x loss_cut) тоже проверяем с минимальной задержкой
             if profit_pct <= -critical_loss_cut_from_price:
+                # ✅ ЗАЩИТА: Минимальная задержка даже для критических убытков (5 секунд)
+                min_critical_hold_seconds = self.min_critical_hold_seconds or 5.0
+                
+                if seconds_in_position < min_critical_hold_seconds:
+                    logger.debug(
+                        f"⏱️ Критический loss_cut заблокирован (min_hold защита): "
+                        f"прибыль {profit_pct:.2%} от цены <= -{critical_loss_cut_from_price:.2%}, "
+                        f"но позиция держится {seconds_in_position:.1f} сек < {min_critical_hold_seconds:.1f} сек, "
+                        f"не закрываем (entry_time={entry_iso}, branch=min_critical_hold_block)"
+                    )
+                    # ✅ DEBUG LOGGER: Логируем блокировку критического loss_cut
+                    if self.debug_logger:
+                        self.debug_logger.log_tsl_loss_cut_check(
+                            symbol=getattr(self, "_symbol", "UNKNOWN"),
+                            profit_pct=profit_pct,
+                            loss_cut_from_price=critical_loss_cut_from_price,
+                            will_close=False,  # Блокировано min_hold
+                        )
+                    return False, None  # НЕ закрываем - минимальная задержка
+                
+                # ✅ ЗАЩИТА: Проверяем, что убыток не из-за комиссии
+                # Если profit_pct очень близок к -critical_loss_cut_from_price (в пределах комиссии),
+                # возможно это просто комиссия, а не реальный убыток
+                commission_threshold = self.trading_fee_rate * 1.5  # 1.5x комиссия как буфер
+                if abs(profit_pct + critical_loss_cut_from_price) < commission_threshold:
+                    logger.debug(
+                        f"⚠️ Критический loss_cut может быть из-за комиссии: "
+                        f"profit_pct={profit_pct:.4f}, critical={critical_loss_cut_from_price:.4f}, "
+                        f"разница={abs(profit_pct + critical_loss_cut_from_price):.4f} < {commission_threshold:.4f}"
+                    )
+                    # Продолжаем, но логируем предупреждение
+                
                 loss_from_margin = abs(profit_pct) * self.leverage
                 logger.warning(
-                    f"🚨 Loss-cut КРИТИЧЕСКИЙ (2x) НЕМЕДЛЕННО: прибыль {profit_pct:.2%} от цены "
+                    f"🚨 Loss-cut КРИТИЧЕСКИЙ (2x): прибыль {profit_pct:.2%} от цены "
                     f"({loss_from_margin:.2%} от маржи) <= -{critical_loss_cut_from_price:.2%} от цены "
                     f"(-{self.loss_cut_percent * 2.0:.2%} от маржи, leverage={self.leverage}x), "
-                    f"позиция будет закрыта НЕМЕДЛЕННО (time_in_position={minutes_in_position:.2f} мин, "
-                    f"entry_time={entry_iso}, branch=critical_loss_cut_immediate_override)"
+                    f"позиция будет закрыта (time_in_position={minutes_in_position:.2f} мин, "
+                    f"entry_time={entry_iso}, branch=critical_loss_cut_2x)"
                 )
                 # ✅ DEBUG LOGGER: Логируем закрытие по критическому loss_cut
                 if self.debug_logger:
@@ -498,7 +543,7 @@ class TrailingStopLoss:
                 return (
                     True,
                     "critical_loss_cut_2x",
-                )  # Закрываем по критическому loss_cut НЕМЕДЛЕННО
+                )  # Закрываем по критическому loss_cut после минимальной задержки
 
         # ✅ ПРАВКА #2: Проверка min_holding ПЕРЕД обычным loss_cut
         if (

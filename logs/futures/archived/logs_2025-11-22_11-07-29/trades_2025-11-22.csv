@@ -1,2 +1,0 @@
-timestamp,symbol,side,entry_price,exit_price,size,gross_pnl,commission,net_pnl,duration_sec,reason,win_rate
-2025-11-22T10:35:22.012150,DOGE-USDT,long,0.1397,0.1396,1070.00000000,-0.1391,0.1494,-0.2885,152.17357,trailing_stop,0.00

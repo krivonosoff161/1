@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
 title Trading Bot Launcher
 
-REM Go to script root directory
+REM Go to project root directory (where this bat file is located)
 cd /d "%~dp0"
 
 echo.

@@ -17,7 +17,14 @@ from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
 from src.config import BotConfig, ScalpingConfig
-from src.strategies.modules.margin_calculator import MarginCalculator
+from .calculations.margin_calculator import MarginCalculator
+
+# ✅ РЕФАКТОРИНГ: Импортируем новые модули
+from .positions.entry_manager import EntryManager
+from .positions.exit_analyzer import ExitAnalyzer
+from .positions.position_monitor import PositionMonitor
+from .core.position_registry import PositionRegistry
+from .core.data_registry import DataRegistry
 
 from ..spot.position_manager import TradeResult
 
@@ -55,6 +62,13 @@ class FuturesPositionManager:
             str, Dict[str, Any]
         ] = {}  # ✅ НОВОЕ: Для per-symbol TP
         self.orchestrator = None  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ссылка на orchestrator для доступа к trailing_sl_by_symbol
+
+        # ✅ РЕФАКТОРИНГ: Новые модули (будут инициализированы позже)
+        self.position_registry = None  # PositionRegistry (будет установлен из orchestrator)
+        self.data_registry = None  # DataRegistry (будет установлен из orchestrator)
+        self.entry_manager = None  # EntryManager (будет создан при необходимости)
+        self.exit_analyzer = None  # ExitAnalyzer (будет создан при необходимости)
+        self.position_monitor = None  # PositionMonitor (будет создан при необходимости)
 
         # Состояние
         self.is_initialized = False
@@ -2281,23 +2295,88 @@ class FuturesPositionManager:
                 pass
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем время открытия позиции для расчета duration
+            # Приоритет 1: orchestrator.active_positions (главный источник)
+            # Приоритет 2: TrailingStopLoss.entry_timestamp
+            # Приоритет 3: position_manager.active_positions (fallback)
             entry_time = None
-            if symbol in self.active_positions:
-                stored_position = self.active_positions[symbol]
-                if isinstance(stored_position, dict):
-                    entry_time = stored_position.get("entry_time")
-                    if isinstance(entry_time, str):
-                        try:
-                            entry_time = datetime.fromisoformat(
-                                entry_time.replace("Z", "+00:00")
-                            )
-                        except:
-                            entry_time = None
-                    elif not isinstance(entry_time, datetime):
-                        entry_time = None
 
-            # Если нет времени открытия в active_positions, используем текущее время как fallback
+            # 1. Пробуем получить из orchestrator.active_positions (главный источник)
+            if hasattr(self, "orchestrator") and self.orchestrator:
+                if hasattr(self.orchestrator, "active_positions"):
+                    if symbol in self.orchestrator.active_positions:
+                        stored_position = self.orchestrator.active_positions[symbol]
+                        if isinstance(stored_position, dict):
+                            entry_time = stored_position.get("entry_time")
+                            if isinstance(entry_time, str):
+                                try:
+                                    entry_time = datetime.fromisoformat(
+                                        entry_time.replace("Z", "+00:00")
+                                    )
+                                    logger.debug(
+                                        f"✅ entry_time для {symbol} получен из orchestrator.active_positions: {entry_time}"
+                                    )
+                                except Exception as e:
+                                    logger.warning(
+                                        f"⚠️ Не удалось распарсить entry_time из orchestrator для {symbol}: {e}"
+                                    )
+                                    entry_time = None
+                            elif isinstance(entry_time, datetime):
+                                logger.debug(
+                                    f"✅ entry_time для {symbol} получен из orchestrator.active_positions: {entry_time}"
+                                )
+                            else:
+                                entry_time = None
+
+            # 2. Пробуем получить из TrailingStopLoss.entry_timestamp (если есть)
             if entry_time is None:
+                if hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "trailing_sl_coordinator"):
+                        tsl_coord = self.orchestrator.trailing_sl_coordinator
+                        if hasattr(tsl_coord, "trailing_sl_by_symbol"):
+                            if symbol in tsl_coord.trailing_sl_by_symbol:
+                                tsl = tsl_coord.trailing_sl_by_symbol[symbol]
+                                if hasattr(tsl, "entry_timestamp") and tsl.entry_timestamp > 0:
+                                    try:
+                                        entry_time = datetime.fromtimestamp(tsl.entry_timestamp)
+                                        logger.debug(
+                                            f"✅ entry_time для {symbol} получен из TrailingStopLoss.entry_timestamp: {entry_time}"
+                                        )
+                                    except Exception as e:
+                                        logger.warning(
+                                            f"⚠️ Не удалось преобразовать entry_timestamp для {symbol}: {e}"
+                                        )
+
+            # 3. Fallback: пробуем из position_manager.active_positions (старый источник)
+            if entry_time is None:
+                if symbol in self.active_positions:
+                    stored_position = self.active_positions[symbol]
+                    if isinstance(stored_position, dict):
+                        entry_time = stored_position.get("entry_time")
+                        if isinstance(entry_time, str):
+                            try:
+                                entry_time = datetime.fromisoformat(
+                                    entry_time.replace("Z", "+00:00")
+                                )
+                                logger.debug(
+                                    f"✅ entry_time для {symbol} получен из position_manager.active_positions: {entry_time}"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"⚠️ Не удалось распарсить entry_time из position_manager для {symbol}: {e}"
+                                )
+                                entry_time = None
+                        elif isinstance(entry_time, datetime):
+                            logger.debug(
+                                f"✅ entry_time для {symbol} получен из position_manager.active_positions: {entry_time}"
+                            )
+                        else:
+                            entry_time = None
+
+            # 4. Последний fallback: текущее время (только если ничего не найдено)
+            if entry_time is None:
+                logger.warning(
+                    f"⚠️ Не удалось найти entry_time для {symbol}, используем текущее время (duration_sec может быть 0)"
+                )
                 entry_time = datetime.now()
 
             # ✅ ЗАДАЧА #10: Получаем комиссию из конфига (может быть в scalping или на верхнем уровне)
