@@ -93,7 +93,13 @@ class MultiTimeframeFilter:
         ...     score += result.bonus
     """
 
-    def __init__(self, client=None, config: MTFConfig = None, data_registry=None, structured_logger=None):
+    def __init__(
+        self,
+        client=None,
+        config: MTFConfig = None,
+        data_registry=None,
+        structured_logger=None,
+    ):
         """
         Инициализация MTF фильтра.
 
@@ -105,8 +111,12 @@ class MultiTimeframeFilter:
         """
         self.client = client  # Может быть None - тогда получаем свечи напрямую
         self.config = config or MTFConfig()  # Дефолтная конфигурация если не передана
-        self.data_registry = data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
-        self.structured_logger = structured_logger  # ✅ НОВОЕ: StructuredLogger для логирования
+        self.data_registry = (
+            data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
+        )
+        self.structured_logger = (
+            structured_logger  # ✅ НОВОЕ: StructuredLogger для логирования
+        )
 
         # Кэш для свечей старшего таймфрейма
         self._candles_cache: Dict[str, tuple[List[OHLCV], float]] = {}
@@ -340,7 +350,10 @@ class MultiTimeframeFilter:
                             f"для {symbol} из DataRegistry"
                         )
                         # ✅ НОВОЕ: Логируем использование DataRegistry
-                        if hasattr(self, "structured_logger") and self.structured_logger:
+                        if (
+                            hasattr(self, "structured_logger")
+                            and self.structured_logger
+                        ):
                             try:
                                 self.structured_logger.log_candle_usage(
                                     filter_name="MTF",
@@ -351,7 +364,9 @@ class MultiTimeframeFilter:
                                     fallback_to_api=False,
                                 )
                             except Exception as e:
-                                logger.debug(f"⚠️ Ошибка логирования использования свечей MTF: {e}")
+                                logger.debug(
+                                    f"⚠️ Ошибка логирования использования свечей MTF: {e}"
+                                )
                         # Кэшируем результат из DataRegistry
                         if candles:
                             self._candles_cache[symbol] = (candles, current_time)
@@ -363,7 +378,10 @@ class MultiTimeframeFilter:
                             f"используем fallback к API"
                         )
                         # ✅ НОВОЕ: Логируем fallback к API
-                        if hasattr(self, "structured_logger") and self.structured_logger:
+                        if (
+                            hasattr(self, "structured_logger")
+                            and self.structured_logger
+                        ):
                             try:
                                 self.structured_logger.log_candle_usage(
                                     filter_name="MTF",

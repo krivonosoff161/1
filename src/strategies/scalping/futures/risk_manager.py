@@ -131,7 +131,9 @@ class FuturesRiskManager:
 
     async def calculate_position_size(
         self,
-        balance: Optional[float] = None,  # ✅ НОВОЕ: Опциональный баланс (читаем из DataRegistry если не передан)
+        balance: Optional[
+            float
+        ] = None,  # ✅ НОВОЕ: Опциональный баланс (читаем из DataRegistry если не передан)
         price: float = 0.0,
         signal: Optional[Dict[str, Any]] = None,
         signal_generator=None,
@@ -158,26 +160,34 @@ class FuturesRiskManager:
                         balance_data = await self.data_registry.get_balance()
                         if balance_data:
                             balance = balance_data.get("balance")
-                            logger.debug(f"✅ RiskManager: Баланс получен из DataRegistry: ${balance:.2f}")
+                            logger.debug(
+                                f"✅ RiskManager: Баланс получен из DataRegistry: ${balance:.2f}"
+                            )
                     except Exception as e:
-                        logger.warning(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
-                
+                        logger.warning(
+                            f"⚠️ Ошибка получения баланса из DataRegistry: {e}"
+                        )
+
                 # Fallback: если DataRegistry не доступен или нет данных
                 if balance is None:
                     if self.client:
                         try:
                             balance = await self.client.get_balance()
-                            logger.debug(f"✅ RiskManager: Баланс получен из API: ${balance:.2f}")
+                            logger.debug(
+                                f"✅ RiskManager: Баланс получен из API: ${balance:.2f}"
+                            )
                         except Exception as e:
                             logger.error(f"❌ Ошибка получения баланса из API: {e}")
                             return 0.0
                     else:
-                        logger.error("❌ RiskManager: Нет доступа к балансу (нет data_registry и client)")
+                        logger.error(
+                            "❌ RiskManager: Нет доступа к балансу (нет data_registry и client)"
+                        )
                         return 0.0
-            
+
             if signal is None:
                 signal = {}
-            
+
             symbol = signal.get("symbol")
             symbol_regime = signal.get("regime")
             if (
@@ -203,11 +213,17 @@ class FuturesRiskManager:
             is_progressive = balance_profile.get("progressive", False)
             if is_progressive:
                 # Для прогрессивных профилей интерполируем между size_at_min и size_at_max
-                size_at_min = balance_profile.get("size_at_min", balance_profile.get("min_position_usd", 50.0))
-                size_at_max = balance_profile.get("size_at_max", balance_profile.get("max_position_usd", 200.0))
+                size_at_min = balance_profile.get(
+                    "size_at_min", balance_profile.get("min_position_usd", 50.0)
+                )
+                size_at_max = balance_profile.get(
+                    "size_at_max", balance_profile.get("max_position_usd", 200.0)
+                )
                 min_balance = balance_profile.get("min_balance", 500.0)
-                max_balance = balance_profile.get("threshold", balance_profile.get("max_balance", 1500.0))
-                
+                max_balance = balance_profile.get(
+                    "threshold", balance_profile.get("max_balance", 1500.0)
+                )
+
                 # Линейная интерполяция: size = size_at_min + (size_at_max - size_at_min) * (balance - min_balance) / (max_balance - min_balance)
                 if max_balance > min_balance:
                     balance_range = max_balance - min_balance
@@ -215,7 +231,9 @@ class FuturesRiskManager:
                     # Ограничиваем баланс в пределах [min_balance, max_balance]
                     clamped_balance = max(min_balance, min(balance, max_balance))
                     # Интерполируем размер
-                    interpolated_size = size_at_min + (size_range * (clamped_balance - min_balance) / balance_range)
+                    interpolated_size = size_at_min + (
+                        size_range * (clamped_balance - min_balance) / balance_range
+                    )
                     base_usd_size = interpolated_size
                     logger.info(
                         f"📊 Прогрессивный расчет размера для баланса ${balance:.2f}: "
@@ -224,7 +242,9 @@ class FuturesRiskManager:
                     )
                 else:
                     # Если диапазон некорректен, используем base_position_usd
-                    base_usd_size = balance_profile.get("base_position_usd", size_at_min)
+                    base_usd_size = balance_profile.get(
+                        "base_position_usd", size_at_min
+                    )
                     logger.warning(
                         f"⚠️ Некорректный диапазон баланса для прогрессивного расчета ({min_balance}-{max_balance}), "
                         f"используем base_position_usd=${base_usd_size:.2f}"
@@ -232,7 +252,7 @@ class FuturesRiskManager:
             else:
                 # Для не-прогрессивных профилей используем base_position_usd
                 base_usd_size = balance_profile["base_position_usd"]
-            
+
             min_usd_size = balance_profile["min_position_usd"]
             max_usd_size = balance_profile["max_position_usd"]
 
@@ -477,13 +497,17 @@ class FuturesRiskManager:
             if is_progressive:
                 # Для прогрессивных профилей используем меньший multiplier (0.9 вместо 0.8)
                 # чтобы прогрессивный расчет работал правильно, но множители все равно влияли
-                progressive_multiplier = 0.9  # 90% от обычного multiplier (увеличено с 0.8)
-                strength_multiplier = 1.0 + (strength_multiplier - 1.0) * progressive_multiplier
+                progressive_multiplier = (
+                    0.9  # 90% от обычного multiplier (увеличено с 0.8)
+                )
+                strength_multiplier = (
+                    1.0 + (strength_multiplier - 1.0) * progressive_multiplier
+                )
                 logger.debug(
                     f"📊 Прогрессивный профиль: уменьшаем multiplier до {strength_multiplier:.2f} "
                     f"(было бы {original_multiplier:.2f} без прогрессивной адаптации)"
                 )
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем multiplier, но ограничиваем max_usd_size!
             base_usd_size *= strength_multiplier
             base_usd_size = min(base_usd_size, max_usd_size)
@@ -945,10 +969,10 @@ class FuturesRiskManager:
                     inst_details = await self.client.get_instrument_details(symbol)
                     ct_val = float(inst_details.get("ctVal", 0.01))
                     min_sz = float(inst_details.get("minSz", 0.01))
-                    
+
                     # Конвертируем размер из монет в контракты
                     size_in_contracts = position_size / ct_val if ct_val > 0 else 0
-                    
+
                     if size_in_contracts < min_sz:
                         # Размер меньше минимума - увеличиваем до минимума
                         min_size_in_coins = min_sz * ct_val
@@ -958,11 +982,13 @@ class FuturesRiskManager:
                             f"Увеличиваем до минимума: {position_size:.6f} → {min_size_in_coins:.6f} монет"
                         )
                         position_size = min_size_in_coins
-                        
+
                         # Пересчитываем notional и margin для нового размера
                         notional_usd = position_size * price
-                        margin_usd = notional_usd / leverage if leverage > 0 else notional_usd
-                        
+                        margin_usd = (
+                            notional_usd / leverage if leverage > 0 else notional_usd
+                        )
+
                         logger.info(
                             f"💰 РАСЧЕТ СКОРРЕКТИРОВАН: position_size={position_size:.6f} монет "
                             f"({min_sz:.6f} контрактов), notional=${notional_usd:.2f}, margin=${margin_usd:.2f}"

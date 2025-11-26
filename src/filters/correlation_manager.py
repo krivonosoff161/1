@@ -76,7 +76,9 @@ class CorrelationManager:
         ...     logger.info(f"Strong correlation: {corr.correlation:.2f}")
     """
 
-    def __init__(self, client: OKXClient, config: CorrelationConfig, data_registry=None):
+    def __init__(
+        self, client: OKXClient, config: CorrelationConfig, data_registry=None
+    ):
         """
         Инициализация менеджера корреляций.
 
@@ -87,7 +89,9 @@ class CorrelationManager:
         """
         self.client = client
         self.config = config
-        self.data_registry = data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
+        self.data_registry = (
+            data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
+        )
 
         # Кэш корреляций: (pair1, pair2) -> CorrelationData
         self._correlation_cache: Dict[Tuple[str, str], CorrelationData] = {}

@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
+
 from src.models import OHLCV
 
 from .candle_buffer import CandleBuffer
@@ -318,7 +319,7 @@ class DataRegistry:
                 "updated_at": datetime.now(),
             }
 
-            available_str = f"{available:.2f}" if available is not None else 'N/A'
+            available_str = f"{available:.2f}" if available is not None else "N/A"
             logger.debug(
                 f"✅ DataRegistry: Обновлена маржа: used={used:.2f}, available={available_str}"
             )
@@ -388,9 +389,7 @@ class DataRegistry:
 
     # ==================== CANDLES ====================
 
-    async def add_candle(
-        self, symbol: str, timeframe: str, candle: OHLCV
-    ) -> None:
+    async def add_candle(self, symbol: str, timeframe: str, candle: OHLCV) -> None:
         """
         Добавить новую свечу в буфер для символа и таймфрейма.
 
@@ -407,8 +406,12 @@ class DataRegistry:
 
             if timeframe not in self._candle_buffers[symbol]:
                 # Создаем новый буфер для таймфрейма
-                max_size = 200 if timeframe == "1m" else 100  # 200 для 1m, 100 для остальных
-                self._candle_buffers[symbol][timeframe] = CandleBuffer(max_size=max_size)
+                max_size = (
+                    200 if timeframe == "1m" else 100
+                )  # 200 для 1m, 100 для остальных
+                self._candle_buffers[symbol][timeframe] = CandleBuffer(
+                    max_size=max_size
+                )
                 logger.debug(
                     f"📊 DataRegistry: Создан CandleBuffer для {symbol} {timeframe} (max_size={max_size})"
                 )
@@ -455,9 +458,7 @@ class DataRegistry:
             buffer = self._candle_buffers[symbol][timeframe]
             return await buffer.update_last_candle(high, low, close, volume)
 
-    async def get_candles(
-        self, symbol: str, timeframe: str
-    ) -> List[OHLCV]:
+    async def get_candles(self, symbol: str, timeframe: str) -> List[OHLCV]:
         """
         Получить все свечи для символа и таймфрейма.
 
@@ -478,9 +479,7 @@ class DataRegistry:
             buffer = self._candle_buffers[symbol][timeframe]
             return await buffer.get_candles()
 
-    async def get_last_candle(
-        self, symbol: str, timeframe: str
-    ) -> Optional[OHLCV]:
+    async def get_last_candle(self, symbol: str, timeframe: str) -> Optional[OHLCV]:
         """
         Получить последнюю свечу для символа и таймфрейма.
 

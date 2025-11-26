@@ -154,12 +154,14 @@ class TrailingStopLoss:
         self.side = side
         self._symbol = symbol  # ✅ Сохраняем символ для логирования
         self.current_trail = self.initial_trail
-        
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем переданный entry_timestamp или текущее время
         if entry_timestamp is not None and entry_timestamp > 0:
             self.entry_timestamp = entry_timestamp
         else:
-            self.entry_timestamp = time.time()  # Для новых позиций используем текущее время
+            self.entry_timestamp = (
+                time.time()
+            )  # Для новых позиций используем текущее время
 
         if side == "long":
             self.highest_price = entry_price
@@ -799,7 +801,11 @@ class TrailingStopLoss:
                         profit_gross = self.get_profit_pct(
                             current_price, include_fees=False
                         )
-                        trend_str = f"{trend_strength:.2f}" if trend_strength is not None else 'N/A'
+                        trend_str = (
+                            f"{trend_strength:.2f}"
+                            if trend_strength is not None
+                            else "N/A"
+                        )
                         logger.debug(
                             f"📈 LONG: Позиция в прибыли (net={profit_pct:.2%}, gross={profit_gross:.2%}), "
                             f"режим={market_regime or 'N/A'}, тренд={trend_str} - "
@@ -833,7 +839,11 @@ class TrailingStopLoss:
                         profit_gross = self.get_profit_pct(
                             current_price, include_fees=False
                         )
-                        trend_str = f"{trend_strength:.2f}" if trend_strength is not None else 'N/A'
+                        trend_str = (
+                            f"{trend_strength:.2f}"
+                            if trend_strength is not None
+                            else "N/A"
+                        )
                         logger.debug(
                             f"📈 SHORT: Позиция в прибыли (net={profit_pct:.2%}, gross={profit_gross:.2%}), "
                             f"режим={market_regime or 'N/A'}, тренд={trend_str} - "

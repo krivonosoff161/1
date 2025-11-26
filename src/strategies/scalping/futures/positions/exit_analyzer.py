@@ -479,23 +479,23 @@ class ExitAnalyzer:
     ) -> tuple[Optional[float], Optional[str]]:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получение entry_price из множественных источников.
-        
+
         Приоритет:
         1. metadata.entry_price
         2. position.avgPx (данные с биржи)
         3. PositionRegistry metadata
-        
+
         Args:
             symbol: Торговый символ
             position: Данные позиции (dict или PositionMetadata)
             metadata: Метаданные позиции
-            
+
         Returns:
             (entry_price, position_side) или (None, None) если не найдено
         """
         position_side = None
         entry_price = None
-        
+
         # Приоритет 1: metadata.entry_price
         if metadata and hasattr(metadata, "entry_price") and metadata.entry_price:
             try:
@@ -503,7 +503,7 @@ class ExitAnalyzer:
                 position_side = getattr(metadata, "position_side", None)
             except (TypeError, ValueError):
                 pass
-        
+
         # Приоритет 2: position.avgPx (данные с биржи)
         if (not entry_price or entry_price == 0) and isinstance(position, dict):
             try:
@@ -519,7 +519,7 @@ class ExitAnalyzer:
                             position_side = position.get("position_side")
             except (TypeError, ValueError):
                 pass
-        
+
         # Приоритет 3: Попытка получить из PositionRegistry напрямую
         if (not entry_price or entry_price == 0) and self.position_registry:
             try:
@@ -530,11 +530,17 @@ class ExitAnalyzer:
                     if not position_side and registry_metadata.position_side:
                         position_side = registry_metadata.position_side
             except Exception as e:
-                logger.debug(f"⚠️ ExitAnalyzer: Не удалось получить entry_price из PositionRegistry для {symbol}: {e}")
-        
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Не удалось получить entry_price из PositionRegistry для {symbol}: {e}"
+                )
+
         # Fallback для position_side
         if not position_side:
-            if metadata and hasattr(metadata, "position_side") and metadata.position_side:
+            if (
+                metadata
+                and hasattr(metadata, "position_side")
+                and metadata.position_side
+            ):
                 position_side = metadata.position_side
             elif isinstance(position, dict):
                 pos_side_raw = position.get("posSide", "").lower()
@@ -544,7 +550,7 @@ class ExitAnalyzer:
                     position_side = position.get("position_side", "long")
             else:
                 position_side = "long"  # Последний fallback
-        
+
         return entry_price if entry_price and entry_price > 0 else None, position_side
 
     async def _check_adaptive_min_holding_for_partial_tp(
@@ -601,7 +607,9 @@ class ExitAnalyzer:
                         if min_holding_minutes is None:
                             # Пробуем получить из scalping_config
                             if self.scalping_config:
-                                by_regime = getattr(self.scalping_config, "by_regime", {})
+                                by_regime = getattr(
+                                    self.scalping_config, "by_regime", {}
+                                )
                                 if regime in by_regime:
                                     regime_config = by_regime[regime]
                                     if isinstance(regime_config, dict):
@@ -623,7 +631,9 @@ class ExitAnalyzer:
                 try:
                     partial_tp_config = getattr(self.scalping_config, "partial_tp", {})
                     if isinstance(partial_tp_config, dict):
-                        adaptive_config = partial_tp_config.get("adaptive_min_holding", {})
+                        adaptive_config = partial_tp_config.get(
+                            "adaptive_min_holding", {}
+                        )
                         if isinstance(adaptive_config, dict):
                             enabled = adaptive_config.get("enabled", False)
                             if not enabled:
@@ -709,7 +719,7 @@ class ExitAnalyzer:
             entry_price, position_side = await self._get_entry_price_and_side(
                 symbol, position, metadata
             )
-            
+
             if not entry_price or entry_price == 0:
                 logger.warning(
                     f"⚠️ ExitAnalyzer TRENDING: Не удалось получить entry_price для {symbol} "
@@ -775,10 +785,13 @@ class ExitAnalyzer:
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.4)
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
-                    can_partial_close, min_holding_info = await self._check_adaptive_min_holding_for_partial_tp(
+                    (
+                        can_partial_close,
+                        min_holding_info,
+                    ) = await self._check_adaptive_min_holding_for_partial_tp(
                         symbol, metadata, pnl_percent, "trending"
                     )
-                    
+
                     if can_partial_close:
                         fraction = partial_tp_params.get("fraction", 0.6)
                         logger.info(
@@ -880,7 +893,7 @@ class ExitAnalyzer:
             entry_price, position_side = await self._get_entry_price_and_side(
                 symbol, position, metadata
             )
-            
+
             if not entry_price or entry_price == 0:
                 logger.warning(
                     f"⚠️ ExitAnalyzer TRENDING: Не удалось получить entry_price для {symbol} "
@@ -927,10 +940,13 @@ class ExitAnalyzer:
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.6)
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
-                    can_partial_close, min_holding_info = await self._check_adaptive_min_holding_for_partial_tp(
+                    (
+                        can_partial_close,
+                        min_holding_info,
+                    ) = await self._check_adaptive_min_holding_for_partial_tp(
                         symbol, metadata, pnl_percent, "ranging"
                     )
-                    
+
                     if can_partial_close:
                         fraction = partial_tp_params.get("fraction", 0.6)
                         logger.info(
@@ -1018,7 +1034,7 @@ class ExitAnalyzer:
             entry_price, position_side = await self._get_entry_price_and_side(
                 symbol, position, metadata
             )
-            
+
             if not entry_price or entry_price == 0:
                 logger.warning(
                     f"⚠️ ExitAnalyzer TRENDING: Не удалось получить entry_price для {symbol} "
@@ -1065,10 +1081,13 @@ class ExitAnalyzer:
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.3)
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
-                    can_partial_close, min_holding_info = await self._check_adaptive_min_holding_for_partial_tp(
+                    (
+                        can_partial_close,
+                        min_holding_info,
+                    ) = await self._check_adaptive_min_holding_for_partial_tp(
                         symbol, metadata, pnl_percent, "choppy"
                     )
-                    
+
                     if can_partial_close:
                         fraction = partial_tp_params.get(
                             "fraction", 0.7

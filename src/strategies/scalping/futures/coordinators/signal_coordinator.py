@@ -355,7 +355,7 @@ class SignalCoordinator:
                     balance = balance_data.get("balance") if balance_data else None
                 except Exception as e:
                     logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
-            
+
             # Fallback: если DataRegistry не доступен или нет данных
             if balance is None:
                 balance = await self.client.get_balance()
@@ -535,11 +535,11 @@ class SignalCoordinator:
                     balance = balance_data.get("balance") if balance_data else None
                 except Exception as e:
                     logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
-            
+
             # Fallback: если DataRegistry не доступен или нет данных
             if balance is None:
                 balance = await self.client.get_balance()
-            
+
             current_price = signal.get("price", 0)
 
             # ✅ НОВОЕ: Получаем режим из DataRegistry
@@ -553,8 +553,10 @@ class SignalCoordinator:
                         if current_regime:
                             current_regime = current_regime.lower()
                 except Exception as e:
-                    logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
-            
+                    logger.debug(
+                        f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}"
+                    )
+
             # Fallback: если DataRegistry не доступен или нет данных
             if not current_regime:
                 # ✅ НОВОЕ: Получаем режим из DataRegistry
@@ -566,8 +568,10 @@ class SignalCoordinator:
                             if current_regime:
                                 current_regime = current_regime.lower()
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}"
+                        )
+
                 # Fallback: если DataRegistry не доступен или нет данных
                 if not current_regime:
                     try:
@@ -1005,14 +1009,18 @@ class SignalCoordinator:
                     if self.data_registry:
                         try:
                             balance_data = await self.data_registry.get_balance()
-                            balance = balance_data.get("balance") if balance_data else None
+                            balance = (
+                                balance_data.get("balance") if balance_data else None
+                            )
                         except Exception as e:
-                            logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
-                    
+                            logger.debug(
+                                f"⚠️ Ошибка получения баланса из DataRegistry: {e}"
+                            )
+
                     # Fallback: если DataRegistry не доступен или нет данных
                     if balance is None:
                         balance = await self.client.get_balance()
-                    
+
                     balance_profile = self.config_manager.get_balance_profile(balance)
                     max_open = balance_profile.get(
                         "max_open_positions", 6
@@ -1036,8 +1044,10 @@ class SignalCoordinator:
                             if regime_data:
                                 regime = regime_data.get("regime")
                         except Exception as e:
-                            logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
-                    
+                            logger.debug(
+                                f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}"
+                            )
+
                     # Fallback: если DataRegistry не доступен или нет данных
                     if not regime:
                         if (
@@ -1285,7 +1295,7 @@ class SignalCoordinator:
             if signal is None:
                 # ✅ НОВОЕ: Определяем режим из DataRegistry (если ARM активен)
                 regime = "ranging"  # По умолчанию
-                
+
                 # Получаем режим из DataRegistry
                 if symbol and self.data_registry:
                     try:
@@ -1293,8 +1303,10 @@ class SignalCoordinator:
                         if regime_data:
                             regime = regime_data.get("regime", "ranging")
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}"
+                        )
+
                 # Fallback: если DataRegistry не доступен или нет данных
                 if not regime or regime == "ranging":
                     if (
@@ -1395,11 +1407,11 @@ class SignalCoordinator:
                     balance = balance_data.get("balance") if balance_data else None
                 except Exception as e:
                     logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
-            
+
             # Fallback: если DataRegistry не доступен или нет данных
             if balance is None:
                 balance = await self.client.get_balance()
-            
+
             position_size = await self.risk_manager.calculate_position_size(
                 balance, price, signal, self.signal_generator
             )
@@ -1597,7 +1609,7 @@ class SignalCoordinator:
 
             # ✅ НОВОЕ: Получаем regime и balance_profile для EntryManager (используем DataRegistry)
             regime = signal.get("regime") if signal else None
-            
+
             # Получаем режим из DataRegistry
             if not regime and symbol and self.data_registry:
                 try:
@@ -1605,8 +1617,10 @@ class SignalCoordinator:
                     if regime_data:
                         regime = regime_data.get("regime")
                 except Exception as e:
-                    logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
-            
+                    logger.debug(
+                        f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}"
+                    )
+
             # Fallback: если DataRegistry не доступен или нет данных
             if not regime and hasattr(self.signal_generator, "regime_managers"):
                 manager = self.signal_generator.regime_managers.get(symbol)
@@ -1617,7 +1631,7 @@ class SignalCoordinator:
                     regime = self.signal_generator.regime_manager.get_current_regime()
                 except Exception:
                     regime = None
-            
+
             # ✅ НОВОЕ: Получаем balance_profile из DataRegistry
             balance_profile = None
             try:
@@ -1629,22 +1643,28 @@ class SignalCoordinator:
                             balance = balance_data.get("balance")
                             balance_profile = balance_data.get("profile")
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Ошибка получения баланса из DataRegistry: {e}"
+                        )
+
                 # Fallback: если DataRegistry не доступен или нет данных
                 if balance is None:
                     balance = await self.client.get_balance()
-                    balance_profile_data = self.config_manager.get_balance_profile(balance)
+                    balance_profile_data = self.config_manager.get_balance_profile(
+                        balance
+                    )
                     if balance_profile_data:
                         balance_profile = balance_profile_data.get("name")
             except Exception:
                 pass
-            
+
             # Получаем regime_params
             regime_params = None
             if regime:
                 try:
-                    regime_params = self.config_manager.get_regime_params(regime, symbol)
+                    regime_params = self.config_manager.get_regime_params(
+                        regime, symbol
+                    )
                 except Exception:
                     pass
 

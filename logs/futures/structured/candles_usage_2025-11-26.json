@@ -1348,5 +1348,405 @@
     "source": "dataregistry",
     "candles_count": 200,
     "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:04.927965",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:20.058370",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:24.086186",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:25.635456",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:25.734020",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:36.400508",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:51.185072",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:54.745874",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:16.348966",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:16.552067",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:24.644443",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:24.691100",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:33.664208",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:47.413980",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:47.579754",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:55.066938",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:55.161210",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:55.851353",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:24:55.920388",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:06.769788",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:21.742599",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:24.931282",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:26.091264",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:26.133290",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:37.091487",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:52.296658",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:56.065499",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:56.134698",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:25:56.222708",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:07.950738",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:22.552203",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:27.650404",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:27.675972",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:27.708878",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:38.725877",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:53.243050",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:57.680258",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:58.159347",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:26:58.963757",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:27:09.891106",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
   }
 ]

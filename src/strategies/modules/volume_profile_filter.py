@@ -87,7 +87,9 @@ class VolumeProfileFilter:
         ...     score += result.bonus
     """
 
-    def __init__(self, client: OKXClient, config: VolumeProfileConfig, data_registry=None):
+    def __init__(
+        self, client: OKXClient, config: VolumeProfileConfig, data_registry=None
+    ):
         """
         Инициализация Volume Profile фильтра.
 
@@ -98,7 +100,9 @@ class VolumeProfileFilter:
         """
         self.client = client
         self.config = config
-        self.data_registry = data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
+        self.data_registry = (
+            data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
+        )
         self.calculator = VolumeProfileCalculator(price_buckets=config.price_buckets)
 
         # Кэш профилей: symbol -> (VolumeProfileData, timestamp)
@@ -243,7 +247,9 @@ class VolumeProfileFilter:
                             f"для {symbol} из DataRegistry"
                         )
                         # Рассчитываем профиль из свечей DataRegistry
-                        profile = self.calculator.calculate(candles, self.config.value_area_percent)
+                        profile = self.calculator.calculate(
+                            candles, self.config.value_area_percent
+                        )
                         if profile:
                             self._profile_cache[symbol] = (profile, current_time)
                         return profile

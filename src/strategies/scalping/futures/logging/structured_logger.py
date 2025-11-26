@@ -373,7 +373,9 @@ class StructuredLogger:
                 "timeframe": timeframe,
                 "candles_count": candles_count,
                 "buffer_size": buffer_size,
-                "usage_percent": (candles_count / buffer_size * 100) if buffer_size > 0 else 0,
+                "usage_percent": (candles_count / buffer_size * 100)
+                if buffer_size > 0
+                else 0,
                 "last_update": last_update or datetime.now().isoformat(),
             }
 

@@ -358,5 +358,53 @@
     "high": 89692.3,
     "low": 89692.3,
     "close": 89692.3
+  },
+  {
+    "timestamp": "2025-11-26T23:25:00.119457",
+    "type": "candle_new",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "candle_timestamp": 1764188700,
+    "price": 3035.88,
+    "open": 3035.88,
+    "high": 3035.88,
+    "low": 3035.88,
+    "close": 3035.88
+  },
+  {
+    "timestamp": "2025-11-26T23:25:31.217766",
+    "type": "candle_new",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "candle_timestamp": 1764188700,
+    "price": 2.2048,
+    "open": 2.2048,
+    "high": 2.2048,
+    "low": 2.2048,
+    "close": 2.2048
+  },
+  {
+    "timestamp": "2025-11-26T23:25:35.250491",
+    "type": "candle_new",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "candle_timestamp": 1764188700,
+    "price": 142.88,
+    "open": 142.88,
+    "high": 142.88,
+    "low": 142.88,
+    "close": 142.88
+  },
+  {
+    "timestamp": "2025-11-26T23:25:48.874678",
+    "type": "candle_new",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "candle_timestamp": 1764188700,
+    "price": 0.15525,
+    "open": 0.15525,
+    "high": 0.15525,
+    "low": 0.15525,
+    "close": 0.15525
   }
 ]

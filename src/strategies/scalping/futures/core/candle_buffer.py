@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from loguru import logger
+
 from src.models import OHLCV
 
 
@@ -159,4 +160,3 @@ class CandleBuffer:
             Количество свечей
         """
         return await self.size()
-

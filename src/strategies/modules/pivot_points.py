@@ -76,7 +76,9 @@ class PivotPointsFilter:
         ...     score += result.bonus
     """
 
-    def __init__(self, client: OKXClient, config: PivotPointsConfig, data_registry=None):
+    def __init__(
+        self, client: OKXClient, config: PivotPointsConfig, data_registry=None
+    ):
         """
         Инициализация Pivot Points фильтра.
 
@@ -87,7 +89,9 @@ class PivotPointsFilter:
         """
         self.client = client
         self.config = config
-        self.data_registry = data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
+        self.data_registry = (
+            data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
+        )
         self.calculator = PivotCalculator()
 
         # Кэш уровней: symbol -> (PivotLevels, timestamp)
@@ -322,7 +326,9 @@ class PivotPointsFilter:
                         f"для {symbol} из DataRegistry"
                     )
                     # Рассчитываем уровни из свечей DataRegistry
-                    levels = self.calculator.calculate(daily_candles, self.config.use_last_n_days)
+                    levels = self.calculator.calculate(
+                        daily_candles, self.config.use_last_n_days
+                    )
                     if levels:
                         self._levels_cache[symbol] = (levels, current_time)
                     return levels

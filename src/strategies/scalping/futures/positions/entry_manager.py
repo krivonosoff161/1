@@ -186,7 +186,9 @@ class EntryManager:
                 return None
 
             # 1. Размещение ордера на бирже через OrderExecutor (используем уже рассчитанный размер)
-            order_result = await self.order_executor.execute_signal(signal, position_size)
+            order_result = await self.order_executor.execute_signal(
+                signal, position_size
+            )
 
             if not order_result or not order_result.get("success"):
                 logger.error(
@@ -198,8 +200,9 @@ class EntryManager:
             try:
                 # Ждем немного для синхронизации позиций на бирже
                 import asyncio
+
                 await asyncio.sleep(1)
-                
+
                 # Получаем позицию с биржи
                 # ✅ Получаем client через order_executor
                 if hasattr(self.order_executor, "client"):
@@ -212,23 +215,24 @@ class EntryManager:
                     )
                     positions = []
                 inst_id = f"{symbol}-SWAP"
-                
+
                 position_data = None
                 for pos in positions:
                     pos_inst_id = pos.get("instId", "")
                     pos_size = abs(float(pos.get("pos", "0")))
-                    
+
                     if (
-                        (pos_inst_id == inst_id or pos_inst_id == symbol)
-                        and pos_size > 0.000001
-                    ):
+                        pos_inst_id == inst_id or pos_inst_id == symbol
+                    ) and pos_size > 0.000001:
                         # Определяем side позиции
                         pos_side_raw = pos.get("posSide", "").lower()
                         if pos_side_raw in ["long", "short"]:
                             position_side = pos_side_raw
                         else:
-                            position_side = "long" if float(pos.get("pos", "0")) > 0 else "short"
-                        
+                            position_side = (
+                                "long" if float(pos.get("pos", "0")) > 0 else "short"
+                            )
+
                         # ✅ КРИТИЧЕСКОЕ: Получаем entry_time из API (cTime/uTime) для правильной инициализации
                         entry_time_from_api = None
                         c_time = pos.get("cTime")
@@ -238,10 +242,12 @@ class EntryManager:
                             try:
                                 entry_timestamp_ms = int(entry_time_str)
                                 entry_timestamp_sec = entry_timestamp_ms / 1000.0
-                                entry_time_from_api = datetime.fromtimestamp(entry_timestamp_sec)
+                                entry_time_from_api = datetime.fromtimestamp(
+                                    entry_timestamp_sec
+                                )
                             except (ValueError, TypeError):
                                 pass
-                        
+
                         position_data = {
                             "symbol": symbol,
                             "instId": pos.get("instId", ""),
@@ -252,11 +258,13 @@ class EntryManager:
                             "size": pos_size,
                             "entry_price": float(pos.get("avgPx", "0")),
                             "position_side": position_side,
-                            "margin_used": float(pos.get("margin", "0")) if pos.get("margin") else 0.0,
+                            "margin_used": float(pos.get("margin", "0"))
+                            if pos.get("margin")
+                            else 0.0,
                             "entry_time": entry_time_from_api,  # ✅ Сохраняем entry_time из API, если доступно
                         }
                         break
-                
+
                 # Если позицию не нашли, используем данные из order_result
                 if not position_data:
                     logger.warning(
@@ -267,7 +275,9 @@ class EntryManager:
                     position_data = {
                         "symbol": symbol,
                         "instId": f"{symbol}-SWAP",
-                        "pos": str(position_size) if side == "buy" else str(-position_size),
+                        "pos": str(position_size)
+                        if side == "buy"
+                        else str(-position_size),
                         "posSide": "long" if side == "buy" else "short",
                         "avgPx": signal.get("price", "0"),
                         "markPx": signal.get("price", "0"),
@@ -276,7 +286,7 @@ class EntryManager:
                         "position_side": "long" if side == "buy" else "short",
                         "margin_used": 0.0,  # Будет рассчитано позже
                     }
-                    
+
             except Exception as e:
                 logger.warning(
                     f"⚠️ EntryManager: Ошибка получения данных позиции с биржи для {symbol}: {e}, "
@@ -300,8 +310,10 @@ class EntryManager:
             # ✅ КРИТИЧЕСКОЕ: Используем entry_time из API, если доступно, иначе datetime.now() (для новых позиций)
             entry_time_for_metadata = position_data.get("entry_time")
             if not entry_time_for_metadata:
-                entry_time_for_metadata = datetime.now()  # Для новых позиций используем текущее время
-            
+                entry_time_for_metadata = (
+                    datetime.now()
+                )  # Для новых позиций используем текущее время
+
             metadata = PositionMetadata(
                 entry_time=entry_time_for_metadata,  # ✅ Используем entry_time из API или текущее время
                 regime=regime or signal.get("regime"),

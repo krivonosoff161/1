@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
+
 from src.models import OHLCV
 
 
@@ -188,7 +189,9 @@ class WebSocketCoordinator:
                         try:
                             await self._update_candle_from_ticker(symbol, price, ticker)
                         except Exception as e:
-                            logger.warning(f"⚠️ Ошибка обновления свечей для {symbol}: {e}")
+                            logger.warning(
+                                f"⚠️ Ошибка обновления свечей для {symbol}: {e}"
+                            )
 
                     # ✅ НОВОЕ: Обновляем DataRegistry с рыночными данными
                     if self.data_registry:
@@ -199,20 +202,25 @@ class WebSocketCoordinator:
                             high_24h = float(ticker.get("high24h", price))
                             low_24h = float(ticker.get("low24h", price))
                             open_24h = float(ticker.get("open24h", price))
-                            
+
                             # Обновляем market data в DataRegistry
-                            await self.data_registry.update_market_data(symbol, {
-                                "price": price,
-                                "last_price": price,
-                                "volume": volume_24h,
-                                "volume_ccy": volume_ccy_24h,
-                                "high_24h": high_24h,
-                                "low_24h": low_24h,
-                                "open_24h": open_24h,
-                                "ticker": ticker,
-                                "updated_at": datetime.now(),
-                            })
-                            logger.debug(f"✅ DataRegistry: Обновлены market data для {symbol} (price=${price:.2f})")
+                            await self.data_registry.update_market_data(
+                                symbol,
+                                {
+                                    "price": price,
+                                    "last_price": price,
+                                    "volume": volume_24h,
+                                    "volume_ccy": volume_ccy_24h,
+                                    "high_24h": high_24h,
+                                    "low_24h": low_24h,
+                                    "open_24h": open_24h,
+                                    "ticker": ticker,
+                                    "updated_at": datetime.now(),
+                                },
+                            )
+                            logger.debug(
+                                f"✅ DataRegistry: Обновлены market data для {symbol} (price=${price:.2f})"
+                            )
                         except Exception as e:
                             logger.warning(
                                 f"⚠️ Ошибка обновления DataRegistry для {symbol}: {e}"
@@ -228,7 +236,7 @@ class WebSocketCoordinator:
 
                             # Обновляем FastADX для расчета тренда
                             self.fast_adx.update(high=high, low=low, close=close)
-                            
+
                             # ✅ НОВОЕ: Сохраняем ADX в DataRegistry после обновления
                             if self.data_registry:
                                 try:
@@ -236,17 +244,23 @@ class WebSocketCoordinator:
                                     # Также получаем +DI и -DI
                                     plus_di = self.fast_adx.get_di_plus()
                                     minus_di = self.fast_adx.get_di_minus()
-                                    
+
                                     indicators_to_save = {
                                         "adx": adx_value,
                                         "adx_plus_di": plus_di,
                                         "adx_minus_di": minus_di,
                                     }
-                                    
-                                    await self.data_registry.update_indicators(symbol, indicators_to_save)
-                                    logger.debug(f"✅ DataRegistry: Сохранен ADX для {symbol}: ADX={adx_value:.2f}, +DI={plus_di:.2f}, -DI={minus_di:.2f}")
+
+                                    await self.data_registry.update_indicators(
+                                        symbol, indicators_to_save
+                                    )
+                                    logger.debug(
+                                        f"✅ DataRegistry: Сохранен ADX для {symbol}: ADX={adx_value:.2f}, +DI={plus_di:.2f}, -DI={minus_di:.2f}"
+                                    )
                                 except Exception as e:
-                                    logger.debug(f"⚠️ Ошибка сохранения ADX в DataRegistry для {symbol}: {e}")
+                                    logger.debug(
+                                        f"⚠️ Ошибка сохранения ADX в DataRegistry для {symbol}: {e}"
+                                    )
                     except Exception as e:
                         logger.debug(
                             f"⚠️ Не удалось обновить FastADX для {symbol}: {e}"
@@ -308,23 +322,36 @@ class WebSocketCoordinator:
             # Получаем текущее время
             current_time = datetime.now()
             current_timestamp = current_time.timestamp()
-            
+
             # Определяем объем из тикера (если доступен)
             volume_24h = float(ticker.get("vol24h", 0))
             volume_ccy_24h = float(ticker.get("volCcy24h", 0))
             # Используем volume_ccy_24h для более точного расчета объема в USDT
 
             # ✅ КРИТИЧЕСКОЕ: Обновляем свечи для всех таймфреймов
-            await self._update_candle_for_timeframe(symbol, "1m", price, current_timestamp, volume_ccy_24h)
-            await self._update_candle_for_timeframe(symbol, "5m", price, current_timestamp, volume_ccy_24h)
-            await self._update_candle_for_timeframe(symbol, "1H", price, current_timestamp, volume_ccy_24h)
-            await self._update_candle_for_timeframe(symbol, "1D", price, current_timestamp, volume_ccy_24h)
-            
+            await self._update_candle_for_timeframe(
+                symbol, "1m", price, current_timestamp, volume_ccy_24h
+            )
+            await self._update_candle_for_timeframe(
+                symbol, "5m", price, current_timestamp, volume_ccy_24h
+            )
+            await self._update_candle_for_timeframe(
+                symbol, "1H", price, current_timestamp, volume_ccy_24h
+            )
+            await self._update_candle_for_timeframe(
+                symbol, "1D", price, current_timestamp, volume_ccy_24h
+            )
+
         except Exception as e:
             logger.warning(f"⚠️ Ошибка обновления свечей из тикера для {symbol}: {e}")
 
     async def _update_candle_for_timeframe(
-        self, symbol: str, timeframe: str, price: float, current_timestamp: float, volume: float
+        self,
+        symbol: str,
+        timeframe: str,
+        price: float,
+        current_timestamp: float,
+        volume: float,
     ) -> None:
         """
         ✅ КРИТИЧЕСКОЕ: Обновить свечу для конкретного таймфрейма.
@@ -344,7 +371,7 @@ class WebSocketCoordinator:
                 "1H": 3600,
                 "1D": 86400,
             }
-            
+
             interval = timeframe_intervals.get(timeframe)
             if not interval:
                 return  # Неизвестный таймфрейм, пропускаем
@@ -353,7 +380,9 @@ class WebSocketCoordinator:
             if timeframe == "1D":
                 # Для дневных свечей используем начало дня (UTC)
                 current_dt = datetime.utcfromtimestamp(current_timestamp)
-                day_start = current_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                day_start = current_dt.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
                 current_candle_timestamp = int(day_start.timestamp())
             elif timeframe == "1H":
                 # Для часовых свечей используем начало часа
@@ -369,10 +398,12 @@ class WebSocketCoordinator:
 
             # Получаем последнюю свечу
             last_candle = await self.data_registry.get_last_candle(symbol, timeframe)
-            
+
             # Ключ для отслеживания последнего timestamp для каждого таймфрейма
             cache_key = f"{symbol}_{timeframe}"
-            last_candle_timestamp = getattr(self, "_last_candle_timestamps", {}).get(cache_key)
+            last_candle_timestamp = getattr(self, "_last_candle_timestamps", {}).get(
+                cache_key
+            )
 
             if last_candle and last_candle_timestamp == current_candle_timestamp:
                 # Та же свеча (еще формируется) → обновляем
@@ -386,7 +417,11 @@ class WebSocketCoordinator:
                 )
             else:
                 # Новая свеча → закрываем старую (если была) и создаем новую
-                if last_candle and last_candle_timestamp and last_candle_timestamp < current_candle_timestamp:
+                if (
+                    last_candle
+                    and last_candle_timestamp
+                    and last_candle_timestamp < current_candle_timestamp
+                ):
                     logger.debug(
                         f"📊 Переход к новой свече {timeframe} для {symbol}: "
                         f"старая={last_candle_timestamp}, новая={current_candle_timestamp}"
@@ -421,9 +456,13 @@ class WebSocketCoordinator:
                         f"📊 Создана новая свеча {symbol} {timeframe}: "
                         f"timestamp={current_candle_timestamp}, price={price:.2f}"
                     )
-                
+
                 # ✅ НОВОЕ: Логируем в StructuredLogger (только для важных таймфреймов, чтобы не перегружать)
-                if timeframe in ["5m", "1H", "1D"] and hasattr(self, "structured_logger") and self.structured_logger:
+                if (
+                    timeframe in ["5m", "1H", "1D"]
+                    and hasattr(self, "structured_logger")
+                    and self.structured_logger
+                ):
                     try:
                         # ✅ ИСПРАВЛЕНО: Используем данные из new_candle вместо получения из DataRegistry
                         self.structured_logger.log_candle_new(
@@ -437,7 +476,9 @@ class WebSocketCoordinator:
                             close=new_candle.close,
                         )
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка логирования новой свечи в StructuredLogger: {e}")
+                        logger.debug(
+                            f"⚠️ Ошибка логирования новой свечи в StructuredLogger: {e}"
+                        )
         except Exception as e:
             logger.warning(f"⚠️ Ошибка обновления свечи {timeframe} для {symbol}: {e}")
 
@@ -519,23 +560,29 @@ class WebSocketCoordinator:
                         ] = saved_order_type
                     if saved_post_only is not None:
                         self.active_positions_ref[symbol]["post_only"] = saved_post_only
-                    
+
                     # ✅ НОВОЕ: Логируем ADL при обновлении позиции (если доступно)
                     if "adl_rank" in update_data:
                         adl_rank = update_data["adl_rank"]
-                        adl_status = "🔴 ВЫСОКИЙ" if adl_rank >= 4 else "🟡 СРЕДНИЙ" if adl_rank >= 2 else "🟢 НИЗКИЙ"
+                        adl_status = (
+                            "🔴 ВЫСОКИЙ"
+                            if adl_rank >= 4
+                            else "🟡 СРЕДНИЙ"
+                            if adl_rank >= 2
+                            else "🟢 НИЗКИЙ"
+                        )
                         logger.debug(
                             f"📊 ADL для {symbol}: rank={adl_rank} ({adl_status}) "
                             f"(upl={position_data.get('upl', '0')} USDT)"
                         )
-                        
+
                         # Предупреждение при высоком ADL
                         if adl_rank >= 4:
                             logger.warning(
                                 f"⚠️ ВЫСОКИЙ ADL для {symbol}: rank={adl_rank} "
                                 f"(риск автоматического сокращения позиции биржей)"
                             )
-                    
+
                     logger.debug(
                         f"📊 Private WS: Позиция {symbol} обновлена (size={pos_size}, upl={position_data.get('upl', '0')})"
                     )
@@ -605,7 +652,7 @@ class WebSocketCoordinator:
                 # ✅ НОВОЕ: Определяем причину закрытия
                 # Проверяем, была ли позиция закрыта из-за ADL
                 reason = "unknown"
-                
+
                 # Проверяем ADL перед закрытием (если был сохранен)
                 adl_rank = position.get("adl_rank")
                 if adl_rank is not None and adl_rank >= 4:  # Высокий ADL (4-5 столбцов)
@@ -730,4 +777,3 @@ class WebSocketCoordinator:
         except Exception as e:
             logger.debug(f"⚠️ Ошибка получения цены для {symbol}: {e}")
             return None
-

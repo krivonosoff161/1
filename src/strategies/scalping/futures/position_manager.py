@@ -3176,9 +3176,7 @@ class FuturesPositionManager:
                 ct_val = float(details.get("ctVal", "0.01"))
                 close_size_coins = close_size_contracts * ct_val
             except Exception as e:
-                logger.error(
-                    f"❌ Не удалось получить ctVal для {symbol}: {e}"
-                )
+                logger.error(f"❌ Не удалось получить ctVal для {symbol}: {e}")
                 return None
 
             # Определение стороны закрытия
@@ -3215,7 +3213,9 @@ class FuturesPositionManager:
                 if isinstance(commission_config, dict):
                     taker_fee_rate = commission_config.get("taker_fee_rate", 0.0005)
                 else:
-                    taker_fee_rate = getattr(commission_config, "taker_fee_rate", 0.0005)
+                    taker_fee_rate = getattr(
+                        commission_config, "taker_fee_rate", 0.0005
+                    )
 
                 # Комиссия на закрытие (MARKET = taker)
                 commission = close_size_coins * current_price * taker_fee_rate
@@ -3264,9 +3264,7 @@ class FuturesPositionManager:
                 }
             else:
                 error_msg = result.get("msg", "Неизвестная ошибка")
-                logger.error(
-                    f"❌ Ошибка частичного закрытия {symbol}: {error_msg}"
-                )
+                logger.error(f"❌ Ошибка частичного закрытия {symbol}: {error_msg}")
                 return {"success": False, "error": error_msg}
 
         except Exception as e:
