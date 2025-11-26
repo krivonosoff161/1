@@ -226,3 +226,5 @@ if profit_pct >= partial_tp_trigger_percent:
 **TP не проверяется:** ✅
 **Требуется полная реализация ExitAnalyzer:** ⚠️
 
+
+

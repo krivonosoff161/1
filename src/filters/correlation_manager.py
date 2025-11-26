@@ -76,16 +76,18 @@ class CorrelationManager:
         ...     logger.info(f"Strong correlation: {corr.correlation:.2f}")
     """
 
-    def __init__(self, client: OKXClient, config: CorrelationConfig):
+    def __init__(self, client: OKXClient, config: CorrelationConfig, data_registry=None):
         """
         Инициализация менеджера корреляций.
 
         Args:
             client: OKX API клиент
             config: Конфигурация расчета корреляции
+            data_registry: DataRegistry для получения свечей (опционально, приоритет над API)
         """
         self.client = client
         self.config = config
+        self.data_registry = data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
 
         # Кэш корреляций: (pair1, pair2) -> CorrelationData
         self._correlation_cache: Dict[Tuple[str, str], CorrelationData] = {}
@@ -289,6 +291,34 @@ class CorrelationManager:
         try:
             limit = self.config.lookback_candles + 10  # Запас
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала пытаемся получить свечи из DataRegistry
+            if self.data_registry:
+                try:
+                    candles = await self.data_registry.get_candles(
+                        symbol, self.config.timeframe
+                    )
+                    if candles and len(candles) >= self.config.lookback_candles:
+                        logger.debug(
+                            f"Correlation: Получено {len(candles)} свечей {self.config.timeframe} "
+                            f"для {symbol} из DataRegistry"
+                        )
+                        # Кэшируем результат из DataRegistry
+                        if candles:
+                            self._candles_cache[symbol] = (candles, current_time)
+                        return candles
+                    else:
+                        logger.debug(
+                            f"Correlation: DataRegistry содержит недостаточно свечей для {symbol} "
+                            f"({len(candles) if candles else 0} свечей, нужно минимум {self.config.lookback_candles}), "
+                            f"используем fallback к API"
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"Correlation: Ошибка получения свечей из DataRegistry для {symbol}: {e}, "
+                        f"используем fallback к API"
+                    )
+
+            # Fallback: запрашиваем через API
             # ✅ АДАПТАЦИЯ: Получаем свечи напрямую через публичный API если client не поддерживает get_candles
             if self.client and hasattr(self.client, "get_candles"):
                 candles = await self.client.get_candles(

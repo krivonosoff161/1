@@ -161,3 +161,252 @@ class StructuredLogger:
                 f"❌ StructuredLogger: Ошибка логирования сигнала для {symbol}: {e}",
                 exc_info=True,
             )
+
+    def log_candle_init(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles_count: int,
+        status: str = "success",
+        error: Optional[str] = None,
+    ) -> None:
+        """
+        Логировать инициализацию буфера свечей.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (1m, 5m, 1H, 1D)
+            candles_count: Количество загруженных свечей
+            status: Статус (success, error)
+            error: Сообщение об ошибке (если есть)
+        """
+        try:
+            log_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "type": "candle_init",
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "candles_count": candles_count,
+                "status": status,
+                "error": error,
+            }
+
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            filepath = self.log_dir / f"candles_init_{date_str}.json"
+
+            entries = []
+            if filepath.exists():
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        entries = json.load(f)
+                except:
+                    entries = []
+
+            entries.append(log_entry)
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(entries, f, indent=2, ensure_ascii=False)
+
+            logger.debug(
+                f"✅ StructuredLogger: Инициализация свечей {symbol} {timeframe} сохранена"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"❌ StructuredLogger: Ошибка логирования инициализации свечей: {e}",
+                exc_info=True,
+            )
+
+    def log_candle_new(
+        self,
+        symbol: str,
+        timeframe: str,
+        timestamp: int,
+        price: float,
+        open_price: float,  # ✅ ИСПРАВЛЕНО: переименовано из 'open' чтобы избежать конфликта с встроенной функцией
+        high: float,
+        low: float,
+        close: float,
+    ) -> None:
+        """
+        Логировать создание новой свечи.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (1m, 5m, 1H, 1D)
+            timestamp: Timestamp свечи
+            price: Цена (обычно равна close)
+            open_price: Цена открытия
+            high: Максимальная цена
+            low: Минимальная цена
+            close: Цена закрытия
+        """
+        try:
+            log_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "type": "candle_new",
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "candle_timestamp": timestamp,
+                "price": price,
+                "open": open_price,  # ✅ ИСПРАВЛЕНО: используем open_price
+                "high": high,
+                "low": low,
+                "close": close,
+            }
+
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            filepath = self.log_dir / f"candles_new_{date_str}.json"
+
+            entries = []
+            if filepath.exists():
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        entries = json.load(f)
+                except:
+                    entries = []
+
+            entries.append(log_entry)
+
+            # Ограничиваем размер файла (последние 1000 записей)
+            if len(entries) > 1000:
+                entries = entries[-1000:]
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(entries, f, indent=2, ensure_ascii=False)
+
+            logger.debug(
+                f"✅ StructuredLogger: Новая свеча {symbol} {timeframe} сохранена"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"❌ StructuredLogger: Ошибка логирования новой свечи: {e}",
+                exc_info=True,
+            )
+
+    def log_candle_usage(
+        self,
+        filter_name: str,
+        symbol: str,
+        timeframe: str,
+        source: str,
+        candles_count: int,
+        fallback_to_api: bool = False,
+    ) -> None:
+        """
+        Логировать использование свечей фильтрами.
+
+        Args:
+            filter_name: Название фильтра (MTF, VolumeProfile, PivotPoints, Correlation)
+            symbol: Торговый символ
+            timeframe: Таймфрейм
+            source: Источник (dataregistry, api)
+            candles_count: Количество полученных свечей
+            fallback_to_api: Был ли использован fallback к API
+        """
+        try:
+            log_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "type": "candle_usage",
+                "filter_name": filter_name,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "source": source,
+                "candles_count": candles_count,
+                "fallback_to_api": fallback_to_api,
+            }
+
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            filepath = self.log_dir / f"candles_usage_{date_str}.json"
+
+            entries = []
+            if filepath.exists():
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        entries = json.load(f)
+                except:
+                    entries = []
+
+            entries.append(log_entry)
+
+            # Ограничиваем размер файла (последние 500 записей)
+            if len(entries) > 500:
+                entries = entries[-500:]
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(entries, f, indent=2, ensure_ascii=False)
+
+            logger.debug(
+                f"✅ StructuredLogger: Использование свечей {filter_name} {symbol} {timeframe} сохранено"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"❌ StructuredLogger: Ошибка логирования использования свечей: {e}",
+                exc_info=True,
+            )
+
+    def log_candle_stats(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles_count: int,
+        buffer_size: int,
+        last_update: Optional[str] = None,
+    ) -> None:
+        """
+        Логировать статистику буфера свечей.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм
+            candles_count: Текущее количество свечей
+            buffer_size: Максимальный размер буфера
+            last_update: Время последнего обновления
+        """
+        try:
+            log_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "type": "candle_stats",
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "candles_count": candles_count,
+                "buffer_size": buffer_size,
+                "usage_percent": (candles_count / buffer_size * 100) if buffer_size > 0 else 0,
+                "last_update": last_update or datetime.now().isoformat(),
+            }
+
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            filepath = self.log_dir / f"candles_stats_{date_str}.json"
+
+            entries = []
+            if filepath.exists():
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        entries = json.load(f)
+                except:
+                    entries = []
+
+            entries.append(log_entry)
+
+            # Ограничиваем размер файла (последние 200 записей)
+            if len(entries) > 200:
+                entries = entries[-200:]
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(entries, f, indent=2, ensure_ascii=False)
+
+            logger.debug(
+                f"✅ StructuredLogger: Статистика свечей {symbol} {timeframe} сохранена"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"❌ StructuredLogger: Ошибка логирования статистики свечей: {e}",
+                exc_info=True,
+            )
+            logger.error(
+                f"❌ StructuredLogger: Ошибка логирования сигнала для {symbol}: {e}",
+                exc_info=True,
+            )

@@ -87,16 +87,18 @@ class VolumeProfileFilter:
         ...     score += result.bonus
     """
 
-    def __init__(self, client: OKXClient, config: VolumeProfileConfig):
+    def __init__(self, client: OKXClient, config: VolumeProfileConfig, data_registry=None):
         """
         Инициализация Volume Profile фильтра.
 
         Args:
             client: OKX API клиент
             config: Конфигурация модуля
+            data_registry: DataRegistry для получения свечей (опционально, приоритет над API)
         """
         self.client = client
         self.config = config
+        self.data_registry = data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
         self.calculator = VolumeProfileCalculator(price_buckets=config.price_buckets)
 
         # Кэш профилей: symbol -> (VolumeProfileData, timestamp)
@@ -229,6 +231,35 @@ class VolumeProfileFilter:
 
         # Получаем свечи для расчета
         try:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала пытаемся получить свечи из DataRegistry
+            if self.data_registry:
+                try:
+                    candles = await self.data_registry.get_candles(
+                        symbol, self.config.lookback_timeframe
+                    )
+                    if candles and len(candles) >= self.config.lookback_candles:
+                        logger.debug(
+                            f"Volume Profile: Получено {len(candles)} свечей {self.config.lookback_timeframe} "
+                            f"для {symbol} из DataRegistry"
+                        )
+                        # Рассчитываем профиль из свечей DataRegistry
+                        profile = self.calculator.calculate(candles, self.config.value_area_percent)
+                        if profile:
+                            self._profile_cache[symbol] = (profile, current_time)
+                        return profile
+                    else:
+                        logger.debug(
+                            f"Volume Profile: DataRegistry содержит недостаточно свечей для {symbol} "
+                            f"({len(candles) if candles else 0} свечей, нужно минимум {self.config.lookback_candles}), "
+                            f"используем fallback к API"
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"Volume Profile: Ошибка получения свечей из DataRegistry для {symbol}: {e}, "
+                        f"используем fallback к API"
+                    )
+
+            # Fallback: запрашиваем через API
             # ✅ АДАПТАЦИЯ: Получаем свечи напрямую через публичный API если client не поддерживает get_candles
             if self.client and hasattr(self.client, "get_candles"):
                 candles = await self.client.get_candles(

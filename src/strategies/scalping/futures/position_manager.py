@@ -3107,6 +3107,175 @@ class FuturesPositionManager:
             logger.error(f"Ошибка ручного закрытия позиции: {e}")
             return {"success": False, "error": str(e)}
 
+    async def close_partial_position(
+        self, symbol: str, fraction: float, reason: str = "partial_tp"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        ✅ ЧАСТИЧНОЕ ЗАКРЫТИЕ ПОЗИЦИИ (Partial TP)
+
+        Закрывает часть позиции (например, 60% от текущего размера).
+        Используется для Partial Take Profit.
+
+        Args:
+            symbol: Торговый символ
+            fraction: Доля позиции для закрытия (0.0-1.0, например 0.6 = 60%)
+            reason: Причина закрытия
+
+        Returns:
+            Dict с результатом операции или None
+        """
+        try:
+            if fraction <= 0 or fraction >= 1:
+                logger.error(
+                    f"❌ Невалидный fraction для частичного закрытия {symbol}: {fraction} (должен быть 0.0-1.0)"
+                )
+                return None
+
+            # Получаем актуальную позицию с биржи
+            positions = await self.client.get_positions(symbol)
+
+            if not isinstance(positions, list) or len(positions) == 0:
+                logger.warning(
+                    f"⚠️ Позиция {symbol} не найдена на бирже для частичного закрытия"
+                )
+                return None
+
+            # Ищем позицию
+            pos_data = None
+            for pos in positions:
+                inst_id = pos.get("instId", "").replace("-SWAP", "")
+                if inst_id == symbol:
+                    size = float(pos.get("pos", "0"))
+                    if size != 0:
+                        pos_data = pos
+                        break
+
+            if pos_data is None:
+                logger.warning(
+                    f"⚠️ Позиция {symbol} уже закрыта, частичное закрытие невозможно"
+                )
+                return None
+
+            current_size = float(pos_data.get("pos", "0"))
+            side = pos_data.get("posSide", "long")
+
+            # Рассчитываем размер для закрытия
+            close_size_contracts = abs(current_size) * fraction
+            remaining_size_contracts = abs(current_size) * (1.0 - fraction)
+
+            logger.info(
+                f"✂️ Частичное закрытие {symbol} {side}: "
+                f"текущий размер={current_size} контрактов, "
+                f"закрываем {fraction*100:.0f}% ({close_size_contracts:.6f} контрактов), "
+                f"останется {remaining_size_contracts:.6f} контрактов"
+            )
+
+            # Получаем ctVal для расчетов
+            try:
+                details = await self.client.get_instrument_details(symbol)
+                ct_val = float(details.get("ctVal", "0.01"))
+                close_size_coins = close_size_contracts * ct_val
+            except Exception as e:
+                logger.error(
+                    f"❌ Не удалось получить ctVal для {symbol}: {e}"
+                )
+                return None
+
+            # Определение стороны закрытия
+            close_side = "sell" if side.lower() == "long" else "buy"
+
+            # Получаем текущую цену для расчета PnL
+            entry_price = float(pos_data.get("avgPx", "0"))
+            current_price = float(pos_data.get("markPx", entry_price))
+
+            # Размещаем ордер на частичное закрытие (MARKET, reduceOnly)
+            result = await self.client.place_futures_order(
+                symbol=symbol,
+                side=close_side,
+                size=close_size_contracts,
+                order_type="market",
+                size_in_contracts=True,  # size в контрактах
+                reduce_only=True,  # Только закрытие
+            )
+
+            if result.get("code") == "0":
+                logger.info(
+                    f"✅ Частичное закрытие {symbol} выполнено: "
+                    f"закрыто {fraction*100:.0f}% позиции"
+                )
+
+                # Рассчитываем PnL для закрытой части
+                if side.lower() == "long":
+                    partial_pnl = (current_price - entry_price) * close_size_coins
+                else:
+                    partial_pnl = (entry_price - current_price) * close_size_coins
+
+                # Получаем комиссию из конфига
+                commission_config = getattr(self.scalping_config, "commission", {})
+                if isinstance(commission_config, dict):
+                    taker_fee_rate = commission_config.get("taker_fee_rate", 0.0005)
+                else:
+                    taker_fee_rate = getattr(commission_config, "taker_fee_rate", 0.0005)
+
+                # Комиссия на закрытие (MARKET = taker)
+                commission = close_size_coins * current_price * taker_fee_rate
+                net_partial_pnl = partial_pnl - commission
+
+                # Обновляем метаданные позиции (partial_tp_done = True)
+                if symbol in self.active_positions:
+                    self.active_positions[symbol]["partial_tp_done"] = True
+                    self.active_positions[symbol]["partial_tp_fraction"] = fraction
+                    logger.debug(
+                        f"✅ Метаданные обновлены: partial_tp_done=True для {symbol}"
+                    )
+
+                # Обновляем PositionRegistry если используется
+                if self.position_registry:
+                    try:
+                        await self.position_registry.update_position(
+                            symbol,
+                            metadata_updates={
+                                "partial_tp_done": True,
+                                "partial_tp_fraction": fraction,
+                            },
+                        )
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Не удалось обновить PositionRegistry для {symbol}: {e}"
+                        )
+
+                logger.info(
+                    f"💰 Частичное закрытие {symbol}: "
+                    f"PnL={net_partial_pnl:+.2f} USDT, "
+                    f"комиссия={commission:.4f} USDT"
+                )
+
+                return {
+                    "success": True,
+                    "symbol": symbol,
+                    "fraction": fraction,
+                    "close_size_contracts": close_size_contracts,
+                    "close_size_coins": close_size_coins,
+                    "remaining_size_contracts": remaining_size_contracts,
+                    "partial_pnl": partial_pnl,
+                    "commission": commission,
+                    "net_partial_pnl": net_partial_pnl,
+                    "reason": reason,
+                }
+            else:
+                error_msg = result.get("msg", "Неизвестная ошибка")
+                logger.error(
+                    f"❌ Ошибка частичного закрытия {symbol}: {error_msg}"
+                )
+                return {"success": False, "error": error_msg}
+
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка частичного закрытия позиции {symbol}: {e}",
+                exc_info=True,
+            )
+            return None
+
     async def close_all_positions(self) -> Dict[str, Any]:
         """Закрытие всех позиций"""
         try:

@@ -309,3 +309,15 @@ class PositionRegistry:
             True если позиция зарегистрирована
         """
         return symbol in self._positions
+
+    def get_all_positions_sync(self) -> Dict[str, Dict[str, Any]]:
+        """
+        ✅ Синхронная версия get_all_positions (для прокси active_positions).
+
+        ⚠️ ВНИМАНИЕ: Используйте только если нет доступа к async контексту!
+        Возвращает копию словаря для безопасности.
+
+        Returns:
+            Копия словаря всех позиций
+        """
+        return {k: v.copy() for k, v in self._positions.items()}

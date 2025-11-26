@@ -11,9 +11,12 @@ DataRegistry - Единый реестр всех данных.
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
+from src.models import OHLCV
+
+from .candle_buffer import CandleBuffer
 
 
 class DataRegistry:
@@ -46,6 +49,11 @@ class DataRegistry:
 
         # Margin: {used: float, available: float, total: float, updated_at: datetime}
         self._margin: Optional[Dict[str, Any]] = None
+
+        # ✅ НОВОЕ: CandleBuffer для каждого символа и таймфрейма
+        # Структура: symbol -> timeframe -> CandleBuffer
+        # Например: "BTC-USDT" -> "1m" -> CandleBuffer(max_size=200)
+        self._candle_buffers: Dict[str, Dict[str, CandleBuffer]] = {}
 
         self._lock = asyncio.Lock()
 
@@ -310,8 +318,9 @@ class DataRegistry:
                 "updated_at": datetime.now(),
             }
 
+            available_str = f"{available:.2f}" if available is not None else 'N/A'
             logger.debug(
-                f"✅ DataRegistry: Обновлена маржа: used={used:.2f}, available={available:.2f if available else 'N/A'}"
+                f"✅ DataRegistry: Обновлена маржа: used={used:.2f}, available={available_str}"
             )
 
     async def get_margin(self) -> Optional[Dict[str, Any]]:
@@ -376,3 +385,157 @@ class DataRegistry:
             Профиль баланса или None
         """
         return self._balance.get("profile") if self._balance else None
+
+    # ==================== CANDLES ====================
+
+    async def add_candle(
+        self, symbol: str, timeframe: str, candle: OHLCV
+    ) -> None:
+        """
+        Добавить новую свечу в буфер для символа и таймфрейма.
+
+        Если свеча для новой минуты (или нового таймфрейма) - закрывает последнюю и добавляет новую.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (1m, 5m, 1H, etc.)
+            candle: Свеча OHLCV
+        """
+        async with self._lock:
+            if symbol not in self._candle_buffers:
+                self._candle_buffers[symbol] = {}
+
+            if timeframe not in self._candle_buffers[symbol]:
+                # Создаем новый буфер для таймфрейма
+                max_size = 200 if timeframe == "1m" else 100  # 200 для 1m, 100 для остальных
+                self._candle_buffers[symbol][timeframe] = CandleBuffer(max_size=max_size)
+                logger.debug(
+                    f"📊 DataRegistry: Создан CandleBuffer для {symbol} {timeframe} (max_size={max_size})"
+                )
+
+            # Добавляем свечу в буфер
+            await self._candle_buffers[symbol][timeframe].add_candle(candle)
+            logger.debug(
+                f"📊 DataRegistry: Добавлена свеча {symbol} {timeframe} "
+                f"(timestamp={candle.timestamp}, price={candle.close:.2f})"
+            )
+
+    async def update_last_candle(
+        self,
+        symbol: str,
+        timeframe: str,
+        high: Optional[float] = None,
+        low: Optional[float] = None,
+        close: Optional[float] = None,
+        volume: Optional[float] = None,
+    ) -> bool:
+        """
+        Обновить последнюю (формирующуюся) свечу для символа и таймфрейма.
+
+        Используется когда свеча еще формируется (не завершилась).
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (1m, 5m, 1H, etc.)
+            high: Новая максимальная цена
+            low: Новая минимальная цена
+            close: Новая цена закрытия
+            volume: Новый объем
+
+        Returns:
+            True если свеча обновлена, False если буфер не существует или пуст
+        """
+        async with self._lock:
+            if symbol not in self._candle_buffers:
+                return False
+
+            if timeframe not in self._candle_buffers[symbol]:
+                return False
+
+            buffer = self._candle_buffers[symbol][timeframe]
+            return await buffer.update_last_candle(high, low, close, volume)
+
+    async def get_candles(
+        self, symbol: str, timeframe: str
+    ) -> List[OHLCV]:
+        """
+        Получить все свечи для символа и таймфрейма.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (1m, 5m, 1H, etc.)
+
+        Returns:
+            Список свечей (от старых к новым) или пустой список
+        """
+        async with self._lock:
+            if symbol not in self._candle_buffers:
+                return []
+
+            if timeframe not in self._candle_buffers[symbol]:
+                return []
+
+            buffer = self._candle_buffers[symbol][timeframe]
+            return await buffer.get_candles()
+
+    async def get_last_candle(
+        self, symbol: str, timeframe: str
+    ) -> Optional[OHLCV]:
+        """
+        Получить последнюю свечу для символа и таймфрейма.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (1m, 5m, 1H, etc.)
+
+        Returns:
+            Последняя свеча или None
+        """
+        async with self._lock:
+            if symbol not in self._candle_buffers:
+                return None
+
+            if timeframe not in self._candle_buffers[symbol]:
+                return None
+
+            buffer = self._candle_buffers[symbol][timeframe]
+            return await buffer.get_last_candle()
+
+    async def initialize_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: List[OHLCV],
+        max_size: Optional[int] = None,
+    ) -> None:
+        """
+        Инициализировать буфер свечей для символа и таймфрейма.
+
+        Используется при старте бота для загрузки исторических свечей.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (1m, 5m, 1H, etc.)
+            candles: Список свечей для инициализации
+            max_size: Максимальный размер буфера (по умолчанию: 200 для 1m, 100 для остальных)
+        """
+        async with self._lock:
+            if symbol not in self._candle_buffers:
+                self._candle_buffers[symbol] = {}
+
+            # Определяем max_size если не передан
+            if max_size is None:
+                max_size = 200 if timeframe == "1m" else 100
+
+            # Создаем новый буфер
+            buffer = CandleBuffer(max_size=max_size)
+            self._candle_buffers[symbol][timeframe] = buffer
+
+            # Добавляем все свечи
+            for candle in candles:
+                await buffer.add_candle(candle)
+
+            logger.info(
+                f"📊 DataRegistry: Инициализирован буфер свечей для {symbol} {timeframe} "
+                f"({len(candles)} свечей, max_size={max_size})"
+            )

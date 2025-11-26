@@ -93,16 +93,20 @@ class MultiTimeframeFilter:
         ...     score += result.bonus
     """
 
-    def __init__(self, client=None, config: MTFConfig = None):
+    def __init__(self, client=None, config: MTFConfig = None, data_registry=None, structured_logger=None):
         """
         Инициализация MTF фильтра.
 
         Args:
             client: OKX API клиент (опционально, можно получать свечи напрямую)
             config: Конфигурация MTF модуля (если None - использует дефолтные значения)
+            data_registry: DataRegistry для получения свечей (опционально, приоритет над API)
+            structured_logger: StructuredLogger для логирования использования свечей (опционально)
         """
         self.client = client  # Может быть None - тогда получаем свечи напрямую
         self.config = config or MTFConfig()  # Дефолтная конфигурация если не передана
+        self.data_registry = data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
+        self.structured_logger = structured_logger  # ✅ НОВОЕ: StructuredLogger для логирования
 
         # Кэш для свечей старшего таймфрейма
         self._candles_cache: Dict[str, tuple[List[OHLCV], float]] = {}
@@ -324,6 +328,60 @@ class MultiTimeframeFilter:
             # Запрашиваем больше свечей для расчета EMA
             limit = max(50, self.config.ema_slow_period * 2)
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала пытаемся получить свечи из DataRegistry
+            if self.data_registry:
+                try:
+                    candles = await self.data_registry.get_candles(
+                        symbol, self.config.confirmation_timeframe
+                    )
+                    if candles and len(candles) >= self.config.ema_slow_period:
+                        logger.debug(
+                            f"MTF: Получено {len(candles)} свечей {self.config.confirmation_timeframe} "
+                            f"для {symbol} из DataRegistry"
+                        )
+                        # ✅ НОВОЕ: Логируем использование DataRegistry
+                        if hasattr(self, "structured_logger") and self.structured_logger:
+                            try:
+                                self.structured_logger.log_candle_usage(
+                                    filter_name="MTF",
+                                    symbol=symbol,
+                                    timeframe=self.config.confirmation_timeframe,
+                                    source="dataregistry",
+                                    candles_count=len(candles),
+                                    fallback_to_api=False,
+                                )
+                            except Exception as e:
+                                logger.debug(f"⚠️ Ошибка логирования использования свечей MTF: {e}")
+                        # Кэшируем результат из DataRegistry
+                        if candles:
+                            self._candles_cache[symbol] = (candles, current_time)
+                        return candles
+                    else:
+                        logger.info(  # ✅ ИЗМЕНЕНО: INFO вместо DEBUG для важного события
+                            f"⚠️ MTF: DataRegistry содержит недостаточно свечей для {symbol} "
+                            f"({len(candles) if candles else 0} свечей, нужно минимум {self.config.ema_slow_period}), "
+                            f"используем fallback к API"
+                        )
+                        # ✅ НОВОЕ: Логируем fallback к API
+                        if hasattr(self, "structured_logger") and self.structured_logger:
+                            try:
+                                self.structured_logger.log_candle_usage(
+                                    filter_name="MTF",
+                                    symbol=symbol,
+                                    timeframe=self.config.confirmation_timeframe,
+                                    source="api",
+                                    candles_count=len(candles) if candles else 0,
+                                    fallback_to_api=True,
+                                )
+                            except Exception as e:
+                                logger.debug(f"⚠️ Ошибка логирования fallback MTF: {e}")
+                except Exception as e:
+                    logger.debug(
+                        f"MTF: Ошибка получения свечей из DataRegistry для {symbol}: {e}, "
+                        f"используем fallback к API"
+                    )
+
+            # Fallback: запрашиваем через API
             # ✅ АДАПТАЦИЯ: Получаем свечи напрямую через публичный API (работает для futures и spot)
             if self.client and hasattr(self.client, "get_candles"):
                 # Если клиент поддерживает get_candles - используем его

@@ -76,16 +76,18 @@ class PivotPointsFilter:
         ...     score += result.bonus
     """
 
-    def __init__(self, client: OKXClient, config: PivotPointsConfig):
+    def __init__(self, client: OKXClient, config: PivotPointsConfig, data_registry=None):
         """
         Инициализация Pivot Points фильтра.
 
         Args:
             client: OKX API клиент
             config: Конфигурация модуля
+            data_registry: DataRegistry для получения свечей (опционально, приоритет над API)
         """
         self.client = client
         self.config = config
+        self.data_registry = data_registry  # ✅ КРИТИЧЕСКОЕ: DataRegistry для получения свечей
         self.calculator = PivotCalculator()
 
         # Кэш уровней: symbol -> (PivotLevels, timestamp)
@@ -307,6 +309,34 @@ class PivotPointsFilter:
 
         # Получаем дневные свечи с fallback системой
         daily_candles = None
+
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Попытка 0: Сначала пытаемся получить свечи из DataRegistry
+        if self.data_registry:
+            try:
+                daily_candles = await self.data_registry.get_candles(
+                    symbol, self.config.daily_timeframe
+                )
+                if daily_candles and len(daily_candles) >= self.config.use_last_n_days:
+                    logger.debug(
+                        f"Pivot: Получено {len(daily_candles)} дневных свечей {self.config.daily_timeframe} "
+                        f"для {symbol} из DataRegistry"
+                    )
+                    # Рассчитываем уровни из свечей DataRegistry
+                    levels = self.calculator.calculate(daily_candles, self.config.use_last_n_days)
+                    if levels:
+                        self._levels_cache[symbol] = (levels, current_time)
+                    return levels
+                else:
+                    logger.debug(
+                        f"Pivot: DataRegistry содержит недостаточно свечей для {symbol} "
+                        f"({len(daily_candles) if daily_candles else 0} свечей, нужно минимум {self.config.use_last_n_days}), "
+                        f"используем fallback к API"
+                    )
+            except Exception as e:
+                logger.debug(
+                    f"Pivot: Ошибка получения свечей из DataRegistry для {symbol}: {e}, "
+                    f"используем fallback к API"
+                )
 
         # Попытка 1: Дневные свечи (1D) - предпочтительный вариант
         try:

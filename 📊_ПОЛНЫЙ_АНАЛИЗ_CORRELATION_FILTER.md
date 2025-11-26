@@ -246,3 +246,5 @@ choppy:
 **Влияние на все пары:** ✅
 **Решение:** Увеличить `max_correlated_positions` до 5 для `ranging` режима
 
+
+

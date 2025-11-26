@@ -1,0 +1,1352 @@
+[
+  {
+    "timestamp": "2025-11-26T23:05:52.661478",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "api",
+    "candles_count": 1,
+    "fallback_to_api": true
+  },
+  {
+    "timestamp": "2025-11-26T23:05:54.722147",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "api",
+    "candles_count": 0,
+    "fallback_to_api": true
+  },
+  {
+    "timestamp": "2025-11-26T23:05:57.888416",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "api",
+    "candles_count": 0,
+    "fallback_to_api": true
+  },
+  {
+    "timestamp": "2025-11-26T23:05:59.703546",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "api",
+    "candles_count": 0,
+    "fallback_to_api": true
+  },
+  {
+    "timestamp": "2025-11-26T23:06:01.948766",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "api",
+    "candles_count": 0,
+    "fallback_to_api": true
+  },
+  {
+    "timestamp": "2025-11-26T23:06:29.956038",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:06:30.001699",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:06:30.035052",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:06:32.696371",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:07:01.612911",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:07:01.629082",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:07:01.645779",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:07:04.697212",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:07:32.149458",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:07:34.846117",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:08:02.178671",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:08:05.702186",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:08:05.774695",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:08:32.689447",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:08:36.237997",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:08:36.296744",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:09:01.413281",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:09:09.585321",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:09:09.615494",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:09:09.649894",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:09:31.874876",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:09:40.106190",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:09:40.152356",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:10:02.983305",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:10:12.258257",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:10:26.852217",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:10:33.588991",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:10:33.714650",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:10:42.502919",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:10:57.253095",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:11:03.643345",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:11:06.316910",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:11:12.688037",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:11:27.430557",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:11:34.729899",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:11:36.549849",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:11:43.547818",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:11:58.107193",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:12:07.962260",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:12:14.081335",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:12:31.924099",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:12:49.661358",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:13:01.232147",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:13:02.399982",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:13:10.685486",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:13:21.826312",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:13:31.445693",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:13:32.657221",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:13:40.952718",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:13:52.492424",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:14:02.909562",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:14:10.279410",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:14:22.568071",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:14:33.348462",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:14:40.963321",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:14:52.836450",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:15:00.322507",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:15:04.533384",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:15:11.572362",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:15:23.077664",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:15:32.565668",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:15:34.945439",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:15:42.913824",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:15:53.393339",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:16:05.547598",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:16:14.855718",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:16:15.853967",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:16:24.183034",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:16:36.829671",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:16:46.727140",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:16:46.761072",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:16:54.194128",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:17:11.429831",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:17:17.819999",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:17:17.858214",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:17:25.365855",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:17:41.647941",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:17:50.474864",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:17:50.512530",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:17:57.584360",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:11.848657",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:11.934935",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:20.539680",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:20.577688",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:27.694736",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:42.639847",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:42.773085",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:50.868837",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:50.960473",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:18:58.274545",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:19:12.753780",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:19:12.887383",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:19:21.738020",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:19:21.820355",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:19:28.824897",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:19:42.907075",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:19:43.111323",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:19:52.126646",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:19:52.307929",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:00.187058",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:13.689401",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:13.756792",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:22.490755",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:22.513946",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:30.307211",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:43.835513",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:43.941109",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:52.595011",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:20:52.703364",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:01.154212",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:14.272532",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:14.426075",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:23.256025",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:23.295491",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:31.687455",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:44.781373",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:44.966407",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:53.446922",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:21:53.492612",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:01.795538",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:15.621946",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:15.769237",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:23.838052",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:23.900151",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:32.661495",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:45.733003",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "BTC-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:45.843004",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "XRP-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:54.559884",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "ETH-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:22:54.608224",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "SOL-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  },
+  {
+    "timestamp": "2025-11-26T23:23:03.405004",
+    "type": "candle_usage",
+    "filter_name": "MTF",
+    "symbol": "DOGE-USDT",
+    "timeframe": "5m",
+    "source": "dataregistry",
+    "candles_count": 200,
+    "fallback_to_api": false
+  }
+]

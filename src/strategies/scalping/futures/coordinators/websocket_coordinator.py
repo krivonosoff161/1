@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
+from src.models import OHLCV
 
 
 class WebSocketCoordinator:
@@ -51,6 +52,8 @@ class WebSocketCoordinator:
         update_active_orders_cache_callback: Optional[
             Callable[[str, str, Dict[str, Any]], None]
         ] = None,
+        data_registry=None,  # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
+        structured_logger=None,  # ✅ НОВОЕ: StructuredLogger для логирования свечей
     ):
         """
         Инициализация WebSocketCoordinator.
@@ -89,6 +92,14 @@ class WebSocketCoordinator:
         self.handle_position_closed_callback = handle_position_closed_callback
         self.update_active_positions_callback = update_active_positions_callback
         self.update_active_orders_cache_callback = update_active_orders_cache_callback
+        # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
+        self.data_registry = data_registry
+        # ✅ НОВОЕ: StructuredLogger для логирования свечей
+        self.structured_logger = structured_logger
+
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Отслеживание последнего timestamp для каждого символа и таймфрейма
+        # Формат: "symbol_timeframe" -> timestamp последней обработанной свечи (в секундах)
+        self._last_candle_timestamps: Dict[str, int] = {}
 
         logger.info("✅ WebSocketCoordinator initialized")
 
@@ -172,6 +183,41 @@ class WebSocketCoordinator:
                 if "last" in ticker:
                     price = float(ticker["last"])
 
+                    # ✅ НОВОЕ: Обновляем свечи в DataRegistry (инкрементально)
+                    if self.data_registry:
+                        try:
+                            await self._update_candle_from_ticker(symbol, price, ticker)
+                        except Exception as e:
+                            logger.warning(f"⚠️ Ошибка обновления свечей для {symbol}: {e}")
+
+                    # ✅ НОВОЕ: Обновляем DataRegistry с рыночными данными
+                    if self.data_registry:
+                        try:
+                            # Извлекаем дополнительные данные из тикера
+                            volume_24h = float(ticker.get("vol24h", 0))
+                            volume_ccy_24h = float(ticker.get("volCcy24h", 0))
+                            high_24h = float(ticker.get("high24h", price))
+                            low_24h = float(ticker.get("low24h", price))
+                            open_24h = float(ticker.get("open24h", price))
+                            
+                            # Обновляем market data в DataRegistry
+                            await self.data_registry.update_market_data(symbol, {
+                                "price": price,
+                                "last_price": price,
+                                "volume": volume_24h,
+                                "volume_ccy": volume_ccy_24h,
+                                "high_24h": high_24h,
+                                "low_24h": low_24h,
+                                "open_24h": open_24h,
+                                "ticker": ticker,
+                                "updated_at": datetime.now(),
+                            })
+                            logger.debug(f"✅ DataRegistry: Обновлены market data для {symbol} (price=${price:.2f})")
+                        except Exception as e:
+                            logger.warning(
+                                f"⚠️ Ошибка обновления DataRegistry для {symbol}: {e}"
+                            )
+
                     # Обновляем FastADX для расчета тренда
                     try:
                         if self.fast_adx:
@@ -182,6 +228,25 @@ class WebSocketCoordinator:
 
                             # Обновляем FastADX для расчета тренда
                             self.fast_adx.update(high=high, low=low, close=close)
+                            
+                            # ✅ НОВОЕ: Сохраняем ADX в DataRegistry после обновления
+                            if self.data_registry:
+                                try:
+                                    adx_value = self.fast_adx.get_adx_value()
+                                    # Также получаем +DI и -DI
+                                    plus_di = self.fast_adx.get_di_plus()
+                                    minus_di = self.fast_adx.get_di_minus()
+                                    
+                                    indicators_to_save = {
+                                        "adx": adx_value,
+                                        "adx_plus_di": plus_di,
+                                        "adx_minus_di": minus_di,
+                                    }
+                                    
+                                    await self.data_registry.update_indicators(symbol, indicators_to_save)
+                                    logger.debug(f"✅ DataRegistry: Сохранен ADX для {symbol}: ADX={adx_value:.2f}, +DI={plus_di:.2f}, -DI={minus_di:.2f}")
+                                except Exception as e:
+                                    logger.debug(f"⚠️ Ошибка сохранения ADX в DataRegistry для {symbol}: {e}")
                     except Exception as e:
                         logger.debug(
                             f"⚠️ Не удалось обновить FastADX для {symbol}: {e}"
@@ -218,6 +283,163 @@ class WebSocketCoordinator:
 
         except Exception as e:
             logger.error(f"❌ Ошибка обработки данных тикера: {e}")
+
+    async def _update_candle_from_ticker(
+        self, symbol: str, price: float, ticker: Dict[str, Any]
+    ) -> None:
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновить свечи для всех таймфреймов (1m, 5m, 1H, 1D) на основе тикера.
+
+        Определяет, нужно ли обновить последнюю свечу или создать новую для каждого таймфрейма:
+        - 1m: Если минута не изменилась → обновляем, если изменилась → новая свеча
+        - 5m: Если 5 минут не прошло → обновляем, если прошло → новая свеча
+        - 1H: Если час не прошел → обновляем, если прошел → новая свеча
+        - 1D: Если день не прошел → обновляем, если прошел → новая свеча
+
+        Args:
+            symbol: Торговый символ
+            price: Текущая цена из тикера
+            ticker: Полные данные тикера
+        """
+        if not self.data_registry:
+            return
+
+        try:
+            # Получаем текущее время
+            current_time = datetime.now()
+            current_timestamp = current_time.timestamp()
+            
+            # Определяем объем из тикера (если доступен)
+            volume_24h = float(ticker.get("vol24h", 0))
+            volume_ccy_24h = float(ticker.get("volCcy24h", 0))
+            # Используем volume_ccy_24h для более точного расчета объема в USDT
+
+            # ✅ КРИТИЧЕСКОЕ: Обновляем свечи для всех таймфреймов
+            await self._update_candle_for_timeframe(symbol, "1m", price, current_timestamp, volume_ccy_24h)
+            await self._update_candle_for_timeframe(symbol, "5m", price, current_timestamp, volume_ccy_24h)
+            await self._update_candle_for_timeframe(symbol, "1H", price, current_timestamp, volume_ccy_24h)
+            await self._update_candle_for_timeframe(symbol, "1D", price, current_timestamp, volume_ccy_24h)
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка обновления свечей из тикера для {symbol}: {e}")
+
+    async def _update_candle_for_timeframe(
+        self, symbol: str, timeframe: str, price: float, current_timestamp: float, volume: float
+    ) -> None:
+        """
+        ✅ КРИТИЧЕСКОЕ: Обновить свечу для конкретного таймфрейма.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (1m, 5m, 1H, 1D)
+            price: Текущая цена
+            current_timestamp: Текущий timestamp (Unix секунды)
+            volume: Объем (для накопления)
+        """
+        try:
+            # Определяем интервал таймфрейма в секундах
+            timeframe_intervals = {
+                "1m": 60,
+                "5m": 300,
+                "1H": 3600,
+                "1D": 86400,
+            }
+            
+            interval = timeframe_intervals.get(timeframe)
+            if not interval:
+                return  # Неизвестный таймфрейм, пропускаем
+
+            # Вычисляем timestamp начала текущей свечи
+            if timeframe == "1D":
+                # Для дневных свечей используем начало дня (UTC)
+                current_dt = datetime.utcfromtimestamp(current_timestamp)
+                day_start = current_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                current_candle_timestamp = int(day_start.timestamp())
+            elif timeframe == "1H":
+                # Для часовых свечей используем начало часа
+                current_dt = datetime.utcfromtimestamp(current_timestamp)
+                hour_start = current_dt.replace(minute=0, second=0, microsecond=0)
+                current_candle_timestamp = int(hour_start.timestamp())
+            elif timeframe == "5m":
+                # Для 5-минутных свечей округляем до 5 минут
+                current_candle_timestamp = int(current_timestamp // interval) * interval
+            else:  # 1m
+                # Для минутных свечей округляем до минуты
+                current_candle_timestamp = int(current_timestamp // interval) * interval
+
+            # Получаем последнюю свечу
+            last_candle = await self.data_registry.get_last_candle(symbol, timeframe)
+            
+            # Ключ для отслеживания последнего timestamp для каждого таймфрейма
+            cache_key = f"{symbol}_{timeframe}"
+            last_candle_timestamp = getattr(self, "_last_candle_timestamps", {}).get(cache_key)
+
+            if last_candle and last_candle_timestamp == current_candle_timestamp:
+                # Та же свеча (еще формируется) → обновляем
+                await self.data_registry.update_last_candle(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    high=max(price, last_candle.high) if last_candle else price,
+                    low=min(price, last_candle.low) if last_candle else price,
+                    close=price,
+                    # volume будет обновляться накоплением (можно улучшить)
+                )
+            else:
+                # Новая свеча → закрываем старую (если была) и создаем новую
+                if last_candle and last_candle_timestamp and last_candle_timestamp < current_candle_timestamp:
+                    logger.debug(
+                        f"📊 Переход к новой свече {timeframe} для {symbol}: "
+                        f"старая={last_candle_timestamp}, новая={current_candle_timestamp}"
+                    )
+
+                # Создаем новую свечу
+                new_candle = OHLCV(
+                    timestamp=current_candle_timestamp,
+                    symbol=symbol,
+                    open=price,
+                    high=price,
+                    low=price,
+                    close=price,
+                    volume=0.0,  # Объем будет накапливаться
+                    timeframe=timeframe,
+                )
+
+                # Добавляем новую свечу в буфер
+                await self.data_registry.add_candle(symbol, timeframe, new_candle)
+
+                # Обновляем отслеживание последнего timestamp
+                self._last_candle_timestamps[cache_key] = current_candle_timestamp
+
+                # ✅ НОВОЕ: Логируем создание новой свечи (INFO для важных таймфреймов, DEBUG для 1m)
+                if timeframe in ["5m", "1H", "1D"]:
+                    logger.info(
+                        f"📊 Создана новая свеча {symbol} {timeframe}: "
+                        f"timestamp={current_candle_timestamp}, price={price:.2f}"
+                    )
+                else:
+                    logger.debug(
+                        f"📊 Создана новая свеча {symbol} {timeframe}: "
+                        f"timestamp={current_candle_timestamp}, price={price:.2f}"
+                    )
+                
+                # ✅ НОВОЕ: Логируем в StructuredLogger (только для важных таймфреймов, чтобы не перегружать)
+                if timeframe in ["5m", "1H", "1D"] and hasattr(self, "structured_logger") and self.structured_logger:
+                    try:
+                        # ✅ ИСПРАВЛЕНО: Используем данные из new_candle вместо получения из DataRegistry
+                        self.structured_logger.log_candle_new(
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            timestamp=current_candle_timestamp,
+                            price=price,
+                            open_price=new_candle.open,  # ✅ ИСПРАВЛЕНО: переименовано в open_price
+                            high=new_candle.high,
+                            low=new_candle.low,
+                            close=new_candle.close,
+                        )
+                    except Exception as e:
+                        logger.debug(f"⚠️ Ошибка логирования новой свечи в StructuredLogger: {e}")
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка обновления свечи {timeframe} для {symbol}: {e}")
 
     async def handle_private_ws_positions(self, positions_data: list):
         """

@@ -20,8 +20,16 @@ class FilterManager:
     Применяет фильтры к сигналам в правильном порядке и координирует их работу.
     """
 
-    def __init__(self):
-        """Инициализация FilterManager"""
+    def __init__(self, data_registry=None):
+        """
+        Инициализация FilterManager
+        
+        Args:
+            data_registry: DataRegistry для чтения индикаторов (опционально)
+        """
+        # ✅ НОВОЕ: DataRegistry для чтения индикаторов
+        self.data_registry = data_registry
+        
         # Pre-filters (проверки перед основными фильтрами)
         self.adx_filter = None
         self.volatility_filter = None
@@ -265,6 +273,26 @@ class FilterManager:
 
     # ==================== HELPER METHODS для каждого фильтра ====================
 
+    async def _get_indicators_from_registry(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        ✅ НОВОЕ: Получить индикаторы из DataRegistry для символа.
+        
+        Args:
+            symbol: Торговый символ
+            
+        Returns:
+            Словарь с индикаторами или None если не доступно
+        """
+        if not self.data_registry:
+            return None
+        
+        try:
+            indicators = await self.data_registry.get_indicators(symbol)
+            return indicators
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка получения индикаторов из DataRegistry для {symbol}: {e}")
+            return None
+
     async def _apply_adx_filter(
         self, symbol: str, signal: Dict[str, Any], market_data: Any
     ) -> Optional[Dict[str, Any]]:
@@ -274,6 +302,22 @@ class FilterManager:
         Returns:
             Обновленный сигнал или None если отфильтрован
         """
+        # ✅ НОВОЕ: Пытаемся получить ADX из DataRegistry
+        if self.data_registry:
+            try:
+                indicators = await self._get_indicators_from_registry(symbol)
+                if indicators:
+                    adx_value = indicators.get("adx")
+                    adx_plus_di = indicators.get("adx_plus_di")
+                    adx_minus_di = indicators.get("adx_minus_di")
+                    
+                    # Если ADX доступен в DataRegistry, используем его для быстрой проверки
+                    if adx_value is not None:
+                        logger.debug(f"✅ FilterManager: ADX из DataRegistry для {symbol}: {adx_value:.2f}")
+                        # Можно добавить быструю проверку ADX здесь, но пока оставляем полную проверку через фильтр
+            except Exception as e:
+                logger.debug(f"⚠️ Ошибка чтения ADX из DataRegistry для {symbol}: {e}")
+        
         # Логика ADX фильтра будет делегирована в существующий ADXFilter
         # Здесь только координация
         from src.models import OrderSide

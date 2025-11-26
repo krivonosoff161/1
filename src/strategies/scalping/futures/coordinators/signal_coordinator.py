@@ -55,6 +55,8 @@ class SignalCoordinator:
         initialize_trailing_stop_callback: Optional[
             Callable[[str, float, str, float, Dict[str, Any]], Any]
         ] = None,
+        entry_manager=None,  # ✅ НОВОЕ: EntryManager для централизованного открытия позиций
+        data_registry=None,  # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
     ):
         """
         Инициализация SignalCoordinator.
@@ -107,6 +109,10 @@ class SignalCoordinator:
         self.close_position_callback = close_position_callback
         self.normalize_symbol_callback = normalize_symbol_callback
         self.initialize_trailing_stop_callback = initialize_trailing_stop_callback
+        # ✅ НОВОЕ: EntryManager для централизованного открытия позиций
+        self.entry_manager = entry_manager
+        # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
+        self.data_registry = data_registry
 
         # Время последнего сигнала по символу: {symbol: timestamp}
         self._last_signal_time: Dict[str, float] = {}
@@ -341,8 +347,18 @@ class SignalCoordinator:
             symbol = signal.get("symbol")
             side = signal.get("side")
 
-            # Получение баланса
-            balance = await self.client.get_balance()
+            # ✅ НОВОЕ: Получение баланса из DataRegistry
+            balance = None
+            if self.data_registry:
+                try:
+                    balance_data = await self.data_registry.get_balance()
+                    balance = balance_data.get("balance") if balance_data else None
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
+            
+            # Fallback: если DataRegistry не доступен или нет данных
+            if balance is None:
+                balance = await self.client.get_balance()
 
             # Расчет максимального размера позиции
             current_price = signal.get("price", 0)
@@ -510,30 +526,68 @@ class SignalCoordinator:
                 logger.warning(f"⚠️ Ошибка проверки активных ордеров: {e}")
                 return
 
-            # Расчет размера позиции
-            balance = await self.client.get_balance()
+            # ✅ НОВОЕ: Расчет размера позиции с использованием DataRegistry
+            # Получаем баланс из DataRegistry
+            balance = None
+            if self.data_registry:
+                try:
+                    balance_data = await self.data_registry.get_balance()
+                    balance = balance_data.get("balance") if balance_data else None
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
+            
+            # Fallback: если DataRegistry не доступен или нет данных
+            if balance is None:
+                balance = await self.client.get_balance()
+            
             current_price = signal.get("price", 0)
 
-            # ✅ ИСПРАВЛЕНО: Получаем режим для адаптивного risk_percentage
+            # ✅ НОВОЕ: Получаем режим из DataRegistry
             current_regime = None
-            try:
-                if (
-                    hasattr(self.signal_generator, "regime_manager")
-                    and self.signal_generator
-                ):
-                    regime_obj = (
-                        self.signal_generator.regime_manager.get_current_regime()
-                    )
-                    if regime_obj:
-                        current_regime = (
-                            regime_obj.lower()
-                            if isinstance(regime_obj, str)
-                            else str(regime_obj).lower()
+            symbol = signal.get("symbol")
+            if symbol and self.data_registry:
+                try:
+                    regime_data = await self.data_registry.get_regime(symbol)
+                    if regime_data:
+                        current_regime = regime_data.get("regime")
+                        if current_regime:
+                            current_regime = current_regime.lower()
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
+            
+            # Fallback: если DataRegistry не доступен или нет данных
+            if not current_regime:
+                # ✅ НОВОЕ: Получаем режим из DataRegistry
+                if symbol and self.data_registry:
+                    try:
+                        regime_data = await self.data_registry.get_regime(symbol)
+                        if regime_data:
+                            current_regime = regime_data.get("regime")
+                            if current_regime:
+                                current_regime = current_regime.lower()
+                    except Exception as e:
+                        logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
+                
+                # Fallback: если DataRegistry не доступен или нет данных
+                if not current_regime:
+                    try:
+                        if (
+                            hasattr(self.signal_generator, "regime_manager")
+                            and self.signal_generator
+                        ):
+                            regime_obj = (
+                                self.signal_generator.regime_manager.get_current_regime()
+                            )
+                            if regime_obj:
+                                current_regime = (
+                                    regime_obj.lower()
+                                    if isinstance(regime_obj, str)
+                                    else str(regime_obj).lower()
+                                )
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Не удалось получить режим для расчета размера позиции: {e}"
                         )
-            except Exception as e:
-                logger.debug(
-                    f"⚠️ Не удалось получить режим для расчета размера позиции: {e}"
-                )
 
             # ✅ ИСПРАВЛЕНО: Используем адаптивный risk_percentage из конфига по режиму
             # Если режим не определен, используем base_risk_percentage
@@ -946,7 +1000,19 @@ class SignalCoordinator:
                                 return
                         # Если allow_concurrent=true, проверка направления будет в process_signals
 
-                    balance = await self.client.get_balance()
+                    # ✅ НОВОЕ: Получаем баланс и режим из DataRegistry
+                    balance = None
+                    if self.data_registry:
+                        try:
+                            balance_data = await self.data_registry.get_balance()
+                            balance = balance_data.get("balance") if balance_data else None
+                        except Exception as e:
+                            logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
+                    
+                    # Fallback: если DataRegistry не доступен или нет данных
+                    if balance is None:
+                        balance = await self.client.get_balance()
+                    
                     balance_profile = self.config_manager.get_balance_profile(balance)
                     max_open = balance_profile.get(
                         "max_open_positions", 6
@@ -962,14 +1028,25 @@ class SignalCoordinator:
                     # 🔥 СКАЛЬПИНГ: Проверяем реальный баланс на бирже
                     # get_balance() возвращает equity (общий баланс с учетом PnL)
                     # ✅ МОДЕРНИЗАЦИЯ: Используем адаптивный min_balance_usd из конфига
+                    # ✅ НОВОЕ: Получаем режим из DataRegistry
                     regime = None
-                    if (
-                        hasattr(self.signal_generator, "regime_manager")
-                        and self.signal_generator.regime_manager
-                    ):
-                        regime = (
-                            self.signal_generator.regime_manager.get_current_regime()
-                        )
+                    if self.data_registry:
+                        try:
+                            regime_data = await self.data_registry.get_regime(symbol)
+                            if regime_data:
+                                regime = regime_data.get("regime")
+                        except Exception as e:
+                            logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
+                    
+                    # Fallback: если DataRegistry не доступен или нет данных
+                    if not regime:
+                        if (
+                            hasattr(self.signal_generator, "regime_manager")
+                            and self.signal_generator.regime_manager
+                        ):
+                            regime = (
+                                self.signal_generator.regime_manager.get_current_regime()
+                            )
                     adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
                         balance, regime, signal_generator=self.signal_generator
                     )
@@ -1206,19 +1283,31 @@ class SignalCoordinator:
 
             # Используем переданный сигнал или создаем тестовый
             if signal is None:
-                # Определяем режим (если ARM активен)
+                # ✅ НОВОЕ: Определяем режим из DataRegistry (если ARM активен)
                 regime = "ranging"  # По умолчанию
-                if (
-                    hasattr(self.signal_generator, "regime_manager")
-                    and self.signal_generator.regime_manager
-                ):
+                
+                # Получаем режим из DataRegistry
+                if symbol and self.data_registry:
                     try:
-                        regime = (
-                            self.signal_generator.regime_manager.get_current_regime()
-                        )
+                        regime_data = await self.data_registry.get_regime(symbol)
+                        if regime_data:
+                            regime = regime_data.get("regime", "ranging")
                     except Exception as e:
-                        logger.debug(f"Не удалось получить режим: {e}")
-                        regime = None
+                        logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
+                
+                # Fallback: если DataRegistry не доступен или нет данных
+                if not regime or regime == "ranging":
+                    if (
+                        hasattr(self.signal_generator, "regime_manager")
+                        and self.signal_generator.regime_manager
+                    ):
+                        try:
+                            regime = (
+                                self.signal_generator.regime_manager.get_current_regime()
+                            )
+                        except Exception as e:
+                            logger.debug(f"Не удалось получить режим: {e}")
+                            regime = None
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем РЫНОЧНЫЕ ордера (Market) для мгновенного исполнения
                 # Лимитные ордера могут оставаться в pending и не открывать позиции
@@ -1297,8 +1386,20 @@ class SignalCoordinator:
                             f"Позиция может открыться с другим leverage, установленным на бирже."
                         )
 
-            # Рассчитываем размер позиции через RiskManager
-            balance = await self.client.get_balance()
+            # ✅ НОВОЕ: Рассчитываем размер позиции через RiskManager (используем DataRegistry)
+            # Получаем баланс из DataRegistry
+            balance = None
+            if self.data_registry:
+                try:
+                    balance_data = await self.data_registry.get_balance()
+                    balance = balance_data.get("balance") if balance_data else None
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
+            
+            # Fallback: если DataRegistry не доступен или нет данных
+            if balance is None:
+                balance = await self.client.get_balance()
+            
             position_size = await self.risk_manager.calculate_position_size(
                 balance, price, signal, self.signal_generator
             )
@@ -1494,8 +1595,75 @@ class SignalCoordinator:
                 # При ошибке - лучше пропустить, чем создать дубликат
                 return False
 
-            # Выполняем ордер с TP/SL
-            result = await self.order_executor.execute_signal(signal, position_size)
+            # ✅ НОВОЕ: Получаем regime и balance_profile для EntryManager (используем DataRegistry)
+            regime = signal.get("regime") if signal else None
+            
+            # Получаем режим из DataRegistry
+            if not regime and symbol and self.data_registry:
+                try:
+                    regime_data = await self.data_registry.get_regime(symbol)
+                    if regime_data:
+                        regime = regime_data.get("regime")
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка получения режима из DataRegistry для {symbol}: {e}")
+            
+            # Fallback: если DataRegistry не доступен или нет данных
+            if not regime and hasattr(self.signal_generator, "regime_managers"):
+                manager = self.signal_generator.regime_managers.get(symbol)
+                if manager:
+                    regime = manager.get_current_regime()
+            if not regime and hasattr(self.signal_generator, "regime_manager"):
+                try:
+                    regime = self.signal_generator.regime_manager.get_current_regime()
+                except Exception:
+                    regime = None
+            
+            # ✅ НОВОЕ: Получаем balance_profile из DataRegistry
+            balance_profile = None
+            try:
+                balance = None
+                if self.data_registry:
+                    try:
+                        balance_data = await self.data_registry.get_balance()
+                        if balance_data:
+                            balance = balance_data.get("balance")
+                            balance_profile = balance_data.get("profile")
+                    except Exception as e:
+                        logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
+                
+                # Fallback: если DataRegistry не доступен или нет данных
+                if balance is None:
+                    balance = await self.client.get_balance()
+                    balance_profile_data = self.config_manager.get_balance_profile(balance)
+                    if balance_profile_data:
+                        balance_profile = balance_profile_data.get("name")
+            except Exception:
+                pass
+            
+            # Получаем regime_params
+            regime_params = None
+            if regime:
+                try:
+                    regime_params = self.config_manager.get_regime_params(regime, symbol)
+                except Exception:
+                    pass
+
+            # ✅ НОВОЕ: Используем EntryManager для централизованного открытия позиций
+            # EntryManager откроет позицию через order_executor и зарегистрирует в PositionRegistry
+            if self.entry_manager:
+                result = await self.entry_manager.open_position_with_size(
+                    signal=signal,
+                    position_size=position_size,
+                    regime=regime,
+                    regime_params=regime_params,
+                    balance_profile=balance_profile,
+                )
+            else:
+                # Fallback: используем order_executor напрямую (для обратной совместимости)
+                logger.warning(
+                    f"⚠️ EntryManager не доступен, используем order_executor напрямую для {symbol}"
+                )
+                result = await self.order_executor.execute_signal(signal, position_size)
 
             if result.get("success"):
                 order_id = result.get("order_id")

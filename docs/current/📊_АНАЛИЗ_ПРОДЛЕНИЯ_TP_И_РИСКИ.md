@@ -260,3 +260,5 @@ if profit >= tp_extended:
 
 
 
+
+

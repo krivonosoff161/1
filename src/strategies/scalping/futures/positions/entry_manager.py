@@ -143,6 +143,202 @@ class EntryManager:
             )
             return False
 
+    async def open_position_with_size(
+        self,
+        signal: Dict[str, Any],
+        position_size: float,
+        regime: Optional[str] = None,
+        regime_params: Optional[Dict[str, Any]] = None,
+        balance_profile: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        ✅ Открыть позицию с уже рассчитанным размером (обертка для signal_coordinator).
+
+        Этот метод используется когда размер позиции уже рассчитан (например, через risk_manager).
+        Он оборачивает order_executor.execute_signal() и дополнительно регистрирует позицию в PositionRegistry.
+
+        Args:
+            signal: Торговый сигнал
+            position_size: Размер позиции в монетах (уже рассчитан)
+            regime: Режим рынка (trending, ranging, choppy)
+            regime_params: Параметры режима
+            balance_profile: Профиль баланса (small, medium, large)
+
+        Returns:
+            Результат исполнения (как от order_executor.execute_signal()) или None
+        """
+        try:
+            symbol = signal.get("symbol")
+            if not symbol:
+                logger.error("❌ EntryManager: Сигнал не содержит symbol")
+                return None
+
+            # Проверяем, нет ли уже открытой позиции
+            has_position = await self.position_registry.has_position(symbol)
+            if has_position:
+                logger.debug(f"ℹ️ EntryManager: Позиция {symbol} уже открыта")
+                return None
+
+            if position_size <= 0:
+                logger.warning(
+                    f"⚠️ EntryManager: Невалидный размер позиции для {symbol}: {position_size}"
+                )
+                return None
+
+            # 1. Размещение ордера на бирже через OrderExecutor (используем уже рассчитанный размер)
+            order_result = await self.order_executor.execute_signal(signal, position_size)
+
+            if not order_result or not order_result.get("success"):
+                logger.error(
+                    f"❌ EntryManager: Не удалось разместить ордер для {symbol}"
+                )
+                return order_result  # Возвращаем результат, даже если неуспешный
+
+            # 2. Получаем данные открытой позиции с биржи
+            try:
+                # Ждем немного для синхронизации позиций на бирже
+                import asyncio
+                await asyncio.sleep(1)
+                
+                # Получаем позицию с биржи
+                # ✅ Получаем client через order_executor
+                if hasattr(self.order_executor, "client"):
+                    client = self.order_executor.client
+                    positions = await client.get_positions()
+                else:
+                    logger.warning(
+                        f"⚠️ EntryManager: order_executor не имеет атрибута client, "
+                        f"не можем получить позицию с биржи"
+                    )
+                    positions = []
+                inst_id = f"{symbol}-SWAP"
+                
+                position_data = None
+                for pos in positions:
+                    pos_inst_id = pos.get("instId", "")
+                    pos_size = abs(float(pos.get("pos", "0")))
+                    
+                    if (
+                        (pos_inst_id == inst_id or pos_inst_id == symbol)
+                        and pos_size > 0.000001
+                    ):
+                        # Определяем side позиции
+                        pos_side_raw = pos.get("posSide", "").lower()
+                        if pos_side_raw in ["long", "short"]:
+                            position_side = pos_side_raw
+                        else:
+                            position_side = "long" if float(pos.get("pos", "0")) > 0 else "short"
+                        
+                        # ✅ КРИТИЧЕСКОЕ: Получаем entry_time из API (cTime/uTime) для правильной инициализации
+                        entry_time_from_api = None
+                        c_time = pos.get("cTime")
+                        u_time = pos.get("uTime")
+                        entry_time_str = c_time or u_time
+                        if entry_time_str:
+                            try:
+                                entry_timestamp_ms = int(entry_time_str)
+                                entry_timestamp_sec = entry_timestamp_ms / 1000.0
+                                entry_time_from_api = datetime.fromtimestamp(entry_timestamp_sec)
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        position_data = {
+                            "symbol": symbol,
+                            "instId": pos.get("instId", ""),
+                            "pos": pos.get("pos", "0"),
+                            "posSide": position_side,
+                            "avgPx": pos.get("avgPx", "0"),
+                            "markPx": pos.get("markPx", pos.get("avgPx", "0")),
+                            "size": pos_size,
+                            "entry_price": float(pos.get("avgPx", "0")),
+                            "position_side": position_side,
+                            "margin_used": float(pos.get("margin", "0")) if pos.get("margin") else 0.0,
+                            "entry_time": entry_time_from_api,  # ✅ Сохраняем entry_time из API, если доступно
+                        }
+                        break
+                
+                # Если позицию не нашли, используем данные из order_result
+                if not position_data:
+                    logger.warning(
+                        f"⚠️ EntryManager: Позиция {symbol} не найдена на бирже после открытия, "
+                        f"используем данные из order_result"
+                    )
+                    side = signal.get("side", "").lower()
+                    position_data = {
+                        "symbol": symbol,
+                        "instId": f"{symbol}-SWAP",
+                        "pos": str(position_size) if side == "buy" else str(-position_size),
+                        "posSide": "long" if side == "buy" else "short",
+                        "avgPx": signal.get("price", "0"),
+                        "markPx": signal.get("price", "0"),
+                        "size": position_size,
+                        "entry_price": signal.get("price", 0.0),
+                        "position_side": "long" if side == "buy" else "short",
+                        "margin_used": 0.0,  # Будет рассчитано позже
+                    }
+                    
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ EntryManager: Ошибка получения данных позиции с биржи для {symbol}: {e}, "
+                    f"используем упрощенные данные"
+                )
+                side = signal.get("side", "").lower()
+                position_data = {
+                    "symbol": symbol,
+                    "instId": f"{symbol}-SWAP",
+                    "pos": str(position_size) if side == "buy" else str(-position_size),
+                    "posSide": "long" if side == "buy" else "short",
+                    "avgPx": signal.get("price", "0"),
+                    "markPx": signal.get("price", "0"),
+                    "size": position_size,
+                    "entry_price": signal.get("price", 0.0),
+                    "position_side": "long" if side == "buy" else "short",
+                    "margin_used": 0.0,
+                }
+
+            # 3. Создаем метаданные позиции
+            # ✅ КРИТИЧЕСКОЕ: Используем entry_time из API, если доступно, иначе datetime.now() (для новых позиций)
+            entry_time_for_metadata = position_data.get("entry_time")
+            if not entry_time_for_metadata:
+                entry_time_for_metadata = datetime.now()  # Для новых позиций используем текущее время
+            
+            metadata = PositionMetadata(
+                entry_time=entry_time_for_metadata,  # ✅ Используем entry_time из API или текущее время
+                regime=regime or signal.get("regime"),
+                balance_profile=balance_profile,
+                entry_price=position_data.get("entry_price"),
+                position_side=position_data.get("position_side"),
+                order_id=order_result.get("order_id"),
+                tp_percent=signal.get("tp_percent"),
+                sl_percent=signal.get("sl_percent"),
+                leverage=signal.get("leverage"),
+                size_in_coins=position_size,
+                margin_used=position_data.get("margin_used"),
+            )
+
+            # 4. Регистрация в PositionRegistry
+            await self.position_registry.register_position(
+                symbol=symbol,
+                position=position_data,
+                metadata=metadata,
+            )
+
+            logger.info(
+                f"✅ EntryManager: Позиция {symbol} открыта и зарегистрирована в PositionRegistry "
+                f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.2f}, "
+                f"side={position_data.get('position_side')}, regime={regime})"
+            )
+
+            # 5. Возвращаем результат, как от order_executor.execute_signal()
+            return order_result
+
+        except Exception as e:
+            logger.error(
+                f"❌ EntryManager: Ошибка открытия позиции для {signal.get('symbol', 'UNKNOWN')}: {e}",
+                exc_info=True,
+            )
+            return None
+
     async def _calculate_position_size(
         self,
         signal: Dict[str, Any],
@@ -206,10 +402,17 @@ class EntryManager:
             # Метод зависит от реализации OrderExecutor
             if hasattr(self.order_executor, "execute_signal"):
                 result = await self.order_executor.execute_signal(signal, position_size)
-                return {
-                    "success": result is not None,
-                    "order_id": result.get("order_id") if result else None,
-                }
+                if result:
+                    return {
+                        "success": result.get("success", False),
+                        "order_id": result.get("order_id"),
+                        "order_type": result.get("order_type"),
+                        "entry_price": result.get("entry_price"),
+                        "position_side": result.get("position_side"),
+                        "size": position_size,
+                        "margin_used": result.get("margin_used"),
+                    }
+                return None
             elif hasattr(self.order_executor, "place_order"):
                 # Прямое размещение ордера
                 side = signal.get("side", "").lower()

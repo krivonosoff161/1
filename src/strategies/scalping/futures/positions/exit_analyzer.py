@@ -474,6 +474,209 @@ class ExitAnalyzer:
 
         return reversal_detected
 
+    async def _get_entry_price_and_side(
+        self, symbol: str, position: Any, metadata: Any
+    ) -> tuple[Optional[float], Optional[str]]:
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получение entry_price из множественных источников.
+        
+        Приоритет:
+        1. metadata.entry_price
+        2. position.avgPx (данные с биржи)
+        3. PositionRegistry metadata
+        
+        Args:
+            symbol: Торговый символ
+            position: Данные позиции (dict или PositionMetadata)
+            metadata: Метаданные позиции
+            
+        Returns:
+            (entry_price, position_side) или (None, None) если не найдено
+        """
+        position_side = None
+        entry_price = None
+        
+        # Приоритет 1: metadata.entry_price
+        if metadata and hasattr(metadata, "entry_price") and metadata.entry_price:
+            try:
+                entry_price = float(metadata.entry_price)
+                position_side = getattr(metadata, "position_side", None)
+            except (TypeError, ValueError):
+                pass
+        
+        # Приоритет 2: position.avgPx (данные с биржи)
+        if (not entry_price or entry_price == 0) and isinstance(position, dict):
+            try:
+                avg_px = position.get("avgPx") or position.get("entry_price") or 0
+                if avg_px:
+                    entry_price = float(avg_px)
+                    # Получаем position_side из position если еще не получен
+                    if not position_side:
+                        pos_side_raw = position.get("posSide", "").lower()
+                        if pos_side_raw in ["long", "short"]:
+                            position_side = pos_side_raw
+                        else:
+                            position_side = position.get("position_side")
+            except (TypeError, ValueError):
+                pass
+        
+        # Приоритет 3: Попытка получить из PositionRegistry напрямую
+        if (not entry_price or entry_price == 0) and self.position_registry:
+            try:
+                registry_metadata = await self.position_registry.get_metadata(symbol)
+                if registry_metadata:
+                    if registry_metadata.entry_price:
+                        entry_price = float(registry_metadata.entry_price)
+                    if not position_side and registry_metadata.position_side:
+                        position_side = registry_metadata.position_side
+            except Exception as e:
+                logger.debug(f"⚠️ ExitAnalyzer: Не удалось получить entry_price из PositionRegistry для {symbol}: {e}")
+        
+        # Fallback для position_side
+        if not position_side:
+            if metadata and hasattr(metadata, "position_side") and metadata.position_side:
+                position_side = metadata.position_side
+            elif isinstance(position, dict):
+                pos_side_raw = position.get("posSide", "").lower()
+                if pos_side_raw in ["long", "short"]:
+                    position_side = pos_side_raw
+                else:
+                    position_side = position.get("position_side", "long")
+            else:
+                position_side = "long"  # Последний fallback
+        
+        return entry_price if entry_price and entry_price > 0 else None, position_side
+
+    async def _check_adaptive_min_holding_for_partial_tp(
+        self, symbol: str, metadata: Any, pnl_percent: float, regime: str
+    ) -> tuple[bool, str]:
+        """
+        ✅ Проверка adaptive_min_holding для Partial TP.
+
+        Проверяет, можно ли выполнить частичное закрытие на основе:
+        - Времени удержания позиции
+        - Адаптивного min_holding на основе прибыли
+
+        Args:
+            symbol: Торговый символ
+            metadata: Метаданные позиции (PositionMetadata)
+            pnl_percent: Текущая прибыль в процентах
+            regime: Режим рынка
+
+        Returns:
+            (can_close: bool, info: str) - можно ли закрывать и информационное сообщение
+        """
+        try:
+            # Получаем entry_time из метаданных
+            entry_time = None
+            if metadata and hasattr(metadata, "entry_time"):
+                entry_time = metadata.entry_time
+            elif isinstance(metadata, dict):
+                entry_time_str = metadata.get("entry_time")
+                if entry_time_str:
+                    if isinstance(entry_time_str, str):
+                        try:
+                            entry_time = datetime.fromisoformat(
+                                entry_time_str.replace("Z", "+00:00")
+                            )
+                        except:
+                            pass
+                    elif isinstance(entry_time_str, datetime):
+                        entry_time = entry_time_str
+
+            if not entry_time:
+                # Если entry_time не найден, разрешаем partial_tp (без проверки времени)
+                return True, "entry_time не найден, пропускаем проверку min_holding"
+
+            # Рассчитываем время удержания в минутах
+            duration_minutes = (datetime.now() - entry_time).total_seconds() / 60.0
+
+            # Получаем базовый min_holding из конфига по режиму
+            min_holding_minutes = None
+            if self.config_manager:
+                try:
+                    regime_params = self.config_manager.get_regime_params(regime)
+                    if regime_params and isinstance(regime_params, dict):
+                        min_holding_minutes = regime_params.get("min_holding_minutes")
+                        if min_holding_minutes is None:
+                            # Пробуем получить из scalping_config
+                            if self.scalping_config:
+                                by_regime = getattr(self.scalping_config, "by_regime", {})
+                                if regime in by_regime:
+                                    regime_config = by_regime[regime]
+                                    if isinstance(regime_config, dict):
+                                        min_holding_minutes = regime_config.get(
+                                            "min_holding_minutes"
+                                        )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes для {symbol}: {e}"
+                    )
+
+            if min_holding_minutes is None:
+                # Если min_holding не указан, разрешаем partial_tp
+                return True, "min_holding не указан в конфиге, разрешаем partial_tp"
+
+            # ✅ Получаем параметры adaptive_min_holding из конфига
+            adaptive_config = None
+            if self.scalping_config:
+                try:
+                    partial_tp_config = getattr(self.scalping_config, "partial_tp", {})
+                    if isinstance(partial_tp_config, dict):
+                        adaptive_config = partial_tp_config.get("adaptive_min_holding", {})
+                        if isinstance(adaptive_config, dict):
+                            enabled = adaptive_config.get("enabled", False)
+                            if not enabled:
+                                # adaptive_min_holding выключен, используем базовый min_holding
+                                adaptive_config = None
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ ExitAnalyzer: Ошибка получения adaptive_min_holding для {symbol}: {e}"
+                    )
+
+            # ✅ Применяем adaptive_min_holding на основе прибыли
+            actual_min_holding = min_holding_minutes
+            if adaptive_config:
+                profit_threshold_1 = adaptive_config.get("profit_threshold_1", 1.0)
+                profit_threshold_2 = adaptive_config.get("profit_threshold_2", 0.5)
+                reduction_factor_1 = adaptive_config.get("reduction_factor_1", 0.5)
+                reduction_factor_2 = adaptive_config.get("reduction_factor_2", 0.75)
+
+                if pnl_percent >= profit_threshold_1:
+                    # Прибыль >= 1.0% → снижаем min_holding до 50%
+                    actual_min_holding = min_holding_minutes * reduction_factor_1
+                    logger.debug(
+                        f"✅ Adaptive min_holding для {symbol}: прибыль {pnl_percent:.2f}% >= {profit_threshold_1}%, "
+                        f"снижаем min_holding с {min_holding_minutes:.1f} до {actual_min_holding:.1f} мин"
+                    )
+                elif pnl_percent >= profit_threshold_2:
+                    # Прибыль >= 0.5% → снижаем min_holding до 75%
+                    actual_min_holding = min_holding_minutes * reduction_factor_2
+                    logger.debug(
+                        f"✅ Adaptive min_holding для {symbol}: прибыль {pnl_percent:.2f}% >= {profit_threshold_2}%, "
+                        f"снижаем min_holding с {min_holding_minutes:.1f} до {actual_min_holding:.1f} мин"
+                    )
+
+            # Проверяем, прошло ли достаточно времени
+            if duration_minutes >= actual_min_holding:
+                return (
+                    True,
+                    f"min_holding пройден: {duration_minutes:.1f} мин >= {actual_min_holding:.1f} мин",
+                )
+            else:
+                return (
+                    False,
+                    f"min_holding не пройден: {duration_minutes:.1f} мин < {actual_min_holding:.1f} мин",
+                )
+
+        except Exception as e:
+            logger.error(
+                f"❌ ExitAnalyzer: Ошибка проверки adaptive_min_holding для {symbol}: {e}",
+                exc_info=True,
+            )
+            # В случае ошибки разрешаем partial_tp (безопаснее)
+            return True, f"ошибка проверки min_holding: {e}, разрешаем partial_tp"
+
     async def _generate_exit_for_trending(
         self,
         symbol: str,
@@ -502,28 +705,17 @@ class ExitAnalyzer:
             Решение {action: str, reason: str, ...} или None
         """
         try:
-            # 1. Получаем данные позиции
-            position_side = None
-            entry_price = None
-            if metadata and hasattr(metadata, "position_side"):
-                position_side = metadata.position_side
-                entry_price = metadata.entry_price
-            elif isinstance(position, dict):
-                position_side = position.get("position_side") or position.get(
-                    "posSide", "long"
-                )
-                entry_price = float(
-                    position.get("avgPx") or position.get("entry_price") or 0
-                )
-
+            # 1. Получаем данные позиции (✅ ИСПОЛЬЗУЕМ ОБЩИЙ МЕТОД)
+            entry_price, position_side = await self._get_entry_price_and_side(
+                symbol, position, metadata
+            )
+            
             if not entry_price or entry_price == 0:
                 logger.warning(
-                    f"⚠️ ExitAnalyzer: Не удалось получить entry_price для {symbol}"
+                    f"⚠️ ExitAnalyzer TRENDING: Не удалось получить entry_price для {symbol} "
+                    f"(metadata={metadata is not None}, position={isinstance(position, dict)})"
                 )
                 return None
-
-            if not position_side:
-                position_side = "long"  # Fallback
 
             # 2. Рассчитываем PnL
             pnl_percent = self._calculate_pnl_percent(
@@ -577,23 +769,43 @@ class ExitAnalyzer:
                     "big_profit_exit_percent": big_profit_exit_percent,
                 }
 
-            # 5. Проверка partial_tp
+            # 5. Проверка partial_tp с учетом adaptive_min_holding
             partial_tp_params = self._get_partial_tp_params("trending")
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.4)
                 if pnl_percent >= trigger_percent:
-                    fraction = partial_tp_params.get("fraction", 0.6)
-                    logger.info(
-                        f"📊 ExitAnalyzer TRENDING: Partial TP триггер достигнут для {symbol}: "
-                        f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции"
+                    # ✅ Проверяем adaptive_min_holding перед partial_tp
+                    can_partial_close, min_holding_info = await self._check_adaptive_min_holding_for_partial_tp(
+                        symbol, metadata, pnl_percent, "trending"
                     )
-                    return {
-                        "action": "partial_close",
-                        "reason": "partial_tp",
-                        "pnl_pct": pnl_percent,
-                        "trigger_percent": trigger_percent,
-                        "fraction": fraction,
-                    }
+                    
+                    if can_partial_close:
+                        fraction = partial_tp_params.get("fraction", 0.6)
+                        logger.info(
+                            f"📊 ExitAnalyzer TRENDING: Partial TP триггер достигнут для {symbol}: "
+                            f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
+                            f"({min_holding_info})"
+                        )
+                        return {
+                            "action": "partial_close",
+                            "reason": "partial_tp",
+                            "pnl_pct": pnl_percent,
+                            "trigger_percent": trigger_percent,
+                            "fraction": fraction,
+                            "min_holding_info": min_holding_info,
+                        }
+                    else:
+                        logger.debug(
+                            f"⏱️ ExitAnalyzer TRENDING: Partial TP триггер достигнут для {symbol}, "
+                            f"но min_holding не пройден ({min_holding_info}), ждем..."
+                        )
+                        # Не закрываем частично, возвращаем hold
+                        return {
+                            "action": "hold",
+                            "reason": "partial_tp_min_holding_wait",
+                            "pnl_pct": pnl_percent,
+                            "min_holding_info": min_holding_info,
+                        }
 
             # 6. Проверка разворота (Order Flow, MTF)
             reversal_detected = await self._check_reversal_signals(
@@ -664,28 +876,17 @@ class ExitAnalyzer:
             Решение {action: str, reason: str, ...} или None
         """
         try:
-            # 1. Получаем данные позиции
-            position_side = None
-            entry_price = None
-            if metadata and hasattr(metadata, "position_side"):
-                position_side = metadata.position_side
-                entry_price = metadata.entry_price
-            elif isinstance(position, dict):
-                position_side = position.get("position_side") or position.get(
-                    "posSide", "long"
-                )
-                entry_price = float(
-                    position.get("avgPx") or position.get("entry_price") or 0
-                )
-
+            # 1. Получаем данные позиции (✅ ИСПОЛЬЗУЕМ ОБЩИЙ МЕТОД)
+            entry_price, position_side = await self._get_entry_price_and_side(
+                symbol, position, metadata
+            )
+            
             if not entry_price or entry_price == 0:
                 logger.warning(
-                    f"⚠️ ExitAnalyzer: Не удалось получить entry_price для {symbol}"
+                    f"⚠️ ExitAnalyzer TRENDING: Не удалось получить entry_price для {symbol} "
+                    f"(metadata={metadata is not None}, position={isinstance(position, dict)})"
                 )
                 return None
-
-            if not position_side:
-                position_side = "long"  # Fallback
 
             # 2. Рассчитываем PnL
             pnl_percent = self._calculate_pnl_percent(
@@ -720,23 +921,42 @@ class ExitAnalyzer:
                     "big_profit_exit_percent": big_profit_exit_percent,
                 }
 
-            # 5. Проверка partial_tp
+            # 5. Проверка partial_tp с учетом adaptive_min_holding
             partial_tp_params = self._get_partial_tp_params("ranging")
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.6)
                 if pnl_percent >= trigger_percent:
-                    fraction = partial_tp_params.get("fraction", 0.6)
-                    logger.info(
-                        f"📊 ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}: "
-                        f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции"
+                    # ✅ Проверяем adaptive_min_holding перед partial_tp
+                    can_partial_close, min_holding_info = await self._check_adaptive_min_holding_for_partial_tp(
+                        symbol, metadata, pnl_percent, "ranging"
                     )
-                    return {
-                        "action": "partial_close",
-                        "reason": "partial_tp",
-                        "pnl_pct": pnl_percent,
-                        "trigger_percent": trigger_percent,
-                        "fraction": fraction,
-                    }
+                    
+                    if can_partial_close:
+                        fraction = partial_tp_params.get("fraction", 0.6)
+                        logger.info(
+                            f"📊 ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}: "
+                            f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
+                            f"({min_holding_info})"
+                        )
+                        return {
+                            "action": "partial_close",
+                            "reason": "partial_tp",
+                            "pnl_pct": pnl_percent,
+                            "trigger_percent": trigger_percent,
+                            "fraction": fraction,
+                            "min_holding_info": min_holding_info,
+                        }
+                    else:
+                        logger.debug(
+                            f"⏱️ ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}, "
+                            f"но min_holding не пройден ({min_holding_info}), ждем..."
+                        )
+                        return {
+                            "action": "hold",
+                            "reason": "partial_tp_min_holding_wait",
+                            "pnl_pct": pnl_percent,
+                            "min_holding_info": min_holding_info,
+                        }
 
             # 6. Проверка разворота (Order Flow, MTF) - в ranging режиме более строго
             reversal_detected = await self._check_reversal_signals(
@@ -794,28 +1014,17 @@ class ExitAnalyzer:
             Решение {action: str, reason: str, ...} или None
         """
         try:
-            # 1. Получаем данные позиции
-            position_side = None
-            entry_price = None
-            if metadata and hasattr(metadata, "position_side"):
-                position_side = metadata.position_side
-                entry_price = metadata.entry_price
-            elif isinstance(position, dict):
-                position_side = position.get("position_side") or position.get(
-                    "posSide", "long"
-                )
-                entry_price = float(
-                    position.get("avgPx") or position.get("entry_price") or 0
-                )
-
+            # 1. Получаем данные позиции (✅ ИСПОЛЬЗУЕМ ОБЩИЙ МЕТОД)
+            entry_price, position_side = await self._get_entry_price_and_side(
+                symbol, position, metadata
+            )
+            
             if not entry_price or entry_price == 0:
                 logger.warning(
-                    f"⚠️ ExitAnalyzer: Не удалось получить entry_price для {symbol}"
+                    f"⚠️ ExitAnalyzer TRENDING: Не удалось получить entry_price для {symbol} "
+                    f"(metadata={metadata is not None}, position={isinstance(position, dict)})"
                 )
                 return None
-
-            if not position_side:
-                position_side = "long"  # Fallback
 
             # 2. Рассчитываем PnL
             pnl_percent = self._calculate_pnl_percent(
@@ -850,25 +1059,44 @@ class ExitAnalyzer:
                     "big_profit_exit_percent": big_profit_exit_percent,
                 }
 
-            # 5. Проверка partial_tp - в choppy режиме более агрессивно
+            # 5. Проверка partial_tp - в choppy режиме более агрессивно (с учетом adaptive_min_holding)
             partial_tp_params = self._get_partial_tp_params("choppy")
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.3)
                 if pnl_percent >= trigger_percent:
-                    fraction = partial_tp_params.get(
-                        "fraction", 0.7
-                    )  # Закрываем больше позиции
-                    logger.info(
-                        f"📊 ExitAnalyzer CHOPPY: Partial TP триггер достигнут для {symbol}: "
-                        f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции"
+                    # ✅ Проверяем adaptive_min_holding перед partial_tp
+                    can_partial_close, min_holding_info = await self._check_adaptive_min_holding_for_partial_tp(
+                        symbol, metadata, pnl_percent, "choppy"
                     )
-                    return {
-                        "action": "partial_close",
-                        "reason": "partial_tp",
-                        "pnl_pct": pnl_percent,
-                        "trigger_percent": trigger_percent,
-                        "fraction": fraction,
-                    }
+                    
+                    if can_partial_close:
+                        fraction = partial_tp_params.get(
+                            "fraction", 0.7
+                        )  # Закрываем больше позиции
+                        logger.info(
+                            f"📊 ExitAnalyzer CHOPPY: Partial TP триггер достигнут для {symbol}: "
+                            f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
+                            f"({min_holding_info})"
+                        )
+                        return {
+                            "action": "partial_close",
+                            "reason": "partial_tp",
+                            "pnl_pct": pnl_percent,
+                            "trigger_percent": trigger_percent,
+                            "fraction": fraction,
+                            "min_holding_info": min_holding_info,
+                        }
+                    else:
+                        logger.debug(
+                            f"⏱️ ExitAnalyzer CHOPPY: Partial TP триггер достигнут для {symbol}, "
+                            f"но min_holding не пройден ({min_holding_info}), ждем..."
+                        )
+                        return {
+                            "action": "hold",
+                            "reason": "partial_tp_min_holding_wait",
+                            "pnl_pct": pnl_percent,
+                            "min_holding_info": min_holding_info,
+                        }
 
             # 6. Проверка разворота (Order Flow, MTF) - в choppy режиме закрываем сразу
             reversal_detected = await self._check_reversal_signals(

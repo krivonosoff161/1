@@ -81,6 +81,7 @@ class CorrelationFilter:
         client: OKXClient,
         config: CorrelationFilterConfig,
         all_symbols: List[str],
+        data_registry=None,
     ):
         """
         Инициализация Correlation фильтра.
@@ -89,19 +90,23 @@ class CorrelationFilter:
             client: OKX API клиент
             config: Конфигурация фильтра
             all_symbols: Все торгуемые символы
+            data_registry: DataRegistry для получения свечей (опционально, приоритет над API)
         """
         self.client = client
         self.config = config
         self.all_symbols = all_symbols
+        self.data_registry = data_registry  # ✅ КРИТИЧЕСКОЕ: Сохраняем DataRegistry
 
-        # Инициализируем Correlation Manager
+        # Инициализируем Correlation Manager с DataRegistry
         corr_manager_config = CorrelationConfig(
             lookback_candles=100,
             timeframe="5m",
             cache_ttl_seconds=300,
             high_correlation_threshold=config.correlation_threshold,
         )
-        self.correlation_manager = CorrelationManager(client, corr_manager_config)
+        self.correlation_manager = CorrelationManager(
+            client, corr_manager_config, data_registry=self.data_registry
+        )  # ✅ КРИТИЧЕСКОЕ: Передаем DataRegistry
 
         # Динамическая статистика блокировок для адаптации порога
         self._decision_history: Deque[Tuple[float, bool]] = deque(maxlen=120)

@@ -37,6 +37,7 @@ class FuturesRiskManager:
         margin_monitor: Optional[MarginMonitor] = None,
         max_size_limiter: Optional[MaxSizeLimiter] = None,
         orchestrator: Optional[Any] = None,
+        data_registry=None,  # ✅ НОВОЕ: DataRegistry для чтения баланса
     ):
         """
         Args:
@@ -47,6 +48,7 @@ class FuturesRiskManager:
             margin_monitor: Мониторинг маржи (опционально)
             max_size_limiter: Ограничитель размера (опционально)
             orchestrator: Ссылка на orchestrator для доступа к методам (опционально)
+            data_registry: DataRegistry для чтения баланса (опционально)
         """
         self.config = config
         self.scalping_config = config.scalping
@@ -59,6 +61,8 @@ class FuturesRiskManager:
         self.orchestrator = (
             orchestrator  # ✅ РЕФАКТОРИНГ: Для доступа к методам orchestrator
         )
+        # ✅ НОВОЕ: DataRegistry для чтения баланса
+        self.data_registry = data_registry
 
         # Получаем symbol_profiles из config_manager
         self.symbol_profiles = config_manager.get_symbol_profiles()
@@ -127,17 +131,18 @@ class FuturesRiskManager:
 
     async def calculate_position_size(
         self,
-        balance: float,
-        price: float,
-        signal: Dict[str, Any],
+        balance: Optional[float] = None,  # ✅ НОВОЕ: Опциональный баланс (читаем из DataRegistry если не передан)
+        price: float = 0.0,
+        signal: Optional[Dict[str, Any]] = None,
         signal_generator=None,
     ) -> float:
         """
         Рассчитывает размер позиции с учетом Balance Profiles и режима рынка.
         ✅ РЕФАКТОРИНГ: Вся логика перенесена из orchestrator._calculate_position_size
+        ✅ НОВОЕ: Баланс читается из DataRegistry, если не передан
 
         Args:
-            balance: Текущий баланс
+            balance: Текущий баланс (опционально, читается из DataRegistry если не передан)
             price: Текущая цена
             signal: Торговый сигнал
             signal_generator: Signal generator для определения режима
@@ -146,6 +151,33 @@ class FuturesRiskManager:
             float: Размер позиции в монетах (не USD!)
         """
         try:
+            # ✅ НОВОЕ: Получаем баланс из DataRegistry, если не передан
+            if balance is None:
+                if self.data_registry:
+                    try:
+                        balance_data = await self.data_registry.get_balance()
+                        if balance_data:
+                            balance = balance_data.get("balance")
+                            logger.debug(f"✅ RiskManager: Баланс получен из DataRegistry: ${balance:.2f}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
+                
+                # Fallback: если DataRegistry не доступен или нет данных
+                if balance is None:
+                    if self.client:
+                        try:
+                            balance = await self.client.get_balance()
+                            logger.debug(f"✅ RiskManager: Баланс получен из API: ${balance:.2f}")
+                        except Exception as e:
+                            logger.error(f"❌ Ошибка получения баланса из API: {e}")
+                            return 0.0
+                    else:
+                        logger.error("❌ RiskManager: Нет доступа к балансу (нет data_registry и client)")
+                        return 0.0
+            
+            if signal is None:
+                signal = {}
+            
             symbol = signal.get("symbol")
             symbol_regime = signal.get("regime")
             if (

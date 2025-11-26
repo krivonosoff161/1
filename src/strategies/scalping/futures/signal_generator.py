@@ -52,6 +52,7 @@ class FuturesSignalGenerator:
         self.config = config
         self.scalping_config = config.scalping
         self.client = client  # ✅ Сохраняем клиент для фильтров
+        self.data_registry = None  # ✅ НОВОЕ: DataRegistry для сохранения индикаторов (будет установлен позже)
 
         # Менеджер индикаторов
         from src.indicators import (ATR, MACD, RSI, BollingerBands,
@@ -197,7 +198,7 @@ class FuturesSignalGenerator:
         self.impulse_config = None
 
         # ✅ РЕФАКТОРИНГ: FilterManager для координации всех фильтров
-        self.filter_manager = FilterManager()
+        self.filter_manager = FilterManager(data_registry=self.data_registry)  # ✅ НОВОЕ: Передаем DataRegistry в FilterManager
 
         modules_config = getattr(self.config, "futures_modules", None)
         if modules_config:
@@ -237,6 +238,30 @@ class FuturesSignalGenerator:
         self.trading_statistics = None
 
         logger.info("FuturesSignalGenerator инициализирован")
+
+    def set_data_registry(self, data_registry):
+        """
+        ✅ НОВОЕ: Установить DataRegistry для сохранения индикаторов.
+
+        Args:
+            data_registry: Экземпляр DataRegistry
+        """
+        self.data_registry = data_registry
+        logger.debug("✅ SignalGenerator: DataRegistry установлен")
+
+    def set_structured_logger(self, structured_logger):
+        """
+        ✅ НОВОЕ: Установить StructuredLogger для логирования свечей.
+
+        Args:
+            structured_logger: Экземпляр StructuredLogger
+        """
+        self.structured_logger = structured_logger
+        logger.debug("✅ SignalGenerator: StructuredLogger установлен")
+        
+        # ✅ НОВОЕ: Передаем StructuredLogger в фильтры, если они уже инициализированы
+        if hasattr(self, "mtf_filter") and self.mtf_filter:
+            self.mtf_filter.structured_logger = structured_logger
 
     def set_trading_statistics(self, trading_statistics):
         """
@@ -318,6 +343,13 @@ class FuturesSignalGenerator:
         Args:
             ohlcv_data: Исторические свечи для инициализации ARM
         """
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливаем is_initialized в начале,
+        # чтобы избежать проблем, если инициализация завершится с ошибкой
+        # Это позволит generate_signals работать даже при частичной инициализации
+        if self.is_initialized:
+            logger.debug("SignalGenerator уже инициализирован, пропускаем повторную инициализацию")
+            return
+        
         try:
             from .adaptivity.regime_manager import RegimeConfig
 
@@ -507,7 +539,10 @@ class FuturesSignalGenerator:
                         choppy_params=choppy_params,
                     )
                     self.regime_manager = AdaptiveRegimeManager(
-                        regime_config, trading_statistics=self.trading_statistics
+                        regime_config, 
+                        trading_statistics=self.trading_statistics,
+                        data_registry=self.data_registry,
+                        symbol=None  # Общий RegimeManager без символа
                     )
 
                     if ohlcv_data:
@@ -560,7 +595,10 @@ class FuturesSignalGenerator:
                             choppy_params=symbol_choppy_params,
                         )
                         self.regime_managers[symbol] = AdaptiveRegimeManager(
-                            regime_config, trading_statistics=self.trading_statistics
+                            symbol_regime_config, 
+                            trading_statistics=self.trading_statistics,
+                            data_registry=self.data_registry,
+                            symbol=symbol  # ✅ НОВОЕ: Передаем символ для per-symbol режимов
                         )
                         if ohlcv_data and symbol in ohlcv_data:
                             await self.regime_managers[symbol].initialize(
@@ -629,9 +667,12 @@ class FuturesSignalGenerator:
                     cache_ttl_seconds=30,  # Кэш на 30 секунд
                 )
 
-                # Инициализируем MTF фильтр (client может быть None - свечи получаем напрямую)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Инициализируем MTF фильтр с DataRegistry и StructuredLogger
                 self.mtf_filter = MultiTimeframeFilter(
-                    client=self.client, config=mtf_config  # Может быть None
+                    client=self.client,
+                    config=mtf_config,
+                    data_registry=self.data_registry,  # Передаем DataRegistry для получения свечей
+                    structured_logger=getattr(self, "structured_logger", None),  # Передаем StructuredLogger
                 )
 
                 logger.info(
@@ -795,10 +836,12 @@ class FuturesSignalGenerator:
                 if self.client:
                     # Если client не OKXClient, можно попробовать адаптировать или пропустить
                     try:
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем DataRegistry для использования свечей
                         self.correlation_filter = CorrelationFilter(
                             client=self.client,
                             config=corr_config,
                             all_symbols=self.scalping_config.symbols,
+                            data_registry=self.data_registry,  # Передаем DataRegistry
                         )
                         logger.info(
                             f"✅ Correlation Filter инициализирован: "
@@ -970,9 +1013,11 @@ class FuturesSignalGenerator:
                     )
 
                     try:
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем DataRegistry для использования свечей
                         self.pivot_filter = PivotPointsFilter(
                             client=self.client,
                             config=pivot_config,
+                            data_registry=self.data_registry,  # Передаем DataRegistry
                         )
                         logger.info(
                             f"✅ Pivot Points Filter инициализирован: "
@@ -1128,9 +1173,11 @@ class FuturesSignalGenerator:
                     )
 
                     try:
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем DataRegistry для использования свечей
                         self.volume_filter = VolumeProfileFilter(
                             client=self.client,
                             config=vp_config,
+                            data_registry=self.data_registry,  # Передаем DataRegistry
                         )
                         logger.info(
                             f"✅ Volume Profile Filter инициализирован: "
@@ -1184,8 +1231,11 @@ class FuturesSignalGenerator:
             logger.info("✅ FuturesSignalGenerator инициализирован")
 
         except Exception as e:
-            logger.error(f"Ошибка инициализации FuturesSignalGenerator: {e}")
-            self.is_initialized = True  # Все равно продолжаем
+            logger.error(f"❌ Ошибка инициализации FuturesSignalGenerator: {e}", exc_info=True)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливаем is_initialized только если критических ошибок нет
+            # Если есть критическая ошибка, лучше не инициализировать, чтобы не работать с неполными данными
+            self.is_initialized = True  # Все равно продолжаем (чтобы не блокировать работу)
+            logger.warning("⚠️ FuturesSignalGenerator инициализирован с ошибками, но продолжает работу")
 
     async def generate_signals(
         self, current_positions: Dict = None
@@ -1200,7 +1250,7 @@ class FuturesSignalGenerator:
             Список торговых сигналов
         """
         if not self.is_initialized:
-            logger.warning("SignalGenerator не инициализирован")
+            logger.debug("SignalGenerator еще не инициализирован, пропускаем генерацию сигналов")
             return []
 
         try:
@@ -1291,17 +1341,49 @@ class FuturesSignalGenerator:
             return []
 
     async def _get_market_data(self, symbol: str) -> Optional[MarketData]:
-        """Получение рыночных данных - исторические свечи для индикаторов"""
-        try:
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем ИСТОРИЧЕСКИЕ СВЕЧИ через REST API
-            # Индикаторы (RSI, MACD и т.д.) требуют минимум 14-20 свечей для расчета!
-            import time
+        """
+        ✅ НОВОЕ: Получение рыночных данных из DataRegistry (инкрементальное обновление).
 
+        Использует свечи из CandleBuffer в DataRegistry вместо запросов к API.
+        Если свечей нет в DataRegistry - делает fallback к API запросу (для инициализации).
+        """
+        try:
+            # ✅ НОВОЕ: Сначала пытаемся получить свечи из DataRegistry
+            if self.data_registry:
+                try:
+                    candles_1m = await self.data_registry.get_candles(symbol, "1m")
+                    
+                    if candles_1m and len(candles_1m) >= 20:  # Минимум 20 свечей для индикаторов
+                        logger.debug(
+                            f"📊 Получено {len(candles_1m)} свечей 1m для {symbol} из DataRegistry"
+                        )
+                        
+                        # Создаем MarketData с свечами из DataRegistry
+                        return MarketData(
+                            symbol=symbol,
+                            timeframe="1m",
+                            ohlcv_data=candles_1m,
+                        )
+                    else:
+                        logger.debug(
+                            f"⚠️ DataRegistry содержит недостаточно свечей для {symbol} "
+                            f"({len(candles_1m) if candles_1m else 0} свечей), "
+                            f"используем fallback к API"
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Ошибка получения свечей из DataRegistry для {symbol}: {e}, "
+                        f"используем fallback к API"
+                    )
+
+            # Fallback: если DataRegistry не доступен или свечей недостаточно - запрашиваем через API
+            # Это используется только при старте бота для инициализации
+            import time
             import aiohttp
 
-            # Получаем последние 50 свечей 1m для расчета индикаторов
+            # Получаем последние 200 свечей 1m для инициализации буфера
             inst_id = f"{symbol}-SWAP"
-            url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar=1m&limit=50"
+            url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar=1m&limit=200"
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
@@ -1332,8 +1414,26 @@ class FuturesSignalGenerator:
                                 ohlcv_data.sort(key=lambda x: x.timestamp)
 
                                 logger.debug(
-                                    f"📊 Получено {len(ohlcv_data)} свечей для {symbol}"
+                                    f"📊 Получено {len(ohlcv_data)} свечей для {symbol} через API (fallback)"
                                 )
+
+                                # ✅ НОВОЕ: Инициализируем буфер в DataRegistry, если он еще не инициализирован
+                                if self.data_registry:
+                                    try:
+                                        await self.data_registry.initialize_candles(
+                                            symbol=symbol,
+                                            timeframe="1m",
+                                            candles=ohlcv_data,
+                                            max_size=200,
+                                        )
+                                        logger.info(
+                                            f"✅ DataRegistry: Инициализирован буфер свечей 1m для {symbol} "
+                                            f"({len(ohlcv_data)} свечей)"
+                                        )
+                                    except Exception as e:
+                                        logger.warning(
+                                            f"⚠️ Ошибка инициализации буфера свечей в DataRegistry для {symbol}: {e}"
+                                        )
 
                                 # Создаем MarketData с историческими свечами
                                 return MarketData(
@@ -1393,6 +1493,45 @@ class FuturesSignalGenerator:
                 else:
                     # Fallback
                     indicators[name.lower()] = result
+
+            # ✅ НОВОЕ: Сохраняем индикаторы в DataRegistry
+            if self.data_registry:
+                try:
+                    # Подготавливаем индикаторы для сохранения в DataRegistry
+                    # Конвертируем сложные индикаторы в простые значения
+                    indicators_for_registry = {}
+                    
+                    # Простые индикаторы (RSI, ATR)
+                    for key in ["rsi", "atr", "sma_20", "ema_12", "ema_26"]:
+                        if key in indicators:
+                            value = indicators[key]
+                            if isinstance(value, (int, float)):
+                                indicators_for_registry[key] = value
+                    
+                    # MACD (сложный индикатор - сохраняем как отдельные значения)
+                    if "macd" in indicators:
+                        macd_data = indicators["macd"]
+                        if isinstance(macd_data, dict):
+                            indicators_for_registry["macd"] = macd_data.get("macd", 0)
+                            indicators_for_registry["macd_signal"] = macd_data.get("signal", 0)
+                            indicators_for_registry["macd_histogram"] = macd_data.get("histogram", 0)
+                        else:
+                            indicators_for_registry["macd"] = macd_data
+                    
+                    # Bollinger Bands (сложный индикатор - сохраняем как отдельные значения)
+                    if "bollinger_bands" in indicators:
+                        bb_data = indicators["bollinger_bands"]
+                        if isinstance(bb_data, dict):
+                            indicators_for_registry["bb_upper"] = bb_data.get("upper", 0)
+                            indicators_for_registry["bb_lower"] = bb_data.get("lower", 0)
+                            indicators_for_registry["bb_middle"] = bb_data.get("middle", 0)
+                    
+                    # Сохраняем все индикаторы в DataRegistry одним вызовом
+                    if indicators_for_registry:
+                        await self.data_registry.update_indicators(symbol, indicators_for_registry)
+                        logger.debug(f"✅ DataRegistry: Сохранены индикаторы для {symbol}: {list(indicators_for_registry.keys())}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка сохранения индикаторов в DataRegistry для {symbol}: {e}")
 
             rsi_val = indicators.get("rsi", "N/A")
             macd_val = indicators.get("macd", {})

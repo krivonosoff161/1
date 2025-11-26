@@ -1,0 +1,15 @@
+timestamp,event_type,symbol,data
+23:06:23.162,tsl_create,SOL-USDT,regime=ranging | entry=143.3600 | side=short | min_hold=60.0000 | timeout=120.0000
+23:06:23.162,config,SOL-USDT,regime=ranging | min_holding=60.0000 | timeout=120.0000 | loss_cut=4.0000 | timeout_loss=2.0000 | tp_atr_mult=None | initial_trail=0.0200
+23:06:29.774,tsl_create,SOL-USDT,regime=ranging | entry=143.3600 | side=short | min_hold=60.0000 | timeout=120.0000
+23:06:29.775,config,SOL-USDT,regime=ranging | min_holding=60.0000 | timeout=120.0000 | loss_cut=4.0000 | timeout_loss=2.0000 | tp_atr_mult=None | initial_trail=0.0200
+23:06:29.780,open,SOL-USDT,side=short | price=143.3600 | size=1.5600 | regime=ranging
+23:06:43.164,tsl_create,BTC-USDT,regime=ranging | entry=89754.9000 | side=short | min_hold=60.0000 | timeout=120.0000
+23:06:43.165,config,BTC-USDT,regime=ranging | min_holding=60.0000 | timeout=120.0000 | loss_cut=4.0000 | timeout_loss=2.0000 | tp_atr_mult=None | initial_trail=0.0200
+23:06:47.010,tsl_create,BTC-USDT,regime=ranging | entry=89754.9000 | side=short | min_hold=60.0000 | timeout=120.0000
+23:06:47.011,config,BTC-USDT,regime=ranging | min_holding=60.0000 | timeout=120.0000 | loss_cut=4.0000 | timeout_loss=2.0000 | tp_atr_mult=None | initial_trail=0.0200
+23:06:47.012,open,BTC-USDT,side=short | price=89754.9000 | size=0.0027 | regime=ranging
+23:08:15.238,tsl_create,XRP-USDT,regime=ranging | entry=2.2024 | side=short | min_hold=60.0000 | timeout=120.0000
+23:08:15.239,config,XRP-USDT,regime=ranging | min_holding=60.0000 | timeout=120.0000 | loss_cut=4.0000 | timeout_loss=2.0000 | tp_atr_mult=None | initial_trail=0.0200
+23:09:23.968,tsl_create,DOGE-USDT,regime=ranging | entry=0.1552 | side=short | min_hold=60.0000 | timeout=120.0000
+23:09:23.970,config,DOGE-USDT,regime=ranging | min_holding=60.0000 | timeout=120.0000 | loss_cut=4.0000 | timeout_loss=2.0000 | tp_atr_mult=None | initial_trail=0.0200

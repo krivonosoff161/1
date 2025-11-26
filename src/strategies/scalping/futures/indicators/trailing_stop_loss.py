@@ -133,7 +133,13 @@ class TrailingStopLoss:
             return None
         return value / 100.0 if value > 1 else value
 
-    def initialize(self, entry_price: float, side: str, symbol: Optional[str] = None):
+    def initialize(
+        self,
+        entry_price: float,
+        side: str,
+        symbol: Optional[str] = None,
+        entry_timestamp: Optional[float] = None,
+    ):
         """
         Инициализация трейлинг стопа для позиции.
 
@@ -141,12 +147,19 @@ class TrailingStopLoss:
             entry_price: Цена входа
             side: Сторона позиции ("long" или "short")
             symbol: Торговый символ (опционально, для логирования)
+            entry_timestamp: Время открытия позиции в секундах (Unix timestamp).
+                            Если None, используется текущее время (для новых позиций).
         """
         self.entry_price = entry_price
         self.side = side
         self._symbol = symbol  # ✅ Сохраняем символ для логирования
         self.current_trail = self.initial_trail
-        self.entry_timestamp = time.time()
+        
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем переданный entry_timestamp или текущее время
+        if entry_timestamp is not None and entry_timestamp > 0:
+            self.entry_timestamp = entry_timestamp
+        else:
+            self.entry_timestamp = time.time()  # Для новых позиций используем текущее время
 
         if side == "long":
             self.highest_price = entry_price
@@ -786,9 +799,10 @@ class TrailingStopLoss:
                         profit_gross = self.get_profit_pct(
                             current_price, include_fees=False
                         )
+                        trend_str = f"{trend_strength:.2f}" if trend_strength is not None else 'N/A'
                         logger.debug(
                             f"📈 LONG: Позиция в прибыли (net={profit_pct:.2%}, gross={profit_gross:.2%}), "
-                            f"режим={market_regime or 'N/A'}, тренд={trend_strength:.2f if trend_strength else 'N/A'} - "
+                            f"режим={market_regime or 'N/A'}, тренд={trend_str} - "
                             f"даем больше места: stop={adjusted_stop:.2f} vs текущий={current_price:.2f} "
                             f"(effective_multiplier={effective_regime_multiplier:.2f})"
                         )
@@ -819,9 +833,10 @@ class TrailingStopLoss:
                         profit_gross = self.get_profit_pct(
                             current_price, include_fees=False
                         )
+                        trend_str = f"{trend_strength:.2f}" if trend_strength is not None else 'N/A'
                         logger.debug(
                             f"📈 SHORT: Позиция в прибыли (net={profit_pct:.2%}, gross={profit_gross:.2%}), "
-                            f"режим={market_regime or 'N/A'}, тренд={trend_strength:.2f if trend_strength else 'N/A'} - "
+                            f"режим={market_regime or 'N/A'}, тренд={trend_str} - "
                             f"даем больше места: stop={adjusted_stop:.2f} vs текущий={current_price:.2f} "
                             f"(effective_multiplier={effective_regime_multiplier:.2f})"
                         )

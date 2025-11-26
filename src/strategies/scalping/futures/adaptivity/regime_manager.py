@@ -188,7 +188,7 @@ class AdaptiveRegimeManager:
     переключает параметры торговли для оптимальной производительности.
     """
 
-    def __init__(self, config: RegimeConfig, trading_statistics=None):
+    def __init__(self, config: RegimeConfig, trading_statistics=None, data_registry=None, symbol=None):
         self.config = config
         # Текущий режим
         self.current_regime: RegimeType = RegimeType.RANGING  # По умолчанию
@@ -200,6 +200,10 @@ class AdaptiveRegimeManager:
         self.regime_switches: Dict[str, int] = {}
         # ✅ НОВОЕ: Модуль статистики для динамической адаптации
         self.trading_statistics = trading_statistics
+        # ✅ НОВОЕ: DataRegistry для сохранения режимов
+        self.data_registry = data_registry
+        # ✅ НОВОЕ: Символ для этого RegimeManager (если per-symbol)
+        self.symbol = symbol
         self.time_in_regime: Dict[RegimeType, timedelta] = {
             RegimeType.TRENDING: timedelta(0),
             RegimeType.RANGING: timedelta(0),
@@ -217,6 +221,19 @@ class AdaptiveRegimeManager:
             f"volatility={config.low_volatility_threshold:.1%}-{config.high_volatility_threshold:.1%}, "
             f"FastADX period={adx_period}"
         )
+
+    def set_data_registry(self, data_registry, symbol=None):
+        """
+        ✅ НОВОЕ: Установить DataRegistry для сохранения режимов.
+
+        Args:
+            data_registry: Экземпляр DataRegistry
+            symbol: Символ для этого RegimeManager (опционально, переопределяет self.symbol)
+        """
+        self.data_registry = data_registry
+        if symbol is not None:
+            self.symbol = symbol
+        logger.debug(f"✅ RegimeManager: DataRegistry установлен (symbol={self.symbol})")
 
     def detect_regime(
         self, candles: List[OHLCV], current_price: float
@@ -454,7 +471,7 @@ class AdaptiveRegimeManager:
             "No clear regime detected → default to RANGING",
         )
 
-    def update_regime(
+    async def update_regime(
         self, candles: List[OHLCV], current_price: float
     ) -> Optional[RegimeType]:
         """
@@ -486,18 +503,78 @@ class AdaptiveRegimeManager:
             )
 
             # Переключаем режим
+            old_regime = self.current_regime
             self.current_regime = new_regime
             self.regime_start_time = datetime.utcnow()
             self.regime_confirmations.clear()
 
             # Статистика переключений
-            switch_key = f"{self.current_regime.value} → {new_regime.value}"
+            switch_key = f"{old_regime.value} → {new_regime.value}"
             self.regime_switches[switch_key] = (
                 self.regime_switches.get(switch_key, 0) + 1
             )
 
+            # ✅ НОВОЕ: Сохраняем режим в DataRegistry после переключения
+            if self.data_registry and self.symbol:
+                try:
+                    # Получаем параметры режима (если доступны)
+                    regime_params = None
+                    if hasattr(self.config, f"{new_regime.value.lower()}_params"):
+                        regime_params_obj = getattr(self.config, f"{new_regime.value.lower()}_params")
+                        if regime_params_obj:
+                            # Конвертируем RegimeParameters в dict
+                            regime_params = {
+                                "min_score_threshold": getattr(regime_params_obj, "min_score_threshold", None),
+                                "max_trades_per_hour": getattr(regime_params_obj, "max_trades_per_hour", None),
+                                "position_size_multiplier": getattr(regime_params_obj, "position_size_multiplier", None),
+                                "tp_atr_multiplier": getattr(regime_params_obj, "tp_atr_multiplier", None),
+                                "sl_atr_multiplier": getattr(regime_params_obj, "sl_atr_multiplier", None),
+                                "max_holding_minutes": getattr(regime_params_obj, "max_holding_minutes", None),
+                            }
+                    
+                    await self.data_registry.update_regime(
+                        symbol=self.symbol,
+                        regime=new_regime.value.lower(),
+                        params=regime_params
+                    )
+                    logger.debug(
+                        f"✅ DataRegistry: Обновлен режим для {self.symbol}: {old_regime.value} → {new_regime.value}"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ Ошибка сохранения режима в DataRegistry для {self.symbol}: {e}"
+                    )
+
             return new_regime
 
+        # ✅ НОВОЕ: Сохраняем текущий режим в DataRegistry даже если переключения не было
+        # (для актуальности и первого определения режима)
+        if self.data_registry and self.symbol:
+            try:
+                # Получаем параметры режима (если доступны)
+                regime_params = None
+                if hasattr(self.config, f"{self.current_regime.value.lower()}_params"):
+                    regime_params_obj = getattr(self.config, f"{self.current_regime.value.lower()}_params")
+                    if regime_params_obj:
+                        # Конвертируем RegimeParameters в dict
+                        regime_params = {
+                            "min_score_threshold": getattr(regime_params_obj, "min_score_threshold", None),
+                            "max_trades_per_hour": getattr(regime_params_obj, "max_trades_per_hour", None),
+                            "position_size_multiplier": getattr(regime_params_obj, "position_size_multiplier", None),
+                            "tp_atr_multiplier": getattr(regime_params_obj, "tp_atr_multiplier", None),
+                            "sl_atr_multiplier": getattr(regime_params_obj, "sl_atr_multiplier", None),
+                            "max_holding_minutes": getattr(regime_params_obj, "max_holding_minutes", None),
+                        }
+                
+                await self.data_registry.update_regime(
+                    symbol=self.symbol,
+                    regime=self.current_regime.value.lower(),
+                    params=regime_params
+                )
+                logger.debug(f"✅ DataRegistry: Текущий режим для {self.symbol}: {self.current_regime.value}")
+            except Exception as e:
+                logger.debug(f"⚠️ Ошибка обновления режима в DataRegistry для {self.symbol}: {e}")
+        
         return None
 
     def get_current_regime(self) -> Optional[str]:

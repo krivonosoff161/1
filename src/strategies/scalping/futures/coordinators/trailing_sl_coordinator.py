@@ -301,8 +301,26 @@ class TrailingSLCoordinator:
             )
             position_side = "long"
 
-        # ✅ ЭТАП 4.4: Инициализируем с правильной стороной (long/short)
-        tsl.initialize(entry_price=entry_price, side=position_side, symbol=symbol)
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем entry_timestamp из entry_time позиции для правильной инициализации TSL
+        entry_timestamp_for_tsl = None
+        if signal and signal.get("entry_time"):
+            entry_time_obj = signal.get("entry_time")
+            if isinstance(entry_time_obj, datetime):
+                entry_timestamp_for_tsl = entry_time_obj.timestamp()
+            elif isinstance(entry_time_obj, (int, float)):
+                # Если уже timestamp (в секундах или миллисекундах)
+                if entry_time_obj > 1e10:  # Это миллисекунды
+                    entry_timestamp_for_tsl = entry_time_obj / 1000.0
+                else:  # Это секунды
+                    entry_timestamp_for_tsl = float(entry_time_obj)
+        
+        # ✅ ЭТАП 4.4: Инициализируем с правильной стороной (long/short) и entry_timestamp
+        tsl.initialize(
+            entry_price=entry_price,
+            side=position_side,
+            symbol=symbol,
+            entry_timestamp=entry_timestamp_for_tsl,  # ✅ КРИТИЧЕСКОЕ: Передаем реальное время открытия
+        )
         if impulse_trailing:
             step_profit = float(impulse_trailing.get("step_profit", 0) or 0)
             step_trail = float(impulse_trailing.get("step_trail", 0) or 0)
@@ -456,12 +474,18 @@ class TrailingSLCoordinator:
                                     f"⚠️ entry_time не найден для {symbol}, используем текущее время"
                                 )
 
+                        # ✅ КРИТИЧЕСКОЕ: Получаем entry_time из позиции для передачи в TSL
+                        entry_time_from_pos = position.get("entry_time")
+                        signal_with_entry_time = None
+                        if entry_time_from_pos:
+                            signal_with_entry_time = {"entry_time": entry_time_from_pos}
+                        
                         tsl = self.initialize_trailing_stop(
                             symbol=symbol,
                             entry_price=entry_price,
                             side=pos_side,
                             current_price=current_price,
-                            signal=None,
+                            signal=signal_with_entry_time,  # ✅ КРИТИЧЕСКОЕ: Передаем entry_time
                         )
 
                         if tsl:
@@ -663,20 +687,77 @@ class TrailingSLCoordinator:
                             if self._has_position(symbol):
                                 await self.close_position_callback(symbol, reason)
                             return
-                        # Если ExitAnalyzer решил частично закрыть - обрабатываем (TODO: реализовать partial close)
+                        # ✅ Если ExitAnalyzer решил частично закрыть - выполняем частичное закрытие
                         elif action == "partial_close":
                             fraction = exit_decision.get("fraction", 0.5)
                             logger.info(
                                 f"📊 ExitAnalyzer: Частичное закрытие {symbol} ({fraction*100:.0f}%, reason={reason})"
                             )
-                            # TODO: Реализовать частичное закрытие позиции
-                        # Если ExitAnalyzer решил продлить TP - продолжаем (TSL уже адаптируется)
+                            
+                            # Выполняем частичное закрытие через position_manager
+                            if self.position_manager and hasattr(self.position_manager, "close_partial_position"):
+                                try:
+                                    partial_result = await self.position_manager.close_partial_position(
+                                        symbol=symbol,
+                                        fraction=fraction,
+                                        reason=reason,
+                                    )
+                                    
+                                    if partial_result and partial_result.get("success"):
+                                        logger.info(
+                                            f"✅ Частичное закрытие {symbol} выполнено: "
+                                            f"закрыто {fraction*100:.0f}%, "
+                                            f"PnL={partial_result.get('net_partial_pnl', 0):+.2f} USDT"
+                                        )
+                                        # После частичного закрытия продолжаем мониторинг оставшейся позиции
+                                    else:
+                                        logger.warning(
+                                            f"⚠️ Не удалось выполнить частичное закрытие {symbol}: "
+                                            f"{partial_result.get('error', 'неизвестная ошибка')}"
+                                        )
+                                except Exception as e:
+                                    logger.error(
+                                        f"❌ Ошибка при частичном закрытии {symbol}: {e}",
+                                        exc_info=True,
+                                    )
+                            else:
+                                logger.warning(
+                                    f"⚠️ PositionManager не доступен для частичного закрытия {symbol}"
+                                )
+                        
+                        # ✅ Если ExitAnalyzer решил продлить TP - обновляем параметры TSL
                         elif action == "extend_tp":
-                            new_tp = exit_decision.get("new_tp")
+                            new_tp_percent = exit_decision.get("new_tp")
+                            trend_strength_extend = exit_decision.get("trend_strength", 0.0)
+                            
                             logger.info(
-                                f"📈 ExitAnalyzer: Продлеваем TP для {symbol} до {new_tp:.2f}% (reason={reason})"
+                                f"📈 ExitAnalyzer: Продлеваем TP для {symbol} "
+                                f"(новый TP={new_tp_percent:.2f}%, trend_strength={trend_strength_extend:.2f}, reason={reason})"
                             )
-                            # Продолжаем - TSL будет адаптироваться
+                            
+                            # Обновляем параметры TSL для продления TP
+                            if symbol in self.trailing_sl_by_symbol:
+                                tsl = self.trailing_sl_by_symbol[symbol]
+                                
+                                # Сохраняем оригинальный TP для отслеживания продления
+                                if not hasattr(tsl, "original_tp_percent"):
+                                    # Получаем оригинальный TP из конфига или метаданных
+                                    original_tp = exit_decision.get("original_tp", new_tp_percent)
+                                    tsl.original_tp_percent = original_tp
+                                    logger.debug(
+                                        f"📌 Сохранили оригинальный TP для {symbol}: {original_tp:.2f}%"
+                                    )
+                                
+                                # Увеличиваем TP в метаданных TSL (используется для логирования и анализа)
+                                tsl.extended_tp_percent = new_tp_percent
+                                tsl.tp_extended_count = getattr(tsl, "tp_extended_count", 0) + 1
+                                
+                                logger.info(
+                                    f"✅ TP продлен для {symbol}: {tsl.original_tp_percent:.2f}% → {new_tp_percent:.2f}% "
+                                    f"(продлений: {tsl.tp_extended_count})"
+                                )
+                            
+                            # Продолжаем - TSL будет работать с новыми параметрами
                 except Exception as e:
                     logger.error(
                         f"❌ ExitAnalyzer: Ошибка анализа для {symbol}: {e}",

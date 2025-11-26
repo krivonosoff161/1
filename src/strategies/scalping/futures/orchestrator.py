@@ -35,7 +35,6 @@ from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
 from .coordinators.websocket_coordinator import WebSocketCoordinator
 from .core.data_registry import DataRegistry
 from .core.position_registry import PositionRegistry
-from .core.trading_control_center import TradingControlCenter
 from .indicators.fast_adx import FastADX
 from .indicators.funding_rate_monitor import FundingRateMonitor
 from .indicators.order_flow_indicator import OrderFlowIndicator
@@ -43,8 +42,12 @@ from .logging.logger_factory import LoggerFactory
 from .logging.structured_logger import StructuredLogger
 from .order_executor import FuturesOrderExecutor
 from .position_manager import FuturesPositionManager
+from .positions.entry_manager import \
+    EntryManager  # ✅ НОВОЕ: EntryManager для централизованного открытия позиций
 from .positions.exit_analyzer import \
     ExitAnalyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
+from .positions.position_monitor import \
+    PositionMonitor  # ✅ НОВОЕ: PositionMonitor для периодического мониторинга позиций
 from .private_websocket_manager import PrivateWebSocketManager
 from .risk.max_size_limiter import MaxSizeLimiter
 from .risk_manager import FuturesRiskManager
@@ -99,14 +102,11 @@ class FuturesScalpingOrchestrator:
         # ✅ РЕФАКТОРИНГ: Инициализация Core модулей
         self.position_registry = PositionRegistry()
         self.data_registry = DataRegistry()
-        self.trading_control_center = TradingControlCenter(
-            position_registry=self.position_registry,
-            data_registry=self.data_registry,
-        )
 
         # 🛡️ Защиты риска
         self.initial_balance = None  # Для drawdown расчета
-        self.total_margin_used = 0.0  # Для max margin проверки
+        # ✅ НОВОЕ: total_margin_used теперь читается из DataRegistry, оставляем для обратной совместимости
+        self.total_margin_used = 0.0  # DEPRECATED: Используйте data_registry.get_margin_used() вместо этого
         # ✅ МОДЕРНИЗАЦИЯ: Параметры риска теперь адаптивные, читаются из конфига динамически
         # Используем fallback значения только для инициализации (будут переопределены при первом использовании)
         self.max_loss_per_trade = 0.02  # Fallback: 2% макс потеря на сделку
@@ -262,6 +262,12 @@ class FuturesScalpingOrchestrator:
         # ✅ НОВОЕ: Передаем trading_statistics в signal_generator для ARM
         if hasattr(self.signal_generator, "set_trading_statistics"):
             self.signal_generator.set_trading_statistics(self.trading_statistics)
+        # ✅ НОВОЕ: Передаем data_registry в signal_generator для сохранения индикаторов
+        if hasattr(self.signal_generator, "set_data_registry"):
+            self.signal_generator.set_data_registry(self.data_registry)
+        # ✅ НОВОЕ: Передаем structured_logger в signal_generator для логирования свечей
+        if hasattr(self.signal_generator, "set_structured_logger"):
+            self.signal_generator.set_structured_logger(self.structured_logger)
         self.order_executor = FuturesOrderExecutor(
             config, self.client, self.slippage_guard
         )
@@ -278,6 +284,15 @@ class FuturesScalpingOrchestrator:
             self.position_manager.set_position_registry(self.position_registry)
         if hasattr(self.position_manager, "set_data_registry"):
             self.position_manager.set_data_registry(self.data_registry)
+
+        # ✅ НОВОЕ: Инициализация EntryManager для централизованного открытия позиций
+        # EntryManager будет использоваться в signal_coordinator вместо прямого вызова order_executor
+        self.entry_manager = EntryManager(
+            position_registry=self.position_registry,
+            order_executor=self.order_executor,
+            position_sizer=None,  # PositionSizer будет добавлен позже, пока используем риск-менеджер
+        )
+        logger.info("✅ EntryManager инициализирован в orchestrator")
 
         # ✅ НОВОЕ: Передаем symbol_profiles в position_manager для per-symbol TP
         # (инициализируем после создания symbol_profiles)
@@ -334,6 +349,7 @@ class FuturesScalpingOrchestrator:
 
         # ✅ НОВОЕ: Инициализация ExitAnalyzer после создания fast_adx и order_flow
         # (position_registry и data_registry уже созданы выше)
+        # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия позиций
         self.exit_analyzer = ExitAnalyzer(
             position_registry=self.position_registry,
             data_registry=self.data_registry,
@@ -343,6 +359,16 @@ class FuturesScalpingOrchestrator:
             signal_generator=self.signal_generator,
         )
         logger.info("✅ ExitAnalyzer инициализирован в orchestrator")
+
+        # ✅ НОВОЕ: Инициализация PositionMonitor для периодического мониторинга позиций
+        # PositionMonitor будет вызывать ExitAnalyzer для всех открытых позиций
+        self.position_monitor = PositionMonitor(
+            position_registry=self.position_registry,
+            data_registry=self.data_registry,
+            exit_analyzer=self.exit_analyzer,  # Передаем ExitAnalyzer для анализа
+            check_interval=5.0,  # Проверка каждые 5 секунд
+        )
+        logger.info("✅ PositionMonitor инициализирован в orchestrator")
 
         # ✅ АДАПТИВНО: FundingRateMonitor параметры из конфига
         funding_config = getattr(config, "futures_modules", {})
@@ -412,6 +438,7 @@ class FuturesScalpingOrchestrator:
             margin_monitor=None,  # Можно добавить позже
             max_size_limiter=self.max_size_limiter,
             orchestrator=self,  # ✅ РЕФАКТОРИНГ: Передаем ссылку на orchestrator
+            data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для чтения баланса
         )
         logger.info("✅ FuturesRiskManager инициализирован")
 
@@ -446,7 +473,9 @@ class FuturesScalpingOrchestrator:
 
         # Состояние
         self.is_running = False
-        self.active_positions = {}
+        # ✅ ПРОКСИ: active_positions теперь прокси к PositionRegistry для обратной совместимости
+        # Чтения через property автоматически получают данные из реестра
+        # Записи должны идти через position_registry.register_position()
         self.trading_session = None
         self._closing_positions: set = set()  # ✅ Защита от множественных закрытий
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: Флаги для автоматической разблокировки после emergency stop
@@ -582,6 +611,8 @@ class FuturesScalpingOrchestrator:
             close_position_callback=_close_position_for_tsl_callback,
             normalize_symbol_callback=self.config_manager.normalize_symbol,
             initialize_trailing_stop_callback=self.trailing_sl_coordinator.initialize_trailing_stop,
+            entry_manager=self.entry_manager,  # ✅ НОВОЕ: EntryManager для централизованного открытия
+            data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
         )
         # Обновляем ссылку на total_margin_used для синхронизации
         self._total_margin_used_ref = total_margin_used_ref
@@ -617,6 +648,8 @@ class FuturesScalpingOrchestrator:
             handle_position_closed_callback=None,  # Используем прямую ссылку
             update_active_positions_callback=None,  # Используем прямую ссылку
             update_active_orders_cache_callback=_update_orders_cache_from_ws,
+            data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
+            structured_logger=self.structured_logger,  # ✅ НОВОЕ: StructuredLogger для логирования свечей
         )
 
         logger.info("FuturesScalpingOrchestrator инициализирован")
@@ -643,12 +676,19 @@ class FuturesScalpingOrchestrator:
             # Важно: вызываем ПОСЛЕ инициализации модулей, чтобы фильтры были созданы
             self._reset_all_states()
 
+            # ✅ НОВОЕ: Инициализация буферов свечей для всех символов (перед загрузкой позиций)
+            await self._initialize_candle_buffers()
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Загружаем существующие позиции и инициализируем TrailingStopLoss
             await self._load_existing_positions()
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Синхронизируем позиции с биржей и обновляем MaxSizeLimiter
             # Это очистит старые данные из MaxSizeLimiter, если позиций на бирже нет
             await self._sync_positions_with_exchange(force=True)
+
+            # ✅ НОВОЕ: Запуск PositionMonitor как фоновой задачи для периодического мониторинга
+            await self.position_monitor.start()
+            logger.info("✅ PositionMonitor запущен (фоновая задача)")
 
             # Основной торговый цикл
             self.is_running = True
@@ -669,6 +709,11 @@ class FuturesScalpingOrchestrator:
         # Остановка модулей безопасности
         await self.liquidation_guard.stop_monitoring()
         await self.slippage_guard.stop_monitoring()
+
+        # ✅ НОВОЕ: Остановка PositionMonitor
+        if hasattr(self, "position_monitor") and self.position_monitor:
+            await self.position_monitor.stop()
+            logger.info("✅ PositionMonitor остановлен")
 
         # Отключение WebSocket
         await self.ws_manager.disconnect()
@@ -692,6 +737,16 @@ class FuturesScalpingOrchestrator:
             # Проверка баланса
             balance = await self.client.get_balance()
             logger.info(f"💰 Доступный баланс: {balance:.2f} USDT")
+
+            # ✅ НОВОЕ: Обновляем баланс в DataRegistry
+            if self.data_registry:
+                try:
+                    balance_profile = self.config_manager.get_balance_profile(balance)
+                    profile_name = balance_profile.get("name", "small") if balance_profile else None
+                    await self.data_registry.update_balance(balance, profile_name)
+                    logger.debug(f"✅ DataRegistry: Обновлен баланс: ${balance:.2f} USDT (profile={profile_name})")
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка обновления баланса в DataRegistry: {e}")
 
             # 🛡️ Инициализация начального баланса для drawdown
             if self.initial_balance is None:
@@ -879,6 +934,159 @@ class FuturesScalpingOrchestrator:
         except Exception as e:
             logger.error(f"Ошибка инициализации торговых модулей: {e}")
             raise
+
+    async def _initialize_candle_buffers(self):
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Инициализация буферов свечей для всех символов и всех таймфреймов при старте бота.
+
+        Загружает свечи для всех нужных таймфреймов:
+        - 1m: 200 свечей (для основных индикаторов и режимов)
+        - 5m: 200 свечей (для Multi-Timeframe и Correlation фильтров)
+        - 1H: 100 свечей (для Volume Profile фильтра)
+        - 1D: 10 свечей (для Pivot Points фильтра)
+
+        После этого свечи будут обновляться инкрементально через WebSocket.
+        """
+        try:
+            logger.info("📊 Инициализация буферов свечей для всех символов и таймфреймов...")
+
+            if not self.data_registry:
+                logger.warning("⚠️ DataRegistry не доступен, пропускаем инициализацию свечей")
+                return
+
+            symbols = self.scalping_config.symbols
+            if not symbols:
+                logger.warning("⚠️ Нет символов для инициализации свечей")
+                return
+
+            import aiohttp
+            from src.models import OHLCV
+
+            # ✅ КРИТИЧЕСКОЕ: Определяем все нужные таймфреймы и их параметры
+            timeframes_config = [
+                {"timeframe": "1m", "limit": 200, "max_size": 200, "description": "основные индикаторы"},
+                {"timeframe": "5m", "limit": 200, "max_size": 200, "description": "Multi-Timeframe и Correlation"},
+                {"timeframe": "1H", "limit": 100, "max_size": 100, "description": "Volume Profile"},
+                {"timeframe": "1D", "limit": 10, "max_size": 10, "description": "Pivot Points"},
+            ]
+
+            total_initialized = 0
+            for symbol in symbols:
+                symbol_initialized = 0
+                for tf_config in timeframes_config:
+                    timeframe = tf_config["timeframe"]
+                    limit = tf_config["limit"]
+                    max_size = tf_config["max_size"]
+                    description = tf_config["description"]
+                    
+                    try:
+                        # Получаем свечи через API
+                        inst_id = f"{symbol}-SWAP"
+                        url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar={timeframe}&limit={limit}"
+
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(url) as resp:
+                                if resp.status == 200:
+                                    data = await resp.json()
+                                    if data.get("code") == "0" and data.get("data"):
+                                        candles = data["data"]
+
+                                        # Конвертируем свечи из формата OKX в OHLCV
+                                        ohlcv_data = []
+                                        for candle in candles:
+                                            if len(candle) >= 6:
+                                                ohlcv_item = OHLCV(
+                                                    timestamp=int(candle[0]) // 1000,  # OKX в миллисекундах
+                                                    symbol=symbol,
+                                                    open=float(candle[1]),
+                                                    high=float(candle[2]),
+                                                    low=float(candle[3]),
+                                                    close=float(candle[4]),
+                                                    volume=float(candle[5]),
+                                                    timeframe=timeframe,
+                                                )
+                                                ohlcv_data.append(ohlcv_item)
+
+                                        if ohlcv_data:
+                                            # Сортируем по timestamp (старые -> новые)
+                                            ohlcv_data.sort(key=lambda x: x.timestamp)
+
+                                            # Инициализируем буфер в DataRegistry
+                                            await self.data_registry.initialize_candles(
+                                                symbol=symbol,
+                                                timeframe=timeframe,
+                                                candles=ohlcv_data,
+                                                max_size=max_size,
+                                            )
+
+                                            symbol_initialized += 1
+                                            total_initialized += 1
+                                            logger.info(
+                                                f"✅ Инициализирован буфер свечей {timeframe} для {symbol} "
+                                                f"({len(ohlcv_data)} свечей, {description})"
+                                            )
+                                            
+                                            # ✅ НОВОЕ: Логируем в StructuredLogger
+                                            if self.structured_logger:
+                                                try:
+                                                    self.structured_logger.log_candle_init(
+                                                        symbol=symbol,
+                                                        timeframe=timeframe,
+                                                        candles_count=len(ohlcv_data),
+                                                        status="success",
+                                                    )
+                                                except Exception as e:
+                                                    logger.debug(f"⚠️ Ошибка логирования инициализации свечей в StructuredLogger: {e}")
+                                    else:
+                                        error_msg = data.get('msg', 'Неизвестная ошибка')
+                                        logger.warning(
+                                            f"⚠️ Не удалось получить свечи {timeframe} для {symbol}: {error_msg}"
+                                        )
+                                        # ✅ НОВОЕ: Логируем ошибку в StructuredLogger
+                                        if self.structured_logger:
+                                            try:
+                                                self.structured_logger.log_candle_init(
+                                                    symbol=symbol,
+                                                    timeframe=timeframe,
+                                                    candles_count=0,
+                                                    status="error",
+                                                    error=error_msg,
+                                                )
+                                            except Exception as e:
+                                                logger.debug(f"⚠️ Ошибка логирования ошибки инициализации свечей: {e}")
+                                else:
+                                    logger.warning(
+                                        f"⚠️ HTTP ошибка при получении свечей {timeframe} для {symbol}: {resp.status}"
+                                    )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Ошибка инициализации буфера свечей {timeframe} для {symbol}: {e}"
+                        )
+
+                if symbol_initialized > 0:
+                    logger.info(
+                        f"📊 Символ {symbol}: инициализировано {symbol_initialized}/{len(timeframes_config)} таймфреймов"
+                    )
+
+            logger.info(
+                f"📊 Инициализация буферов свечей завершена: "
+                f"{total_initialized} буферов для {len(symbols)} символов"
+            )
+            
+            # ✅ НОВОЕ: Логируем итоговую статистику в StructuredLogger
+            if self.structured_logger:
+                try:
+                    self.structured_logger.log_candle_init(
+                        symbol="ALL",
+                        timeframe="ALL",
+                        candles_count=total_initialized,
+                        status="completed",
+                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка логирования итоговой статистики: {e}")
+
+        except Exception as e:
+            logger.error(f"❌ Критическая ошибка инициализации буферов свечей: {e}", exc_info=True)
 
     def _reset_all_states(self):
         """Очистка всех состояний при старте бота"""
@@ -1082,7 +1290,36 @@ class FuturesScalpingOrchestrator:
                         )
 
                     # Добавляем в active_positions
-                    from datetime import datetime
+
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем реальное время открытия позиции из API
+                    # Пробуем получить из cTime (create time) или uTime (update time)
+                    entry_time_dt = None
+                    c_time = pos.get("cTime")
+                    u_time = pos.get("uTime")
+                    entry_time_str = c_time or u_time
+                    
+                    if entry_time_str:
+                        try:
+                            # OKX возвращает время в миллисекундах
+                            entry_timestamp_ms = int(entry_time_str)
+                            entry_timestamp_sec = entry_timestamp_ms / 1000.0
+                            entry_time_dt = datetime.fromtimestamp(entry_timestamp_sec)
+                            logger.debug(
+                                f"✅ Реальное время открытия для {symbol} получено из API: {entry_time_dt} "
+                                f"(из {'cTime' if c_time else 'uTime'})"
+                            )
+                        except (ValueError, TypeError) as e:
+                            logger.warning(
+                                f"⚠️ Не удалось распарсить cTime/uTime для {symbol}: {e}, "
+                                f"используем текущее время (fallback)"
+                            )
+                            entry_time_dt = datetime.now()
+                    else:
+                        logger.warning(
+                            f"⚠️ cTime/uTime не найдены для {symbol} в данных позиции, "
+                            f"используем текущее время (fallback)"
+                        )
+                        entry_time_dt = datetime.now()
 
                     self.active_positions[symbol] = {
                         "instId": inst_id,
@@ -1091,7 +1328,7 @@ class FuturesScalpingOrchestrator:
                         "size": pos_size_abs,
                         "entry_price": entry_price,
                         "margin": float(pos.get("margin", "0")),
-                        "entry_time": datetime.now(),  # Время загрузки (не точное время открытия)
+                        "entry_time": entry_time_dt,  # ✅ КРИТИЧЕСКОЕ: Реальное время открытия из API
                         "timestamp": datetime.now(),
                         "time_extended": False,
                     }
@@ -1130,24 +1367,44 @@ class FuturesScalpingOrchestrator:
 
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #4: Передаем position_side ("long"/"short") в TrailingSLCoordinator
                     signal_with_regime = {"regime": regime} if regime else None
+                    # ✅ КРИТИЧЕСКОЕ: Передаем entry_time для правильной инициализации entry_timestamp в TSL
+                    signal_with_regime = signal_with_regime or {}
+                    signal_with_regime["entry_time"] = entry_time_dt
+                    
                     tsl = self.trailing_sl_coordinator.initialize_trailing_stop(
                         symbol=symbol,
                         entry_price=entry_price,
                         side=position_side,  # "long" или "short", а не "buy"/"sell"
                         current_price=current_price,
-                        signal=signal_with_regime,  # ✅ Передаем regime для адаптации параметров
+                        signal=signal_with_regime,  # ✅ Передаем regime и entry_time для адаптации параметров
                     )
                     if tsl:
                         logger.info(
                             f"✅ Загружена позиция {symbol} {side.upper()}: "
                             f"size={pos_size_abs}, entry={entry_price:.2f}, "
-                            f"TrailingStopLoss инициализирован"
+                            f"entry_time={entry_time_dt}, TrailingStopLoss инициализирован"
                         )
                     else:
                         logger.warning(
                             f"⚠️ Не удалось инициализировать TrailingStopLoss для {symbol}: "
-                            f"entry_price={entry_price}, current_price={current_price}"
+                            f"entry_price={entry_price}, current_price={current_price}, entry_time={entry_time_dt}"
                         )
+                    # ✅ КРИТИЧЕСКОЕ: Регистрируем позицию в PositionRegistry с правильными метаданными
+                    from .core.position_registry import PositionMetadata
+                    metadata = PositionMetadata(
+                        entry_time=entry_time_dt,
+                        regime=regime,
+                        entry_price=entry_price,
+                        position_side=position_side,
+                        size_in_coins=pos_size_abs,
+                        margin_used=float(pos.get("margin", "0")),
+                    )
+                    await self.position_registry.register_position(
+                        symbol=symbol,
+                        position=self.active_positions[symbol],
+                        metadata=metadata,
+                    )
+                    
                     loaded_count += 1
 
             if loaded_count > 0:
@@ -1199,9 +1456,31 @@ class FuturesScalpingOrchestrator:
             ):
                 regime = self.signal_generator.regime_manager.get_current_regime()
 
-            balance = await self.client.get_balance()
-            balance_profile = self.config_manager.get_balance_profile(balance)
-            profile_name = balance_profile.get("name", "small")
+            # ✅ НОВОЕ: Читаем баланс из DataRegistry
+            balance = None
+            if self.data_registry:
+                try:
+                    balance_data = await self.data_registry.get_balance()
+                    if balance_data:
+                        balance = balance_data.get("balance")
+                        profile_name = balance_data.get("profile")
+                        logger.debug(f"📊 Баланс получен из DataRegistry: ${balance:.2f} (profile={profile_name})")
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
+            
+            # Fallback на прямой запрос к API
+            if balance is None:
+                balance = await self.client.get_balance()
+                balance_profile = self.config_manager.get_balance_profile(balance)
+                profile_name = balance_profile.get("name", "small")
+            
+            # ✅ НОВОЕ: Обновляем баланс в DataRegistry (если получили из API)
+            if self.data_registry:
+                try:
+                    await self.data_registry.update_balance(balance, profile_name)
+                    logger.debug(f"✅ DataRegistry: Обновлен баланс: ${balance:.2f} USDT (profile={profile_name})")
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка обновления баланса в DataRegistry: {e}")
 
             # Получаем множитель интервала по режиму (ПРИОРИТЕТ 1)
             by_regime = self.config_manager.to_dict(
@@ -1411,15 +1690,36 @@ class FuturesScalpingOrchestrator:
                         regime = manager.get_current_regime()
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем signal с режимом для передачи в initialize_trailing_stop
-                signal_with_regime = {"regime": regime} if regime else None
-
-                self.trailing_sl_coordinator.initialize_trailing_stop(
+                signal_with_regime = {"regime": regime} if regime else {}
+                
+                # ✅ КРИТИЧЕСКОЕ: Получаем entry_time из активной позиции или метаданных для передачи в TSL
+                entry_time_for_tsl = None
+                if symbol in self.active_positions:
+                    entry_time_for_tsl = self.active_positions[symbol].get("entry_time")
+                if not entry_time_for_tsl:
+                    # Пробуем получить из PositionRegistry
+                    try:
+                        metadata = await self.position_registry.get_metadata(symbol)
+                        if metadata and metadata.entry_time:
+                            entry_time_for_tsl = metadata.entry_time
+                    except Exception:
+                        pass
+                if entry_time_for_tsl:
+                    signal_with_regime["entry_time"] = entry_time_for_tsl
+                
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем результат инициализации TSL
+                tsl = self.trailing_sl_coordinator.initialize_trailing_stop(
                     symbol=symbol,
                     entry_price=effective_price,
                     side=trailing_side,  # "long" или "short", а не "buy"/"sell"
                     current_price=mark_price,
-                    signal=signal_with_regime,  # ✅ КРИТИЧЕСКОЕ: Передаем режим через signal
+                    signal=signal_with_regime if signal_with_regime else None,  # ✅ КРИТИЧЕСКОЕ: Передаем режим и entry_time через signal
                 )
+                if not tsl:
+                    logger.warning(
+                        f"⚠️ Не удалось инициализировать TrailingStopLoss для {symbol} "
+                        f"при синхронизации: entry_price={effective_price}, side={trailing_side}"
+                    )
 
             if effective_price > 0:
                 self.max_size_limiter.position_sizes[symbol] = (
@@ -1444,18 +1744,58 @@ class FuturesScalpingOrchestrator:
 
         # ✅ ЭТАП 6.3: Обновляем total_margin_used с актуальными данными с биржи
         # Используем _get_used_margin() для получения точной маржи с биржи
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: total_margin инициализируется до try блока
+        # (уже инициализирована на строке 1323, но убеждаемся что она доступна в except)
         try:
             used_margin = await self._get_used_margin()
             self.total_margin_used = used_margin
             if hasattr(self, "_total_margin_used_ref") and self._total_margin_used_ref:
                 self._total_margin_used_ref[0] = used_margin
+            
+            # ✅ НОВОЕ: Обновляем маржу в DataRegistry
+            if self.data_registry:
+                try:
+                    # Получаем баланс для расчета доступной маржи
+                    balance_data = await self.data_registry.get_balance()
+                    balance = balance_data.get("balance", 0) if balance_data else 0
+                    available_margin = balance - used_margin if balance > used_margin else 0
+                    total_margin_value = balance  # Общая маржа = баланс
+                    
+                    await self.data_registry.update_margin(
+                        used=used_margin,
+                        available=available_margin,
+                        total=total_margin_value
+                    )
+                    logger.debug(f"✅ DataRegistry: Обновлена маржа: used=${used_margin:.2f}, available=${available_margin:.2f}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка обновления маржи в DataRegistry: {e}")
         except Exception as e:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем расчетную total_margin (которая уже вычислена выше)
+            # total_margin уже инициализирована на строке 1323 и обновляется в цикле позиций (строка 1393)
+            calculated_margin = total_margin  # Используем расчетную маржу из позиций
             logger.warning(
-                f"⚠️ Не удалось получить использованную маржу с биржи: {e}, используем расчетную: {total_margin:.2f}"
+                f"⚠️ Не удалось получить использованную маржу с биржи: {e}, используем расчетную: {calculated_margin:.2f}"
             )
-            self.total_margin_used = total_margin
+            # ✅ НОВОЕ: Маржа обновляется в DataRegistry, локальная переменная для обратной совместимости
+            self.total_margin_used = calculated_margin  # DEPRECATED: Используйте data_registry.get_margin_used()
             if hasattr(self, "_total_margin_used_ref") and self._total_margin_used_ref:
-                self._total_margin_used_ref[0] = total_margin
+                self._total_margin_used_ref[0] = calculated_margin
+            
+            # ✅ НОВОЕ: Обновляем маржу в DataRegistry даже при ошибке (используем расчетную)
+            if self.data_registry:
+                try:
+                    balance_data = await self.data_registry.get_balance()
+                    balance = balance_data.get("balance", 0) if balance_data else 0
+                    available_margin = balance - calculated_margin if balance > calculated_margin else 0
+                    total_margin_value = balance
+                    
+                    await self.data_registry.update_margin(
+                        used=calculated_margin,
+                        available=available_margin,
+                        total=total_margin_value
+                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка обновления расчетной маржи в DataRegistry: {e}")
 
         # ✅ ЭТАП 5.3: MaxSizeLimiter уже обновлен выше (строки 1004-1006, 1018)
         # Позиции добавляются/удаляются из MaxSizeLimiter сразу после синхронизации
@@ -1565,13 +1905,129 @@ class FuturesScalpingOrchestrator:
             if not self.is_running:
                 return
 
-            # Обновление активных позиций
-            self.active_positions = {}
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновление позиций через PositionRegistry с сохранением метаданных
+            # Сохраняем существующие метаданные перед обновлением позиций
+            all_registered = await self.position_registry.get_all_positions()
+            all_metadata = await self.position_registry.get_all_metadata()
+            
+            # Удаляем позиции, которых больше нет на бирже
+            exchange_symbols = set()
             for position in positions:
                 symbol = position.get("instId", "").replace("-SWAP", "")
                 size = float(position.get("pos", "0"))
-                if size != 0:
-                    self.active_positions[symbol] = position
+                if abs(size) >= 1e-8:
+                    exchange_symbols.add(symbol)
+            
+            # Удаляем позиции, которых нет на бирже
+            for symbol in list(all_registered.keys()):
+                if symbol not in exchange_symbols:
+                    await self.position_registry.unregister_position(symbol)
+            
+            # Обновляем/регистрируем позиции с сохранением метаданных
+            for position in positions:
+                symbol = position.get("instId", "").replace("-SWAP", "")
+                size = float(position.get("pos", "0"))
+                if abs(size) >= 1e-8:
+                    # ✅ КРИТИЧЕСКОЕ: Сохраняем существующие метаданные
+                    existing_metadata = all_metadata.get(symbol)
+                    
+                    # Получаем entry_price из position данных
+                    try:
+                        entry_price_from_api = float(position.get("avgPx", 0) or 0)
+                    except (TypeError, ValueError):
+                        entry_price_from_api = 0.0
+                    
+                    # ✅ КРИТИЧЕСКОЕ: Получаем entry_time из API (cTime/uTime), если метаданных нет
+                    entry_time_from_api = None
+                    c_time = position.get("cTime")
+                    u_time = position.get("uTime")
+                    entry_time_str = c_time or u_time
+                    if entry_time_str:
+                        try:
+                            entry_timestamp_ms = int(entry_time_str)
+                            entry_timestamp_sec = entry_timestamp_ms / 1000.0
+                            entry_time_from_api = datetime.fromtimestamp(entry_timestamp_sec)
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Если метаданные уже есть, обновляем только entry_price если нужно
+                    if existing_metadata:
+                        # ✅ КРИТИЧЕСКОЕ: Сохраняем entry_time, если он еще не установлен, но есть в API
+                        if not existing_metadata.entry_time or existing_metadata.entry_time == datetime.now():
+                            if entry_time_from_api:
+                                existing_metadata.entry_time = entry_time_from_api
+                        
+                        # Обновляем entry_price в метаданных если он изменился или отсутствует
+                        if not existing_metadata.entry_price or existing_metadata.entry_price == 0:
+                            if entry_price_from_api > 0:
+                                existing_metadata.entry_price = entry_price_from_api
+                        
+                        # Получаем текущий режим из signal_generator если regime отсутствует
+                        if not existing_metadata.regime:
+                            regime = None
+                            if hasattr(self.signal_generator, "regime_managers") and symbol in getattr(
+                                self.signal_generator, "regime_managers", {}
+                            ):
+                                manager = self.signal_generator.regime_managers.get(symbol)
+                                if manager:
+                                    regime = manager.get_current_regime()
+                            if not regime:
+                                if hasattr(self.signal_generator, "regime_manager") and self.signal_generator.regime_manager:
+                                    regime = self.signal_generator.regime_manager.get_current_regime()
+                            if regime:
+                                existing_metadata.regime = regime
+                        
+                        # Обновляем position_side если отсутствует
+                        pos_side_raw = position.get("posSide", "").lower()
+                        if pos_side_raw in ["long", "short"] and not existing_metadata.position_side:
+                            existing_metadata.position_side = pos_side_raw
+                        
+                        # Используем существующие метаданные с обновлениями
+                        await self.position_registry.register_position(
+                            symbol=symbol,
+                            position=position,
+                            metadata=existing_metadata,
+                        )
+                    else:
+                        # Новая позиция - создаем метаданные
+                        from .core.position_registry import PositionMetadata
+                        
+                        # ✅ КРИТИЧЕСКОЕ: Используем entry_time из API, если доступно, иначе текущее время
+                        entry_time_for_metadata = entry_time_from_api if entry_time_from_api else datetime.now()
+                        
+                        # Получаем режим для новой позиции
+                        regime = None
+                        if hasattr(self.signal_generator, "regime_managers") and symbol in getattr(
+                            self.signal_generator, "regime_managers", {}
+                        ):
+                            manager = self.signal_generator.regime_managers.get(symbol)
+                            if manager:
+                                regime = manager.get_current_regime()
+                        if not regime:
+                            if hasattr(self.signal_generator, "regime_manager") and self.signal_generator.regime_manager:
+                                regime = self.signal_generator.regime_manager.get_current_regime()
+                        
+                        # Определяем position_side
+                        pos_side_raw = position.get("posSide", "").lower()
+                        position_side = None
+                        if pos_side_raw in ["long", "short"]:
+                            position_side = pos_side_raw
+                        else:
+                            position_side = "long" if size > 0 else "short"
+                        
+                        # Создаем метаданные для новой позиции
+                        new_metadata = PositionMetadata(
+                            entry_time=entry_time_for_metadata,  # ✅ КРИТИЧЕСКОЕ: Используем entry_time из API (cTime/uTime)
+                            regime=regime,
+                            entry_price=entry_price_from_api if entry_price_from_api > 0 else None,
+                            position_side=position_side,
+                        )
+                        
+                        await self.position_registry.register_position(
+                            symbol=symbol,
+                            position=position,
+                            metadata=new_metadata,
+                        )
 
             # ✅ Проверяем is_running перед API запросом
             if not self.is_running:
@@ -2264,8 +2720,16 @@ class FuturesScalpingOrchestrator:
 
         except Exception as e:
             logger.error(f"❌ Ошибка получения использованной маржи: {e}", exc_info=True)
-            # Возвращаем текущее значение total_margin_used как fallback
-            return self.total_margin_used
+            # ✅ НОВОЕ: Fallback - пытаемся прочитать из DataRegistry
+            if self.data_registry:
+                try:
+                    margin_data = await self.data_registry.get_margin()
+                    if margin_data and margin_data.get("used") is not None:
+                        return margin_data["used"]
+                except Exception:
+                    pass
+            # Последний fallback - возвращаем 0.0
+            return 0.0
 
     async def _check_drawdown_protection(self) -> bool:
         """
@@ -2281,7 +2745,20 @@ class FuturesScalpingOrchestrator:
             if self.initial_balance is None:
                 return True
 
-            current_balance = await self.client.get_balance()
+            # ✅ НОВОЕ: Читаем баланс из DataRegistry
+            current_balance = None
+            if self.data_registry:
+                try:
+                    balance_data = await self.data_registry.get_balance()
+                    if balance_data:
+                        current_balance = balance_data.get("balance")
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry для drawdown: {e}")
+            
+            # Fallback на прямой запрос к API
+            if current_balance is None:
+                current_balance = await self.client.get_balance()
+            
             drawdown = (self.initial_balance - current_balance) / self.initial_balance
 
             # ✅ МОДЕРНИЗАЦИЯ: Получаем адаптивный max_drawdown_percent из конфига
@@ -3066,10 +3543,43 @@ class FuturesScalpingOrchestrator:
             if hasattr(self, "_closing_positions"):
                 self._closing_positions.discard(symbol)
 
+    @property
+    def active_positions(self) -> Dict[str, Dict[str, Any]]:
+        """
+        ✅ ПРОКСИ к PositionRegistry для обратной совместимости.
+
+        Возвращает все позиции из единого источника истины (PositionRegistry).
+        Это свойство обеспечивает обратную совместимость с существующим кодом,
+        который использует orchestrator.active_positions напрямую.
+
+        ⚠️ ВНИМАНИЕ: Для записи используйте position_registry.register_position()
+        Прямое присваивание в active_positions не синхронизирует данные!
+
+        Returns:
+            Копия словаря всех позиций из PositionRegistry
+        """
+        try:
+            return self.position_registry.get_all_positions_sync()
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения active_positions из PositionRegistry: {e}")
+            return {}  # Fallback: пустой словарь
+
     async def get_status(self) -> Dict[str, Any]:
         """Получение статуса системы"""
         try:
-            balance = await self.client.get_balance()
+            # ✅ НОВОЕ: Читаем баланс из DataRegistry
+            balance = None
+            if self.data_registry:
+                try:
+                    balance_data = await self.data_registry.get_balance()
+                    if balance_data:
+                        balance = balance_data.get("balance")
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry для статуса: {e}")
+            
+            # Fallback на прямой запрос к API
+            if balance is None:
+                balance = await self.client.get_balance()
             margin_status = await self.liquidation_guard.get_margin_status(self.client)
             slippage_stats = self.slippage_guard.get_slippage_statistics()
 
