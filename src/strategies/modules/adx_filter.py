@@ -99,6 +99,18 @@ class ADXFilter:
             plus_di = self._calculate_plus_di(candles)
             minus_di = self._calculate_minus_di(candles)
 
+            # ✅ ИСПРАВЛЕНО: Проверка на nan значения
+            if np.isnan(adx) or np.isnan(plus_di) or np.isnan(minus_di):
+                logger.debug(
+                    f"⚠️ ADX {symbol}: обнаружены nan значения (ADX={adx}, +DI={plus_di}, -DI={minus_di}), "
+                    f"используем fallback: ADX=0.0, +DI={plus_di if not np.isnan(plus_di) else 0.0:.1f}, "
+                    f"-DI={minus_di if not np.isnan(minus_di) else 0.0:.1f}"
+                )
+                # Используем fallback значения
+                adx = 0.0 if np.isnan(adx) else adx
+                plus_di = 0.0 if np.isnan(plus_di) else plus_di
+                minus_di = 0.0 if np.isnan(minus_di) else minus_di
+
             logger.debug(
                 f"📊 ADX {symbol}: ADX={adx:.1f}, "
                 f"+DI={plus_di:.1f}, -DI={minus_di:.1f}"
@@ -198,19 +210,76 @@ class ADXFilter:
         plus_di_smooth = self._wilder_smooth(plus_dm, self.config.adx_period)
         minus_di_smooth = self._wilder_smooth(minus_dm, self.config.adx_period)
 
+        # ✅ ИСПРАВЛЕНО: Защита от деления на ноль и nan
+        # Проверяем только последнее значение (первые period-1 значений всегда nan в Wilder's smoothing)
+        if len(atr) == 0 or np.isnan(atr[-1]) or atr[-1] == 0:
+            logger.debug(
+                f"⚠️ ADX: последнее значение atr nan или ноль для {len(candles)} свечей "
+                f"(atr[-1]={atr[-1] if len(atr) > 0 else 'N/A'}), "
+                f"используем fallback значение 0.0"
+            )
+            return 0.0
+
+        # ✅ ИСПРАВЛЕНО: Заменяем nan в atr на последнее валидное значение для безопасного деления
+        # Это нужно, чтобы при делении plus_di_smooth и minus_di_smooth на atr не получить nan
+        atr_safe = atr.copy()
+        last_valid_atr = atr[-1]  # Последнее значение уже проверено на nan и 0
+        atr_safe = np.where(np.isnan(atr_safe), last_valid_atr, atr_safe)
+
         # +DI и -DI (в процентах)
-        plus_di_vals = 100 * plus_di_smooth / atr
-        minus_di_vals = 100 * minus_di_smooth / atr
+        plus_di_vals = (
+            100 * plus_di_smooth / (atr_safe + 1e-10)
+        )  # Защита от деления на ноль
+        minus_di_vals = (
+            100 * minus_di_smooth / (atr_safe + 1e-10)
+        )  # Защита от деления на ноль
+
+        # ✅ ИСПРАВЛЕНО: Проверяем только последние значения (первые period-1 значений всегда nan)
+        if (
+            len(plus_di_vals) == 0
+            or np.isnan(plus_di_vals[-1])
+            or len(minus_di_vals) == 0
+            or np.isnan(minus_di_vals[-1])
+        ):
+            logger.debug(
+                f"⚠️ ADX: последние значения +DI или -DI содержат nan после расчета "
+                f"(+DI[-1]={plus_di_vals[-1] if len(plus_di_vals) > 0 else 'N/A'}, "
+                f"-DI[-1]={minus_di_vals[-1] if len(minus_di_vals) > 0 else 'N/A'}), "
+                f"используем fallback значение 0.0"
+            )
+            return 0.0
 
         # DX
-        dx = (
-            100
-            * np.abs(plus_di_vals - minus_di_vals)
-            / (plus_di_vals + minus_di_vals + 1e-10)
-        )
+        di_sum = plus_di_vals + minus_di_vals
+        # Защита от деления на ноль и nan
+        di_sum = np.where(
+            di_sum == 0, 1e-10, di_sum
+        )  # Заменяем нули на маленькое значение
+        dx = 100 * np.abs(plus_di_vals - minus_di_vals) / di_sum
+
+        # ✅ ИСПРАВЛЕНО: Проверяем только последнее значение DX
+        if len(dx) == 0 or np.isnan(dx[-1]):
+            logger.debug(
+                f"⚠️ ADX: последнее значение DX содержит nan (DX[-1]={dx[-1] if len(dx) > 0 else 'N/A'}), "
+                f"используем fallback значение 0.0"
+            )
+            return 0.0
+
+        # ✅ ИСПРАВЛЕНО: Заменяем nan в DX на последнее валидное значение перед сглаживанием
+        # Это нужно, чтобы Wilder's smoothing не дал nan в результате
+        dx_safe = dx.copy()
+        last_valid_dx = dx[-1]  # Последнее значение уже проверено на nan
+        dx_safe = np.where(np.isnan(dx_safe), last_valid_dx, dx_safe)
 
         # ADX = сглаженный DX
-        adx_vals = self._wilder_smooth(dx, self.config.adx_period)
+        adx_vals = self._wilder_smooth(dx_safe, self.config.adx_period)
+
+        # Проверяем финальное значение ADX
+        if len(adx_vals) == 0 or np.isnan(adx_vals[-1]):
+            logger.debug(
+                f"⚠️ ADX: финальное значение nan или пустое, используем fallback значение 0.0"
+            )
+            return 0.0
 
         return float(adx_vals[-1])
 
@@ -229,7 +298,20 @@ class ADXFilter:
         atr = self._wilder_smooth(tr, self.config.adx_period)
         plus_di_smooth = self._wilder_smooth(plus_dm, self.config.adx_period)
 
-        plus_di = 100 * plus_di_smooth / atr
+        # ✅ ИСПРАВЛЕНО: Защита от деления на ноль и nan
+        # Проверяем только последнее значение (первые period-1 значений всегда nan в Wilder's smoothing)
+        if len(atr) == 0 or np.isnan(atr[-1]) or atr[-1] == 0:
+            return 0.0
+
+        # ✅ ИСПРАВЛЕНО: Заменяем nan в atr на последнее валидное значение
+        atr_safe = atr.copy()
+        last_valid_atr = atr[-1]
+        atr_safe = np.where(np.isnan(atr_safe), last_valid_atr, atr_safe)
+
+        plus_di = 100 * plus_di_smooth / (atr_safe + 1e-10)  # Защита от деления на ноль
+
+        if len(plus_di) == 0 or np.isnan(plus_di[-1]):
+            return 0.0
 
         return float(plus_di[-1])
 
@@ -248,7 +330,22 @@ class ADXFilter:
         atr = self._wilder_smooth(tr, self.config.adx_period)
         minus_di_smooth = self._wilder_smooth(minus_dm, self.config.adx_period)
 
-        minus_di = 100 * minus_di_smooth / atr
+        # ✅ ИСПРАВЛЕНО: Защита от деления на ноль и nan
+        # Проверяем только последнее значение (первые period-1 значений всегда nan в Wilder's smoothing)
+        if len(atr) == 0 or np.isnan(atr[-1]) or atr[-1] == 0:
+            return 0.0
+
+        # ✅ ИСПРАВЛЕНО: Заменяем nan в atr на последнее валидное значение
+        atr_safe = atr.copy()
+        last_valid_atr = atr[-1]
+        atr_safe = np.where(np.isnan(atr_safe), last_valid_atr, atr_safe)
+
+        minus_di = (
+            100 * minus_di_smooth / (atr_safe + 1e-10)
+        )  # Защита от деления на ноль
+
+        if len(minus_di) == 0 or np.isnan(minus_di[-1]):
+            return 0.0
 
         return float(minus_di[-1])
 

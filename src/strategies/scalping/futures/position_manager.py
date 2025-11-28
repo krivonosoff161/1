@@ -818,6 +818,50 @@ class FuturesPositionManager:
             )
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем regime в margin_calculator (используем position_regime если есть, иначе market_regime)
             regime_for_margin = position_regime or market_regime
+
+            # ✅ НОВОЕ: Рассчитываем возраст позиции для улучшенного расчета margin_ratio
+            position_age_seconds = None
+            try:
+                entry_time = None
+                if symbol in self.active_positions:
+                    entry_time = self.active_positions[symbol].get("entry_time")
+
+                if not entry_time:
+                    # Пробуем получить из позиции API
+                    c_time = position.get("cTime")
+                    u_time = position.get("uTime")
+                    entry_time_str = c_time or u_time
+                    if entry_time_str:
+                        try:
+                            if (
+                                isinstance(entry_time_str, str)
+                                and entry_time_str.isdigit()
+                            ):
+                                entry_timestamp = int(entry_time_str) / 1000.0
+                                entry_time = datetime.fromtimestamp(entry_timestamp)
+                            elif isinstance(entry_time_str, (int, float)):
+                                entry_timestamp = (
+                                    float(entry_time_str) / 1000.0
+                                    if float(entry_time_str) > 1000000000000
+                                    else float(entry_time_str)
+                                )
+                                entry_time = datetime.fromtimestamp(entry_timestamp)
+                        except (ValueError, TypeError):
+                            pass
+
+                if entry_time:
+                    if isinstance(entry_time, datetime):
+                        position_age_seconds = (
+                            datetime.now() - entry_time
+                        ).total_seconds()
+                    elif isinstance(entry_time, (int, float)):
+                        # Предполагаем что это timestamp
+                        position_age_seconds = time.time() - entry_time
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось рассчитать возраст позиции для {symbol}: {e}"
+                )
+
             is_safe, details = self.margin_calculator.is_position_safe(
                 position_value,
                 equity,  # ✅ Используем equity из позиции!
@@ -827,6 +871,7 @@ class FuturesPositionManager:
                 leverage,
                 safety_threshold=None,  # ✅ ИСПРАВЛЕНО: None - читает из конфига по режиму
                 regime=regime_for_margin,  # ✅ КРИТИЧЕСКОЕ: Передаем regime для адаптивного safety_threshold
+                position_age_seconds=position_age_seconds,  # ✅ НОВОЕ: Передаем возраст позиции
             )
 
             if not is_safe:

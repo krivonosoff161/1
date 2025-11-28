@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-chcp 65001 >nul 2>&1
+chcp 65001
 title Clean Logs
 color 0A
 
@@ -8,17 +8,22 @@ echo ====================================
 echo   CLEAN LOGS
 echo ====================================
 echo.
+echo Script started at %TIME%
+echo.
 
 cd /d "%~dp0"
 if errorlevel 1 (
     echo [ERROR] Failed to change directory!
     echo Current: %CD%
     echo Script: %~dp0
+    echo.
+    echo Press any key to exit...
     pause
     exit /b 1
 )
 
 echo Current directory: %CD%
+echo Script directory: %~dp0
 echo.
 
 set filefound=0
@@ -26,14 +31,18 @@ if exist "logs\futures\*.log" set filefound=1
 if exist "logs\futures\*.zip" set filefound=1
 if exist "logs\futures\debug\*.csv" set filefound=1
 if exist "logs\futures\structured\*.json" set filefound=1
-if exist "logs\futures\extracted\*.*" set filefound=1
-if exist "logs\futures\temp_extracted\*.*" set filefound=1
+if exist "logs\futures\extracted" set filefound=1
+if exist "logs\futures\temp_extracted" set filefound=1
 if exist "logs\trades_*.csv" set filefound=1
 if exist "logs\trades_*.json" set filefound=1
+
+echo File found flag: !filefound!
+echo.
 
 if !filefound! equ 0 (
     echo No files found for archiving!
     echo.
+    echo Press any key to exit...
     pause
     exit /b 0
 )
@@ -43,6 +52,8 @@ if not exist "logs\futures\archived" (
     mkdir "logs\futures\archived"
     if errorlevel 1 (
         echo [ERROR] Failed to create archive folder!
+        echo.
+        echo Press any key to exit...
         pause
         exit /b 1
     )
@@ -53,12 +64,17 @@ set datetime=
 for /f "tokens=*" %%I in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Date -Format \"yyyyMMddHHmmss\"" 2^>nul') do set datetime=%%I
 if "!datetime!"=="" (
     echo PowerShell failed, trying WMIC...
-    for /f "tokens=2 delims==" %%I in ('wmic OS Get localdatetime /value 2^>nul') do set datetime=%%I
-    set datetime=!datetime:~0,14!
+    for /f "tokens=2 delims==" %%I in ('wmic OS Get localdatetime /value 2^>nul') do (
+        set datetime=%%I
+    )
+    if not "!datetime!"=="" (
+        set datetime=!datetime:~0,14!
+    )
 )
 if "!datetime!"=="" (
     echo [ERROR] Failed to get date and time!
     echo.
+    echo Press any key to exit...
     pause
     exit /b 1
 )
@@ -71,6 +87,8 @@ if not exist "!archivefolder!" (
     mkdir "!archivefolder!"
     if errorlevel 1 (
         echo [ERROR] Failed to create archive folder: !archivefolder!
+        echo.
+        echo Press any key to exit...
         pause
         exit /b 1
     )
@@ -97,7 +115,7 @@ set tempextractedcount=0
 set failedtempextracted=0
 
 echo Moving LOG files...
-for %%f in (logs\futures\*.log) do (
+for %%f in ("logs\futures\*.log") do (
     if exist "%%f" (
         move /Y "%%f" "!archivefolder!\" >nul 2>&1
         if !errorlevel! equ 0 (
@@ -109,7 +127,7 @@ for %%f in (logs\futures\*.log) do (
 )
 
 echo Moving ZIP archives...
-for %%f in (logs\futures\*.zip) do (
+for %%f in ("logs\futures\*.zip") do (
     if exist "%%f" (
         move /Y "%%f" "!archivefolder!\" >nul 2>&1
         if !errorlevel! equ 0 (
@@ -122,7 +140,7 @@ for %%f in (logs\futures\*.zip) do (
 
 echo Moving DEBUG CSV files...
 if exist "logs\futures\debug" (
-    for %%f in (logs\futures\debug\*.csv) do (
+    for %%f in ("logs\futures\debug\*.csv") do (
         if exist "%%f" (
             move /Y "%%f" "!archivefolder!\" >nul 2>&1
             if !errorlevel! equ 0 (
@@ -160,7 +178,7 @@ for %%f in ("logs\trades_*.json") do (
 
 echo Moving STRUCTURED JSON files...
 if exist "logs\futures\structured" (
-    for %%f in (logs\futures\structured\*.json) do (
+    for %%f in ("logs\futures\structured\*.json") do (
         if exist "%%f" (
             move /Y "%%f" "!archivefolder!\" >nul 2>&1
             if !errorlevel! equ 0 (
@@ -174,7 +192,7 @@ if exist "logs\futures\structured" (
 
 echo Moving EXTRACTED files...
 if exist "logs\futures\extracted" (
-    for %%f in (logs\futures\extracted\*.*) do (
+    for %%f in ("logs\futures\extracted\*.*") do (
         if exist "%%f" (
             move /Y "%%f" "!archivefolder!\" >nul 2>&1
             if !errorlevel! equ 0 (
@@ -189,7 +207,7 @@ if exist "logs\futures\extracted" (
 
 echo Moving TEMP_EXTRACTED files...
 if exist "logs\futures\temp_extracted" (
-    for %%f in (logs\futures\temp_extracted\*.*) do (
+    for %%f in ("logs\futures\temp_extracted\*.*") do (
         if exist "%%f" (
             move /Y "%%f" "!archivefolder!\" >nul 2>&1
             if !errorlevel! equ 0 (
@@ -242,27 +260,39 @@ if !totalmoved! equ 0 (
     echo Creating ZIP archive: !zipfile!
     echo.
     
-    REM Проверяем наличие PowerShell для создания ZIP
     where powershell >nul 2>&1
     if !errorlevel! equ 0 (
-        REM Используем PowerShell для создания ZIP
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '!archivefolder!\*' -DestinationPath '!zipfile!' -Force" >nul 2>&1
+        set "ps_archive_path=!archivefolder!"
+        set "ps_zip_path=!zipfile!"
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path \"!ps_archive_path!\*\" -DestinationPath \"!ps_zip_path!\" -Force" >nul 2>&1
         if !errorlevel! equ 0 (
             echo [SUCCESS] ZIP archive created: !zipfile!
             
-            REM Проверяем размер архива
             for %%A in ("!zipfile!") do (
                 set zipsize=%%~zA
                 set /a zipsize_mb=!zipsize!/1024/1024
                 echo Archive size: !zipsize_mb! MB
             )
             
-            REM Спрашиваем, удалять ли исходную папку
+            REM Опция: автоматически удалять исходную папку после создания ZIP
+            REM Если нужно всегда удалять - раскомментируйте следующие строки:
+            REM echo Removing archive folder (automatic)...
+            REM rmdir /S /Q "!archivefolder!" >nul 2>&1
+            REM if !errorlevel! equ 0 (
+            REM     echo [SUCCESS] Archive folder removed.
+            REM ) else (
+            REM     echo [WARNING] Failed to remove archive folder. You can remove it manually.
+            REM )
+            
+            REM Если нужно всегда оставлять - раскомментируйте:
+            REM echo Keeping archive folder: !archivefolder!
+            
+            REM По умолчанию: спрашиваем пользователя
             echo.
             echo Do you want to remove the original archive folder?
             echo Press Y to remove, any other key to keep:
-            choice /C YN /N /M "[Y/N]: "
-            if !errorlevel! equ 1 (
+            set /p removefolder="[Y/N]: "
+            if /i "!removefolder!"=="Y" (
                 echo Removing archive folder...
                 rmdir /S /Q "!archivefolder!" >nul 2>&1
                 if !errorlevel! equ 0 (
@@ -289,4 +319,6 @@ echo ====================================
 echo   CLEAN LOGS COMPLETE
 echo ====================================
 echo.
+echo Press any key to exit...
 pause
+

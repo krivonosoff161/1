@@ -162,6 +162,9 @@ class MarginCalculator:
         leverage: Optional[int] = None,
         safety_threshold: Optional[float] = None,
         regime: Optional[str] = None,
+        position_age_seconds: Optional[
+            float
+        ] = None,  # ✅ НОВОЕ: Возраст позиции в секундах
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         Проверка безопасности позиции
@@ -350,15 +353,45 @@ class MarginCalculator:
             # Но нужно учитывать общий баланс аккаунта для расчета доступной маржи
             # Если позиция только открыта, equity может быть ≈ margin
             # В этом случае используем более консервативный расчет с учетом общего баланса
+
+            # ✅ ИСПРАВЛЕНО: Улучшенный расчет для новых позиций (< 60 секунд)
+            # Для очень новых позиций (< 30 сек) используем более консервативный расчет
+            # так как equity может еще не синхронизироваться с биржей
+            is_very_new_position = (
+                position_age_seconds is not None and position_age_seconds < 30.0
+            )
+            is_new_position = (
+                position_age_seconds is not None and position_age_seconds < 60.0
+            )
+
             if equity > 0 and margin_used > 0:
-                # Используем equity / margin_used как базовый margin_ratio
-                # Но добавляем небольшой запас для новых позиций
-                # available_margin = (equity - margin_used) + margin_used * 0.5
-                # Это дает margin_ratio ≈ 1.5 для новой позиции (безопасно)
-                available_margin = max(
-                    (equity - margin_used),
-                    margin_used * 0.5,  # Минимум 50% от margin как запас
-                )
+                if is_very_new_position:
+                    # ✅ Для очень новых позиций (< 30 сек): используем более консервативный расчет
+                    # Предполагаем что есть запас маржи, даже если equity еще не обновился
+                    # margin_ratio = 2.0 (безопасно для новых позиций)
+                    available_margin = margin_used * 1.0  # margin_ratio = 2.0
+                    logger.debug(
+                        f"✅ Новая позиция (< 30 сек): используем консервативный расчет "
+                        f"margin_ratio=2.0 (age={position_age_seconds:.1f}s)"
+                    )
+                elif is_new_position:
+                    # ✅ Для новых позиций (< 60 сек): используем умеренный расчет
+                    # margin_ratio = 1.5 (безопасно)
+                    available_margin = margin_used * 0.5  # margin_ratio = 1.5
+                    logger.debug(
+                        f"✅ Новая позиция (< 60 сек): используем умеренный расчет "
+                        f"margin_ratio=1.5 (age={position_age_seconds:.1f}s)"
+                    )
+                else:
+                    # ✅ Для позиций > 60 сек: используем стандартный расчет
+                    # Используем equity / margin_used как базовый margin_ratio
+                    # Но добавляем небольшой запас для новых позиций
+                    # available_margin = (equity - margin_used) + margin_used * 0.5
+                    # Это дает margin_ratio ≈ 1.5 для новой позиции (безопасно)
+                    available_margin = max(
+                        (equity - margin_used),
+                        margin_used * 0.5,  # Минимум 50% от margin как запас
+                    )
             else:
                 # Fallback: если equity = 0 или margin = 0 (не должно происходить)
                 available_margin = margin_used * 2  # Временная защита: margin_ratio = 2

@@ -115,7 +115,32 @@ class SlippageGuard:
             symbol = order.get("instId", "").replace("-SWAP", "")
             side = order.get("side")
             order_type = order.get("ordType")
-            price = float(order.get("px", "0"))
+
+            # ✅ ИСПРАВЛЕНО: Обработка пустой строки для market ордеров
+            px_value = order.get("px") or "0"
+            if not px_value or px_value == "":
+                # Market ордера не имеют цены (px), пропускаем анализ
+                if order_type == "market":
+                    logger.debug(
+                        f"Slippage Guard: пропускаем анализ market ордера {order_id} "
+                        f"(market ордера не имеют цены px)"
+                    )
+                    return
+                # Для других типов ордеров пытаемся получить текущую цену
+                current_prices = await self._get_current_prices(client, symbol)
+                if not current_prices:
+                    logger.warning(
+                        f"⚠️ Не удалось получить цену для {symbol}, пропускаем анализ ордера {order_id}"
+                    )
+                    return
+                price = (
+                    current_prices["last"]
+                    if side.lower() == "buy"
+                    else current_prices["bid"]
+                )
+            else:
+                price = float(px_value)
+
             size = float(order.get("sz", "0"))
 
             if order_type not in ["market", "limit"]:
