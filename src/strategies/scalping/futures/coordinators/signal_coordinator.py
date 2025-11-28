@@ -16,7 +16,6 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from loguru import logger
 
 
-
 class SignalCoordinator:
     """
     Координатор обработки торговых сигналов для Futures торговли.

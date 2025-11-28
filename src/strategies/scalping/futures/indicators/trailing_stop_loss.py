@@ -527,7 +527,10 @@ class TrailingStopLoss:
 
                 # ✅ ЗАЩИТА: Проверяем, что убыток не из-за комиссии
                 commission_threshold = self.trading_fee_rate * 1.5
-                if abs(profit_pct + critical_loss_cut_from_price) < commission_threshold:
+                if (
+                    abs(profit_pct + critical_loss_cut_from_price)
+                    < commission_threshold
+                ):
                     logger.debug(
                         f"⚠️ Критический loss_cut может быть из-за комиссии: "
                         f"profit_pct={profit_pct:.4f}, critical={critical_loss_cut_from_price:.4f}, "

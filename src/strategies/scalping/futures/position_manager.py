@@ -902,8 +902,12 @@ class FuturesPositionManager:
                         if symbol in self.active_positions:
                             pos_data = self.active_positions[symbol]
                             if isinstance(pos_data, dict):
-                                position_open_time = pos_data.get("entry_time") or pos_data.get("timestamp") or pos_data.get("open_time")
-                        
+                                position_open_time = (
+                                    pos_data.get("entry_time")
+                                    or pos_data.get("timestamp")
+                                    or pos_data.get("open_time")
+                                )
+
                         # Если не нашли, пробуем из текущей позиции
                         if not position_open_time:
                             c_time = position.get("cTime")
@@ -911,27 +915,45 @@ class FuturesPositionManager:
                             if c_time or u_time:
                                 entry_time_str = c_time or u_time
                                 try:
-                                    if isinstance(entry_time_str, str) and entry_time_str.isdigit():
+                                    if (
+                                        isinstance(entry_time_str, str)
+                                        and entry_time_str.isdigit()
+                                    ):
                                         entry_timestamp = int(entry_time_str) / 1000.0
-                                        position_open_time = datetime.fromtimestamp(entry_timestamp)
+                                        position_open_time = datetime.fromtimestamp(
+                                            entry_timestamp
+                                        )
                                     elif isinstance(entry_time_str, (int, float)):
-                                        entry_timestamp = float(entry_time_str) / 1000.0 if float(entry_time_str) > 1000000000000 else float(entry_time_str)
-                                        position_open_time = datetime.fromtimestamp(entry_timestamp)
+                                        entry_timestamp = (
+                                            float(entry_time_str) / 1000.0
+                                            if float(entry_time_str) > 1000000000000
+                                            else float(entry_time_str)
+                                        )
+                                        position_open_time = datetime.fromtimestamp(
+                                            entry_timestamp
+                                        )
                                 except (ValueError, TypeError):
                                     pass
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка получения времени открытия для {symbol}: {e}")
-                    
+                        logger.debug(
+                            f"⚠️ Ошибка получения времени открытия для {symbol}: {e}"
+                        )
+
                     time_since_open = 0.0
                     if position_open_time:
                         if isinstance(position_open_time, datetime):
-                            time_since_open = (datetime.now() - position_open_time).total_seconds()
+                            time_since_open = (
+                                datetime.now() - position_open_time
+                            ).total_seconds()
                         else:
                             try:
-                                time_since_open = (datetime.now() - datetime.fromtimestamp(float(position_open_time))).total_seconds()
+                                time_since_open = (
+                                    datetime.now()
+                                    - datetime.fromtimestamp(float(position_open_time))
+                                ).total_seconds()
                             except (ValueError, TypeError):
                                 pass
-                    
+
                     # ✅ ЗАЩИТА #1: Не закрываем позиции, открытые менее 30 секунд назад
                     if time_since_open < 30.0:
                         logger.debug(
@@ -939,7 +961,7 @@ class FuturesPositionManager:
                             f"пропускаем emergency close (защита от ложных срабатываний, margin_ratio={margin_ratio:.2f}%)"
                         )
                         return
-                    
+
                     # ✅ ЗАЩИТА #2: Проверяем, что убыток действительно критический (> 2% от маржи)
                     try:
                         pnl = float(position.get("upl", "0") or 0)
@@ -954,8 +976,10 @@ class FuturesPositionManager:
                                 )
                                 return
                     except (ValueError, TypeError) as e:
-                        logger.debug(f"⚠️ Ошибка расчета убытка для emergency close {symbol}: {e}")
-                    
+                        logger.debug(
+                            f"⚠️ Ошибка расчета убытка для emergency close {symbol}: {e}"
+                        )
+
                     logger.warning(
                         f"⚠️ Позиция {symbol} имеет низкую маржу: {margin_ratio:.2f}%. Закрытие... "
                         f"(время удержания: {time_since_open:.1f} сек)"
@@ -1290,15 +1314,22 @@ class FuturesPositionManager:
             min_holding_minutes = 35.0  # Default
             try:
                 if hasattr(self, "orchestrator") and self.orchestrator:
-                    if hasattr(self.orchestrator, "signal_generator") and self.orchestrator.signal_generator:
-                        regime_params = self.orchestrator.signal_generator.regime_manager.get_current_parameters()
+                    if (
+                        hasattr(self.orchestrator, "signal_generator")
+                        and self.orchestrator.signal_generator
+                    ):
+                        regime_params = (
+                            self.orchestrator.signal_generator.regime_manager.get_current_parameters()
+                        )
                         if regime_params:
-                            min_holding_minutes = getattr(regime_params, "min_holding_minutes", 35.0)
+                            min_holding_minutes = getattr(
+                                regime_params, "min_holding_minutes", 35.0
+                            )
             except Exception:
                 pass  # Используем default 35 минут
-            
+
             min_holding_seconds = min_holding_minutes * 60.0
-            
+
             # ✅ Проверяем MIN_HOLDING: если позиция открыта меньше min_holding, НЕ закрываем по PH
             if time_since_open < min_holding_seconds:
                 logger.debug(
@@ -1342,39 +1373,59 @@ class FuturesPositionManager:
             side = position.get("posSide", "long")
             entry_price = float(position.get("avgPx", "0"))
             current_price = float(position.get("markPx", "0"))
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем MIN_HOLDING перед TP
             # Защита от шума должна работать - не закрываем по TP до 35 минут (min_holding)
             try:
                 entry_time_str = position.get("cTime", position.get("openTime", ""))
-                if not entry_time_str and hasattr(self, "orchestrator") and self.orchestrator:
-                    active_positions = getattr(self.orchestrator, "active_positions", {})
+                if (
+                    not entry_time_str
+                    and hasattr(self, "orchestrator")
+                    and self.orchestrator
+                ):
+                    active_positions = getattr(
+                        self.orchestrator, "active_positions", {}
+                    )
                     if symbol in active_positions:
                         entry_time_str = active_positions[symbol].get("entry_time", "")
-                
+
                 if entry_time_str:
                     from datetime import timezone
+
                     if isinstance(entry_time_str, str):
                         if entry_time_str.isdigit():
                             entry_timestamp = int(entry_time_str) / 1000.0
                         else:
-                            entry_time = datetime.fromisoformat(entry_time_str.replace("Z", "+00:00"))
+                            entry_time = datetime.fromisoformat(
+                                entry_time_str.replace("Z", "+00:00")
+                            )
                             entry_timestamp = entry_time.timestamp()
                     else:
-                        entry_timestamp = float(entry_time_str) / 1000.0 if entry_time_str > 1000000000000 else float(entry_time_str)
-                    
+                        entry_timestamp = (
+                            float(entry_time_str) / 1000.0
+                            if entry_time_str > 1000000000000
+                            else float(entry_time_str)
+                        )
+
                     current_timestamp = datetime.now(timezone.utc).timestamp()
                     time_since_open = current_timestamp - entry_timestamp
-                    
+
                     min_holding_minutes = 35.0  # Default
                     if hasattr(self, "orchestrator") and self.orchestrator:
-                        if hasattr(self.orchestrator, "signal_generator") and self.orchestrator.signal_generator:
-                            regime_params = self.orchestrator.signal_generator.regime_manager.get_current_parameters()
+                        if (
+                            hasattr(self.orchestrator, "signal_generator")
+                            and self.orchestrator.signal_generator
+                        ):
+                            regime_params = (
+                                self.orchestrator.signal_generator.regime_manager.get_current_parameters()
+                            )
                             if regime_params:
-                                min_holding_minutes = getattr(regime_params, "min_holding_minutes", 35.0)
-                    
+                                min_holding_minutes = getattr(
+                                    regime_params, "min_holding_minutes", 35.0
+                                )
+
                     min_holding_seconds = min_holding_minutes * 60.0
-                    
+
                     if time_since_open < min_holding_seconds:
                         logger.debug(
                             f"⏱️ TP заблокирован MIN_HOLDING для {symbol}: "
@@ -1383,7 +1434,9 @@ class FuturesPositionManager:
                         )
                         return  # НЕ закрываем - защита от шума активна!
             except Exception as e:
-                logger.debug(f"⚠️ Не удалось проверить MIN_HOLDING для TP {symbol}: {e}")
+                logger.debug(
+                    f"⚠️ Не удалось проверить MIN_HOLDING для TP {symbol}: {e}"
+                )
                 # Продолжаем проверку TP, если не удалось получить время
 
             # ✅ НОВОЕ: Проверка адаптивного SL (ПЕРЕД loss_cut - более строгий стоп)
@@ -1400,7 +1453,7 @@ class FuturesPositionManager:
                         tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
                     except Exception:
                         pass
-            
+
             # Рассчитываем PnL для проверки loss_cut
             if entry_price > 0 and current_price > 0:
                 try:
@@ -1408,63 +1461,103 @@ class FuturesPositionManager:
                         pnl_pct = (current_price - entry_price) / entry_price
                     else:
                         pnl_pct = (entry_price - current_price) / entry_price
-                    
+
                     # ✅ Проверяем loss_cut только для убыточных позиций
                     if pnl_pct < 0:
                         # Получаем loss_cut из конфига
                         loss_cut_percent = None
                         market_regime = position.get("regime")
-                        
+
                         try:
                             if hasattr(self, "orchestrator") and self.orchestrator:
-                                if hasattr(self.orchestrator, "trailing_sl_coordinator"):
+                                if hasattr(
+                                    self.orchestrator, "trailing_sl_coordinator"
+                                ):
                                     # Получаем параметры TSL из конфига
                                     tsl_params = self.orchestrator.trailing_sl_coordinator._get_trailing_sl_params(
                                         symbol, market_regime
                                     )
                                     if tsl_params:
-                                        loss_cut_percent = tsl_params.get("loss_cut_percent")
+                                        loss_cut_percent = tsl_params.get(
+                                            "loss_cut_percent"
+                                        )
                         except Exception as e:
-                            logger.debug(f"⚠️ Ошибка получения loss_cut_percent для {symbol}: {e}")
-                        
+                            logger.debug(
+                                f"⚠️ Ошибка получения loss_cut_percent для {symbol}: {e}"
+                            )
+
                         if loss_cut_percent:
                             leverage = getattr(self.scalping_config, "leverage", 5)
                             loss_cut_from_price = loss_cut_percent / leverage
-                            
+
                             # ✅ Для больших убытков (>= loss_cut) закрываем после минимальной задержки (5 сек)
                             if abs(pnl_pct) >= loss_cut_from_price:
                                 # Получаем время открытия
                                 time_since_open = 0.0
                                 try:
-                                    entry_time_str = position.get("cTime", position.get("openTime", ""))
+                                    entry_time_str = position.get(
+                                        "cTime", position.get("openTime", "")
+                                    )
                                     if entry_time_str:
                                         from datetime import timezone
-                                        if isinstance(entry_time_str, str) and entry_time_str.isdigit():
-                                            entry_timestamp = int(entry_time_str) / 1000.0
-                                            current_timestamp = datetime.now(timezone.utc).timestamp()
-                                            time_since_open = current_timestamp - entry_timestamp
+
+                                        if (
+                                            isinstance(entry_time_str, str)
+                                            and entry_time_str.isdigit()
+                                        ):
+                                            entry_timestamp = (
+                                                int(entry_time_str) / 1000.0
+                                            )
+                                            current_timestamp = datetime.now(
+                                                timezone.utc
+                                            ).timestamp()
+                                            time_since_open = (
+                                                current_timestamp - entry_timestamp
+                                            )
                                         elif isinstance(entry_time_str, (int, float)):
-                                            entry_timestamp = float(entry_time_str) / 1000.0 if float(entry_time_str) > 1000000000000 else float(entry_time_str)
-                                            current_timestamp = datetime.now(timezone.utc).timestamp()
-                                            time_since_open = current_timestamp - entry_timestamp
-                                    
+                                            entry_timestamp = (
+                                                float(entry_time_str) / 1000.0
+                                                if float(entry_time_str) > 1000000000000
+                                                else float(entry_time_str)
+                                            )
+                                            current_timestamp = datetime.now(
+                                                timezone.utc
+                                            ).timestamp()
+                                            time_since_open = (
+                                                current_timestamp - entry_timestamp
+                                            )
+
                                     # Пробуем из active_positions
-                                    if time_since_open == 0 and hasattr(self, "orchestrator") and self.orchestrator:
-                                        active_positions = getattr(self.orchestrator, "active_positions", {})
+                                    if (
+                                        time_since_open == 0
+                                        and hasattr(self, "orchestrator")
+                                        and self.orchestrator
+                                    ):
+                                        active_positions = getattr(
+                                            self.orchestrator, "active_positions", {}
+                                        )
                                         if symbol in active_positions:
-                                            entry_time_obj = active_positions[symbol].get("entry_time")
+                                            entry_time_obj = active_positions[
+                                                symbol
+                                            ].get("entry_time")
                                             if entry_time_obj:
                                                 if isinstance(entry_time_obj, datetime):
-                                                    time_since_open = (datetime.now() - entry_time_obj).total_seconds()
+                                                    time_since_open = (
+                                                        datetime.now() - entry_time_obj
+                                                    ).total_seconds()
                                 except Exception as e:
-                                    logger.debug(f"⚠️ Ошибка расчета времени открытия для loss_cut {symbol}: {e}")
-                                
+                                    logger.debug(
+                                        f"⚠️ Ошибка расчета времени открытия для loss_cut {symbol}: {e}"
+                                    )
+
                                 if time_since_open >= 5.0:  # Минимальная задержка
                                     logger.warning(
                                         f"⚠️ Loss-cut (position_manager): {symbol} PnL={pnl_pct:.2%} <= -{loss_cut_from_price:.2%}%, "
                                         f"закрываем (время: {time_since_open:.1f} сек, TSL={'активен' if tsl else 'не активен'})"
                                     )
-                                    await self._close_position_by_reason(position, "loss_cut")
+                                    await self._close_position_by_reason(
+                                        position, "loss_cut"
+                                    )
                                     return
                                 else:
                                     logger.debug(
@@ -1472,7 +1565,9 @@ class FuturesPositionManager:
                                         f"время: {time_since_open:.1f} сек < 5.0 сек"
                                     )
                 except Exception as e:
-                    logger.debug(f"⚠️ Ошибка проверки loss_cut в position_manager для {symbol}: {e}")
+                    logger.debug(
+                        f"⚠️ Ошибка проверки loss_cut в position_manager для {symbol}: {e}"
+                    )
             # ✅ ИСПРАВЛЕНИЕ: Используем leverage из конфига, а не из позиции на бирже
             # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
             leverage_from_position = int(position.get("lever", "0"))
@@ -2995,14 +3090,25 @@ class FuturesPositionManager:
                 if hasattr(self, "orchestrator") and self.orchestrator:
                     if hasattr(self.orchestrator, "performance_tracker"):
                         try:
-                            self.orchestrator.performance_tracker.record_trade(trade_result)
-                            logger.debug(f"✅ Сделка {symbol} записана в CSV через orchestrator.performance_tracker")
+                            self.orchestrator.performance_tracker.record_trade(
+                                trade_result
+                            )
+                            logger.debug(
+                                f"✅ Сделка {symbol} записана в CSV через orchestrator.performance_tracker"
+                            )
                         except Exception as e:
-                            logger.error(f"❌ Ошибка записи сделки {symbol} в CSV: {e}", exc_info=True)
+                            logger.error(
+                                f"❌ Ошибка записи сделки {symbol} в CSV: {e}",
+                                exc_info=True,
+                            )
                     else:
-                        logger.warning(f"⚠️ orchestrator.performance_tracker не найден, пропуск записи в CSV для {symbol}")
+                        logger.warning(
+                            f"⚠️ orchestrator.performance_tracker не найден, пропуск записи в CSV для {symbol}"
+                        )
                 else:
-                    logger.warning(f"⚠️ orchestrator не найден, пропуск записи в CSV для {symbol}")
+                    logger.warning(
+                        f"⚠️ orchestrator не найден, пропуск записи в CSV для {symbol}"
+                    )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Возвращаем TradeResult для записи в CSV
                 return trade_result
