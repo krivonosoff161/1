@@ -171,26 +171,35 @@ class EntryManager:
             symbol = signal.get("symbol")
             if not symbol:
                 logger.error("❌ EntryManager: Сигнал не содержит symbol")
-                return None
+                return {"success": False, "error": "Сигнал не содержит symbol"}
 
             # Проверяем, нет ли уже открытой позиции
             has_position = await self.position_registry.has_position(symbol)
             if has_position:
                 logger.debug(f"ℹ️ EntryManager: Позиция {symbol} уже открыта")
-                return None
+                return {"success": False, "error": f"Позиция {symbol} уже открыта"}
 
             if position_size <= 0:
                 logger.warning(
                     f"⚠️ EntryManager: Невалидный размер позиции для {symbol}: {position_size}"
                 )
-                return None
+                return {
+                    "success": False,
+                    "error": f"Невалидный размер позиции: {position_size}",
+                }
 
             # 1. Размещение ордера на бирже через OrderExecutor (используем уже рассчитанный размер)
             order_result = await self.order_executor.execute_signal(
                 signal, position_size
             )
 
-            if not order_result or not order_result.get("success"):
+            if not order_result:
+                logger.error(
+                    f"❌ EntryManager: order_executor.execute_signal вернул None для {symbol}"
+                )
+                return {"success": False, "error": "order_executor вернул None"}
+
+            if not order_result.get("success"):
                 logger.error(
                     f"❌ EntryManager: Не удалось разместить ордер для {symbol}"
                 )
@@ -210,8 +219,8 @@ class EntryManager:
                     positions = await client.get_positions()
                 else:
                     logger.warning(
-                        f"⚠️ EntryManager: order_executor не имеет атрибута client, "
-                        f"не можем получить позицию с биржи"
+                        "⚠️ EntryManager: order_executor не имеет атрибута client, "
+                        "не можем получить позицию с биржи"
                     )
                     positions = []
                 inst_id = f"{symbol}-SWAP"

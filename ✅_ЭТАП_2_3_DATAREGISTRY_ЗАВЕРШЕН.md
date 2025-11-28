@@ -27,3 +27,8 @@
 
 **RiskManager теперь использует DataRegistry! ✅**
 
+
+
+
+
+

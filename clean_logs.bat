@@ -25,6 +25,7 @@ set filefound=0
 if exist "logs\futures\*.log" set filefound=1
 if exist "logs\futures\*.zip" set filefound=1
 if exist "logs\futures\debug\*.csv" set filefound=1
+if exist "logs\futures\structured\*.json" set filefound=1
 if exist "logs\futures\extracted\*.*" set filefound=1
 if exist "logs\futures\temp_extracted\*.*" set filefound=1
 if exist "logs\trades_*.csv" set filefound=1
@@ -88,6 +89,8 @@ set tradescount=0
 set failedtrades=0
 set jsoncount=0
 set failedjson=0
+set structuredcount=0
+set failedstructured=0
 set extractedcount=0
 set failedextracted=0
 set tempextractedcount=0
@@ -155,6 +158,20 @@ for %%f in ("logs\trades_*.json") do (
     )
 )
 
+echo Moving STRUCTURED JSON files...
+if exist "logs\futures\structured" (
+    for %%f in (logs\futures\structured\*.json) do (
+        if exist "%%f" (
+            move /Y "%%f" "!archivefolder!\" >nul 2>&1
+            if !errorlevel! equ 0 (
+                set /a structuredcount+=1
+            ) else (
+                set /a failedstructured+=1
+            )
+        )
+    )
+)
+
 echo Moving EXTRACTED files...
 if exist "logs\futures\extracted" (
     for %%f in (logs\futures\extracted\*.*) do (
@@ -195,14 +212,15 @@ echo Moved ZIP archives: !zipcount!
 echo Moved DEBUG CSV files: !debugcsvcount!
 echo Moved TRADE CSV files: !tradescount!
 echo Moved JSON files: !jsoncount!
+echo Moved STRUCTURED JSON files: !structuredcount!
 echo Moved EXTRACTED files: !extractedcount!
 echo Moved TEMP_EXTRACTED files: !tempextractedcount!
 echo.
-echo Failed to move: !failedcount! LOG, !failedzip! ZIP, !faileddebugcsv! DEBUG_CSV, !failedtrades! TRADE_CSV, !failedjson! JSON, !failedextracted! EXTRACTED, !failedtempextracted! TEMP_EXTRACTED
+echo Failed to move: !failedcount! LOG, !failedzip! ZIP, !faileddebugcsv! DEBUG_CSV, !failedtrades! TRADE_CSV, !failedjson! JSON, !failedstructured! STRUCTURED, !failedextracted! EXTRACTED, !failedtempextracted! TEMP_EXTRACTED
 echo.
 
 set totalmoved=0
-set /a totalmoved=!logcount!+!zipcount!+!debugcsvcount!+!tradescount!+!jsoncount!+!extractedcount!+!tempextractedcount!
+set /a totalmoved=!logcount!+!zipcount!+!debugcsvcount!+!tradescount!+!jsoncount!+!structuredcount!+!extractedcount!+!tempextractedcount!
 
 if !totalmoved! equ 0 (
     echo [WARNING] No files were moved!
@@ -212,6 +230,58 @@ if !totalmoved! equ 0 (
 ) else (
     echo Archive folder: !archivefolder!
     echo Total files moved: !totalmoved!
+    echo.
+    
+    echo ====================================
+    echo   CREATING ZIP ARCHIVE
+    echo ====================================
+    echo.
+    
+    set zipfile=logs\futures\archived\!datefolder!.zip
+    
+    echo Creating ZIP archive: !zipfile!
+    echo.
+    
+    REM Проверяем наличие PowerShell для создания ZIP
+    where powershell >nul 2>&1
+    if !errorlevel! equ 0 (
+        REM Используем PowerShell для создания ZIP
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '!archivefolder!\*' -DestinationPath '!zipfile!' -Force" >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo [SUCCESS] ZIP archive created: !zipfile!
+            
+            REM Проверяем размер архива
+            for %%A in ("!zipfile!") do (
+                set zipsize=%%~zA
+                set /a zipsize_mb=!zipsize!/1024/1024
+                echo Archive size: !zipsize_mb! MB
+            )
+            
+            REM Спрашиваем, удалять ли исходную папку
+            echo.
+            echo Do you want to remove the original archive folder?
+            echo Press Y to remove, any other key to keep:
+            choice /C YN /N /M "[Y/N]: "
+            if !errorlevel! equ 1 (
+                echo Removing archive folder...
+                rmdir /S /Q "!archivefolder!" >nul 2>&1
+                if !errorlevel! equ 0 (
+                    echo [SUCCESS] Archive folder removed.
+                ) else (
+                    echo [WARNING] Failed to remove archive folder. You can remove it manually.
+                )
+            ) else (
+                echo Keeping archive folder: !archivefolder!
+            )
+        ) else (
+            echo [WARNING] Failed to create ZIP archive. Keeping archive folder.
+            echo You can create ZIP manually or try again.
+        )
+    ) else (
+        echo [WARNING] PowerShell not found. Cannot create ZIP archive.
+        echo Archive folder kept: !archivefolder!
+        echo You can create ZIP manually using 7-Zip or WinRAR.
+    )
 )
 
 echo.

@@ -39,3 +39,8 @@
 
 **FilterManager теперь может читать индикаторы из DataRegistry! ✅**
 
+
+
+
+
+

@@ -185,3 +185,8 @@ if profit_pct <= -critical_loss_cut_from_price:  # 2x loss_cut
 
 Нужно проверить, почему критический loss_cut не срабатывает.
 
+
+
+
+
+

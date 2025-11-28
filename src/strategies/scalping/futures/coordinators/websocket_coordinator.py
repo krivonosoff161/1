@@ -270,10 +270,8 @@ class WebSocketCoordinator:
                     logger.info(f"💰 {symbol}: ${price:.2f}")
 
                     # Проверяем TP ПЕРВЫМ, затем Loss Cut, затем TSL
-                    if (
-                        symbol in self.active_positions_ref
-                        and "entry_price" in self.active_positions_ref.get(symbol, {})
-                    ):
+                    # ✅ ИСПРАВЛЕНО (TODO #1): Убрали проверку entry_price - он будет восстановлен в update_trailing_stop_loss()
+                    if symbol in self.active_positions_ref:
                         # Сначала проверяем TP через manage_position
                         if self.position_manager:
                             await self.position_manager.manage_position(

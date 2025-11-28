@@ -255,3 +255,8 @@ balance_profile = balance_data.get("profile")
 
 **Готов начать интеграцию? Начнем с ЭТАПА 1.1 (WebSocket обновляет DataRegistry)?** 🚀
 
+
+
+
+
+

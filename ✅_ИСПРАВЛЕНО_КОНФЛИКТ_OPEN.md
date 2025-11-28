@@ -86,3 +86,8 @@ self.structured_logger.log_candle_new(
 
 Ошибка должна быть устранена!
 
+
+
+
+
+

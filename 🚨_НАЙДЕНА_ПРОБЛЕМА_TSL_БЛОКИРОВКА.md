@@ -148,3 +148,8 @@ if position_side == "long" and current_delta > 0.1:
 
 **Нужно исправить СРОЧНО!**
 
+
+
+
+
+

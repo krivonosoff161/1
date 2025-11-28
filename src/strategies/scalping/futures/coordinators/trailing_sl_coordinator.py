@@ -423,8 +423,17 @@ class TrailingSLCoordinator:
                         )
 
                     if entry_price == 0:
+                        # ✅ TODO #5: Не блокируем другие проверки, если entry_price == 0
+                        logger.warning(
+                            f"⚠️ Entry price = 0 для {symbol}, avgPx={avg_px}, не можем обновить TSL"
+                        )
+                        # ✅ Проверяем, есть ли позиция вообще
+                        if not self._has_position(symbol):
+                            return
+                        # ✅ Позиция существует, но entry_price=0 - это проблема, но не критично для других проверок
                         logger.debug(
-                            f"⚠️ Entry price = 0 для {symbol}, avgPx={avg_px}, пропускаем обновление TSL (будет восстановлено при следующем WebSocket обновлении)"
+                            f"⚠️ Позиция {symbol} существует, но entry_price=0, пропускаем обновление TSL "
+                            f"(loss_cut может быть проверен в position_manager)"
                         )
                         return
 
@@ -1373,12 +1382,13 @@ class TrailingSLCoordinator:
                     )
                     return
 
+                # ✅ ИСПРАВЛЕНО: Не закрываем по max_holding если прибыль > min_profit_to_close
+                # Бот продолжает искать оптимальный момент закрытия через TP/SL
                 min_profit_to_close = None
                 tsl = self.trailing_sl_by_symbol.get(symbol)
                 if tsl:
                     min_profit_to_close = getattr(tsl, "min_profit_to_close", None)
 
-                # ✅ ИСПРАВЛЕНО: Если прибыль большая, НЕ закрываем по времени (используем trailing stop)
                 if (
                     min_profit_to_close is not None
                     and profit_pct >= min_profit_to_close
@@ -1386,8 +1396,8 @@ class TrailingSLCoordinator:
                     logger.info(
                         f"✅ Позиция {symbol} удерживается {time_held:.1f} минут "
                         f"(лимит: {actual_max_holding:.1f} минут), "
-                        f"но прибыль {profit_pct:.2%} >= min_profit_to_close "
-                        f"{min_profit_to_close:.2%}, НЕ закрываем по времени (используем trailing stop)"
+                        f"прибыль {profit_pct:.2%} >= min_profit_to_close {min_profit_to_close:.2%}, "
+                        f"не закрываем по max_holding (бот продолжает искать оптимальный момент через TP/SL)"
                     )
                     return
 

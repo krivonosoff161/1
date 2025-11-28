@@ -4,10 +4,8 @@
 Автоматическая архивация логов
 """
 
-import os
-import shutil
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 
@@ -165,6 +163,55 @@ def archive_old_logs(
                     print(f"✅ Перемещен в архив: {zip_file.name}")
                 except Exception as e:
                     print(f"⚠️ Ошибка перемещения {zip_file.name}: {e}")
+
+    # ✅ НОВОЕ: Обрабатываем structured логи (JSON файлы)
+    # Эти файлы обычно архивируются вместе с остальными логами при очистке через clean_logs.bat
+    # Здесь мы просто удаляем старые файлы или перемещаем их в общий архив
+    structured_dir = logs_path / "structured"
+    if structured_dir.exists():
+        for json_file in structured_dir.glob("*.json"):
+            mod_time = datetime.fromtimestamp(json_file.stat().st_mtime)
+            age_days = (now - mod_time).days
+
+            if age_days >= keep_days:
+                # Файл старше keep_days - удаляем
+                try:
+                    json_file.unlink()
+                    deleted_count += 1
+                    print(
+                        f"🗑️  Удален structured лог (старше {keep_days} дней): {json_file.name}"
+                    )
+                except Exception as e:
+                    print(f"⚠️ Ошибка удаления structured лога {json_file.name}: {e}")
+            elif age_days >= auto_archive_days:
+                # Файл старше auto_archive_days, но младше keep_days
+                # Находим соответствующий архив сессии по дате или создаем новый
+                # Используем формат logs_YYYY-MM-DD для совместимости с clean_logs.bat
+                date_str = mod_time.strftime("%Y-%m-%d")
+
+                # Ищем существующий архив для этой даты
+                session_archive_dir = None
+                for existing_archive in archive_dir.glob(f"logs_{date_str}_*"):
+                    if existing_archive.is_dir():
+                        session_archive_dir = existing_archive
+                        break
+
+                # Если не нашли, создаем новый с временной меткой
+                if session_archive_dir is None:
+                    time_str = mod_time.strftime("%H-%M-%S")
+                    session_archive_dir = archive_dir / f"logs_{date_str}_{time_str}"
+                    session_archive_dir.mkdir(exist_ok=True)
+
+                try:
+                    json_file.rename(session_archive_dir / json_file.name)
+                    archived_count += 1
+                    print(
+                        f"✅ Перемещен structured лог в архив сессии: {json_file.name} → {session_archive_dir.name}"
+                    )
+                except Exception as e:
+                    print(
+                        f"⚠️ Ошибка перемещения structured лога {json_file.name}: {e}"
+                    )
 
     # ✅ ИСПРАВЛЕНО 3: Обрабатываем существующие архивы в папке archived
     for zip_file in archive_dir.glob("*.zip"):

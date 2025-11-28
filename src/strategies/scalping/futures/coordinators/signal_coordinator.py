@@ -15,7 +15,6 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
 
-from .order_coordinator import OrderCoordinator
 
 
 class SignalCoordinator:
@@ -116,6 +115,13 @@ class SignalCoordinator:
 
         # Время последнего сигнала по символу: {symbol: timestamp}
         self._last_signal_time: Dict[str, float] = {}
+        # ✅ КРИТИЧЕСКОЕ: Throttling для избыточных предупреждений
+        self._last_warning_time: Dict[
+            str, float
+        ] = {}  # Время последнего предупреждения для каждого символа
+        self._warning_throttle_seconds: float = (
+            30.0  # Минимум 30 секунд между одинаковыми предупреждениями
+        )
 
         logger.info("✅ SignalCoordinator initialized")
 
@@ -490,6 +496,13 @@ class SignalCoordinator:
                             size_in_contracts=True,
                         )
 
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка на None перед использованием
+                        if close_result is None:
+                            logger.error(
+                                f"❌ place_futures_order вернул None при закрытии позиции {symbol} {pos_side.upper()}"
+                            )
+                            return  # Не открываем новую позицию, если не удалось закрыть старую
+
                         if close_result.get("code") != "0":
                             logger.error(
                                 f"❌ Не удалось закрыть позицию {symbol} {pos_side.upper()}: {close_result.get('msg', 'Неизвестная ошибка')}"
@@ -727,6 +740,13 @@ class SignalCoordinator:
                                 size_in_contracts=True,
                             )
 
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка на None перед использованием
+                            if close_result is None:
+                                logger.error(
+                                    f"❌ place_futures_order вернул None при закрытии противоположной позиции {symbol} {pos_side_to_close.upper()}"
+                                )
+                                return  # Не открываем новую позицию, если не удалось закрыть старую
+
                             if close_result.get("code") != "0":
                                 logger.error(
                                     f"❌ Не удалось закрыть противоположную позицию {symbol} {pos_side_to_close.upper()}: {close_result.get('msg', 'Неизвестная ошибка')}"
@@ -929,9 +949,6 @@ class SignalCoordinator:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем направление позиции!
                     # На OKX Futures несколько ордеров в ОДНОМ направлении объединяются в ОДНУ позицию
                     # Поэтому нужно блокировать новые ордера, если уже есть позиция в этом направлении
-                    max_positions_per_symbol = getattr(
-                        self.scalping_config, "max_positions_per_symbol", 4
-                    )
                     allow_concurrent = getattr(
                         self.scalping_config, "allow_concurrent_positions", False
                     )
@@ -996,11 +1013,30 @@ class SignalCoordinator:
                                     pos_side = pos_side_raw
                                 else:
                                     pos_side = "long" if pos_raw > 0 else "short"
-                                logger.warning(
-                                    f"⚠️ Позиция {symbol} {pos_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
-                                    f"БЛОКИРУЕМ новые сигналы (allow_concurrent=false). "
-                                    f"Позиции: {positions_info}"
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Throttling для избыточных предупреждений
+                                warning_key = f"{symbol}_{pos_side}_blocked"
+                                current_time = time.time()
+                                last_warning_time = self._last_warning_time.get(
+                                    warning_key, 0
                                 )
+
+                                # Логируем только если прошло достаточно времени с последнего предупреждения
+                                if (
+                                    current_time - last_warning_time
+                                    >= self._warning_throttle_seconds
+                                ):
+                                    logger.warning(
+                                        f"⚠️ Позиция {symbol} {pos_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
+                                        f"БЛОКИРУЕМ новые сигналы (allow_concurrent=false). "
+                                        f"Позиции: {positions_info}"
+                                    )
+                                    self._last_warning_time[warning_key] = current_time
+                                else:
+                                    # Логируем только на DEBUG уровне если предупреждение недавно было
+                                    logger.debug(
+                                        f"⏭️ Позиция {symbol} {pos_side.upper()} заблокирована "
+                                        f"(throttling: {int(self._warning_throttle_seconds - (current_time - last_warning_time))}s)"
+                                    )
                                 return
                         # Если allow_concurrent=true, проверка направления будет в process_signals
 
@@ -1684,6 +1720,14 @@ class SignalCoordinator:
                     f"⚠️ EntryManager не доступен, используем order_executor напрямую для {symbol}"
                 )
                 result = await self.order_executor.execute_signal(signal, position_size)
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка на None перед использованием result
+            if result is None:
+                logger.error(
+                    f"❌ execute_signal_from_price: result is None для {symbol}. "
+                    f"entry_manager или order_executor вернул None вместо словаря результата."
+                )
+                return False
 
             if result.get("success"):
                 order_id = result.get("order_id")

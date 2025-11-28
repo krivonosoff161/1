@@ -4,8 +4,6 @@ import base64
 import hashlib
 import hmac
 import json
-import math
-import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -462,18 +460,30 @@ class OKXFuturesClient:
                                     # Для BUY: max_buy_price должен быть выше best_ask (но не слишком далеко)
                                     # Для SELL: min_sell_price должен быть ниже best_bid (но не слишком далеко)
                                     # Используем 0.5% от спреда для безопасности
-                                    max_buy_price = best_ask + (spread * 0.5)  # 50% от спреда выше best_ask
-                                    min_sell_price = best_bid - (spread * 0.5)  # 50% от спреда ниже best_bid
+                                    max_buy_price = best_ask + (
+                                        spread * 0.5
+                                    )  # 50% от спреда выше best_ask
+                                    min_sell_price = best_bid - (
+                                        spread * 0.5
+                                    )  # 50% от спреда ниже best_bid
                                     # ✅ ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Не позволяем лимитам быть слишком далеко от рынка
                                     # Если спред очень большой, ограничиваем лимиты разумными значениями
-                                    if max_buy_price > best_ask * 1.01:  # Не более 1% выше best_ask
+                                    if (
+                                        max_buy_price > best_ask * 1.01
+                                    ):  # Не более 1% выше best_ask
                                         max_buy_price = best_ask * 1.01
-                                    if min_sell_price < best_bid * 0.99:  # Не более 1% ниже best_bid
+                                    if (
+                                        min_sell_price < best_bid * 0.99
+                                    ):  # Не более 1% ниже best_bid
                                         min_sell_price = best_bid * 0.99
                                 else:
                                     # Если спреда нет, используем минимальный offset
-                                    max_buy_price = best_ask * 1.001  # 0.1% выше best_ask
-                                    min_sell_price = best_bid * 0.999  # 0.1% ниже best_bid
+                                    max_buy_price = (
+                                        best_ask * 1.001
+                                    )  # 0.1% выше best_ask
+                                    min_sell_price = (
+                                        best_bid * 0.999
+                                    )  # 0.1% ниже best_bid
 
                                 # Получаем текущую цену из тикера
                                 ticker_url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
@@ -601,12 +611,25 @@ class OKXFuturesClient:
             equity = 0.0
 
             # Способ 1: Прямое поле 'eq' (если есть)
-            if "eq" in pos and pos.get("eq") and str(pos["eq"]).strip():
-                try:
-                    equity = float(pos["eq"])
-                    logger.debug(f"✅ equity получен из 'eq' для {symbol}: {equity:.2f}")
-                except (ValueError, TypeError) as e:
-                    logger.debug(f"⚠️ Не удалось преобразовать eq для {symbol}: {e}")
+            if "eq" in pos and pos.get("eq"):
+                eq_value = pos["eq"]
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
+                if eq_value and str(eq_value).strip():
+                    try:
+                        equity = float(eq_value)
+                        if equity > 0:  # Проверяем что результат валидный
+                            logger.debug(
+                                f"✅ equity получен из 'eq' для {symbol}: {equity:.2f}"
+                            )
+                        else:
+                            equity = 0.0
+                    except (ValueError, TypeError) as e:
+                        logger.debug(
+                            f"⚠️ Не удалось преобразовать eq для {symbol}: {e}, значение={eq_value}"
+                        )
+                        equity = 0.0
+                else:
+                    logger.debug(f"⚠️ Пустое значение eq для {symbol}: '{eq_value}'")
                     equity = 0.0
 
             # Способ 2: Расчет equity = margin + unrealizedPnl (для изолированной маржи)
@@ -651,13 +674,21 @@ class OKXFuturesClient:
             margin = 0.0
             upl = 0.0
             try:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что значения не пустые строки
                 if "margin" in pos and pos.get("margin"):
-                    margin = float(pos["margin"])
+                    margin_str = str(pos["margin"]).strip()
+                    if margin_str:  # Проверяем что не пустая строка
+                        margin = float(margin_str)
                 if "upl" in pos and pos.get("upl"):
-                    upl = float(pos["upl"])
+                    upl_str = str(pos["upl"]).strip()
+                    if upl_str:
+                        upl = float(upl_str)
                 elif "uPnl" in pos and pos.get("uPnl"):
-                    upl = float(pos["uPnl"])
-            except (ValueError, TypeError):
+                    upnl_str = str(pos["uPnl"]).strip()
+                    if upnl_str:
+                        upl = float(upnl_str)
+            except (ValueError, TypeError) as e:
+                logger.debug(f"⚠️ Ошибка конвертации margin/upl для {symbol}: {e}")
                 pass
 
             return {

@@ -228,3 +228,8 @@ if profit_pct >= partial_tp_trigger_percent:
 
 
 
+
+
+
+
+

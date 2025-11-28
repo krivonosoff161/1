@@ -28,3 +28,11 @@ Thumbs.db
 .pytest_cache/
 htmlcov/
 .coverage
+
+# Logs
+logs/futures/debug/*.csv
+logs/futures/structured/*.json
+logs/futures/archived/
+logs/*.csv
+logs/*.log
+logs/*.log.zip

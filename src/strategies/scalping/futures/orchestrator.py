@@ -3264,6 +3264,22 @@ class FuturesScalpingOrchestrator:
                 )
                 return
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: TIMEOUT - абсолютный лимит времени
+            # Получаем timeout_minutes из TSL (жесткий лимит времени) ПЕРЕД остальными проверками
+            timeout_minutes = None
+            tsl = self.trailing_sl_coordinator.get_tsl(symbol)
+            if tsl and hasattr(tsl, "timeout_minutes"):
+                timeout_minutes = tsl.timeout_minutes
+
+            # ✅ ПЕРВАЯ ПРОВЕРКА: TIMEOUT - принудительное закрытие после максимального времени
+            if timeout_minutes is not None and time_held >= timeout_minutes:
+                logger.info(
+                    f"⏰ TIMEOUT для {symbol}: {time_held:.1f} минут >= {timeout_minutes:.1f} минут, "
+                    f"принудительно закрываем (прибыль: {profit_pct:.2%})"
+                )
+                await self._close_position(symbol, "timeout")
+                return
+
             # Получаем параметры режима
             try:
                 if (
@@ -3340,7 +3356,7 @@ class FuturesScalpingOrchestrator:
                 "max_holding_minutes", max_holding_minutes
             )
 
-            # Проверяем, истекло ли время
+            # Проверяем, истекло ли время (max_holding, но не TIMEOUT)
             if time_held >= actual_max_holding:
                 time_extended = position.get("time_extended", False)
 
@@ -3369,7 +3385,7 @@ class FuturesScalpingOrchestrator:
                     return  # Продлили, не закрываем
                 else:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #6: Проверяем min_profit_to_close перед закрытием по времени
-                    # НЕ закрываем по времени если позиция в прибыли > min_profit_to_close
+                    # НЕ закрываем по max_holding если позиция в прибыли > min_profit_to_close
                     min_profit_to_close = None
                     tsl = self.trailing_sl_coordinator.get_tsl(symbol)
                     if tsl:
@@ -3379,14 +3395,15 @@ class FuturesScalpingOrchestrator:
                         min_profit_to_close is not None
                         and profit_pct > min_profit_to_close
                     ):
-                        # Позиция в прибыли превышает min_profit_to_close - НЕ закрываем по времени
+                        # Позиция в прибыли превышает min_profit_to_close - НЕ закрываем по max_holding
+                        # Бот продолжает искать оптимальный момент закрытия через TP/SL
                         logger.info(
                             f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
                             f"(лимит: {actual_max_holding:.1f} минут), "
-                            f"но прибыль {profit_pct:.2%} > min_profit_to_close {min_profit_to_close:.2%}, "
-                            f"НЕ закрываем по времени (даем больше времени для роста прибыли)"
+                            f"прибыль {profit_pct:.2%} > min_profit_to_close {min_profit_to_close:.2%}, "
+                            f"не закрываем по max_holding (бот продолжает искать оптимальный момент через TP/SL)"
                         )
-                        return  # Не закрываем, даем больше времени
+                        return  # Не закрываем по max_holding, даем боту время найти оптимальный момент
 
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: НЕ закрываем убыточные позиции по времени
                     # Убыточные позиции должны закрываться только по trailing stop или loss cut

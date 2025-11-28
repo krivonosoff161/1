@@ -186,3 +186,8 @@ self.trailing_sl_coordinator.initialize_trailing_stop(...)  # Результат
 
 **Нужно исправить СРОЧНО!**
 
+
+
+
+
+

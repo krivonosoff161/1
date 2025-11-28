@@ -54,3 +54,8 @@
 
 **Отличный прогресс! SignalCoordinator теперь использует DataRegistry! ✅**
 
+
+
+
+
+

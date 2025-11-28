@@ -114,3 +114,8 @@ async def _get_entry_price_and_side(
 
 **✅ ПРОБЛЕМА ИСПРАВЛЕНА!**
 
+
+
+
+
+

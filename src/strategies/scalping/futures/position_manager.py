@@ -10,8 +10,8 @@ Futures Position Manager для скальпинг стратегии.
 
 import asyncio
 import time
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 from loguru import logger
 
@@ -419,7 +419,6 @@ class FuturesPositionManager:
         try:
             symbol = position.get("instId", "").replace("-SWAP", "")
             size = float(position.get("pos", "0"))
-            side = position.get("posSide", "long")
 
             if size == 0:
                 # Позиция закрыта
@@ -556,13 +555,19 @@ class FuturesPositionManager:
                 if equity == 0:
                     # Проверяем, есть ли 'eq' или другие поля в самой позиции
                     if "eq" in position and position["eq"]:
-                        try:
-                            equity = float(position["eq"])
-                            logger.debug(
-                                f"✅ equity получен из position['eq'] для {symbol}: {equity:.2f}"
-                            )
-                        except (ValueError, TypeError):
-                            pass
+                        eq_value = position["eq"]
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
+                        if eq_value and str(eq_value).strip():
+                            try:
+                                equity = float(eq_value)
+                                logger.debug(
+                                    f"✅ equity получен из position['eq'] для {symbol}: {equity:.2f}"
+                                )
+                            except (ValueError, TypeError) as e:
+                                logger.debug(
+                                    f"⚠️ Ошибка конвертации eq для {symbol}: {e}, значение={eq_value}"
+                                )
+                                pass
 
                     # Если все еще 0, используем общий баланс как fallback
                     if equity == 0:
@@ -579,14 +584,37 @@ class FuturesPositionManager:
 
                                 # Пробуем получить equity из различных полей
                                 if "eq" in pos_data and pos_data.get("eq"):
-                                    equity = float(pos_data["eq"])
-                                    logger.debug(
-                                        f"✅ equity получен из позиции API для {symbol}: {equity:.2f}"
-                                    )
-                                elif "margin" in pos_data and "upl" in pos_data:
-                                    margin = float(pos_data.get("margin", 0))
-                                    upl = float(pos_data.get("upl", 0))
-                                    equity = margin + upl
+                                    eq_value = pos_data["eq"]
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
+                                    if eq_value and str(eq_value).strip():
+                                        try:
+                                            equity = float(eq_value)
+                                            logger.debug(
+                                                f"✅ equity получен из позиции API для {symbol}: {equity:.2f}"
+                                            )
+                                        except (ValueError, TypeError) as e:
+                                            logger.debug(
+                                                f"⚠️ Ошибка конвертации eq для {symbol}: {e}, значение={eq_value}"
+                                            )
+                                if (
+                                    equity == 0
+                                    and "margin" in pos_data
+                                    and "upl" in pos_data
+                                ):
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что значения не пустые строки
+                                    try:
+                                        margin_str = str(
+                                            pos_data.get("margin", "0")
+                                        ).strip()
+                                        upl_str = str(pos_data.get("upl", "0")).strip()
+                                        if margin_str and upl_str:
+                                            margin = float(margin_str)
+                                            upl = float(upl_str)
+                                            equity = margin + upl
+                                    except (ValueError, TypeError) as e:
+                                        logger.debug(
+                                            f"⚠️ Ошибка конвертации margin/upl для {symbol}: {e}"
+                                        )
                                     if equity > 0:
                                         logger.debug(
                                             f"✅ equity рассчитан из позиции API для {symbol}: "
@@ -611,11 +639,17 @@ class FuturesPositionManager:
                 equity = 0
                 try:
                     if "eq" in position and position["eq"]:
-                        equity = float(position["eq"])
-                        logger.debug(
-                            f"✅ equity получен из position['eq'] (fallback) для {symbol}: {equity:.2f}"
-                        )
-                except (ValueError, TypeError):
+                        eq_value = position["eq"]
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
+                        if eq_value and str(eq_value).strip():
+                            equity = float(eq_value)
+                            logger.debug(
+                                f"✅ equity получен из position['eq'] (fallback) для {symbol}: {equity:.2f}"
+                            )
+                except (ValueError, TypeError) as e:
+                    logger.debug(
+                        f"⚠️ Ошибка конвертации eq (fallback) для {symbol}: {e}"
+                    )
                     pass
 
                 if equity == 0:
@@ -629,14 +663,37 @@ class FuturesPositionManager:
                         if positions_data and positions_data.get("data"):
                             pos_data = positions_data["data"][0]
                             if "eq" in pos_data and pos_data.get("eq"):
-                                equity = float(pos_data["eq"])
-                                logger.debug(
-                                    f"✅ equity получен из позиции API (fallback) для {symbol}: {equity:.2f}"
-                                )
-                            elif "margin" in pos_data and "upl" in pos_data:
-                                margin = float(pos_data.get("margin", 0))
-                                upl = float(pos_data.get("upl", 0))
-                                equity = margin + upl
+                                eq_value = pos_data["eq"]
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
+                                if eq_value and str(eq_value).strip():
+                                    try:
+                                        equity = float(eq_value)
+                                        logger.debug(
+                                            f"✅ equity получен из позиции API (fallback) для {symbol}: {equity:.2f}"
+                                        )
+                                    except (ValueError, TypeError) as e:
+                                        logger.debug(
+                                            f"⚠️ Ошибка конвертации eq (fallback) для {symbol}: {e}, значение={eq_value}"
+                                        )
+                            if (
+                                equity == 0
+                                and "margin" in pos_data
+                                and "upl" in pos_data
+                            ):
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что значения не пустые строки
+                                try:
+                                    margin_str = str(
+                                        pos_data.get("margin", "0")
+                                    ).strip()
+                                    upl_str = str(pos_data.get("upl", "0")).strip()
+                                    if margin_str and upl_str:
+                                        margin = float(margin_str)
+                                        upl = float(upl_str)
+                                        equity = margin + upl
+                                except (ValueError, TypeError) as e:
+                                    logger.debug(
+                                        f"⚠️ Ошибка конвертации margin/upl (fallback) для {symbol}: {e}"
+                                    )
                                 if equity > 0:
                                     logger.debug(
                                         f"✅ equity рассчитан из позиции API (fallback) для {symbol}: "
@@ -838,8 +895,70 @@ class FuturesPositionManager:
                 # ⚠️ ВНИМАНИЕ: Не закрываем автоматически, если margin_ratio отрицательный
                 # (это может быть из-за ошибки расчета - исправлено выше)
                 if margin_ratio < 1.2 and margin_ratio > 0:
+                    # ✅ TODO #2: ЗАЩИТА от ложных срабатываний - проверяем время открытия
+                    position_open_time = None
+                    try:
+                        # Пробуем получить время открытия из позиции
+                        if symbol in self.active_positions:
+                            pos_data = self.active_positions[symbol]
+                            if isinstance(pos_data, dict):
+                                position_open_time = pos_data.get("entry_time") or pos_data.get("timestamp") or pos_data.get("open_time")
+                        
+                        # Если не нашли, пробуем из текущей позиции
+                        if not position_open_time:
+                            c_time = position.get("cTime")
+                            u_time = position.get("uTime")
+                            if c_time or u_time:
+                                entry_time_str = c_time or u_time
+                                try:
+                                    if isinstance(entry_time_str, str) and entry_time_str.isdigit():
+                                        entry_timestamp = int(entry_time_str) / 1000.0
+                                        position_open_time = datetime.fromtimestamp(entry_timestamp)
+                                    elif isinstance(entry_time_str, (int, float)):
+                                        entry_timestamp = float(entry_time_str) / 1000.0 if float(entry_time_str) > 1000000000000 else float(entry_time_str)
+                                        position_open_time = datetime.fromtimestamp(entry_timestamp)
+                                except (ValueError, TypeError):
+                                    pass
+                    except Exception as e:
+                        logger.debug(f"⚠️ Ошибка получения времени открытия для {symbol}: {e}")
+                    
+                    time_since_open = 0.0
+                    if position_open_time:
+                        if isinstance(position_open_time, datetime):
+                            time_since_open = (datetime.now() - position_open_time).total_seconds()
+                        else:
+                            try:
+                                time_since_open = (datetime.now() - datetime.fromtimestamp(float(position_open_time))).total_seconds()
+                            except (ValueError, TypeError):
+                                pass
+                    
+                    # ✅ ЗАЩИТА #1: Не закрываем позиции, открытые менее 30 секунд назад
+                    if time_since_open < 30.0:
+                        logger.debug(
+                            f"⚠️ Позиция {symbol} открыта {time_since_open:.1f} сек назад, "
+                            f"пропускаем emergency close (защита от ложных срабатываний, margin_ratio={margin_ratio:.2f}%)"
+                        )
+                        return
+                    
+                    # ✅ ЗАЩИТА #2: Проверяем, что убыток действительно критический (> 2% от маржи)
+                    try:
+                        pnl = float(position.get("upl", "0") or 0)
+                        margin = float(position.get("margin", "0") or 0)
+                        if margin > 0:
+                            pnl_percent_from_margin = abs(pnl) / margin * 100
+                            # Закрываем только если убыток > 2% от маржи
+                            if pnl_percent_from_margin < 2.0:
+                                logger.debug(
+                                    f"⚠️ Позиция {symbol} margin_ratio={margin_ratio:.2f}%, но убыток только {pnl_percent_from_margin:.2f}% от маржи, "
+                                    f"пропускаем emergency close (защита от ложных срабатываний)"
+                                )
+                                return
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"⚠️ Ошибка расчета убытка для emergency close {symbol}: {e}")
+                    
                     logger.warning(
-                        f"⚠️ Позиция {symbol} имеет низкую маржу: {margin_ratio:.2f}%. Закрытие..."
+                        f"⚠️ Позиция {symbol} имеет низкую маржу: {margin_ratio:.2f}%. Закрытие... "
+                        f"(время удержания: {time_since_open:.1f} сек)"
                     )
                     await self._emergency_close_position(position)
                 elif margin_ratio <= 0:
@@ -1166,12 +1285,35 @@ class FuturesPositionManager:
                 logger.debug(f"⚠️ Не удалось рассчитать PnL для {symbol}: {e}")
                 return False
 
-            # Проверка условий Profit Harvesting
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем MIN_HOLDING перед Profit Harvesting
+            # Защита от шума должна работать - не закрываем по PH до 35 минут (min_holding)
+            min_holding_minutes = 35.0  # Default
+            try:
+                if hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "signal_generator") and self.orchestrator.signal_generator:
+                        regime_params = self.orchestrator.signal_generator.regime_manager.get_current_parameters()
+                        if regime_params:
+                            min_holding_minutes = getattr(regime_params, "min_holding_minutes", 35.0)
+            except Exception:
+                pass  # Используем default 35 минут
+            
+            min_holding_seconds = min_holding_minutes * 60.0
+            
+            # ✅ Проверяем MIN_HOLDING: если позиция открыта меньше min_holding, НЕ закрываем по PH
+            if time_since_open < min_holding_seconds:
+                logger.debug(
+                    f"⏱️ Profit Harvest заблокирован MIN_HOLDING для {symbol}: "
+                    f"позиция открыта {time_since_open:.1f}с < {min_holding_seconds:.1f}с "
+                    f"(защита от шума активна)"
+                )
+                return False  # НЕ закрываем - защита от шума активна!
+
+            # Проверка условий Profit Harvesting (только после MIN_HOLDING)
             if net_pnl_usd >= ph_threshold and time_since_open < ph_time_limit:
                 logger.info(
                     f"💰💰💰 PROFIT HARVESTING TRIGGERED! {symbol} {side.upper()}\n"
                     f"   Quick profit: ${net_pnl_usd:.4f} (threshold: ${ph_threshold:.2f})\n"
-                    f"   Time: {time_since_open:.1f}s (limit: {ph_time_limit}s)\n"
+                    f"   Time: {time_since_open:.1f}s (limit: {ph_time_limit}s, min_holding: {min_holding_seconds:.1f}s)\n"
                     f"   Entry: ${entry_price:.4f} → Exit: ${current_price:.4f}\n"
                     f"   Regime: {market_regime or 'N/A'}"
                 )
@@ -1200,106 +1342,137 @@ class FuturesPositionManager:
             side = position.get("posSide", "long")
             entry_price = float(position.get("avgPx", "0"))
             current_price = float(position.get("markPx", "0"))
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем MIN_HOLDING перед TP
+            # Защита от шума должна работать - не закрываем по TP до 35 минут (min_holding)
+            try:
+                entry_time_str = position.get("cTime", position.get("openTime", ""))
+                if not entry_time_str and hasattr(self, "orchestrator") and self.orchestrator:
+                    active_positions = getattr(self.orchestrator, "active_positions", {})
+                    if symbol in active_positions:
+                        entry_time_str = active_positions[symbol].get("entry_time", "")
+                
+                if entry_time_str:
+                    from datetime import timezone
+                    if isinstance(entry_time_str, str):
+                        if entry_time_str.isdigit():
+                            entry_timestamp = int(entry_time_str) / 1000.0
+                        else:
+                            entry_time = datetime.fromisoformat(entry_time_str.replace("Z", "+00:00"))
+                            entry_timestamp = entry_time.timestamp()
+                    else:
+                        entry_timestamp = float(entry_time_str) / 1000.0 if entry_time_str > 1000000000000 else float(entry_time_str)
+                    
+                    current_timestamp = datetime.now(timezone.utc).timestamp()
+                    time_since_open = current_timestamp - entry_timestamp
+                    
+                    min_holding_minutes = 35.0  # Default
+                    if hasattr(self, "orchestrator") and self.orchestrator:
+                        if hasattr(self.orchestrator, "signal_generator") and self.orchestrator.signal_generator:
+                            regime_params = self.orchestrator.signal_generator.regime_manager.get_current_parameters()
+                            if regime_params:
+                                min_holding_minutes = getattr(regime_params, "min_holding_minutes", 35.0)
+                    
+                    min_holding_seconds = min_holding_minutes * 60.0
+                    
+                    if time_since_open < min_holding_seconds:
+                        logger.debug(
+                            f"⏱️ TP заблокирован MIN_HOLDING для {symbol}: "
+                            f"позиция открыта {time_since_open:.1f}с < {min_holding_seconds:.1f}с "
+                            f"(защита от шума активна)"
+                        )
+                        return  # НЕ закрываем - защита от шума активна!
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось проверить MIN_HOLDING для TP {symbol}: {e}")
+                # Продолжаем проверку TP, если не удалось получить время
 
             # ✅ НОВОЕ: Проверка адаптивного SL (ПЕРЕД loss_cut - более строгий стоп)
             sl_should_close = await self._check_sl(position)
             if sl_should_close:
                 return  # Закрыли по SL, выходим
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем loss_cut ДО проверки TP (ПОСЛЕ SL - мягкий стоп)
-            # Это важно для позиций без TSL или с большим убытком
+            # ✅ TODO #4: Проверка loss_cut для позиций БЕЗ TSL или с большим убытком
+            # Это гарантирует, что loss_cut проверяется даже если TSL не инициализирован
+            tsl = None
             if hasattr(self, "orchestrator") and self.orchestrator:
                 if hasattr(self.orchestrator, "trailing_sl_coordinator"):
-                    tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
-                    if tsl:
-                        # TSL активен - проверка loss_cut будет в TSL
+                    try:
+                        tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                    except Exception:
                         pass
+            
+            # Рассчитываем PnL для проверки loss_cut
+            if entry_price > 0 and current_price > 0:
+                try:
+                    if side.lower() == "long":
+                        pnl_pct = (current_price - entry_price) / entry_price
                     else:
-                        # ✅ КРИТИЧЕСКОЕ: TSL не активен - проверяем loss_cut здесь
-                        # Получаем режим для адаптивного loss_cut
-                        regime = position.get("regime") or self.active_positions.get(
-                            symbol, {}
-                        ).get("regime")
-                        if not regime and hasattr(
-                            self.orchestrator, "signal_generator"
-                        ):
-                            if hasattr(
-                                self.orchestrator.signal_generator, "regime_managers"
-                            ):
-                                manager = self.orchestrator.signal_generator.regime_managers.get(
-                                    symbol
-                                )
-                                if manager:
-                                    regime = manager.get_current_regime()
-
-                        # Получаем loss_cut параметры из конфига
-                        if regime:
-                            try:
-                                regime_params = (
-                                    self.orchestrator.config_manager.get_regime_params(
-                                        regime, symbol
-                                    )
-                                )
-                                loss_cut_percent = regime_params.get("loss_cut_percent")
-                                if loss_cut_percent is None:
-                                    # Fallback на глобальный loss_cut
-                                    tsl_config = getattr(
-                                        self.scalping_config, "trailing_sl", {}
-                                    )
-                                    loss_cut_percent = getattr(
-                                        tsl_config, "loss_cut_percent", 1.5
-                                    )
-                            except Exception:
-                                # Fallback на глобальный loss_cut
-                                tsl_config = getattr(
-                                    self.scalping_config, "trailing_sl", {}
-                                )
-                                loss_cut_percent = getattr(
-                                    tsl_config, "loss_cut_percent", 1.5
-                                )
-                        else:
-                            # Fallback на глобальный loss_cut
-                            tsl_config = getattr(
-                                self.scalping_config, "trailing_sl", {}
-                            )
-                            loss_cut_percent = getattr(
-                                tsl_config, "loss_cut_percent", 1.5
-                            )
-
-                        # Рассчитываем PnL% от маржи для проверки loss_cut
+                        pnl_pct = (entry_price - current_price) / entry_price
+                    
+                    # ✅ Проверяем loss_cut только для убыточных позиций
+                    if pnl_pct < 0:
+                        # Получаем loss_cut из конфига
+                        loss_cut_percent = None
+                        market_regime = position.get("regime")
+                        
                         try:
-                            margin_used = float(position.get("margin", 0))
-                            if margin_used > 0:
-                                # Рассчитываем unrealized PnL
-                                position_side = position.get("posSide", "long").lower()
-                                if position_side == "long":
-                                    unrealized_pnl = size * (
-                                        current_price - entry_price
+                            if hasattr(self, "orchestrator") and self.orchestrator:
+                                if hasattr(self.orchestrator, "trailing_sl_coordinator"):
+                                    # Получаем параметры TSL из конфига
+                                    tsl_params = self.orchestrator.trailing_sl_coordinator._get_trailing_sl_params(
+                                        symbol, market_regime
                                     )
-                                else:
-                                    unrealized_pnl = size * (
-                                        entry_price - current_price
-                                    )
-
-                                pnl_percent_from_margin = (
-                                    unrealized_pnl / margin_used
-                                ) * 100
-
-                                # Проверяем loss_cut
-                                if pnl_percent_from_margin <= -loss_cut_percent:
-                                    logger.warning(
-                                        f"🚨 Loss-cut сработал для {symbol} (без TSL): "
-                                        f"PnL={pnl_percent_from_margin:.2f}% от маржи <= -{loss_cut_percent:.2f}% "
-                                        f"(margin=${margin_used:.2f}, PnL=${unrealized_pnl:.2f})"
-                                    )
-                                    await self._close_position_by_reason(
-                                        position, "loss_cut"
-                                    )
-                                    return
+                                    if tsl_params:
+                                        loss_cut_percent = tsl_params.get("loss_cut_percent")
                         except Exception as e:
-                            logger.debug(
-                                f"⚠️ Не удалось проверить loss_cut для {symbol}: {e}"
-                            )
+                            logger.debug(f"⚠️ Ошибка получения loss_cut_percent для {symbol}: {e}")
+                        
+                        if loss_cut_percent:
+                            leverage = getattr(self.scalping_config, "leverage", 5)
+                            loss_cut_from_price = loss_cut_percent / leverage
+                            
+                            # ✅ Для больших убытков (>= loss_cut) закрываем после минимальной задержки (5 сек)
+                            if abs(pnl_pct) >= loss_cut_from_price:
+                                # Получаем время открытия
+                                time_since_open = 0.0
+                                try:
+                                    entry_time_str = position.get("cTime", position.get("openTime", ""))
+                                    if entry_time_str:
+                                        from datetime import timezone
+                                        if isinstance(entry_time_str, str) and entry_time_str.isdigit():
+                                            entry_timestamp = int(entry_time_str) / 1000.0
+                                            current_timestamp = datetime.now(timezone.utc).timestamp()
+                                            time_since_open = current_timestamp - entry_timestamp
+                                        elif isinstance(entry_time_str, (int, float)):
+                                            entry_timestamp = float(entry_time_str) / 1000.0 if float(entry_time_str) > 1000000000000 else float(entry_time_str)
+                                            current_timestamp = datetime.now(timezone.utc).timestamp()
+                                            time_since_open = current_timestamp - entry_timestamp
+                                    
+                                    # Пробуем из active_positions
+                                    if time_since_open == 0 and hasattr(self, "orchestrator") and self.orchestrator:
+                                        active_positions = getattr(self.orchestrator, "active_positions", {})
+                                        if symbol in active_positions:
+                                            entry_time_obj = active_positions[symbol].get("entry_time")
+                                            if entry_time_obj:
+                                                if isinstance(entry_time_obj, datetime):
+                                                    time_since_open = (datetime.now() - entry_time_obj).total_seconds()
+                                except Exception as e:
+                                    logger.debug(f"⚠️ Ошибка расчета времени открытия для loss_cut {symbol}: {e}")
+                                
+                                if time_since_open >= 5.0:  # Минимальная задержка
+                                    logger.warning(
+                                        f"⚠️ Loss-cut (position_manager): {symbol} PnL={pnl_pct:.2%} <= -{loss_cut_from_price:.2%}%, "
+                                        f"закрываем (время: {time_since_open:.1f} сек, TSL={'активен' if tsl else 'не активен'})"
+                                    )
+                                    await self._close_position_by_reason(position, "loss_cut")
+                                    return
+                                else:
+                                    logger.debug(
+                                        f"⏱️ Loss-cut заблокирован минимальной задержкой: {symbol} PnL={pnl_pct:.2%}, "
+                                        f"время: {time_since_open:.1f} сек < 5.0 сек"
+                                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка проверки loss_cut в position_manager для {symbol}: {e}")
             # ✅ ИСПРАВЛЕНИЕ: Используем leverage из конфига, а не из позиции на бирже
             # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
             leverage_from_position = int(position.get("lever", "0"))
@@ -1333,11 +1506,32 @@ class FuturesPositionManager:
                 if margin_used == 0:
                     # Пытаемся получить из position или рассчитать
                     if "margin" in position:
-                        margin_used = float(position["margin"])
+                        margin_value = position.get("margin", "0")
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
+                        if margin_value and str(margin_value).strip():
+                            try:
+                                margin_used = float(margin_value)
+                            except (ValueError, TypeError) as e:
+                                logger.debug(
+                                    f"⚠️ Ошибка конвертации margin для {symbol}: {e}, значение={margin_value}"
+                                )
+                                margin_used = 0
                     elif "imr" in position:
-                        margin_used = float(
-                            position["imr"]
-                        )  # Initial Margin Requirement
+                        imr_value = position.get("imr", "0")
+                        if imr_value and str(imr_value).strip():
+                            try:
+                                margin_used = float(imr_value)
+                            except (ValueError, TypeError) as e:
+                                logger.debug(
+                                    f"⚠️ Ошибка конвертации imr для {symbol}: {e}, значение={imr_value}"
+                                )
+                                margin_used = 0
+                        else:
+                            # Fallback: если imr пустой, пытаемся напрямую
+                            try:
+                                margin_used = float(position.get("imr", "0") or 0)
+                            except (ValueError, TypeError):
+                                margin_used = 0
                     else:
                         # Рассчитываем маржу из размера позиции
                         # position_value = size_in_coins * entry_price
@@ -2246,6 +2440,85 @@ class FuturesPositionManager:
                         )
 
                         try:
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем активные reduceOnly ордера перед размещением
+                            # Это предотвращает размещение дубликатов при отмене предыдущих ордеров
+                            try:
+                                active_orders = await self.client.get_active_orders(
+                                    symbol
+                                )
+                                inst_id = f"{symbol}-SWAP"
+                                has_reduce_only_order = False
+                                for order in active_orders:
+                                    order_inst_id = order.get("instId", "")
+                                    order_side = order.get("side", "").lower()
+                                    # Проверяем, есть ли уже reduceOnly ордер на закрытие
+                                    if (
+                                        (
+                                            order_inst_id == inst_id
+                                            or order_inst_id == symbol
+                                        )
+                                        and order_side == close_side
+                                        and order.get("reduceOnly", "false").lower()
+                                        == "true"
+                                    ):
+                                        order_state = order.get("state", "").lower()
+                                        # Пропускаем только отмененные ордера
+                                        if order_state not in ["canceled", "cancelled"]:
+                                            has_reduce_only_order = True
+                                            logger.debug(
+                                                f"⚠️ Partial TP пропущен для {symbol}: "
+                                                f"уже есть активный reduceOnly ордер {order.get('ordId')} "
+                                                f"(state={order_state})"
+                                            )
+                                            break
+
+                                if has_reduce_only_order:
+                                    return  # Пропускаем размещение, если уже есть активный ордер
+                            except Exception as e:
+                                logger.warning(
+                                    f"⚠️ Ошибка проверки активных ордеров для Partial TP {symbol}: {e}, "
+                                    f"продолжаем размещение"
+                                )
+
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем актуальный размер позиции на бирже
+                            # перед размещением, так как позиция могла быть закрыта частично
+                            try:
+                                actual_positions = await self.client.get_positions(
+                                    symbol
+                                )
+                                actual_size = 0.0
+                                for pos in actual_positions:
+                                    pos_inst_id = pos.get("instId", "").replace(
+                                        "-SWAP", ""
+                                    )
+                                    if pos_inst_id == symbol:
+                                        actual_size = abs(float(pos.get("pos", "0")))
+                                        break
+
+                                if actual_size < size_partial:
+                                    logger.warning(
+                                        f"⚠️ Partial TP пропущен для {symbol}: "
+                                        f"размер позиции {actual_size:.6f} контрактов < "
+                                        f"требуемого для Partial TP {size_partial:.6f} контрактов. "
+                                        f"Позиция могла быть закрыта частично."
+                                    )
+                                    return  # Пропускаем, если позиция слишком мала
+
+                                # Обновляем size_partial, если позиция стала меньше
+                                if actual_size < size_abs:
+                                    size_partial = min(
+                                        size_partial, actual_size * ptp_fraction
+                                    )
+                                    logger.debug(
+                                        f"📊 Partial TP размер скорректирован для {symbol}: "
+                                        f"{size_partial:.6f} контрактов (позиция={actual_size:.6f})"
+                                    )
+                            except Exception as e:
+                                logger.warning(
+                                    f"⚠️ Ошибка проверки размера позиции для Partial TP {symbol}: {e}, "
+                                    f"продолжаем с исходным размером"
+                                )
+
                             # Размещаем лимитный reduce-only ордер (size уже в контрактах)
                             result = await self.client.place_futures_order(
                                 symbol=symbol,
@@ -2716,6 +2989,20 @@ class FuturesPositionManager:
                         logger.warning(
                             f"⚠️ Ошибка синхронизации позиций после закрытия {symbol}: {e}"
                         )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем сделку в CSV через performance_tracker
+                # Используем orchestrator.performance_tracker для записи в CSV
+                if hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "performance_tracker"):
+                        try:
+                            self.orchestrator.performance_tracker.record_trade(trade_result)
+                            logger.debug(f"✅ Сделка {symbol} записана в CSV через orchestrator.performance_tracker")
+                        except Exception as e:
+                            logger.error(f"❌ Ошибка записи сделки {symbol} в CSV: {e}", exc_info=True)
+                    else:
+                        logger.warning(f"⚠️ orchestrator.performance_tracker не найден, пропуск записи в CSV для {symbol}")
+                else:
+                    logger.warning(f"⚠️ orchestrator не найден, пропуск записи в CSV для {symbol}")
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Возвращаем TradeResult для записи в CSV
                 return trade_result

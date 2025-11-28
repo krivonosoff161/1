@@ -498,61 +498,50 @@ class TrailingStopLoss:
             # Применяем множитель продления времени для прибыльных позиций
             effective_min_holding = effective_min_holding * self.extend_time_multiplier
 
-        # ✅ ПРАВКА #2: Проверка min_holding ПЕРЕД loss_cut (включая критические убытки)
-        # ✅ ИСПРАВЛЕНО: Критический 2x loss_cut тоже проверяем с минимальной задержкой
+        # ✅ TODO #3: КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ - Проверяем loss_cut ПЕРЕД MIN_HOLDING блокировкой
+        # Loss_cut должен иметь приоритет над MIN_HOLDING для больших убытков
         seconds_in_position = minutes_in_position * 60.0
         if self.loss_cut_percent is not None:
             loss_cut_from_price = self.loss_cut_percent / self.leverage
             critical_loss_cut_from_price = loss_cut_from_price * 2.0
 
-            # ✅ ИСПРАВЛЕНО: Критический убыток (2x loss_cut) тоже проверяем с минимальной задержкой
+            # ✅ 1. Критический убыток (2x loss_cut) - приоритет #1
             if profit_pct <= -critical_loss_cut_from_price:
-                # ✅ ЗАЩИТА: Минимальная задержка даже для критических убытков (5 секунд)
                 min_critical_hold_seconds = self.min_critical_hold_seconds or 5.0
 
                 if seconds_in_position < min_critical_hold_seconds:
                     logger.debug(
-                        f"⏱️ Критический loss_cut заблокирован (min_hold защита): "
+                        f"⏱️ Критический loss_cut заблокирован минимальной задержкой: "
                         f"прибыль {profit_pct:.2%} от цены <= -{critical_loss_cut_from_price:.2%}, "
                         f"но позиция держится {seconds_in_position:.1f} сек < {min_critical_hold_seconds:.1f} сек, "
                         f"не закрываем (entry_time={entry_iso}, branch=min_critical_hold_block)"
                     )
-                    # ✅ DEBUG LOGGER: Логируем блокировку критического loss_cut
                     if self.debug_logger:
                         self.debug_logger.log_tsl_loss_cut_check(
                             symbol=getattr(self, "_symbol", "UNKNOWN"),
                             profit_pct=profit_pct,
                             loss_cut_from_price=critical_loss_cut_from_price,
-                            will_close=False,  # Блокировано min_hold
+                            will_close=False,
                         )
-                    return False, None  # НЕ закрываем - минимальная задержка
+                    return False, None
 
                 # ✅ ЗАЩИТА: Проверяем, что убыток не из-за комиссии
-                # Если profit_pct очень близок к -critical_loss_cut_from_price (в пределах комиссии),
-                # возможно это просто комиссия, а не реальный убыток
-                commission_threshold = (
-                    self.trading_fee_rate * 1.5
-                )  # 1.5x комиссия как буфер
-                if (
-                    abs(profit_pct + critical_loss_cut_from_price)
-                    < commission_threshold
-                ):
+                commission_threshold = self.trading_fee_rate * 1.5
+                if abs(profit_pct + critical_loss_cut_from_price) < commission_threshold:
                     logger.debug(
                         f"⚠️ Критический loss_cut может быть из-за комиссии: "
                         f"profit_pct={profit_pct:.4f}, critical={critical_loss_cut_from_price:.4f}, "
                         f"разница={abs(profit_pct + critical_loss_cut_from_price):.4f} < {commission_threshold:.4f}"
                     )
-                    # Продолжаем, но логируем предупреждение
 
                 loss_from_margin = abs(profit_pct) * self.leverage
                 logger.warning(
                     f"🚨 Loss-cut КРИТИЧЕСКИЙ (2x): прибыль {profit_pct:.2%} от цены "
                     f"({loss_from_margin:.2%} от маржи) <= -{critical_loss_cut_from_price:.2%} от цены "
                     f"(-{self.loss_cut_percent * 2.0:.2%} от маржи, leverage={self.leverage}x), "
-                    f"позиция будет закрыта (time_in_position={minutes_in_position:.2f} мин, "
-                    f"entry_time={entry_iso}, branch=critical_loss_cut_2x)"
+                    f"закрываем НЕЗАВИСИМО от MIN_HOLDING "
+                    f"(time_in_position={minutes_in_position:.2f} мин, entry_time={entry_iso}, branch=critical_loss_cut_2x)"
                 )
-                # ✅ DEBUG LOGGER: Логируем закрытие по критическому loss_cut
                 if self.debug_logger:
                     self.debug_logger.log_tsl_loss_cut_check(
                         symbol=getattr(self, "_symbol", "UNKNOWN"),
@@ -560,43 +549,59 @@ class TrailingStopLoss:
                         loss_cut_from_price=critical_loss_cut_from_price,
                         will_close=True,
                     )
-                return (
-                    True,
-                    "critical_loss_cut_2x",
-                )  # Закрываем по критическому loss_cut после минимальной задержки
+                return True, "critical_loss_cut_2x"
 
-        # ✅ ПРАВКА #2: Проверка min_holding ПЕРЕД обычным loss_cut
-        if (
-            effective_min_holding is not None
-            and minutes_in_position < effective_min_holding
-        ):
-            # ✅ Проверяем loss_cut только если прошло min_holding (кроме критических)
-            if self.loss_cut_percent is not None:
-                loss_cut_from_price = self.loss_cut_percent / self.leverage
-                if profit_pct <= -loss_cut_from_price:
+            # ✅ 2. Обычный loss_cut - приоритет #2 (ПЕРЕД MIN_HOLDING!)
+            # Если убыток >= loss_cut, закрываем СРАЗУ (после минимальной задержки 5 сек)
+            if profit_pct <= -loss_cut_from_price:
+                min_loss_cut_hold_seconds = 5.0  # Минимальная задержка для loss_cut
+
+                if seconds_in_position >= min_loss_cut_hold_seconds:
+                    # ✅ Закрываем по loss_cut, независимо от MIN_HOLDING
                     loss_from_margin = abs(profit_pct) * self.leverage
-                    logger.debug(
-                        f"⏱️ Loss-cut заблокирован (min_holding защита): прибыль {profit_pct:.2%} от цены "
-                        f"({loss_from_margin:.2%} от маржи) <= -{loss_cut_from_price:.2%} от цены, "
-                        f"но позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
-                        f"не закрываем (entry_time={entry_iso}, branch=min_holding_loss_cut_block)"
+                    logger.warning(
+                        f"⚠️ Loss-cut: прибыль {profit_pct:.2%} от цены "
+                        f"({loss_from_margin:.2%} от маржи) <= -{loss_cut_from_price:.2%} от цены "
+                        f"(-{self.loss_cut_percent:.2%} от маржи, leverage={self.leverage}x), "
+                        f"закрываем НЕЗАВИСИМО от MIN_HOLDING "
+                        f"(time_in_position={minutes_in_position:.2f} мин, entry_time={entry_iso}, branch=loss_cut_priority)"
                     )
-                    # ✅ DEBUG LOGGER: Логируем блокировку loss_cut
                     if self.debug_logger:
                         self.debug_logger.log_tsl_loss_cut_check(
                             symbol=getattr(self, "_symbol", "UNKNOWN"),
                             profit_pct=profit_pct,
                             loss_cut_from_price=loss_cut_from_price,
-                            will_close=False,  # Блокировано min_holding
+                            will_close=True,
                         )
-                    return False, None  # НЕ закрываем - min_holding защита активна!
+                    return True, "loss_cut"
+                else:
+                    # ✅ Минимальная задержка для loss_cut (5 сек)
+                    logger.debug(
+                        f"⏱️ Loss-cut заблокирован минимальной задержкой: "
+                        f"прибыль {profit_pct:.2%} <= -{loss_cut_from_price:.2%}, "
+                        f"но позиция держится {seconds_in_position:.1f} сек < {min_loss_cut_hold_seconds:.1f} сек, "
+                        f"не закрываем (entry_time={entry_iso}, branch=loss_cut_min_delay)"
+                    )
+                    if self.debug_logger:
+                        self.debug_logger.log_tsl_loss_cut_check(
+                            symbol=getattr(self, "_symbol", "UNKNOWN"),
+                            profit_pct=profit_pct,
+                            loss_cut_from_price=loss_cut_from_price,
+                            will_close=False,  # Блокировано минимальной задержкой
+                        )
+                    return False, None
 
-            # Если не loss_cut - просто блокируем закрытие
+        # ✅ 3. MIN_HOLDING блокировка - ТОЛЬКО для малых убытков (защита от шума)
+        # MIN_HOLDING блокирует только малые убытки, но не большие (loss_cut)
+        if (
+            effective_min_holding is not None
+            and minutes_in_position < effective_min_holding
+        ):
+            # Блокируем закрытие по другим причинам (trailing stop), но НЕ loss_cut
             logger.debug(
                 f"⏱️ Минимальное время удержания: позиция держится {minutes_in_position:.2f} мин < {effective_min_holding:.2f} мин, "
                 f"не закрываем (profit={profit_pct:.2%}, entry_time={entry_iso}, branch=min_holding)"
             )
-            # ✅ DEBUG LOGGER: Логируем блокировку min_holding
             if self.debug_logger:
                 self.debug_logger.log_tsl_min_holding_block(
                     symbol=getattr(self, "_symbol", "UNKNOWN"),
@@ -605,33 +610,6 @@ class TrailingStopLoss:
                     profit_pct=profit_pct,
                 )
             return False, None
-
-        # ✅ Жёсткое ограничение убытка
-        # ✅ КРИТИЧЕСКОЕ: Учитываем leverage при сравнении loss_cut_percent
-        # loss_cut_percent в конфиге указан как % от маржи (1.5% от маржи)
-        # profit_pct рассчитывается от цены, поэтому нужно разделить loss_cut_percent на leverage для сравнения
-        if self.loss_cut_percent is not None:
-            # Приводим loss_cut_percent к процентам от цены (делим на leverage)
-            loss_cut_from_price = self.loss_cut_percent / self.leverage
-            # profit_pct уже учитывает комиссию, поэтому сравниваем напрямую
-            if profit_pct <= -loss_cut_from_price:
-                loss_from_margin = abs(profit_pct) * self.leverage
-                logger.warning(
-                    f"⚠️ Loss-cut: прибыль {profit_pct:.2%} от цены "
-                    f"({loss_from_margin:.2%} от маржи) <= -{loss_cut_from_price:.2%} от цены "
-                    f"(-{self.loss_cut_percent:.2%} от маржи, leverage={self.leverage}x), "
-                    f"позиция будет закрыта "
-                    f"(time_in_position={minutes_in_position:.2f} мин, entry_time={entry_iso}, branch=loss_cut)"
-                )
-                # ✅ DEBUG LOGGER: Логируем закрытие по loss_cut
-                if self.debug_logger:
-                    self.debug_logger.log_tsl_loss_cut_check(
-                        symbol=getattr(self, "_symbol", "UNKNOWN"),
-                        profit_pct=profit_pct,
-                        loss_cut_from_price=loss_cut_from_price,
-                        will_close=True,
-                    )
-                return True, "loss_cut"
 
         # ✅ Таймаут для убыточных позиций
         # ✅ КРИТИЧЕСКОЕ: Учитываем leverage при сравнении timeout_loss_percent
