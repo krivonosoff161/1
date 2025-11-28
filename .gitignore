@@ -30,9 +30,8 @@ htmlcov/
 .coverage
 
 # Logs
-logs/futures/debug/*.csv
-logs/futures/structured/*.json
+logs/**/*.csv
+logs/**/*.json
+logs/**/*.log
+logs/**/*.log.zip
 logs/futures/archived/
-logs/*.csv
-logs/*.log
-logs/*.log.zip
