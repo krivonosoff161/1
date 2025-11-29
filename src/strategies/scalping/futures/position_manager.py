@@ -1212,12 +1212,13 @@ class FuturesPositionManager:
                         f"⚠️ margin_used=0 для {symbol}, пропускаем проверку SL"
                     )
             except Exception as e:
-                logger.debug(f"⚠️ Не удалось проверить SL для {symbol}: {e}")
+                logger.error(f"❌ [CHECK_SL] Ошибка проверки SL для {symbol}: {e}", exc_info=True)
 
+            logger.debug(f"🔍 [CHECK_SL] {symbol}: Завершено, позиция остается открытой")
             return False
 
         except Exception as e:
-            logger.error(f"❌ Ошибка проверки SL для {symbol}: {e}", exc_info=True)
+            logger.error(f"❌ [CHECK_SL] Ошибка проверки SL для {symbol}: {e}", exc_info=True)
             return False
 
     async def _check_tp_sl(self, position: Dict[str, Any]):
