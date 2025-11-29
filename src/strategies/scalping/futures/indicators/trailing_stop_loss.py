@@ -624,11 +624,13 @@ class TrailingStopLoss:
             and self.entry_timestamp > 0
         ):
             minutes_in_position = (time.time() - self.entry_timestamp) / 60.0
-            
+
             if minutes_in_position >= self.timeout_minutes:
                 # ✅ НОВОЕ: Для прибыльных позиций - закрываем если прибыль < минимальной
-                min_profit_threshold = 0.005  # 0.5% минимальная прибыль для закрытия по timeout
-                
+                min_profit_threshold = (
+                    0.005  # 0.5% минимальная прибыль для закрытия по timeout
+                )
+
                 if profit_pct > 0 and profit_pct < min_profit_threshold:
                     logger.warning(
                         f"⏰ Timeout low-profit: позиция держится {minutes_in_position:.2f} минут, "
@@ -644,7 +646,7 @@ class TrailingStopLoss:
                             will_close=True,
                         )
                     return True, "timeout_low_profit"
-                
+
                 # Для убыточных позиций - как раньше
                 if self.timeout_loss_percent is not None:
                     timeout_loss_from_price = self.timeout_loss_percent / self.leverage

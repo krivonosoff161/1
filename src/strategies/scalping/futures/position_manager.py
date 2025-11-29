@@ -1268,7 +1268,9 @@ class FuturesPositionManager:
                     ph_threshold = getattr(regime_config, "ph_threshold", 0.0)
                     ph_time_limit = getattr(regime_config, "ph_time_limit", 0)
                     # ✅ НОВОЕ: Получаем min_holding_minutes из конфига (если есть)
-                    config_min_holding = getattr(regime_config, "min_holding_minutes", None)
+                    config_min_holding = getattr(
+                        regime_config, "min_holding_minutes", None
+                    )
             except Exception as e:
                 logger.debug(f"⚠️ Не удалось получить параметры PH из конфига: {e}")
                 return False
@@ -1408,7 +1410,9 @@ class FuturesPositionManager:
                 elif market_regime == "choppy":
                     min_holding_minutes = 1.0  # 1 минута в хаосе
                 else:  # ranging
-                    min_holding_minutes = 1.0  # ✅ ИСПРАВЛЕНО: 1 минута в боковике (было 3.0)
+                    min_holding_minutes = (
+                        1.0  # ✅ ИСПРАВЛЕНО: 1 минута в боковике (было 3.0)
+                    )
             except Exception:
                 pass  # Используем default 3 минуты
 
@@ -2084,11 +2088,15 @@ class FuturesPositionManager:
                     metadata = None
                     if hasattr(self, "orchestrator") and self.orchestrator:
                         if hasattr(self.orchestrator, "position_registry"):
-                            metadata = await self.orchestrator.position_registry.get_metadata(symbol)
-                    
+                            metadata = (
+                                await self.orchestrator.position_registry.get_metadata(
+                                    symbol
+                                )
+                            )
+
                     max_tp_extensions = 3  # Максимум 3 продления
                     tp_extension_count = metadata.tp_extension_count if metadata else 0
-                    
+
                     if tp_extension_count >= max_tp_extensions:
                         logger.info(
                             f"📈 TP уже продлевался {tp_extension_count} раз для {symbol}, "
@@ -2108,7 +2116,9 @@ class FuturesPositionManager:
                                 if hasattr(self.orchestrator, "position_registry"):
                                     await self.orchestrator.position_registry.update_position(
                                         symbol,
-                                        metadata_updates={"tp_extension_count": tp_extension_count + 1}
+                                        metadata_updates={
+                                            "tp_extension_count": tp_extension_count + 1
+                                        },
                                     )
                         # Обновляем TP в позиции (вместо закрытия)
                         # ВАЖНО: Это требует обновления TP на бирже или сохранения нового TP для проверки
@@ -3279,7 +3289,7 @@ class FuturesPositionManager:
     async def _update_peak_profit(self, position: Dict[str, Any]):
         """
         ✅ НОВОЕ: Обновление максимальной прибыли позиции.
-        
+
         Отслеживает пиковую прибыль для последующего закрытия при откате.
         """
         try:
@@ -3296,7 +3306,9 @@ class FuturesPositionManager:
             metadata = None
             if hasattr(self, "orchestrator") and self.orchestrator:
                 if hasattr(self.orchestrator, "position_registry"):
-                    metadata = await self.orchestrator.position_registry.get_metadata(symbol)
+                    metadata = await self.orchestrator.position_registry.get_metadata(
+                        symbol
+                    )
 
             # Рассчитываем текущий PnL
             try:
@@ -3314,8 +3326,10 @@ class FuturesPositionManager:
                 if isinstance(commission_config, dict):
                     commission_rate = commission_config.get("trading_fee_rate", 0.0010)
                 else:
-                    commission_rate = getattr(commission_config, "trading_fee_rate", 0.0010)
-                
+                    commission_rate = getattr(
+                        commission_config, "trading_fee_rate", 0.0010
+                    )
+
                 position_value = size_in_coins * entry_price
                 commission = position_value * commission_rate * 2  # Открытие + закрытие
                 net_pnl = current_pnl - commission
@@ -3324,15 +3338,16 @@ class FuturesPositionManager:
                 if metadata:
                     if net_pnl > metadata.peak_profit_usd:
                         from datetime import timezone
+
                         metadata.peak_profit_usd = net_pnl
                         metadata.peak_profit_time = datetime.now(timezone.utc)
                         metadata.peak_profit_price = current_price
-                        
+
                         logger.debug(
                             f"📈 Обновлен peak_profit для {symbol}: {net_pnl:.4f} USDT "
                             f"(было: {metadata.peak_profit_usd:.4f} USDT)"
                         )
-                        
+
                         # Сохраняем в position_registry
                         if hasattr(self, "orchestrator") and self.orchestrator:
                             if hasattr(self.orchestrator, "position_registry"):
@@ -3342,23 +3357,29 @@ class FuturesPositionManager:
                                         "peak_profit_usd": net_pnl,
                                         "peak_profit_time": metadata.peak_profit_time,
                                         "peak_profit_price": current_price,
-                                    }
+                                    },
                                 )
-                        
+
                         # ✅ НОВОЕ: Немедленная проверка profit_drawdown после обновления пика
                         # Это позволяет закрыть позицию быстрее при откате от максимума
                         # ⚠️ ВАЖНО: Проверяем только если позиция еще открыта (size != 0)
                         if size != 0:
                             try:
-                                drawdown_should_close = await self._check_profit_drawdown(position)
+                                drawdown_should_close = (
+                                    await self._check_profit_drawdown(position)
+                                )
                                 if drawdown_should_close:
                                     logger.warning(
                                         f"📉 Немедленное закрытие по Profit Drawdown после обновления пика для {symbol}"
                                     )
-                                    await self._close_position_by_reason(position, "profit_drawdown")
+                                    await self._close_position_by_reason(
+                                        position, "profit_drawdown"
+                                    )
                                     return  # Позиция закрыта, выходим
                             except Exception as e:
-                                logger.debug(f"⚠️ Ошибка немедленной проверки profit_drawdown для {symbol}: {e}")
+                                logger.debug(
+                                    f"⚠️ Ошибка немедленной проверки profit_drawdown для {symbol}: {e}"
+                                )
 
             except Exception as e:
                 logger.debug(f"⚠️ Ошибка обновления peak_profit для {symbol}: {e}")
@@ -3369,9 +3390,9 @@ class FuturesPositionManager:
     async def _check_profit_drawdown(self, position: Dict[str, Any]) -> bool:
         """
         ✅ НОВОЕ: Проверка отката от максимальной прибыли.
-        
+
         Закрывает позицию если прибыль упала на X% от максимума.
-        
+
         Параметры из конфига:
         - Trending: 40% откат (тренд продолжается)
         - Ranging: 30% откат (боковик)
@@ -3391,7 +3412,9 @@ class FuturesPositionManager:
             metadata = None
             if hasattr(self, "orchestrator") and self.orchestrator:
                 if hasattr(self.orchestrator, "position_registry"):
-                    metadata = await self.orchestrator.position_registry.get_metadata(symbol)
+                    metadata = await self.orchestrator.position_registry.get_metadata(
+                        symbol
+                    )
 
             if not metadata or metadata.peak_profit_usd <= 0:
                 return False  # Нет максимума или максимум <= 0
@@ -3412,8 +3435,10 @@ class FuturesPositionManager:
                 if isinstance(commission_config, dict):
                     commission_rate = commission_config.get("trading_fee_rate", 0.0010)
                 else:
-                    commission_rate = getattr(commission_config, "trading_fee_rate", 0.0010)
-                
+                    commission_rate = getattr(
+                        commission_config, "trading_fee_rate", 0.0010
+                    )
+
                 position_value = size_in_coins * entry_price
                 commission = position_value * commission_rate * 2
                 net_pnl = current_pnl - commission
@@ -3421,7 +3446,7 @@ class FuturesPositionManager:
                 # Получаем режим для адаптивного порога отката
                 regime = metadata.regime or "ranging"
                 drawdown_threshold = 0.3  # Default 30%
-                
+
                 if regime == "trending":
                     drawdown_threshold = 0.4  # 40% откат в тренде
                 elif regime == "choppy":
@@ -3431,7 +3456,9 @@ class FuturesPositionManager:
 
                 # Проверяем откат от максимума
                 peak_profit = metadata.peak_profit_usd
-                drawdown_percent = (peak_profit - net_pnl) / peak_profit if peak_profit > 0 else 0
+                drawdown_percent = (
+                    (peak_profit - net_pnl) / peak_profit if peak_profit > 0 else 0
+                )
 
                 if drawdown_percent >= drawdown_threshold and net_pnl > 0:
                     logger.info(
@@ -3455,9 +3482,9 @@ class FuturesPositionManager:
     async def _check_max_holding(self, position: Dict[str, Any]) -> bool:
         """
         ✅ НОВОЕ: Проверка максимального времени удержания позиции.
-        
+
         Закрывает позицию если она держится дольше max_holding_minutes.
-        
+
         Параметры из конфига:
         - Trending: 60 минут
         - Ranging: 120 минут (2 часа)
@@ -3465,12 +3492,14 @@ class FuturesPositionManager:
         """
         try:
             symbol = position.get("instId", "").replace("-SWAP", "")
-            
+
             # Получаем время открытия
             entry_time_str = position.get("cTime", position.get("openTime", ""))
             if not entry_time_str:
                 if hasattr(self, "orchestrator") and self.orchestrator:
-                    active_positions = getattr(self.orchestrator, "active_positions", {})
+                    active_positions = getattr(
+                        self.orchestrator, "active_positions", {}
+                    )
                     if symbol in active_positions:
                         entry_time_str = active_positions[symbol].get("entry_time", "")
 
@@ -3481,7 +3510,9 @@ class FuturesPositionManager:
             metadata = None
             if hasattr(self, "orchestrator") and self.orchestrator:
                 if hasattr(self.orchestrator, "position_registry"):
-                    metadata = await self.orchestrator.position_registry.get_metadata(symbol)
+                    metadata = await self.orchestrator.position_registry.get_metadata(
+                        symbol
+                    )
 
             regime = "ranging"  # Default
             if metadata and metadata.regime:
@@ -3492,21 +3523,25 @@ class FuturesPositionManager:
             try:
                 adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
                 regime_config = None
-                
+
                 if hasattr(adaptive_regime, regime):
                     regime_config = getattr(adaptive_regime, regime)
                 elif hasattr(adaptive_regime, "ranging"):
                     regime_config = getattr(adaptive_regime, "ranging")
 
                 if regime_config:
-                    max_holding_minutes = getattr(regime_config, "max_holding_minutes", 120.0)
+                    max_holding_minutes = getattr(
+                        regime_config, "max_holding_minutes", 120.0
+                    )
             except Exception as e:
-                logger.debug(f"⚠️ Не удалось получить max_holding_minutes из конфига: {e}")
+                logger.debug(
+                    f"⚠️ Не удалось получить max_holding_minutes из конфига: {e}"
+                )
 
             # Рассчитываем время в позиции
             try:
                 from datetime import timezone
-                
+
                 if isinstance(entry_time_str, str):
                     if entry_time_str.isdigit():
                         entry_timestamp = int(entry_time_str) / 1000.0

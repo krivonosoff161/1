@@ -1596,26 +1596,28 @@ class FuturesSignalGenerator:
             adx_plus_di = 0.0
             adx_minus_di = 0.0
             adx_threshold = 25.0  # Дефолтный порог
-            
+
             if self.adx_filter and self.adx_filter.config.enabled:
                 try:
                     # Получаем порог из конфига
                     adx_threshold = self.adx_filter.config.adx_threshold
-                    
+
                     # Конвертируем свечи в формат для ADX фильтра
                     candles_dict = []
                     if market_data and market_data.ohlcv_data:
                         for candle in market_data.ohlcv_data:
-                            candles_dict.append({
-                                "high": candle.high,
-                                "low": candle.low,
-                                "close": candle.close
-                            })
-                    
+                            candles_dict.append(
+                                {
+                                    "high": candle.high,
+                                    "low": candle.low,
+                                    "close": candle.close,
+                                }
+                            )
+
                     if candles_dict:
                         # Проверяем тренд для BUY и SELL
                         from src.strategies.modules.adx_filter import OrderSide
-                        
+
                         # Проверяем BUY (LONG)
                         buy_result = self.adx_filter.check_trend_strength(
                             symbol, OrderSide.BUY, candles_dict
@@ -1624,24 +1626,30 @@ class FuturesSignalGenerator:
                         sell_result = self.adx_filter.check_trend_strength(
                             symbol, OrderSide.SELL, candles_dict
                         )
-                        
+
                         # Определяем тренд на основе ADX
                         adx_value = buy_result.adx_value
                         adx_plus_di = buy_result.plus_di
                         adx_minus_di = buy_result.minus_di
-                        
+
                         if adx_value >= adx_threshold:
                             # Сильный тренд
-                            if adx_plus_di > adx_minus_di + self.adx_filter.config.di_difference:
+                            if (
+                                adx_plus_di
+                                > adx_minus_di + self.adx_filter.config.di_difference
+                            ):
                                 adx_trend = "bullish"  # Восходящий тренд
-                            elif adx_minus_di > adx_plus_di + self.adx_filter.config.di_difference:
+                            elif (
+                                adx_minus_di
+                                > adx_plus_di + self.adx_filter.config.di_difference
+                            ):
                                 adx_trend = "bearish"  # Нисходящий тренд
                             else:
                                 adx_trend = "ranging"  # Нейтральный (DI близки)
                         else:
                             # Слабый тренд (ADX < threshold)
                             adx_trend = "ranging"
-                            
+
                         logger.debug(
                             f"📊 ADX тренд для {symbol}: {adx_trend}, "
                             f"ADX={adx_value:.1f}, +DI={adx_plus_di:.1f}, -DI={adx_minus_di:.1f}"
@@ -1803,8 +1811,13 @@ class FuturesSignalGenerator:
         }
 
     async def _generate_rsi_signals(
-        self, symbol: str, indicators: Dict, market_data: MarketData,
-        adx_trend: Optional[str] = None, adx_value: float = 0.0, adx_threshold: float = 25.0
+        self,
+        symbol: str,
+        indicators: Dict,
+        market_data: MarketData,
+        adx_trend: Optional[str] = None,
+        adx_value: float = 0.0,
+        adx_threshold: float = 25.0,
     ) -> List[Dict[str, Any]]:
         """Генерация RSI сигналов с режим-специфичными порогами"""
         signals = []
@@ -2083,8 +2096,13 @@ class FuturesSignalGenerator:
         return signals
 
     async def _generate_macd_signals(
-        self, symbol: str, indicators: Dict, market_data: MarketData,
-        adx_trend: Optional[str] = None, adx_value: float = 0.0, adx_threshold: float = 25.0
+        self,
+        symbol: str,
+        indicators: Dict,
+        market_data: MarketData,
+        adx_trend: Optional[str] = None,
+        adx_value: float = 0.0,
+        adx_threshold: float = 25.0,
     ) -> List[Dict[str, Any]]:
         """Генерация MACD сигналов"""
         signals = []
@@ -2307,8 +2325,13 @@ class FuturesSignalGenerator:
         return signals
 
     async def _generate_bollinger_signals(
-        self, symbol: str, indicators: Dict, market_data: MarketData,
-        adx_trend: Optional[str] = None, adx_value: float = 0.0, adx_threshold: float = 25.0
+        self,
+        symbol: str,
+        indicators: Dict,
+        market_data: MarketData,
+        adx_trend: Optional[str] = None,
+        adx_value: float = 0.0,
+        adx_threshold: float = 25.0,
     ) -> List[Dict[str, Any]]:
         """Генерация Bollinger Bands сигналов"""
         signals = []
@@ -2542,8 +2565,13 @@ class FuturesSignalGenerator:
         return signals
 
     async def _generate_ma_signals(
-        self, symbol: str, indicators: Dict, market_data: MarketData,
-        adx_trend: Optional[str] = None, adx_value: float = 0.0, adx_threshold: float = 25.0
+        self,
+        symbol: str,
+        indicators: Dict,
+        market_data: MarketData,
+        adx_trend: Optional[str] = None,
+        adx_value: float = 0.0,
+        adx_threshold: float = 25.0,
     ) -> List[Dict[str, Any]]:
         """Генерация Moving Average сигналов с проверкой направления движения цены и ADX тренда"""
         signals = []

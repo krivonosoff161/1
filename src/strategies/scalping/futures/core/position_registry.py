@@ -52,7 +52,9 @@ class PositionMetadata:
             "created_at": self.created_at.isoformat() if self.created_at else None,
             # ✅ НОВОЕ: Отслеживание максимальной прибыли
             "peak_profit_usd": self.peak_profit_usd,
-            "peak_profit_time": self.peak_profit_time.isoformat() if self.peak_profit_time else None,
+            "peak_profit_time": self.peak_profit_time.isoformat()
+            if self.peak_profit_time
+            else None,
             "peak_profit_price": self.peak_profit_price,
             "tp_extension_count": self.tp_extension_count,
         }
