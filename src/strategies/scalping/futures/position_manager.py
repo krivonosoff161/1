@@ -2950,9 +2950,11 @@ class FuturesPositionManager:
 
             # ⚠️ Stop Loss отключен - используется TrailingSL из orchestrator
             # TrailingSL более гибкий и учитывает тренд/режим рынка
+            
+            logger.debug(f"🔍 [TP_ONLY] {symbol}: Завершено, позиция остается открытой")
 
         except Exception as e:
-            logger.error(f"Ошибка проверки TP: {e}")
+            logger.error(f"❌ [TP_ONLY] Ошибка проверки TP для {symbol}: {e}", exc_info=True)
 
     async def _get_trend_strength(self, symbol: str, current_price: float) -> float:
         """
