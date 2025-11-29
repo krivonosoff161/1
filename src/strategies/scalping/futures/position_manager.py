@@ -1439,13 +1439,30 @@ class FuturesPositionManager:
                 return False  # НЕ закрываем - защита от шума активна!
 
             # Проверка условий Profit Harvesting (только после MIN_HOLDING)
-            if net_pnl_usd >= ph_threshold and time_since_open < ph_time_limit:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если экстремальная прибыль (>= 2x порога),
+            # игнорируем не только min_holding, но и ph_time_limit
+            should_close = False
+            close_reason = ""
+            
+            if ignore_min_holding:
+                # Экстремальная прибыль: игнорируем ph_time_limit
+                if net_pnl_usd >= ph_threshold:
+                    should_close = True
+                    close_reason = "EXTREME PROFIT (ignoring time_limit)"
+            else:
+                # Обычная прибыль: проверяем ph_time_limit
+                if net_pnl_usd >= ph_threshold and time_since_open < ph_time_limit:
+                    should_close = True
+                    close_reason = "NORMAL PROFIT (within time_limit)"
+            
+            if should_close:
                 logger.info(
                     f"💰💰💰 PROFIT HARVESTING TRIGGERED! {symbol} {side.upper()}\n"
                     f"   Quick profit: ${net_pnl_usd:.4f} (threshold: ${ph_threshold:.2f})\n"
                     f"   Time: {time_since_open:.1f}s (limit: {ph_time_limit}s, min_holding: {min_holding_seconds:.1f}s)\n"
                     f"   Entry: ${entry_price:.4f} → Exit: ${current_price:.4f}\n"
-                    f"   Regime: {market_regime or 'N/A'}"
+                    f"   Regime: {market_regime or 'N/A'}\n"
+                    f"   Reason: {close_reason}"
                 )
                 return True
 
