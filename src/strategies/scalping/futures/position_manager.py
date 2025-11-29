@@ -419,9 +419,19 @@ class FuturesPositionManager:
         try:
             symbol = position.get("instId", "").replace("-SWAP", "")
             size = float(position.get("pos", "0"))
+            side = position.get("posSide", "long")
+            entry_price = float(position.get("avgPx", "0"))
+            current_price = float(position.get("markPx", "0"))
+
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало управления позицией
+            logger.debug(
+                f"🔄 [MANAGE_POSITION] Начало для {symbol} | "
+                f"size={size}, side={side}, entry={entry_price:.4f}, current={current_price:.4f}"
+            )
 
             if size == 0:
                 # Позиция закрыта
+                logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: size=0, позиция закрыта")
                 if symbol in self.active_positions:
                     await self._handle_position_closed(symbol)
                 return
@@ -457,41 +467,56 @@ class FuturesPositionManager:
                 position["regime"] = self.active_positions[symbol]["regime"]
 
             # Проверка безопасности позиции
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка безопасности позиции")
             await self._check_position_safety(position)
 
             # ✅ МОДЕРНИЗАЦИЯ #1: Проверка Profit Harvest (PH) - ПРИОРИТЕТ #1
             # PH проверяется ПЕРЕД TP/SL для быстрого закрытия при высокой прибыли
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Harvesting (ПРИОРИТЕТ #1)")
             ph_should_close = await self._check_profit_harvesting(position)
             if ph_should_close:
+                logger.info(f"🔄 [MANAGE_POSITION] {symbol}: PH сработал, закрываем позицию")
                 await self._close_position_by_reason(position, "profit_harvest")
                 return  # Закрыли по PH, дальше не проверяем
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: PH не сработал, продолжаем")
 
             # ✅ НОВОЕ: Обновление максимальной прибыли (перед проверкой отката)
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Обновление peak_profit")
             await self._update_peak_profit(position)
 
             # ✅ НОВОЕ: Проверка отката от максимальной прибыли - ПРИОРИТЕТ #2
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Drawdown (ПРИОРИТЕТ #2)")
             drawdown_should_close = await self._check_profit_drawdown(position)
             if drawdown_should_close:
+                logger.info(f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown сработал, закрываем позицию")
                 await self._close_position_by_reason(position, "profit_drawdown")
                 return  # Закрыли по откату, дальше не проверяем
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown не сработал, продолжаем")
 
             # Проверка TP/SL
             # ⚠️ ВАЖНО: Фиксированный SL отключен, когда используется TrailingSL
             # TrailingSL проверяется в orchestrator._update_trailing_stop_loss
             # Здесь проверяем только TP (Take Profit)
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка TP/SL")
             await self._check_tp_only(position)
 
             # ✅ НОВОЕ: Проверка MAX_HOLDING - ПРИОРИТЕТ #3
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка MAX_HOLDING (ПРИОРИТЕТ #3)")
             max_holding_should_close = await self._check_max_holding(position)
             if max_holding_should_close:
+                logger.info(f"🔄 [MANAGE_POSITION] {symbol}: MAX_HOLDING сработал, закрываем позицию")
                 await self._close_position_by_reason(position, "max_holding_exceeded")
                 return  # Закрыли по MAX_HOLDING, дальше не проверяем
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: MAX_HOLDING не сработал, продолжаем")
 
             # Обновление статистики
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Обновление статистики")
             await self._update_position_stats(position)
+            
+            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Завершено, позиция остается открытой")
 
         except Exception as e:
-            logger.error(f"Ошибка управления позицией {symbol}: {e}")
+            logger.error(f"❌ [MANAGE_POSITION] Ошибка управления позицией {symbol}: {e}", exc_info=True)
 
     async def _check_position_safety(self, position: Dict[str, Any]):
         """Проверка безопасности позиции"""
@@ -1586,6 +1611,12 @@ class FuturesPositionManager:
             side = position.get("posSide", "long")
             entry_price = float(position.get("avgPx", "0"))
             current_price = float(position.get("markPx", "0"))
+
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало проверки
+            logger.debug(
+                f"🔍 [TP_ONLY] Начало для {symbol} | "
+                f"size={size}, side={side}, entry={entry_price:.4f}, current={current_price:.4f}"
+            )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем MIN_HOLDING перед TP
             # Защита от шума должна работать - не закрываем по TP до 35 минут (min_holding)
@@ -3413,7 +3444,14 @@ class FuturesPositionManager:
             current_price = float(position.get("markPx", "0"))
             side = position.get("posSide", "long")
 
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало обновления
+            logger.debug(
+                f"🔍 [UPDATE_PEAK_PROFIT] Начало для {symbol} | "
+                f"size={size}, side={side}, entry={entry_price:.4f}, current={current_price:.4f}"
+            )
+
             if size == 0:
+                logger.debug(f"🔍 [UPDATE_PEAK_PROFIT] {symbol}: size=0, пропускаем")
                 return
 
             # Получаем metadata из position_registry
@@ -3448,6 +3486,12 @@ class FuturesPositionManager:
                 commission = position_value * commission_rate * 2  # Открытие + закрытие
                 net_pnl = current_pnl - commission
 
+                # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Расчет PnL
+                logger.debug(
+                    f"🔍 [UPDATE_PEAK_PROFIT] {symbol}: Расчет PnL | "
+                    f"gross=${current_pnl:.4f}, commission=${commission:.4f}, net=${net_pnl:.4f}"
+                )
+
                 # Обновляем peak_profit если текущий PnL больше
                 if metadata:
                     if net_pnl > metadata.peak_profit_usd:
@@ -3458,8 +3502,8 @@ class FuturesPositionManager:
                         metadata.peak_profit_price = current_price
 
                         logger.debug(
-                            f"📈 Обновлен peak_profit для {symbol}: {net_pnl:.4f} USDT "
-                            f"(было: {metadata.peak_profit_usd:.4f} USDT)"
+                            f"🔍 [UPDATE_PEAK_PROFIT] {symbol}: Обновлен peak_profit | "
+                            f"новый=${net_pnl:.4f}, был=${metadata.peak_profit_usd:.4f}"
                         )
 
                         # Сохраняем в position_registry
@@ -3496,10 +3540,12 @@ class FuturesPositionManager:
                                 )
 
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка обновления peak_profit для {symbol}: {e}")
+                logger.error(f"❌ [UPDATE_PEAK_PROFIT] Ошибка обновления peak_profit для {symbol}: {e}", exc_info=True)
+            else:
+                logger.debug(f"🔍 [UPDATE_PEAK_PROFIT] {symbol}: Завершено")
 
         except Exception as e:
-            logger.debug(f"⚠️ Ошибка в _update_peak_profit для {symbol}: {e}")
+            logger.error(f"❌ [UPDATE_PEAK_PROFIT] Ошибка в _update_peak_profit для {symbol}: {e}", exc_info=True)
 
     async def _check_profit_drawdown(self, position: Dict[str, Any]) -> bool:
         """
@@ -3519,7 +3565,14 @@ class FuturesPositionManager:
             current_price = float(position.get("markPx", "0"))
             side = position.get("posSide", "long")
 
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало проверки
+            logger.debug(
+                f"🔍 [PROFIT_DRAWDOWN] Начало для {symbol} | "
+                f"size={size}, side={side}, entry={entry_price:.4f}, current={current_price:.4f}"
+            )
+
             if size == 0:
+                logger.debug(f"🔍 [PROFIT_DRAWDOWN] {symbol}: size=0, пропускаем")
                 return False
 
             # Получаем metadata
@@ -3531,6 +3584,10 @@ class FuturesPositionManager:
                     )
 
             if not metadata or metadata.peak_profit_usd <= 0:
+                logger.debug(
+                    f"🔍 [PROFIT_DRAWDOWN] {symbol}: Нет peak_profit "
+                    f"(metadata={metadata is not None}, peak_profit={metadata.peak_profit_usd if metadata else 0})"
+                )
                 return False  # Нет максимума или максимум <= 0
 
             # Рассчитываем текущий PnL
@@ -3603,6 +3660,13 @@ class FuturesPositionManager:
                     (peak_profit - net_pnl) / peak_profit if peak_profit > 0 else 0
                 )
 
+                # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Расчет отката
+                logger.debug(
+                    f"🔍 [PROFIT_DRAWDOWN] {symbol}: Расчет | "
+                    f"peak_profit=${peak_profit:.4f}, current_pnl=${net_pnl:.4f}, "
+                    f"drawdown={drawdown_percent:.1%}, threshold={drawdown_threshold:.1%}"
+                )
+
                 if drawdown_percent >= drawdown_threshold and net_pnl > 0:
                     logger.info(
                         f"📉 PROFIT DRAWDOWN TRIGGERED! {symbol} {side.upper()}\n"
@@ -3612,14 +3676,20 @@ class FuturesPositionManager:
                         f"   Regime: {regime}"
                     )
                     return True
+                else:
+                    logger.debug(
+                        f"🔍 [PROFIT_DRAWDOWN] {symbol}: Условие не выполнено | "
+                        f"drawdown={drawdown_percent:.1%} < {drawdown_threshold:.1%} или net_pnl={net_pnl:.4f} <= 0"
+                    )
 
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка расчета отката для {symbol}: {e}")
+                logger.error(f"❌ [PROFIT_DRAWDOWN] Ошибка расчета отката для {symbol}: {e}", exc_info=True)
 
+            logger.debug(f"🔍 [PROFIT_DRAWDOWN] {symbol}: Завершено, позиция остается открытой")
             return False
 
         except Exception as e:
-            logger.error(f"❌ Ошибка проверки profit drawdown для {symbol}: {e}")
+            logger.error(f"❌ [PROFIT_DRAWDOWN] Ошибка проверки profit drawdown для {symbol}: {e}", exc_info=True)
             return False
 
     async def _check_max_holding(self, position: Dict[str, Any]) -> bool:
@@ -3636,6 +3706,9 @@ class FuturesPositionManager:
         try:
             symbol = position.get("instId", "").replace("-SWAP", "")
 
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало проверки
+            logger.debug(f"🔍 [MAX_HOLDING] Начало для {symbol}")
+
             # Получаем время открытия
             entry_time_str = position.get("cTime", position.get("openTime", ""))
             if not entry_time_str:
@@ -3647,6 +3720,7 @@ class FuturesPositionManager:
                         entry_time_str = active_positions[symbol].get("entry_time", "")
 
             if not entry_time_str:
+                logger.debug(f"🔍 [MAX_HOLDING] {symbol}: Не удалось получить entry_time, пропускаем")
                 return False
 
             # Получаем metadata для режима
@@ -3712,14 +3786,20 @@ class FuturesPositionManager:
                         f"   Regime: {regime}"
                     )
                     return True
+                else:
+                    logger.debug(
+                        f"🔍 [MAX_HOLDING] {symbol}: Время в пределах лимита | "
+                        f"{minutes_in_position:.1f} мин < {max_holding_minutes:.1f} мин"
+                    )
 
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка расчета времени для {symbol}: {e}")
+                logger.error(f"❌ [MAX_HOLDING] Ошибка расчета времени для {symbol}: {e}", exc_info=True)
 
+            logger.debug(f"🔍 [MAX_HOLDING] {symbol}: Завершено, позиция остается открытой")
             return False
 
         except Exception as e:
-            logger.error(f"❌ Ошибка проверки max_holding для {symbol}: {e}")
+            logger.error(f"❌ [MAX_HOLDING] Ошибка проверки max_holding для {symbol}: {e}", exc_info=True)
             return False
 
     async def _update_position_stats(self, position: Dict[str, Any]):
