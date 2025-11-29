@@ -29,6 +29,11 @@ class PositionMetadata:
     size_in_coins: Optional[float] = None
     margin_used: Optional[float] = None
     created_at: datetime = field(default_factory=datetime.now)
+    # ✅ НОВОЕ: Отслеживание максимальной прибыли
+    peak_profit_usd: float = 0.0  # Максимальная прибыль в USD
+    peak_profit_time: Optional[datetime] = None  # Время достижения максимума
+    peak_profit_price: Optional[float] = None  # Цена при максимуме прибыли
+    tp_extension_count: int = 0  # Количество продлений TP
 
     def to_dict(self) -> Dict[str, Any]:
         """Конвертация в словарь для сериализации"""
@@ -45,6 +50,11 @@ class PositionMetadata:
             "size_in_coins": self.size_in_coins,
             "margin_used": self.margin_used,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            # ✅ НОВОЕ: Отслеживание максимальной прибыли
+            "peak_profit_usd": self.peak_profit_usd,
+            "peak_profit_time": self.peak_profit_time.isoformat() if self.peak_profit_time else None,
+            "peak_profit_price": self.peak_profit_price,
+            "tp_extension_count": self.tp_extension_count,
         }
 
     @classmethod
@@ -76,6 +86,19 @@ class PositionMetadata:
             elif isinstance(data["created_at"], datetime):
                 created_at = data["created_at"]
 
+        # Парсим peak_profit_time
+        peak_profit_time = None
+        if data.get("peak_profit_time"):
+            if isinstance(data["peak_profit_time"], str):
+                try:
+                    peak_profit_time = datetime.fromisoformat(
+                        data["peak_profit_time"].replace("Z", "+00:00")
+                    )
+                except:
+                    peak_profit_time = None
+            elif isinstance(data["peak_profit_time"], datetime):
+                peak_profit_time = data["peak_profit_time"]
+
         return cls(
             entry_time=entry_time or datetime.now(),
             regime=data.get("regime"),
@@ -89,6 +112,11 @@ class PositionMetadata:
             size_in_coins=data.get("size_in_coins"),
             margin_used=data.get("margin_used"),
             created_at=created_at,
+            # ✅ НОВОЕ: Отслеживание максимальной прибыли
+            peak_profit_usd=data.get("peak_profit_usd", 0.0),
+            peak_profit_time=peak_profit_time,
+            peak_profit_price=data.get("peak_profit_price"),
+            tp_extension_count=data.get("tp_extension_count", 0),
         )
 
 

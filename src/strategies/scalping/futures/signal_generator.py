@@ -1590,9 +1590,71 @@ class FuturesSignalGenerator:
             # Логируем только при генерации реальных сигналов (INFO уровень)
             # logger.debug(f"📊 Индикаторы для {symbol}: цена=${current_price:.2f}, RSI={rsi_val}")
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем ADX тренд ДО генерации сигналов
+            adx_trend = None  # "bullish", "bearish", "ranging", None
+            adx_value = 0.0
+            adx_plus_di = 0.0
+            adx_minus_di = 0.0
+            adx_threshold = 25.0  # Дефолтный порог
+            
+            if self.adx_filter and self.adx_filter.config.enabled:
+                try:
+                    # Получаем порог из конфига
+                    adx_threshold = self.adx_filter.config.adx_threshold
+                    
+                    # Конвертируем свечи в формат для ADX фильтра
+                    candles_dict = []
+                    if market_data and market_data.ohlcv_data:
+                        for candle in market_data.ohlcv_data:
+                            candles_dict.append({
+                                "high": candle.high,
+                                "low": candle.low,
+                                "close": candle.close
+                            })
+                    
+                    if candles_dict:
+                        # Проверяем тренд для BUY и SELL
+                        from src.strategies.modules.adx_filter import OrderSide
+                        
+                        # Проверяем BUY (LONG)
+                        buy_result = self.adx_filter.check_trend_strength(
+                            symbol, OrderSide.BUY, candles_dict
+                        )
+                        # Проверяем SELL (SHORT)
+                        sell_result = self.adx_filter.check_trend_strength(
+                            symbol, OrderSide.SELL, candles_dict
+                        )
+                        
+                        # Определяем тренд на основе ADX
+                        adx_value = buy_result.adx_value
+                        adx_plus_di = buy_result.plus_di
+                        adx_minus_di = buy_result.minus_di
+                        
+                        if adx_value >= adx_threshold:
+                            # Сильный тренд
+                            if adx_plus_di > adx_minus_di + self.adx_filter.config.di_difference:
+                                adx_trend = "bullish"  # Восходящий тренд
+                            elif adx_minus_di > adx_plus_di + self.adx_filter.config.di_difference:
+                                adx_trend = "bearish"  # Нисходящий тренд
+                            else:
+                                adx_trend = "ranging"  # Нейтральный (DI близки)
+                        else:
+                            # Слабый тренд (ADX < threshold)
+                            adx_trend = "ranging"
+                            
+                        logger.debug(
+                            f"📊 ADX тренд для {symbol}: {adx_trend}, "
+                            f"ADX={adx_value:.1f}, +DI={adx_plus_di:.1f}, -DI={adx_minus_di:.1f}"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ Ошибка получения ADX тренда для {symbol}: {e}, "
+                        f"сигналы будут генерироваться без учета ADX"
+                    )
+
             # RSI сигналы
             rsi_signals = await self._generate_rsi_signals(
-                symbol, indicators, market_data
+                symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
             )
             # ✅ ОПТИМИЗАЦИЯ: Логирование через INFO уровень при наличии сигналов
             # if rsi_signals:
@@ -1601,7 +1663,7 @@ class FuturesSignalGenerator:
 
             # MACD сигналы
             macd_signals = await self._generate_macd_signals(
-                symbol, indicators, market_data
+                symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
             )
             # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
             # if macd_signals:
@@ -1610,7 +1672,7 @@ class FuturesSignalGenerator:
 
             # Bollinger Bands сигналы
             bb_signals = await self._generate_bollinger_signals(
-                symbol, indicators, market_data
+                symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
             )
             # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
             # if bb_signals:
@@ -1619,7 +1681,7 @@ class FuturesSignalGenerator:
 
             # Moving Average сигналы
             ma_signals = await self._generate_ma_signals(
-                symbol, indicators, market_data
+                symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
             )
             signals.extend(ma_signals)
 
@@ -1741,7 +1803,8 @@ class FuturesSignalGenerator:
         }
 
     async def _generate_rsi_signals(
-        self, symbol: str, indicators: Dict, market_data: MarketData
+        self, symbol: str, indicators: Dict, market_data: MarketData,
+        adx_trend: Optional[str] = None, adx_value: float = 0.0, adx_threshold: float = 25.0
     ) -> List[Dict[str, Any]]:
         """Генерация RSI сигналов с режим-специфичными порогами"""
         signals = []
@@ -1890,19 +1953,27 @@ class FuturesSignalGenerator:
                     # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
                     # logger.debug(f"✅ RSI OVERSOLD сигнал для {symbol}: RSI={rsi:.2f}")
 
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "buy",
-                        "type": "rsi_oversold",
-                        "strength": strength,
-                        "price": current_price,
-                        "timestamp": datetime.now(),
-                        "indicator_value": rsi,
-                        "confidence": confidence,
-                        "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
-                    }
-                )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                if adx_trend == "bearish" and adx_value >= adx_threshold:
+                    # Сильный нисходящий тренд - не генерируем BUY сигнал
+                    logger.debug(
+                        f"🚫 RSI OVERSOLD сигнал ОТМЕНЕН для {symbol}: "
+                        f"ADX показывает нисходящий тренд (ADX={adx_value:.1f}, -DI доминирует)"
+                    )
+                else:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "buy",
+                            "type": "rsi_oversold",
+                            "strength": strength,
+                            "price": current_price,
+                            "timestamp": datetime.now(),
+                            "indicator_value": rsi,
+                            "confidence": confidence,
+                            "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
+                        }
+                    )
 
             # Перекупленность (продажа) - используем адаптивный порог
             elif rsi > rsi_overbought:
@@ -1984,19 +2055,27 @@ class FuturesSignalGenerator:
                     # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
                     # logger.debug(f"✅ RSI OVERBOUGHT сигнал для {symbol}: RSI={rsi:.2f}")
 
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "sell",
-                        "type": "rsi_overbought",
-                        "strength": strength,
-                        "price": current_price,
-                        "timestamp": datetime.now(),
-                        "indicator_value": rsi,
-                        "confidence": confidence,
-                        "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
-                    }
-                )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                if adx_trend == "bullish" and adx_value >= adx_threshold:
+                    # Сильный восходящий тренд - не генерируем SELL сигнал
+                    logger.debug(
+                        f"🚫 RSI OVERBOUGHT сигнал ОТМЕНЕН для {symbol}: "
+                        f"ADX показывает восходящий тренд (ADX={adx_value:.1f}, +DI доминирует)"
+                    )
+                else:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "sell",
+                            "type": "rsi_overbought",
+                            "strength": strength,
+                            "price": current_price,
+                            "timestamp": datetime.now(),
+                            "indicator_value": rsi,
+                            "confidence": confidence,
+                            "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
+                        }
+                    )
 
         except Exception as e:
             logger.error(f"Ошибка генерации RSI сигналов: {e}")
@@ -2004,7 +2083,8 @@ class FuturesSignalGenerator:
         return signals
 
     async def _generate_macd_signals(
-        self, symbol: str, indicators: Dict, market_data: MarketData
+        self, symbol: str, indicators: Dict, market_data: MarketData,
+        adx_trend: Optional[str] = None, adx_value: float = 0.0, adx_threshold: float = 25.0
     ) -> List[Dict[str, Any]]:
         """Генерация MACD сигналов"""
         signals = []
@@ -2121,20 +2201,28 @@ class FuturesSignalGenerator:
                     f"✅ MACD BULLISH сигнал для {symbol}: macd({macd_line:.4f}) > signal({signal_line:.4f}), "
                     f"histogram={histogram:.4f} > 0, is_bullish_trend={is_bullish_trend}"
                 )
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "buy",
-                        "type": "macd_bullish",
-                        "strength": base_strength,
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
-                        "timestamp": datetime.now(),
-                        "indicator_value": histogram,
-                        "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
-                    }
-                )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                if adx_trend == "bearish" and adx_value >= adx_threshold:
+                    # Сильный нисходящий тренд - не генерируем BUY сигнал
+                    logger.debug(
+                        f"🚫 MACD BULLISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"ADX показывает нисходящий тренд (ADX={adx_value:.1f}, -DI доминирует)"
+                    )
+                else:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "buy",
+                            "type": "macd_bullish",
+                            "strength": base_strength,
+                            "price": market_data.ohlcv_data[-1].close
+                            if market_data.ohlcv_data
+                            else 0.0,
+                            "timestamp": datetime.now(),
+                            "indicator_value": histogram,
+                            "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
+                        }
+                    )
 
             elif macd_line < signal_line and histogram < 0:
                 # ✅ ЗАДАЧА #7: Проверяем совпадение EMA и цены для BEARISH
@@ -2190,20 +2278,28 @@ class FuturesSignalGenerator:
                 logger.debug(
                     f"✅ MACD BEARISH сигнал для {symbol}: histogram={histogram:.4f}, is_bearish_trend={is_bearish_trend}"
                 )
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "sell",
-                        "type": "macd_bearish",
-                        "strength": base_strength,
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
-                        "timestamp": datetime.now(),
-                        "indicator_value": histogram,
-                        "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
-                    }
-                )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                if adx_trend == "bullish" and adx_value >= adx_threshold:
+                    # Сильный восходящий тренд - не генерируем SELL сигнал
+                    logger.debug(
+                        f"🚫 MACD BEARISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"ADX показывает восходящий тренд (ADX={adx_value:.1f}, +DI доминирует)"
+                    )
+                else:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "sell",
+                            "type": "macd_bearish",
+                            "strength": base_strength,
+                            "price": market_data.ohlcv_data[-1].close
+                            if market_data.ohlcv_data
+                            else 0.0,
+                            "timestamp": datetime.now(),
+                            "indicator_value": histogram,
+                            "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
+                        }
+                    )
 
         except Exception as e:
             logger.error(f"Ошибка генерации MACD сигналов: {e}")
@@ -2211,7 +2307,8 @@ class FuturesSignalGenerator:
         return signals
 
     async def _generate_bollinger_signals(
-        self, symbol: str, indicators: Dict, market_data: MarketData
+        self, symbol: str, indicators: Dict, market_data: MarketData,
+        adx_trend: Optional[str] = None, adx_value: float = 0.0, adx_threshold: float = 25.0
     ) -> List[Dict[str, Any]]:
         """Генерация Bollinger Bands сигналов"""
         signals = []
@@ -2327,20 +2424,28 @@ class FuturesSignalGenerator:
                         f"тренд не нисходящий (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f})"
                     )
 
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "buy",
-                        "type": "bb_oversold",
-                        "strength": base_strength,
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
-                        "timestamp": datetime.now(),
-                        "indicator_value": current_price,
-                        "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
-                    }
-                )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                if adx_trend == "bearish" and adx_value >= adx_threshold:
+                    # Сильный нисходящий тренд - не генерируем BUY сигнал
+                    logger.debug(
+                        f"🚫 BB OVERSOLD сигнал ОТМЕНЕН для {symbol}: "
+                        f"ADX показывает нисходящий тренд (ADX={adx_value:.1f}, -DI доминирует)"
+                    )
+                else:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "buy",
+                            "type": "bb_oversold",
+                            "strength": base_strength,
+                            "price": market_data.ohlcv_data[-1].close
+                            if market_data.ohlcv_data
+                            else 0.0,
+                            "timestamp": datetime.now(),
+                            "indicator_value": current_price,
+                            "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
+                        }
+                    )
 
             # Отскок от верхней полосы (продажа)
             # ✅ ИСПРАВЛЕНИЕ: Не даем SHORT сигнал в восходящем тренде!
@@ -2408,20 +2513,28 @@ class FuturesSignalGenerator:
                         f"тренд не восходящий (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f})"
                     )
 
-                signals.append(
-                    {
-                        "symbol": symbol,
-                        "side": "sell",
-                        "type": "bb_overbought",
-                        "strength": base_strength,
-                        "price": market_data.ohlcv_data[-1].close
-                        if market_data.ohlcv_data
-                        else 0.0,
-                        "timestamp": datetime.now(),
-                        "indicator_value": current_price,
-                        "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
-                    }
-                )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                if adx_trend == "bullish" and adx_value >= adx_threshold:
+                    # Сильный восходящий тренд - не генерируем SELL сигнал
+                    logger.debug(
+                        f"🚫 BB OVERBOUGHT сигнал ОТМЕНЕН для {symbol}: "
+                        f"ADX показывает восходящий тренд (ADX={adx_value:.1f}, +DI доминирует)"
+                    )
+                else:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "sell",
+                            "type": "bb_overbought",
+                            "strength": base_strength,
+                            "price": market_data.ohlcv_data[-1].close
+                            if market_data.ohlcv_data
+                            else 0.0,
+                            "timestamp": datetime.now(),
+                            "indicator_value": current_price,
+                            "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
+                        }
+                    )
 
         except Exception as e:
             logger.error(f"Ошибка генерации Bollinger Bands сигналов: {e}")
@@ -2429,9 +2542,10 @@ class FuturesSignalGenerator:
         return signals
 
     async def _generate_ma_signals(
-        self, symbol: str, indicators: Dict, market_data: MarketData
+        self, symbol: str, indicators: Dict, market_data: MarketData,
+        adx_trend: Optional[str] = None, adx_value: float = 0.0, adx_threshold: float = 25.0
     ) -> List[Dict[str, Any]]:
-        """Генерация Moving Average сигналов с проверкой направления движения цены"""
+        """Генерация Moving Average сигналов с проверкой направления движения цены и ADX тренда"""
         signals = []
 
         try:
@@ -2964,8 +3078,15 @@ class FuturesSignalGenerator:
 
             # Пересечение быстрой и медленной MA
             if ma_fast > ma_slow and current_price > ma_fast and ma_slow > 0:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                if adx_trend == "bearish" and adx_value >= adx_threshold:
+                    # Сильный нисходящий тренд - не генерируем BULLISH сигнал
+                    logger.debug(
+                        f"🚫 MA BULLISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"ADX показывает нисходящий тренд (ADX={adx_value:.1f}, -DI доминирует)"
+                    )
                 # ✅ УЛУЧШЕНИЕ: Проверяем минимальную разницу EMA
-                if ma_difference_pct < min_ma_difference_pct:
+                elif ma_difference_pct < min_ma_difference_pct:
                     logger.debug(
                         f"⚠️ MA BULLISH сигнал ОТМЕНЕН для {symbol}: "
                         f"разница EMA слишком мала ({ma_difference_pct:.3f}% < {min_ma_difference_pct}%)"
@@ -3023,8 +3144,15 @@ class FuturesSignalGenerator:
                     )
 
             elif ma_fast < ma_slow and current_price < ma_fast and ma_slow > 0:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                if adx_trend == "bullish" and adx_value >= adx_threshold:
+                    # Сильный восходящий тренд - не генерируем BEARISH сигнал
+                    logger.debug(
+                        f"🚫 MA BEARISH сигнал ОТМЕНЕН для {symbol}: "
+                        f"ADX показывает восходящий тренд (ADX={adx_value:.1f}, +DI доминирует)"
+                    )
                 # ✅ УЛУЧШЕНИЕ: Проверяем минимальную разницу EMA
-                if ma_difference_pct < min_ma_difference_pct:
+                elif ma_difference_pct < min_ma_difference_pct:
                     logger.debug(
                         f"⚠️ MA BEARISH сигнал ОТМЕНЕН для {symbol}: "
                         f"разница EMA слишком мала ({ma_difference_pct:.3f}% < {min_ma_difference_pct}%)"

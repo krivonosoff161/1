@@ -614,39 +614,57 @@ class TrailingStopLoss:
                 )
             return False, None
 
-        # ✅ Таймаут для убыточных позиций
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Timeout для ВСЕХ позиций (не только убыточных)
         # ✅ КРИТИЧЕСКОЕ: Учитываем leverage при сравнении timeout_loss_percent
         # timeout_loss_percent в конфиге указан как % от маржи (1.0% от маржи)
         # profit_pct рассчитывается от цены, поэтому нужно разделить timeout_loss_percent на leverage для сравнения
         if (
-            self.timeout_loss_percent is not None
-            and self.timeout_minutes is not None
+            self.timeout_minutes is not None
+            and self.timeout_minutes > 0
             and self.entry_timestamp > 0
         ):
             minutes_in_position = (time.time() - self.entry_timestamp) / 60.0
-            # Приводим timeout_loss_percent к процентам от цены (делим на leverage)
-            timeout_loss_from_price = self.timeout_loss_percent / self.leverage
-            if (
-                minutes_in_position >= self.timeout_minutes
-                and profit_pct <= -timeout_loss_from_price
-            ):
-                loss_from_margin = abs(profit_pct) * self.leverage
-                logger.warning(
-                    f"⚠️ Timeout loss-cut: позиция держится {minutes_in_position:.2f} минут, "
-                    f"прибыль {profit_pct:.2%} от цены ({loss_from_margin:.2%} от маржи) "
-                    f"≤ -{timeout_loss_from_price:.2%} от цены (-{self.timeout_loss_percent:.2%} от маржи, leverage={self.leverage}x), "
-                    f"закрываем (entry_time={entry_iso}, branch=timeout)"
-                )
-                # ✅ DEBUG LOGGER: Логируем закрытие по timeout
-                if self.debug_logger:
-                    self.debug_logger.log_tsl_timeout_check(
-                        symbol=getattr(self, "_symbol", "UNKNOWN"),
-                        minutes_in_position=minutes_in_position,
-                        timeout_minutes=self.timeout_minutes,
-                        profit_pct=profit_pct,
-                        will_close=True,
+            
+            if minutes_in_position >= self.timeout_minutes:
+                # ✅ НОВОЕ: Для прибыльных позиций - закрываем если прибыль < минимальной
+                min_profit_threshold = 0.005  # 0.5% минимальная прибыль для закрытия по timeout
+                
+                if profit_pct > 0 and profit_pct < min_profit_threshold:
+                    logger.warning(
+                        f"⏰ Timeout low-profit: позиция держится {minutes_in_position:.2f} минут, "
+                        f"прибыль {profit_pct:.2%} < {min_profit_threshold:.2%} (минимальный порог), "
+                        f"закрываем (entry_time={entry_iso}, branch=timeout_low_profit)"
                     )
-                return True, "timeout"
+                    if self.debug_logger:
+                        self.debug_logger.log_tsl_timeout_check(
+                            symbol=getattr(self, "_symbol", "UNKNOWN"),
+                            minutes_in_position=minutes_in_position,
+                            timeout_minutes=self.timeout_minutes,
+                            profit_pct=profit_pct,
+                            will_close=True,
+                        )
+                    return True, "timeout_low_profit"
+                
+                # Для убыточных позиций - как раньше
+                if self.timeout_loss_percent is not None:
+                    timeout_loss_from_price = self.timeout_loss_percent / self.leverage
+                    if profit_pct <= -timeout_loss_from_price:
+                        loss_from_margin = abs(profit_pct) * self.leverage
+                        logger.warning(
+                            f"⚠️ Timeout loss-cut: позиция держится {minutes_in_position:.2f} минут, "
+                            f"прибыль {profit_pct:.2%} от цены ({loss_from_margin:.2%} от маржи) "
+                            f"≤ -{timeout_loss_from_price:.2%} от цены (-{self.timeout_loss_percent:.2%} от маржи, leverage={self.leverage}x), "
+                            f"закрываем (entry_time={entry_iso}, branch=timeout)"
+                        )
+                        if self.debug_logger:
+                            self.debug_logger.log_tsl_timeout_check(
+                                symbol=getattr(self, "_symbol", "UNKNOWN"),
+                                minutes_in_position=minutes_in_position,
+                                timeout_minutes=self.timeout_minutes,
+                                profit_pct=profit_pct,
+                                will_close=True,
+                            )
+                        return True, "timeout"
 
         # Базовая проверка стоп-лосса
         if self.side == "long":
