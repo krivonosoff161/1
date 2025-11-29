@@ -105,6 +105,20 @@ scalping:
     slippage_buffer_percent: 0.15  # ✅ НОВОЕ: Буфер на slippage в процентах от маржи (0.15% = 0.0015)
     tp_buffer_percent: 0.1  # ✅ НОВОЕ: Дополнительный буфер для TP в процентах от маржи (0.1% = 0.001)
   
+  # ✅ НОВОЕ: Profit Drawdown Protection - защита от отката прибыли
+  profit_drawdown:
+    enabled: true
+    drawdown_percent: 0.20  # 20% базовый откат от пика прибыли
+    min_profit_to_activate_usd: 0.5  # Минимальная прибыль в USD для активации
+    # Адаптивные пороги по режимам (множители от базового drawdown_percent)
+    by_regime:
+      trending:
+        multiplier: 2.0  # 40% откат в тренде (0.20 * 2.0)
+      ranging:
+        multiplier: 1.5  # 30% откат в боковике (0.20 * 1.5)
+      choppy:
+        multiplier: 1.0  # 20% откат в хаосе (0.20 * 1.0)
+  
   # Адаптивные параметры
   adaptive_tp_sl: true  # Адаптивные TP/SL на основе волатильности
   volatility_multiplier: 1.2  # Меньший множитель для Futures

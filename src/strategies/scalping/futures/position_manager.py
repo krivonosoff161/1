@@ -3559,14 +3559,43 @@ class FuturesPositionManager:
 
                 # Получаем режим для адаптивного порога отката
                 regime = metadata.regime or "ranging"
-                drawdown_threshold = 0.3  # Default 30%
-
-                if regime == "trending":
-                    drawdown_threshold = 0.4  # 40% откат в тренде
-                elif regime == "choppy":
-                    drawdown_threshold = 0.2  # 20% откат в хаосе
-                else:  # ranging
-                    drawdown_threshold = 0.3  # 30% откат в боковике
+                
+                # ✅ ИСПРАВЛЕНО: Читаем порог отката из конфига вместо захардкоженных значений
+                base_drawdown = 0.20  # Default 20%
+                try:
+                    profit_drawdown_config = getattr(self.scalping_config, "profit_drawdown", {})
+                    if isinstance(profit_drawdown_config, dict):
+                        base_drawdown = profit_drawdown_config.get("drawdown_percent", 0.20)
+                    else:
+                        base_drawdown = getattr(profit_drawdown_config, "drawdown_percent", 0.20)
+                    
+                    # Получаем множитель по режиму
+                    multiplier = 1.5  # Default для ranging
+                    if isinstance(profit_drawdown_config, dict):
+                        by_regime = profit_drawdown_config.get("by_regime", {})
+                        regime_config = by_regime.get(regime, {})
+                        multiplier = regime_config.get("multiplier", 1.5)
+                    else:
+                        by_regime = getattr(profit_drawdown_config, "by_regime", {})
+                        if hasattr(by_regime, regime):
+                            regime_config = getattr(by_regime, regime)
+                            multiplier = getattr(regime_config, "multiplier", 1.5)
+                    
+                    drawdown_threshold = base_drawdown * multiplier
+                    logger.debug(
+                        f"📊 Profit Drawdown для {symbol} (regime={regime}): "
+                        f"base={base_drawdown:.1%}, multiplier={multiplier:.1f}, "
+                        f"threshold={drawdown_threshold:.1%}"
+                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка чтения profit_drawdown из конфига: {e}, используем fallback")
+                    # Fallback на старые захардкоженные значения
+                    if regime == "trending":
+                        drawdown_threshold = 0.4  # 40% откат в тренде
+                    elif regime == "choppy":
+                        drawdown_threshold = 0.2  # 20% откат в хаосе
+                    else:  # ranging
+                        drawdown_threshold = 0.3  # 30% откат в боковике
 
                 # Проверяем откат от максимума
                 peak_profit = metadata.peak_profit_usd
