@@ -1225,7 +1225,17 @@ class FuturesPositionManager:
             entry_price = float(position.get("avgPx", "0"))
             current_price = float(position.get("markPx", "0"))
 
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #1: Начало проверки
+            logger.debug(
+                f"🔍 PH проверка для {symbol}: начало | "
+                f"size={size}, side={side}, entry={entry_price:.4f}, current={current_price:.4f}"
+            )
+
             if size == 0 or entry_price == 0 or current_price == 0:
+                logger.debug(
+                    f"❌ PH для {symbol}: некорректные данные позиции "
+                    f"(size={size}, entry={entry_price}, current={current_price})"
+                )
                 return False
 
             # Получаем параметры PH из конфига по режиму рынка
@@ -1271,16 +1281,40 @@ class FuturesPositionManager:
                     config_min_holding = getattr(
                         regime_config, "min_holding_minutes", None
                     )
+                    
+                    # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #2: Параметры из конфига
+                    logger.debug(
+                        f"🔍 PH параметры для {symbol} (regime={market_regime or 'ranging'}): "
+                        f"enabled={ph_enabled}, threshold=${ph_threshold:.2f}, "
+                        f"time_limit={ph_time_limit}с, min_holding={config_min_holding}"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️ PH для {symbol}: regime_config не найден для режима {market_regime or 'N/A'}"
+                    )
             except Exception as e:
-                logger.debug(f"⚠️ Не удалось получить параметры PH из конфига: {e}")
+                logger.error(
+                    f"❌ PH для {symbol}: Ошибка получения параметров из конфига: {e}",
+                    exc_info=True
+                )
                 return False
 
             if not ph_enabled or ph_threshold <= 0 or ph_time_limit <= 0:
+                logger.debug(
+                    f"❌ PH для {symbol}: PH отключен или некорректные параметры "
+                    f"(enabled={ph_enabled}, threshold={ph_threshold}, time_limit={ph_time_limit})"
+                )
                 return False
 
             # Получаем время открытия позиции
             entry_time_str = position.get("cTime", position.get("openTime", ""))
+            
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #3: Получение времени открытия
             if not entry_time_str:
+                logger.debug(
+                    f"🔍 PH для {symbol}: cTime/openTime отсутствует в позиции, "
+                    f"пробуем получить из active_positions"
+                )
                 # Пытаемся получить из active_positions orchestrator
                 if hasattr(self, "orchestrator") and self.orchestrator:
                     active_positions = getattr(
@@ -1288,8 +1322,27 @@ class FuturesPositionManager:
                     )
                     if symbol in active_positions:
                         entry_time_str = active_positions[symbol].get("entry_time", "")
+                        logger.debug(
+                            f"🔍 PH для {symbol}: entry_time из active_positions: {entry_time_str}"
+                        )
+                    else:
+                        logger.debug(
+                            f"🔍 PH для {symbol}: символ не найден в active_positions"
+                        )
+                else:
+                    logger.debug(
+                        f"🔍 PH для {symbol}: orchestrator недоступен"
+                    )
+            else:
+                logger.debug(
+                    f"🔍 PH для {symbol}: entry_time из позиции: {entry_time_str}"
+                )
 
             if not entry_time_str:
+                logger.warning(
+                    f"❌ PH для {symbol}: Не можем определить время открытия позиции "
+                    f"(cTime={position.get('cTime')}, openTime={position.get('openTime')})"
+                )
                 return False  # Не можем определить время открытия
 
             try:
@@ -1317,9 +1370,16 @@ class FuturesPositionManager:
 
                 current_timestamp = datetime.now(timezone.utc).timestamp()
                 time_since_open = current_timestamp - entry_timestamp
-            except Exception as e:
+                
+                # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #4: Время в позиции
                 logger.debug(
-                    f"⚠️ Не удалось рассчитать время открытия для {symbol}: {e}"
+                    f"🔍 PH для {symbol}: время в позиции {time_since_open:.1f}с "
+                    f"({time_since_open/60:.1f} мин), entry_timestamp={entry_timestamp}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"❌ PH для {symbol}: Ошибка расчета времени открытия: {e}",
+                    exc_info=True
                 )
                 return False
 
@@ -1369,9 +1429,19 @@ class FuturesPositionManager:
                 position_value = size_in_coins * entry_price
                 commission = position_value * commission_rate * 2  # Открытие + закрытие
                 net_pnl_usd = pnl_usd - commission
+                
+                # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #5: Расчет PnL
+                logger.debug(
+                    f"🔍 PH для {symbol}: PnL расчет | "
+                    f"gross=${pnl_usd:.4f}, commission=${commission:.4f}, "
+                    f"net=${net_pnl_usd:.4f}, threshold=${ph_threshold:.2f}"
+                )
 
             except Exception as e:
-                logger.debug(f"⚠️ Не удалось рассчитать PnL для {symbol}: {e}")
+                logger.error(
+                    f"❌ PH для {symbol}: Ошибка расчета PnL: {e}",
+                    exc_info=True
+                )
                 return False
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем MIN_HOLDING перед Profit Harvesting
@@ -1418,23 +1488,25 @@ class FuturesPositionManager:
 
             min_holding_seconds = min_holding_minutes * 60.0
 
-            # ✅ НОВОЕ: Игнорируем MIN_HOLDING для экстремально больших прибылей (> 2x порога)
+            # ✅ НОВОЕ: Игнорируем MIN_HOLDING для экстремально больших прибылей (> 1.5x порога)
             # Это позволяет закрывать позиции немедленно при сверхприбыли, не дожидаясь min_holding
+            # ✅ ОПТИМИЗАЦИЯ: Уменьшен порог с 2x до 1.5x для более агрессивного закрытия
+            extreme_profit_threshold = ph_threshold * 1.5  # ✅ ИЗМЕНЕНО: 1.5x вместо 2x
             ignore_min_holding = False
-            if net_pnl_usd >= ph_threshold * 2.0:  # Прибыль в 2 раза больше порога
+            if net_pnl_usd >= extreme_profit_threshold:
                 ignore_min_holding = True
                 logger.info(
                     f"🚨 ЭКСТРЕМАЛЬНАЯ ПРИБЫЛЬ! {symbol}: ${net_pnl_usd:.4f} "
-                    f"(2x порога: ${ph_threshold * 2.0:.2f}) - игнорируем MIN_HOLDING"
+                    f"(1.5x порога: ${extreme_profit_threshold:.2f}) - игнорируем MIN_HOLDING и TIME_LIMIT"
                 )
 
             # ✅ Проверяем MIN_HOLDING: если позиция открыта меньше min_holding, НЕ закрываем по PH
             # ИСКЛЮЧЕНИЕ: игнорируем для экстремально больших прибылей
             if not ignore_min_holding and time_since_open < min_holding_seconds:
                 logger.debug(
-                    f"⏱️ Profit Harvest заблокирован MIN_HOLDING для {symbol}: "
+                    f"⏱️ PH заблокирован MIN_HOLDING для {symbol}: "
                     f"позиция открыта {time_since_open:.1f}с < {min_holding_seconds:.1f}с "
-                    f"(защита от шума активна, прибыль: ${net_pnl_usd:.4f} < ${ph_threshold * 2.0:.2f})"
+                    f"(защита от шума активна, прибыль: ${net_pnl_usd:.4f} < ${extreme_profit_threshold:.2f})"
                 )
                 return False  # НЕ закрываем - защита от шума активна!
 
@@ -1449,11 +1521,36 @@ class FuturesPositionManager:
                 if net_pnl_usd >= ph_threshold:
                     should_close = True
                     close_reason = "EXTREME PROFIT (ignoring time_limit)"
+                    logger.debug(
+                        f"✅ PH для {symbol}: Условие экстремальной прибыли выполнено "
+                        f"(profit=${net_pnl_usd:.4f} >= threshold=${ph_threshold:.2f})"
+                    )
+                else:
+                    logger.debug(
+                        f"❌ PH для {symbol}: Экстремальная прибыль, но недостаточно для закрытия "
+                        f"(profit=${net_pnl_usd:.4f} < threshold=${ph_threshold:.2f})"
+                    )
             else:
                 # Обычная прибыль: проверяем ph_time_limit
                 if net_pnl_usd >= ph_threshold and time_since_open < ph_time_limit:
                     should_close = True
                     close_reason = "NORMAL PROFIT (within time_limit)"
+                    logger.debug(
+                        f"✅ PH для {symbol}: Условие обычной прибыли выполнено "
+                        f"(profit=${net_pnl_usd:.4f} >= ${ph_threshold:.2f}, "
+                        f"time={time_since_open:.1f}с < {ph_time_limit}с)"
+                    )
+                else:
+                    if net_pnl_usd < ph_threshold:
+                        logger.debug(
+                            f"❌ PH для {symbol}: Прибыль недостаточна "
+                            f"(${net_pnl_usd:.4f} < ${ph_threshold:.2f})"
+                        )
+                    if time_since_open >= ph_time_limit:
+                        logger.debug(
+                            f"❌ PH для {symbol}: Превышен time_limit "
+                            f"({time_since_open:.1f}с >= {ph_time_limit}с)"
+                        )
             
             if should_close:
                 logger.info(

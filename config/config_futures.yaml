@@ -267,7 +267,7 @@ scalping:
       volume_profile_bonus_multiplier: 1.0
       ph_enabled: true
       ph_threshold: 0.15
-      ph_time_limit: 120
+      ph_time_limit: 300  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 120 до 300 сек (5 мин) для большего охвата
       min_holding_minutes: 1  # ✅ ИСПРАВЛЕНО: Уменьшено с 3 до 1 минуты для быстрого PH
       
       indicators:
