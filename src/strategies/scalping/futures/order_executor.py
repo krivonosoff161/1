@@ -595,28 +595,60 @@ class FuturesOrderExecutor:
                         )
                         limit_price = best_ask if best_ask > 0 else limit_price
             else:  # sell
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для SELL используем best_bid - offset (не best_ask!)
-                # Проблема: Для SELL использовался best_ask, что неправильно
-                # Решение: Используем best_bid для правильного размещения ордера на продажу
-
-                # ✅ ИСПРАВЛЕНО: Для SELL используем best_bid - offset (лучшая цена покупки)
-                # Offset может быть положительным (ниже best bid для гарантии) или нулевым (по best bid)
-                if best_bid > 0:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для SELL проверяем актуальность best_bid
+                # Проблема: best_bid из стакана может быть устаревшим (например, $90,619 vs текущая $90,100)
+                # Решение: Используем best_bid только если он близок к current_price, иначе используем current_price
+                
+                # ✅ НОВОЕ: Проверяем актуальность best_bid
+                use_best_bid = False
+                if best_bid > 0 and current_price > 0:
+                    spread_pct = abs(best_bid - current_price) / current_price
+                    # Используем best_bid только если разница < 0.5% (актуальные данные)
+                    if spread_pct < 0.005:
+                        use_best_bid = True
+                        logger.debug(
+                            f"✅ best_bid актуален для {symbol} SELL: "
+                            f"best_bid={best_bid:.2f}, current={current_price:.2f}, spread={spread_pct:.3%}"
+                        )
+                    else:
+                        logger.warning(
+                            f"⚠️ best_bid устарел для {symbol} SELL: "
+                            f"best_bid={best_bid:.2f}, current={current_price:.2f}, spread={spread_pct:.3%} "
+                            f"(используем current_price)"
+                        )
+                
+                # ✅ ИСПРАВЛЕНО: Для SELL используем best_bid только если он актуален, иначе current_price
+                if use_best_bid:
                     limit_price = best_bid * (1 - offset_percent / 100.0)
-                else:
-                    # Fallback: используем текущую цену - offset
+                elif current_price > 0:
+                    # best_bid устарел, используем current_price
                     limit_price = current_price * (1 - offset_percent / 100.0)
+                    logger.debug(
+                        f"💰 Используем current_price для {symbol} SELL: "
+                        f"current={current_price:.2f}, offset={offset_percent:.3f}%, "
+                        f"limit_price={limit_price:.2f}"
+                    )
+                else:
+                    # Fallback: используем best_bid даже если устарел
+                    limit_price = best_bid * (1 - offset_percent / 100.0) if best_bid > 0 else 0.0
+                    logger.warning(
+                        f"⚠️ Fallback для {symbol} SELL: используем best_bid={best_bid:.2f} "
+                        f"(current_price недоступен)"
+                    )
 
                 # ✅ КРИТИЧЕСКОЕ: Проверяем лимит биржи
                 # Для SELL: цена должна быть >= min_sell_price
-                # ✅ ИСПРАВЛЕНО: НЕ используем best_ask (это далеко от цены для SELL!)
-                # Для SELL нужна лучшая цена покупки = best_bid (не best_ask!)
-                # best_ask * 0.999 ставит ордер далеко от рынка, если спред большой
-                # Решение: используем только best_bid (уже рассчитан выше) и min_sell_price
-                if best_bid > 0:
-                    # ✅ ИСПРАВЛЕНО: Используем best_bid (лучшая цена покупки), а НЕ best_ask
-                    # limit_price уже рассчитан от best_bid выше, проверяем только min_sell_price
+                # ⚠️ ВАЖНО: НЕ используем min_sell_price если он рассчитан от устаревшего best_bid!
+                if use_best_bid and best_bid > 0:
+                    # best_bid актуален, можно использовать min_sell_price
                     limit_price = max(limit_price, min_sell_price)
+                elif current_price > 0:
+                    # best_bid устарел, НЕ используем min_sell_price (он тоже устарел)
+                    # Используем только current_price - offset
+                    logger.debug(
+                        f"💰 Не используем min_sell_price для {symbol} SELL "
+                        f"(best_bid устарел, min_sell_price тоже устарел)"
+                    )
                 else:
                     # Fallback: используем min_sell_price
                     limit_price = max(limit_price, min_sell_price)
