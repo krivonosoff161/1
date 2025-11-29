@@ -3037,9 +3037,66 @@ class FuturesPositionManager:
             size = float(actual_position.get("pos", "0"))
             side = actual_position.get("posSide", "long")
             entry_price = float(actual_position.get("avgPx", "0"))
-            exit_price = float(
-                actual_position.get("markPx", "0")
-            )  # Текущая цена (mark price)
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем актуальную цену из стакана перед закрытием
+            # Проблема: markPx может быть устаревшим (как и best_bid при открытии)
+            # Решение: получаем актуальную цену из стакана/тикера для точного логирования
+            exit_price = float(actual_position.get("markPx", "0"))  # Fallback на markPx
+            try:
+                # Получаем актуальную цену из стакана
+                price_limits = await self.client.get_price_limits(symbol)
+                current_price_from_book = price_limits.get("current_price", 0.0)
+                best_bid = price_limits.get("best_bid", 0.0)
+                best_ask = price_limits.get("best_ask", 0.0)
+                
+                # ✅ Для закрытия используем актуальную цену из стакана
+                # Для LONG (закрываем SELL): используем best_bid (цена продажи)
+                # Для SHORT (закрываем BUY): используем best_ask (цена покупки)
+                if side.lower() == "long":
+                    # Закрываем LONG → SELL → используем best_bid
+                    if best_bid > 0:
+                        exit_price = best_bid
+                        logger.debug(
+                            f"✅ Актуальная цена закрытия для {symbol} LONG: best_bid={best_bid:.4f} "
+                            f"(markPx={actual_position.get('markPx', '0')})"
+                        )
+                    elif current_price_from_book > 0:
+                        exit_price = current_price_from_book
+                        logger.debug(
+                            f"✅ Актуальная цена закрытия для {symbol} LONG: current_price={current_price_from_book:.4f} "
+                            f"(markPx={actual_position.get('markPx', '0')})"
+                        )
+                else:  # short
+                    # Закрываем SHORT → BUY → используем best_ask
+                    if best_ask > 0:
+                        exit_price = best_ask
+                        logger.debug(
+                            f"✅ Актуальная цена закрытия для {symbol} SHORT: best_ask={best_ask:.4f} "
+                            f"(markPx={actual_position.get('markPx', '0')})"
+                        )
+                    elif current_price_from_book > 0:
+                        exit_price = current_price_from_book
+                        logger.debug(
+                            f"✅ Актуальная цена закрытия для {symbol} SHORT: current_price={current_price_from_book:.4f} "
+                            f"(markPx={actual_position.get('markPx', '0')})"
+                        )
+                
+                # ✅ Проверяем актуальность цены (как при открытии)
+                mark_px = float(actual_position.get("markPx", "0"))
+                if mark_px > 0 and exit_price > 0:
+                    spread_pct = abs(exit_price - mark_px) / mark_px
+                    if spread_pct > 0.01:  # Разница > 1%
+                        logger.warning(
+                            f"⚠️ Большая разница между актуальной ценой ({exit_price:.4f}) и markPx ({mark_px:.4f}) "
+                            f"для {symbol}: {spread_pct*100:.2f}%"
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить актуальную цену для {symbol} перед закрытием: {e}. "
+                    f"Используем markPx={exit_price:.4f}"
+                )
+                # Используем markPx как fallback
+                exit_price = float(actual_position.get("markPx", "0"))
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем финальный PnL перед закрытием
             final_pnl = 0.0
