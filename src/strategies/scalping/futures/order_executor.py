@@ -108,6 +108,13 @@ class FuturesOrderExecutor:
             logger.info(
                 f"🎯 Исполнение сигнала: {symbol} {side} размер={position_size:.6f}"
             )
+            
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем информацию о сигнале
+            logger.debug(
+                f"🔍 [EXECUTE_SIGNAL] {symbol} {side}: "
+                f"size={position_size:.6f}, signal_type={signal.get('type', 'limit')}, "
+                f"regime={signal.get('regime', 'N/A')}, strength={signal.get('strength', 0):.2f}"
+            )
 
             # Валидация сигнала через Slippage Guard
             (
@@ -662,10 +669,19 @@ class FuturesOrderExecutor:
             # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что цена в допустимом диапазоне
             # Финальная проверка лимитов биржи уже выполнена выше
 
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем все детали расчета лимитной цены
             logger.info(
                 f"💰 Лимитная цена для {symbol} {side}: {limit_price:.2f} "
-                f"(best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, offset={offset_percent:.3f}%, "
-                f"режим={regime or 'default'}, лимиты: max_buy={max_buy_price:.2f}, min_sell={min_sell_price:.2f})"
+                f"(best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, current_price={current_price:.2f}, "
+                f"offset={offset_percent:.3f}%, режим={regime or 'default'}, "
+                f"лимиты: max_buy={max_buy_price:.2f}, min_sell={min_sell_price:.2f})"
+            )
+            logger.debug(
+                f"🔍 [CALCULATE_LIMIT_PRICE] {symbol} {side}: "
+                f"limit_price={limit_price:.2f}, best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, "
+                f"current_price={current_price:.2f}, offset={offset_percent:.3f}%, "
+                f"spread_bid={abs(best_bid - current_price) / current_price * 100 if best_bid > 0 and current_price > 0 else 0:.3f}%, "
+                f"spread_ask={abs(best_ask - current_price) / current_price * 100 if best_ask > 0 and current_price > 0 else 0:.3f}%"
             )
             return limit_price
 
@@ -805,9 +821,14 @@ class FuturesOrderExecutor:
                         )
                         price = min_sell_price
 
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем все детали размещения ордера
             logger.info(
                 f"📊 Размещение лимитного ордера: {symbol} {side} {size:.6f} @ {price:.2f} "
                 f"(post_only={post_only})"
+            )
+            logger.debug(
+                f"🔍 [PLACE_LIMIT_ORDER] {symbol} {side}: "
+                f"size={size:.6f}, price={price:.2f}, post_only={post_only}, regime={regime or 'N/A'}"
             )
 
             result = await self.client.place_futures_order(
