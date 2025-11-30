@@ -1707,7 +1707,7 @@ class FuturesSignalGenerator:
             for signal in signals:
                 signal_symbol = signal.get("symbol", "")
                 signal_side = signal.get("side", "")
-                
+
                 # Фильтр для XRP-USDT SHORT
                 if signal_symbol == "XRP-USDT" and signal_side.lower() == "sell":
                     # Проверяем ADX тренд - блокируем SHORT если тренд BULLISH
@@ -1719,10 +1719,12 @@ class FuturesSignalGenerator:
                             )
                             continue  # Пропускаем этот сигнал
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка проверки ADX для XRP-USDT SHORT: {e}, разрешаем сигнал")
-                
+                        logger.debug(
+                            f"⚠️ Ошибка проверки ADX для XRP-USDT SHORT: {e}, разрешаем сигнал"
+                        )
+
                 filtered_signals.append(signal)
-            
+
             signals = filtered_signals
 
             # ✅ ОПТИМИЗАЦИЯ: Логируем только если есть сигналы (INFO уровень) или важная информация

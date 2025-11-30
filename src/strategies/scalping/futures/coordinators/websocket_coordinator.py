@@ -279,8 +279,10 @@ class WebSocketCoordinator:
                         # Это работает в реальном времени через WebSocket
                         if self.smart_exit_coordinator:
                             try:
-                                decision = await self.smart_exit_coordinator.check_position(
-                                    symbol, self.active_positions_ref[symbol]
+                                decision = (
+                                    await self.smart_exit_coordinator.check_position(
+                                        symbol, self.active_positions_ref[symbol]
+                                    )
                                 )
                                 if decision and decision.get("action") == "close":
                                     # Позиция закрыта по умному фильтру, пропускаем остальные проверки
@@ -289,7 +291,7 @@ class WebSocketCoordinator:
                                 logger.debug(
                                     f"⚠️ Ошибка SmartExitCoordinator для {symbol}: {e}"
                                 )
-                        
+
                         # Затем проверяем TP через manage_position
                         if self.position_manager:
                             await self.position_manager.manage_position(

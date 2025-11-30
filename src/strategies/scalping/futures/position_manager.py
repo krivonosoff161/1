@@ -472,10 +472,14 @@ class FuturesPositionManager:
 
             # ✅ МОДЕРНИЗАЦИЯ #1: Проверка Profit Harvest (PH) - ПРИОРИТЕТ #1
             # PH проверяется ПЕРЕД TP/SL для быстрого закрытия при высокой прибыли
-            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Harvesting (ПРИОРИТЕТ #1)")
+            logger.debug(
+                f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Harvesting (ПРИОРИТЕТ #1)"
+            )
             ph_should_close = await self._check_profit_harvesting(position)
             if ph_should_close:
-                logger.info(f"🔄 [MANAGE_POSITION] {symbol}: PH сработал, закрываем позицию")
+                logger.info(
+                    f"🔄 [MANAGE_POSITION] {symbol}: PH сработал, закрываем позицию"
+                )
                 await self._close_position_by_reason(position, "profit_harvest")
                 return  # Закрыли по PH, дальше не проверяем
             logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: PH не сработал, продолжаем")
@@ -485,13 +489,19 @@ class FuturesPositionManager:
             await self._update_peak_profit(position)
 
             # ✅ НОВОЕ: Проверка отката от максимальной прибыли - ПРИОРИТЕТ #2
-            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Drawdown (ПРИОРИТЕТ #2)")
+            logger.debug(
+                f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Drawdown (ПРИОРИТЕТ #2)"
+            )
             drawdown_should_close = await self._check_profit_drawdown(position)
             if drawdown_should_close:
-                logger.info(f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown сработал, закрываем позицию")
+                logger.info(
+                    f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown сработал, закрываем позицию"
+                )
                 await self._close_position_by_reason(position, "profit_drawdown")
                 return  # Закрыли по откату, дальше не проверяем
-            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown не сработал, продолжаем")
+            logger.debug(
+                f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown не сработал, продолжаем"
+            )
 
             # Проверка TP/SL
             # ⚠️ ВАЖНО: Фиксированный SL отключен, когда используется TrailingSL
@@ -501,22 +511,33 @@ class FuturesPositionManager:
             await self._check_tp_only(position)
 
             # ✅ НОВОЕ: Проверка MAX_HOLDING - ПРИОРИТЕТ #3
-            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка MAX_HOLDING (ПРИОРИТЕТ #3)")
+            logger.debug(
+                f"🔄 [MANAGE_POSITION] {symbol}: Проверка MAX_HOLDING (ПРИОРИТЕТ #3)"
+            )
             max_holding_should_close = await self._check_max_holding(position)
             if max_holding_should_close:
-                logger.info(f"🔄 [MANAGE_POSITION] {symbol}: MAX_HOLDING сработал, закрываем позицию")
+                logger.info(
+                    f"🔄 [MANAGE_POSITION] {symbol}: MAX_HOLDING сработал, закрываем позицию"
+                )
                 await self._close_position_by_reason(position, "max_holding_exceeded")
                 return  # Закрыли по MAX_HOLDING, дальше не проверяем
-            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: MAX_HOLDING не сработал, продолжаем")
+            logger.debug(
+                f"🔄 [MANAGE_POSITION] {symbol}: MAX_HOLDING не сработал, продолжаем"
+            )
 
             # Обновление статистики
             logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Обновление статистики")
             await self._update_position_stats(position)
-            
-            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Завершено, позиция остается открытой")
+
+            logger.debug(
+                f"🔄 [MANAGE_POSITION] {symbol}: Завершено, позиция остается открытой"
+            )
 
         except Exception as e:
-            logger.error(f"❌ [MANAGE_POSITION] Ошибка управления позицией {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"❌ [MANAGE_POSITION] Ошибка управления позицией {symbol}: {e}",
+                exc_info=True,
+            )
 
     async def _check_position_safety(self, position: Dict[str, Any]):
         """Проверка безопасности позиции"""
@@ -1212,13 +1233,17 @@ class FuturesPositionManager:
                         f"⚠️ margin_used=0 для {symbol}, пропускаем проверку SL"
                     )
             except Exception as e:
-                logger.error(f"❌ [CHECK_SL] Ошибка проверки SL для {symbol}: {e}", exc_info=True)
+                logger.error(
+                    f"❌ [CHECK_SL] Ошибка проверки SL для {symbol}: {e}", exc_info=True
+                )
 
             logger.debug(f"🔍 [CHECK_SL] {symbol}: Завершено, позиция остается открытой")
             return False
 
         except Exception as e:
-            logger.error(f"❌ [CHECK_SL] Ошибка проверки SL для {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"❌ [CHECK_SL] Ошибка проверки SL для {symbol}: {e}", exc_info=True
+            )
             return False
 
     async def _check_tp_sl(self, position: Dict[str, Any]):
@@ -1314,15 +1339,19 @@ class FuturesPositionManager:
                         ph_enabled = regime_config.get("ph_enabled", False)
                         ph_threshold = float(regime_config.get("ph_threshold", 0.0))
                         ph_time_limit = int(regime_config.get("ph_time_limit", 0))
-                        config_min_holding = regime_config.get("min_holding_minutes", None)
+                        config_min_holding = regime_config.get(
+                            "min_holding_minutes", None
+                        )
                     else:
                         ph_enabled = getattr(regime_config, "ph_enabled", False)
-                        ph_threshold = float(getattr(regime_config, "ph_threshold", 0.0))
+                        ph_threshold = float(
+                            getattr(regime_config, "ph_threshold", 0.0)
+                        )
                         ph_time_limit = int(getattr(regime_config, "ph_time_limit", 0))
                         config_min_holding = getattr(
                             regime_config, "min_holding_minutes", None
                         )
-                    
+
                     # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #2: Параметры из конфига
                     logger.debug(
                         f"🔍 PH параметры для {symbol} (regime={market_regime or 'ranging'}): "
@@ -1336,7 +1365,7 @@ class FuturesPositionManager:
             except Exception as e:
                 logger.error(
                     f"❌ PH для {symbol}: Ошибка получения параметров из конфига: {e}",
-                    exc_info=True
+                    exc_info=True,
                 )
                 return False
 
@@ -1349,7 +1378,7 @@ class FuturesPositionManager:
 
             # Получаем время открытия позиции
             entry_time_str = position.get("cTime", position.get("openTime", ""))
-            
+
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #3: Получение времени открытия
             if not entry_time_str:
                 logger.debug(
@@ -1371,9 +1400,7 @@ class FuturesPositionManager:
                             f"🔍 PH для {symbol}: символ не найден в active_positions"
                         )
                 else:
-                    logger.debug(
-                        f"🔍 PH для {symbol}: orchestrator недоступен"
-                    )
+                    logger.debug(f"🔍 PH для {symbol}: orchestrator недоступен")
             else:
                 logger.debug(
                     f"🔍 PH для {symbol}: entry_time из позиции: {entry_time_str}"
@@ -1389,7 +1416,7 @@ class FuturesPositionManager:
             try:
                 # Конвертируем время открытия (OKX использует миллисекунды)
                 from datetime import timezone
-                
+
                 if isinstance(entry_time_str, datetime):
                     # Если это уже datetime объект, конвертируем в timestamp
                     if entry_time_str.tzinfo is None:
@@ -1426,7 +1453,7 @@ class FuturesPositionManager:
 
                 current_timestamp = datetime.now(timezone.utc).timestamp()
                 time_since_open = current_timestamp - entry_timestamp
-                
+
                 # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #4: Время в позиции
                 logger.debug(
                     f"🔍 PH для {symbol}: время в позиции {time_since_open:.1f}с "
@@ -1435,7 +1462,7 @@ class FuturesPositionManager:
             except Exception as e:
                 logger.error(
                     f"❌ PH для {symbol}: Ошибка расчета времени открытия: {e}",
-                    exc_info=True
+                    exc_info=True,
                 )
                 return False
 
@@ -1485,7 +1512,7 @@ class FuturesPositionManager:
                 position_value = size_in_coins * entry_price
                 commission = position_value * commission_rate * 2  # Открытие + закрытие
                 net_pnl_usd = pnl_usd - commission
-                
+
                 # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #5: Расчет PnL
                 logger.debug(
                     f"🔍 PH для {symbol}: PnL расчет | "
@@ -1495,8 +1522,7 @@ class FuturesPositionManager:
 
             except Exception as e:
                 logger.error(
-                    f"❌ PH для {symbol}: Ошибка расчета PnL: {e}",
-                    exc_info=True
+                    f"❌ PH для {symbol}: Ошибка расчета PnL: {e}", exc_info=True
                 )
                 return False
 
@@ -1571,17 +1597,19 @@ class FuturesPositionManager:
             # игнорируем не только min_holding, но и ph_time_limit
             should_close = False
             close_reason = ""
-            
+
             # ✅ ИСПРАВЛЕНО: Определяем порог экстремальной прибыли 2x
             extreme_profit_2x = ph_threshold * 2.0
-            
+
             if ignore_min_holding:
                 # ✅ ИСПРАВЛЕНО: Для экстремальных прибылей >= 2x полностью игнорируем ph_time_limit
                 if net_pnl_usd >= extreme_profit_2x:
                     # Экстремальная прибыль >= 2x: игнорируем ph_time_limit
                     if net_pnl_usd >= ph_threshold:
                         should_close = True
-                        close_reason = "EXTREME PROFIT 2x+ (ignoring time_limit and min_holding)"
+                        close_reason = (
+                            "EXTREME PROFIT 2x+ (ignoring time_limit and min_holding)"
+                        )
                         logger.debug(
                             f"✅ PH для {symbol}: Условие экстремальной прибыли 2x+ выполнено "
                             f"(profit=${net_pnl_usd:.4f} >= 2x threshold=${extreme_profit_2x:.2f})"
@@ -1632,7 +1660,7 @@ class FuturesPositionManager:
                             f"❌ PH для {symbol}: Превышен time_limit "
                             f"({time_since_open:.1f}с >= {ph_time_limit}с)"
                         )
-            
+
             if should_close:
                 logger.info(
                     f"💰💰💰 PROFIT HARVESTING TRIGGERED! {symbol} {side.upper()}\n"
@@ -3025,11 +3053,13 @@ class FuturesPositionManager:
 
             # ⚠️ Stop Loss отключен - используется TrailingSL из orchestrator
             # TrailingSL более гибкий и учитывает тренд/режим рынка
-            
+
             logger.debug(f"🔍 [TP_ONLY] {symbol}: Завершено, позиция остается открытой")
 
         except Exception as e:
-            logger.error(f"❌ [TP_ONLY] Ошибка проверки TP для {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"❌ [TP_ONLY] Ошибка проверки TP для {symbol}: {e}", exc_info=True
+            )
 
     async def _get_trend_strength(self, symbol: str, current_price: float) -> float:
         """
@@ -3111,7 +3141,7 @@ class FuturesPositionManager:
             size = float(actual_position.get("pos", "0"))
             side = actual_position.get("posSide", "long")
             entry_price = float(actual_position.get("avgPx", "0"))
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем актуальную цену из стакана перед закрытием
             # Проблема: markPx может быть устаревшим (как и best_bid при открытии)
             # Решение: получаем актуальную цену из стакана/тикера для точного логирования
@@ -3122,11 +3152,11 @@ class FuturesPositionManager:
                 current_price_from_book = price_limits.get("current_price", 0.0)
                 best_bid = price_limits.get("best_bid", 0.0)
                 best_ask = price_limits.get("best_ask", 0.0)
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем актуальность best_bid/best_ask перед использованием
                 # Проблема: best_bid/best_ask могут быть устаревшими (как при открытии)
                 # Решение: проверяем разницу с current_price и используем более актуальную цену
-                
+
                 # ✅ Для закрытия используем актуальную цену из стакана
                 # Для LONG (закрываем SELL): используем best_bid (цена продажи)
                 # Для SHORT (закрываем BUY): используем best_ask (цена покупки)
@@ -3134,7 +3164,10 @@ class FuturesPositionManager:
                     # Закрываем LONG → SELL → используем best_bid
                     if best_bid > 0 and current_price_from_book > 0:
                         # Проверяем актуальность best_bid
-                        spread_bid_pct = abs(best_bid - current_price_from_book) / current_price_from_book
+                        spread_bid_pct = (
+                            abs(best_bid - current_price_from_book)
+                            / current_price_from_book
+                        )
                         if spread_bid_pct < 0.005:  # Разница < 0.5% - best_bid актуален
                             exit_price = best_bid
                             logger.debug(
@@ -3143,7 +3176,9 @@ class FuturesPositionManager:
                             )
                         else:
                             # best_bid устарел, используем current_price с небольшим offset для SELL
-                            exit_price = current_price_from_book * 0.9995  # -0.05% для гарантии исполнения
+                            exit_price = (
+                                current_price_from_book * 0.9995
+                            )  # -0.05% для гарантии исполнения
                             logger.warning(
                                 f"⚠️ best_bid устарел для {symbol} LONG: best_bid={best_bid:.4f}, "
                                 f"current_price={current_price_from_book:.4f}, spread={spread_bid_pct*100:.2f}%. "
@@ -3156,7 +3191,9 @@ class FuturesPositionManager:
                             f"(markPx={actual_position.get('markPx', '0')}, current_price недоступен)"
                         )
                     elif current_price_from_book > 0:
-                        exit_price = current_price_from_book * 0.9995  # -0.05% для гарантии исполнения
+                        exit_price = (
+                            current_price_from_book * 0.9995
+                        )  # -0.05% для гарантии исполнения
                         logger.debug(
                             f"✅ Актуальная цена закрытия для {symbol} LONG: current_price={exit_price:.4f} "
                             f"(best_bid недоступен, markPx={actual_position.get('markPx', '0')})"
@@ -3165,7 +3202,10 @@ class FuturesPositionManager:
                     # Закрываем SHORT → BUY → используем best_ask
                     if best_ask > 0 and current_price_from_book > 0:
                         # Проверяем актуальность best_ask
-                        spread_ask_pct = abs(best_ask - current_price_from_book) / current_price_from_book
+                        spread_ask_pct = (
+                            abs(best_ask - current_price_from_book)
+                            / current_price_from_book
+                        )
                         if spread_ask_pct < 0.005:  # Разница < 0.5% - best_ask актуален
                             exit_price = best_ask
                             logger.debug(
@@ -3174,7 +3214,9 @@ class FuturesPositionManager:
                             )
                         else:
                             # best_ask устарел, используем current_price с небольшим offset для BUY
-                            exit_price = current_price_from_book * 1.0005  # +0.05% для гарантии исполнения
+                            exit_price = (
+                                current_price_from_book * 1.0005
+                            )  # +0.05% для гарантии исполнения
                             logger.warning(
                                 f"⚠️ best_ask устарел для {symbol} SHORT: best_ask={best_ask:.4f}, "
                                 f"current_price={current_price_from_book:.4f}, spread={spread_ask_pct*100:.2f}%. "
@@ -3187,12 +3229,14 @@ class FuturesPositionManager:
                             f"(markPx={actual_position.get('markPx', '0')}, current_price недоступен)"
                         )
                     elif current_price_from_book > 0:
-                        exit_price = current_price_from_book * 1.0005  # +0.05% для гарантии исполнения
+                        exit_price = (
+                            current_price_from_book * 1.0005
+                        )  # +0.05% для гарантии исполнения
                         logger.debug(
                             f"✅ Актуальная цена закрытия для {symbol} SHORT: current_price={exit_price:.4f} "
                             f"(best_ask недоступен, markPx={actual_position.get('markPx', '0')})"
                         )
-                
+
                 # ✅ Дополнительная проверка актуальности цены (сравнение с markPx)
                 mark_px = float(actual_position.get("markPx", "0"))
                 if mark_px > 0 and exit_price > 0:
@@ -3669,18 +3713,21 @@ class FuturesPositionManager:
                 # Для убыточных позиций: обновляем если убыток уменьшился (PnL ближе к 0)
                 if metadata:
                     from datetime import timezone
-                    
+
                     # ✅ ИСПРАВЛЕНИЕ #1: Первое обновление - устанавливаем текущий PnL (даже если отрицательный)
-                    if metadata.peak_profit_usd == 0.0 and metadata.peak_profit_time is None:
+                    if (
+                        metadata.peak_profit_usd == 0.0
+                        and metadata.peak_profit_time is None
+                    ):
                         metadata.peak_profit_usd = net_pnl
                         metadata.peak_profit_time = datetime.now(timezone.utc)
                         metadata.peak_profit_price = current_price
-                        
+
                         logger.debug(
                             f"🔍 [UPDATE_PEAK_PROFIT] {symbol}: Первое обновление peak_profit | "
                             f"установлен=${net_pnl:.4f}"
                         )
-                        
+
                         # Сохраняем в position_registry
                         if hasattr(self, "orchestrator") and self.orchestrator:
                             if hasattr(self.orchestrator, "position_registry"):
@@ -3742,12 +3789,18 @@ class FuturesPositionManager:
                         )
 
             except Exception as e:
-                logger.error(f"❌ [UPDATE_PEAK_PROFIT] Ошибка обновления peak_profit для {symbol}: {e}", exc_info=True)
+                logger.error(
+                    f"❌ [UPDATE_PEAK_PROFIT] Ошибка обновления peak_profit для {symbol}: {e}",
+                    exc_info=True,
+                )
             else:
                 logger.debug(f"🔍 [UPDATE_PEAK_PROFIT] {symbol}: Завершено")
 
         except Exception as e:
-            logger.error(f"❌ [UPDATE_PEAK_PROFIT] Ошибка в _update_peak_profit для {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"❌ [UPDATE_PEAK_PROFIT] Ошибка в _update_peak_profit для {symbol}: {e}",
+                exc_info=True,
+            )
 
     async def _check_profit_drawdown(self, position: Dict[str, Any]) -> bool:
         """
@@ -3770,18 +3823,22 @@ class FuturesPositionManager:
             # Проблема: current_price из стакана может временно скакать (проскальзывание), что вызывает ложные срабатывания
             # Решение: используем markPx (маркировочная цена биржи) - она более стабильна и не подвержена временным скачкам
             # markPx обновляется биржей и отражает справедливую цену, фильтруя временные скачки в стакане
-            current_price = float(position.get("markPx", "0"))  # Используем markPx по умолчанию
-            
+            current_price = float(
+                position.get("markPx", "0")
+            )  # Используем markPx по умолчанию
+
             try:
                 # ✅ ЗАЩИТА ОТ ПРОСКАЛЬЗЫВАНИЯ: Проверяем разницу между markPx и current_price из стакана
                 # Если разница слишком большая (>1%), это может быть временный скачок - используем markPx
                 price_limits = await self.client.get_price_limits(symbol)
                 current_price_from_book = price_limits.get("current_price", 0.0)
                 mark_px = float(position.get("markPx", "0"))
-                
+
                 if current_price_from_book > 0 and mark_px > 0:
-                    spread_pct = abs(mark_px - current_price_from_book) / current_price_from_book
-                    
+                    spread_pct = (
+                        abs(mark_px - current_price_from_book) / current_price_from_book
+                    )
+
                     if spread_pct > 0.01:  # Разница > 1% - возможен временный скачок
                         # Используем markPx (более стабильная цена, защита от проскальзывания)
                         current_price = mark_px
@@ -3873,16 +3930,22 @@ class FuturesPositionManager:
 
                 # Получаем режим для адаптивного порога отката
                 regime = metadata.regime or "ranging"
-                
+
                 # ✅ ИСПРАВЛЕНО: Читаем порог отката из конфига вместо захардкоженных значений
                 base_drawdown = 0.20  # Default 20%
                 try:
-                    profit_drawdown_config = getattr(self.scalping_config, "profit_drawdown", {})
+                    profit_drawdown_config = getattr(
+                        self.scalping_config, "profit_drawdown", {}
+                    )
                     if isinstance(profit_drawdown_config, dict):
-                        base_drawdown = profit_drawdown_config.get("drawdown_percent", 0.20)
+                        base_drawdown = profit_drawdown_config.get(
+                            "drawdown_percent", 0.20
+                        )
                     else:
-                        base_drawdown = getattr(profit_drawdown_config, "drawdown_percent", 0.20)
-                    
+                        base_drawdown = getattr(
+                            profit_drawdown_config, "drawdown_percent", 0.20
+                        )
+
                     # Получаем множитель по режиму
                     multiplier = 1.5  # Default для ranging
                     if isinstance(profit_drawdown_config, dict):
@@ -3894,7 +3957,7 @@ class FuturesPositionManager:
                         if hasattr(by_regime, regime):
                             regime_config = getattr(by_regime, regime)
                             multiplier = getattr(regime_config, "multiplier", 1.5)
-                    
+
                     drawdown_threshold = base_drawdown * multiplier
                     logger.debug(
                         f"📊 Profit Drawdown для {symbol} (regime={regime}): "
@@ -3902,7 +3965,9 @@ class FuturesPositionManager:
                         f"threshold={drawdown_threshold:.1%}"
                     )
                 except Exception as e:
-                    logger.debug(f"⚠️ Ошибка чтения profit_drawdown из конфига: {e}, используем fallback")
+                    logger.debug(
+                        f"⚠️ Ошибка чтения profit_drawdown из конфига: {e}, используем fallback"
+                    )
                     # Fallback на старые захардкоженные значения
                     if regime == "trending":
                         drawdown_threshold = 0.4  # 40% откат в тренде
@@ -3914,26 +3979,31 @@ class FuturesPositionManager:
                 # ✅ НОВОЕ: Для убыточных позиций проверяем откат от минимального убытка
                 # Если убыток увеличился (стал больше по модулю), закрываем
                 peak_profit = metadata.peak_profit_usd
-                
+
                 if peak_profit < 0:
                     # ✅ ИСПРАВЛЕНО: Защита от слишком быстрого закрытия только что открытых позиций
                     # Проверяем время в позиции
                     from datetime import datetime, timezone
+
                     entry_time = metadata.entry_time
                     time_since_open = 0
-                    
+
                     if entry_time:
                         try:
                             if isinstance(entry_time, datetime):
                                 # Нормализуем datetime (добавляем timezone если отсутствует)
                                 if entry_time.tzinfo is None:
                                     # Если timezone отсутствует, предполагаем что это UTC (как на бирже)
-                                    entry_time_normalized = entry_time.replace(tzinfo=timezone.utc)
+                                    entry_time_normalized = entry_time.replace(
+                                        tzinfo=timezone.utc
+                                    )
                                 else:
                                     entry_time_normalized = entry_time
                                 current_time = datetime.now(timezone.utc)
-                                time_since_open = (current_time - entry_time_normalized).total_seconds()
-                                
+                                time_since_open = (
+                                    current_time - entry_time_normalized
+                                ).total_seconds()
+
                                 # ✅ ЗАЩИТА: Если получили отрицательное значение, значит entry_time в будущем
                                 # Это может быть из-за разницы часовых поясов или неправильного времени
                                 # В этом случае используем альтернативный метод - получаем entry_time из позиции
@@ -3949,9 +4019,15 @@ class FuturesPositionManager:
                                         u_time = position.get("uTime")
                                         entry_time_str = c_time or u_time
                                         if entry_time_str:
-                                            entry_timestamp = int(entry_time_str) / 1000.0
-                                            current_timestamp = datetime.now(timezone.utc).timestamp()
-                                            time_since_open = current_timestamp - entry_timestamp
+                                            entry_timestamp = (
+                                                int(entry_time_str) / 1000.0
+                                            )
+                                            current_timestamp = datetime.now(
+                                                timezone.utc
+                                            ).timestamp()
+                                            time_since_open = (
+                                                current_timestamp - entry_timestamp
+                                            )
                                             if time_since_open < 0:
                                                 logger.warning(
                                                     f"⚠️ [PROFIT_DRAWDOWN] {symbol}: Отрицательное time_since_open даже из позиции={time_since_open:.1f}с, используем 0"
@@ -3966,16 +4042,24 @@ class FuturesPositionManager:
                                 # Пытаемся распарсить строку
                                 if entry_time.isdigit():
                                     entry_timestamp = int(entry_time) / 1000.0
-                                    current_timestamp = datetime.now(timezone.utc).timestamp()
-                                    time_since_open = current_timestamp - entry_timestamp
+                                    current_timestamp = datetime.now(
+                                        timezone.utc
+                                    ).timestamp()
+                                    time_since_open = (
+                                        current_timestamp - entry_timestamp
+                                    )
                                 else:
                                     entry_time_parsed = datetime.fromisoformat(
                                         entry_time.replace("Z", "+00:00")
                                     )
                                     if entry_time_parsed.tzinfo is None:
-                                        entry_time_parsed = entry_time_parsed.replace(tzinfo=timezone.utc)
+                                        entry_time_parsed = entry_time_parsed.replace(
+                                            tzinfo=timezone.utc
+                                        )
                                     current_time = datetime.now(timezone.utc)
-                                    time_since_open = (current_time - entry_time_parsed).total_seconds()
+                                    time_since_open = (
+                                        current_time - entry_time_parsed
+                                    ).total_seconds()
                             elif isinstance(entry_time, (int, float)):
                                 # Конвертируем из миллисекунд или секунд
                                 entry_timestamp = (
@@ -3983,7 +4067,9 @@ class FuturesPositionManager:
                                     if entry_time > 1000000000000
                                     else float(entry_time)
                                 )
-                                current_timestamp = datetime.now(timezone.utc).timestamp()
+                                current_timestamp = datetime.now(
+                                    timezone.utc
+                                ).timestamp()
                                 time_since_open = current_timestamp - entry_timestamp
                             else:
                                 logger.debug(
@@ -3995,7 +4081,7 @@ class FuturesPositionManager:
                                 f"⚠️ [PROFIT_DRAWDOWN] {symbol}: Ошибка расчета time_since_open: {e}, используем time_since_open=0"
                             )
                             time_since_open = 0
-                    
+
                     # ✅ ЗАЩИТА: Игнорируем profit_drawdown для убыточных позиций, если они открыты менее 60 секунд
                     min_holding_for_loss_drawdown = 60.0  # 60 секунд
                     if time_since_open < min_holding_for_loss_drawdown:
@@ -4005,10 +4091,12 @@ class FuturesPositionManager:
                             f"(защита от слишком быстрого закрытия)"
                         )
                         return False
-                    
+
                     # ✅ ЗАЩИТА #1: Критический убыток - закрываем немедленно (независимо от минимального порога)
                     # Если убыток превышает 5% от размера позиции, закрываем немедленно
-                    critical_loss_threshold = position_value * 0.05  # 5% от размера позиции
+                    critical_loss_threshold = (
+                        position_value * 0.05
+                    )  # 5% от размера позиции
                     if abs(net_pnl) >= critical_loss_threshold:
                         logger.warning(
                             f"🚨 [PROFIT_DRAWDOWN] {symbol}: КРИТИЧЕСКИЙ УБЫТОК! "
@@ -4016,20 +4104,22 @@ class FuturesPositionManager:
                             f"закрываем немедленно"
                         )
                         return True
-                    
+
                     # ✅ ЗАЩИТА #2: Минимальный порог увеличения убытка
                     # ✅ ИСПРАВЛЕНО: Снижено с 0.5% до 0.2% для убыточных позиций (было слишком высоким)
                     # Не закрываем, если убыток увеличился менее чем на 0.2% от размера позиции или $0.20
                     loss_increase = abs(net_pnl - peak_profit)  # Увеличение убытка
-                    min_loss_increase_usd = max(0.20, position_value * 0.002)  # 0.2% от размера или $0.20
-                    
+                    min_loss_increase_usd = max(
+                        0.20, position_value * 0.002
+                    )  # 0.2% от размера или $0.20
+
                     if loss_increase < min_loss_increase_usd:
                         logger.debug(
                             f"🔍 [PROFIT_DRAWDOWN] {symbol}: Убыточная позиция, убыток увеличился на ${loss_increase:.4f} "
                             f"< ${min_loss_increase_usd:.4f} (минимальный порог), пропускаем закрытие"
                         )
                         return False
-                    
+
                     # Убыточная позиция: проверяем откат от минимального убытка
                     # Если текущий убыток больше (по модулю) чем peak_profit_usd, значит убыток увеличился
                     if net_pnl < peak_profit:
@@ -4046,7 +4136,7 @@ class FuturesPositionManager:
                             f"(текущий=${net_pnl:.4f}, peak=${peak_profit:.4f})"
                         )
                         return False
-                
+
                 # Прибыльная позиция: проверяем откат от максимума (существующая логика)
                 drawdown_percent = (
                     (peak_profit - net_pnl) / peak_profit if peak_profit > 0 else 0
@@ -4075,13 +4165,21 @@ class FuturesPositionManager:
                     )
 
             except Exception as e:
-                logger.error(f"❌ [PROFIT_DRAWDOWN] Ошибка расчета отката для {symbol}: {e}", exc_info=True)
+                logger.error(
+                    f"❌ [PROFIT_DRAWDOWN] Ошибка расчета отката для {symbol}: {e}",
+                    exc_info=True,
+                )
 
-            logger.debug(f"🔍 [PROFIT_DRAWDOWN] {symbol}: Завершено, позиция остается открытой")
+            logger.debug(
+                f"🔍 [PROFIT_DRAWDOWN] {symbol}: Завершено, позиция остается открытой"
+            )
             return False
 
         except Exception as e:
-            logger.error(f"❌ [PROFIT_DRAWDOWN] Ошибка проверки profit drawdown для {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"❌ [PROFIT_DRAWDOWN] Ошибка проверки profit drawdown для {symbol}: {e}",
+                exc_info=True,
+            )
             return False
 
     async def _check_max_holding(self, position: Dict[str, Any]) -> bool:
@@ -4112,7 +4210,9 @@ class FuturesPositionManager:
                         entry_time_str = active_positions[symbol].get("entry_time", "")
 
             if not entry_time_str:
-                logger.debug(f"🔍 [MAX_HOLDING] {symbol}: Не удалось получить entry_time, пропускаем")
+                logger.debug(
+                    f"🔍 [MAX_HOLDING] {symbol}: Не удалось получить entry_time, пропускаем"
+                )
                 return False
 
             # Получаем metadata для режима
@@ -4150,11 +4250,13 @@ class FuturesPositionManager:
                 if regime_config:
                     # ✅ ИСПРАВЛЕНИЕ: Работаем как со словарями, так и с объектами
                     if isinstance(regime_config, dict):
-                        max_holding_minutes = float(regime_config.get("max_holding_minutes", 120.0))
+                        max_holding_minutes = float(
+                            regime_config.get("max_holding_minutes", 120.0)
+                        )
                     else:
-                        max_holding_minutes = float(getattr(
-                            regime_config, "max_holding_minutes", 120.0
-                        ))
+                        max_holding_minutes = float(
+                            getattr(regime_config, "max_holding_minutes", 120.0)
+                        )
             except Exception as e:
                 logger.debug(
                     f"⚠️ Не удалось получить max_holding_minutes из конфига: {e}"
@@ -4210,13 +4312,21 @@ class FuturesPositionManager:
                     )
 
             except Exception as e:
-                logger.error(f"❌ [MAX_HOLDING] Ошибка расчета времени для {symbol}: {e}", exc_info=True)
+                logger.error(
+                    f"❌ [MAX_HOLDING] Ошибка расчета времени для {symbol}: {e}",
+                    exc_info=True,
+                )
 
-            logger.debug(f"🔍 [MAX_HOLDING] {symbol}: Завершено, позиция остается открытой")
+            logger.debug(
+                f"🔍 [MAX_HOLDING] {symbol}: Завершено, позиция остается открытой"
+            )
             return False
 
         except Exception as e:
-            logger.error(f"❌ [MAX_HOLDING] Ошибка проверки max_holding для {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"❌ [MAX_HOLDING] Ошибка проверки max_holding для {symbol}: {e}",
+                exc_info=True,
+            )
             return False
 
     async def _update_position_stats(self, position: Dict[str, Any]):
