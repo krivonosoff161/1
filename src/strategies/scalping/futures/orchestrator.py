@@ -31,6 +31,7 @@ from .calculations.margin_calculator import MarginCalculator
 from .config.config_manager import ConfigManager
 from .coordinators.order_coordinator import OrderCoordinator
 from .coordinators.signal_coordinator import SignalCoordinator
+from .coordinators.smart_exit_coordinator import SmartExitCoordinator
 from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
 from .coordinators.websocket_coordinator import WebSocketCoordinator
 from .core.data_registry import DataRegistry
@@ -633,6 +634,15 @@ class FuturesScalpingOrchestrator:
             self.active_orders_cache[symbol][order_id] = order_cache_data
             self.active_orders_cache[symbol]["timestamp"] = time.time()
 
+        # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия позиций через индикаторы
+        self.smart_exit_coordinator = SmartExitCoordinator(
+            position_registry=self.position_registry,
+            data_registry=self.data_registry,
+            close_position_callback=self._close_position,
+            enabled=True,  # Можно отключить через конфиг
+        )
+        logger.info("✅ SmartExitCoordinator инициализирован")
+
         # WebSocket Coordinator (создаем ПОСЛЕ SignalCoordinator, т.к. используем его callback)
         self.websocket_coordinator = WebSocketCoordinator(
             ws_manager=self.ws_manager,
@@ -652,6 +662,7 @@ class FuturesScalpingOrchestrator:
             update_active_orders_cache_callback=_update_orders_cache_from_ws,
             data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
             structured_logger=self.structured_logger,  # ✅ НОВОЕ: StructuredLogger для логирования свечей
+            smart_exit_coordinator=self.smart_exit_coordinator,  # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
         )
 
         logger.info("FuturesScalpingOrchestrator инициализирован")

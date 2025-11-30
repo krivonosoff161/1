@@ -1702,6 +1702,29 @@ class FuturesSignalGenerator:
                 symbol, market_data, indicators, current_regime
             )
 
+            # ✅ НОВОЕ: Фильтр для XRP-USDT SHORT - блокируем если сильный BULLISH тренд
+            filtered_signals = []
+            for signal in signals:
+                signal_symbol = signal.get("symbol", "")
+                signal_side = signal.get("side", "")
+                
+                # Фильтр для XRP-USDT SHORT
+                if signal_symbol == "XRP-USDT" and signal_side.lower() == "sell":
+                    # Проверяем ADX тренд - блокируем SHORT если тренд BULLISH
+                    try:
+                        if adx_trend == "bullish" and adx_value >= adx_threshold:
+                            logger.warning(
+                                f"🚫 XRP-USDT SHORT заблокирован: сильный BULLISH тренд "
+                                f"(ADX={adx_value:.1f}, +DI={adx_plus_di:.1f}, -DI={adx_minus_di:.1f})"
+                            )
+                            continue  # Пропускаем этот сигнал
+                    except Exception as e:
+                        logger.debug(f"⚠️ Ошибка проверки ADX для XRP-USDT SHORT: {e}, разрешаем сигнал")
+                
+                filtered_signals.append(signal)
+            
+            signals = filtered_signals
+
             # ✅ ОПТИМИЗАЦИЯ: Логируем только если есть сигналы (INFO уровень) или важная информация
             # logger.debug(f"📊 Всего базовых сигналов для {symbol}: {len(signals)}")
 

@@ -223,7 +223,7 @@ scalping:
       volume_profile_bonus_multiplier: 1.1
       ph_enabled: true
       ph_threshold: 0.2  # 20 центов для Futures
-      ph_time_limit: 180  # 3 минуты
+      ph_time_limit: 600  # ✅ УВЕЛИЧЕНО: 10 минут (было 180 = 3 минуты)
       
       # Индикаторы для тренда
       indicators:
@@ -281,7 +281,7 @@ scalping:
       volume_profile_bonus_multiplier: 1.0
       ph_enabled: true
       ph_threshold: 0.15
-      ph_time_limit: 300  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 120 до 300 сек (5 мин) для большего охвата
+      ph_time_limit: 1200  # ✅ УВЕЛИЧЕНО: 20 минут (было 300 = 5 минут) для большего охвата
       min_holding_minutes: 1  # ✅ ИСПРАВЛЕНО: Уменьшено с 3 до 1 минуты для быстрого PH
       
       indicators:

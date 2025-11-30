@@ -55,6 +55,7 @@ class WebSocketCoordinator:
         ] = None,
         data_registry=None,  # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
         structured_logger=None,  # ✅ НОВОЕ: StructuredLogger для логирования свечей
+        smart_exit_coordinator=None,  # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
     ):
         """
         Инициализация WebSocketCoordinator.
@@ -97,6 +98,8 @@ class WebSocketCoordinator:
         self.data_registry = data_registry
         # ✅ НОВОЕ: StructuredLogger для логирования свечей
         self.structured_logger = structured_logger
+        # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
+        self.smart_exit_coordinator = smart_exit_coordinator
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Отслеживание последнего timestamp для каждого символа и таймфрейма
         # Формат: "symbol_timeframe" -> timestamp последней обработанной свечи (в секундах)
@@ -272,7 +275,22 @@ class WebSocketCoordinator:
                     # Проверяем TP ПЕРВЫМ, затем Loss Cut, затем TSL
                     # ✅ ИСПРАВЛЕНО (TODO #1): Убрали проверку entry_price - он будет восстановлен в update_trailing_stop_loss()
                     if symbol in self.active_positions_ref:
-                        # Сначала проверяем TP через manage_position
+                        # ✅ НОВОЕ: Сначала проверяем умный фильтр индикаторов (SmartExitCoordinator)
+                        # Это работает в реальном времени через WebSocket
+                        if self.smart_exit_coordinator:
+                            try:
+                                decision = await self.smart_exit_coordinator.check_position(
+                                    symbol, self.active_positions_ref[symbol]
+                                )
+                                if decision and decision.get("action") == "close":
+                                    # Позиция закрыта по умному фильтру, пропускаем остальные проверки
+                                    return  # Выходим из функции, позиция уже закрыта
+                            except Exception as e:
+                                logger.debug(
+                                    f"⚠️ Ошибка SmartExitCoordinator для {symbol}: {e}"
+                                )
+                        
+                        # Затем проверяем TP через manage_position
                         if self.position_manager:
                             await self.position_manager.manage_position(
                                 self.active_positions_ref[symbol]
