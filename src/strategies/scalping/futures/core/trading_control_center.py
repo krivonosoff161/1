@@ -23,6 +23,7 @@ from loguru import logger
 # ✅ НОВОЕ: Импорт для memory usage
 try:
     import psutil
+
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
@@ -130,14 +131,17 @@ class TradingControlCenter:
         while self.is_running:
             try:
                 cycle_start_time = time.perf_counter()
-                
+
                 # Проверяем is_running перед каждым шагом
                 if not self.is_running:
                     break
 
                 # ✅ НОВОЕ: Логирование memory usage раз в 10 минут
                 current_time = time.time()
-                if current_time - self._last_memory_log_time >= self._memory_log_interval:
+                if (
+                    current_time - self._last_memory_log_time
+                    >= self._memory_log_interval
+                ):
                     await self._log_memory_usage()
                     self._last_memory_log_time = current_time
 
@@ -153,11 +157,9 @@ class TradingControlCenter:
                 signals_start = time.perf_counter()
                 signals = await self.signal_generator.generate_signals()
                 signals_time = (time.perf_counter() - signals_start) * 1000  # мс
-                
+
                 if len(signals) > 0:
-                    logger.info(
-                        f"📊 TCC: Сгенерировано {len(signals)} сигналов"
-                    )
+                    logger.info(f"📊 TCC: Сгенерировано {len(signals)} сигналов")
                 else:
                     logger.debug("📊 TCC: Сигналов не сгенерировано")
 
@@ -247,25 +249,27 @@ class TradingControlCenter:
         """
         try:
             manage_start = time.perf_counter()
-            
+
             # ✅ ИСПРАВЛЕНИЕ: Получаем актуальные позиции из PositionRegistry, а не из прокси
             all_positions = await self.position_registry.get_all_positions()
             positions_count = len(all_positions)
-            
+
             if positions_count == 0:
                 logger.debug("📊 TCC: Нет открытых позиций для анализа")
                 return
-            
+
             logger.debug(f"📊 TCC: Анализ {positions_count} позиций...")
-            
+
             for symbol, position in all_positions.items():
                 pos_start = time.perf_counter()
                 await self.position_manager.manage_position(position)
                 pos_time = (time.perf_counter() - pos_start) * 1000  # мс
                 logger.debug(f"📊 TCC: {symbol} анализ завершен за {pos_time:.2f}ms")
-            
+
             manage_time = (time.perf_counter() - manage_start) * 1000  # мс
-            logger.debug(f"📊 TCC: Управление позициями завершено за {manage_time:.2f}ms ({positions_count} позиций)")
+            logger.debug(
+                f"📊 TCC: Управление позициями завершено за {manage_time:.2f}ms ({positions_count} позиций)"
+            )
 
             # ✅ НОВОЕ: Периодический мониторинг ADL для всех позиций
             # Логируем ADL для всех открытых позиций раз в минуту
@@ -646,7 +650,7 @@ class TradingControlCenter:
     async def _log_memory_usage(self) -> None:
         """
         ✅ НОВОЕ: Логирование использования памяти для проверки memory leak.
-        
+
         Логирует:
         - Использование памяти (MB)
         - Количество позиций в PositionRegistry
@@ -661,26 +665,25 @@ class TradingControlCenter:
             process = psutil.Process(os.getpid())
             memory_info = process.memory_info()
             memory_mb = memory_info.rss / 1024 / 1024  # MB
-            
+
             # Получаем количество позиций
             positions = await self.position_registry.get_all_positions()
             positions_count = len(positions) if positions else 0
-            
+
             # Получаем количество задач asyncio
             tasks_count = len(asyncio.all_tasks())
-            
+
             # Получаем метаданные позиций
             metadata_count = 0
-            if hasattr(self.position_registry, '_metadata'):
+            if hasattr(self.position_registry, "_metadata"):
                 metadata_count = len(self.position_registry._metadata)
-            
+
             logger.info(
                 f"💾 Memory Usage: {memory_mb:.1f} MB, "
                 f"Positions: {positions_count}, "
                 f"Metadata: {metadata_count}, "
                 f"Tasks: {tasks_count}"
             )
-            
+
         except Exception as e:
             logger.debug(f"⚠️ TCC: Ошибка логирования memory usage: {e}")
-

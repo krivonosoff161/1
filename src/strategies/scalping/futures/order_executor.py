@@ -108,7 +108,7 @@ class FuturesOrderExecutor:
             logger.info(
                 f"🎯 Исполнение сигнала: {symbol} {side} размер={position_size:.6f}"
             )
-            
+
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем информацию о сигнале
             logger.debug(
                 f"🔍 [EXECUTE_SIGNAL] {symbol} {side}: "
@@ -237,36 +237,46 @@ class FuturesOrderExecutor:
             if isinstance(self.scalping_config, dict):
                 order_executor_config = self.scalping_config.get("order_executor")
             else:
-                order_executor_config = getattr(self.scalping_config, "order_executor", None)
+                order_executor_config = getattr(
+                    self.scalping_config, "order_executor", None
+                )
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если None, пробуем получить через model_dump
-                if order_executor_config is None and hasattr(self.scalping_config, "model_dump"):
+                if order_executor_config is None and hasattr(
+                    self.scalping_config, "model_dump"
+                ):
                     try:
                         scalping_dict = self.scalping_config.model_dump()
                         order_executor_config = scalping_dict.get("order_executor")
                     except Exception:
                         pass
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если None, пробуем получить через dict()
-                if order_executor_config is None and hasattr(self.scalping_config, "dict"):
+                if order_executor_config is None and hasattr(
+                    self.scalping_config, "dict"
+                ):
                     try:
                         scalping_dict = self.scalping_config.dict()
                         order_executor_config = scalping_dict.get("order_executor")
                     except Exception:
                         pass
                 # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Если это Pydantic модель, пробуем model_dump
-                if order_executor_config is None and hasattr(self.scalping_config, "model_dump"):
+                if order_executor_config is None and hasattr(
+                    self.scalping_config, "model_dump"
+                ):
                     try:
                         scalping_dict = self.scalping_config.model_dump()
                         order_executor_config = scalping_dict.get("order_executor")
                     except Exception:
                         pass
                 # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Если это Pydantic v1, пробуем dict()
-                if order_executor_config is None and hasattr(self.scalping_config, "dict"):
+                if order_executor_config is None and hasattr(
+                    self.scalping_config, "dict"
+                ):
                     try:
                         scalping_dict = self.scalping_config.dict()
                         order_executor_config = scalping_dict.get("order_executor")
                     except Exception:
                         pass
-            
+
             # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Проверяем что order_executor_config существует
             if order_executor_config is None:
                 logger.warning(
@@ -274,7 +284,7 @@ class FuturesOrderExecutor:
                     f"Доступные атрибуты: {[attr for attr in dir(self.scalping_config) if not attr.startswith('_')]}"
                 )
                 order_executor_config = {}
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Преобразуем в dict если это объект
             if not isinstance(order_executor_config, dict):
                 if hasattr(order_executor_config, "dict"):
@@ -289,14 +299,16 @@ class FuturesOrderExecutor:
                         f"type={type(order_executor_config)}"
                     )
                     order_executor_config = {}
-            
+
             # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Проверяем структуру order_executor_config
             logger.debug(
                 f"🔍 order_executor_config для {symbol}: type={type(order_executor_config)}, "
                 f"keys={list(order_executor_config.keys()) if isinstance(order_executor_config, dict) else 'N/A'}"
             )
             # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Проверяем scalping_config напрямую
-            if order_executor_config is None or (isinstance(order_executor_config, dict) and not order_executor_config):
+            if order_executor_config is None or (
+                isinstance(order_executor_config, dict) and not order_executor_config
+            ):
                 logger.warning(
                     f"⚠️ order_executor_config пустой для {symbol}. "
                     f"Проверяем scalping_config напрямую: "
@@ -311,7 +323,9 @@ class FuturesOrderExecutor:
                     )
                     if "order_executor" in scalping_dict:
                         order_executor_raw = scalping_dict["order_executor"]
-                        logger.info(f"✅ order_executor найден через __dict__ для {symbol}")
+                        logger.info(
+                            f"✅ order_executor найден через __dict__ для {symbol}"
+                        )
                         # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Проверяем что находится в order_executor
                         logger.debug(
                             f"🔍 order_executor_raw для {symbol}: type={type(order_executor_raw)}, "
@@ -323,13 +337,21 @@ class FuturesOrderExecutor:
                         if not isinstance(order_executor_raw, dict):
                             if hasattr(order_executor_raw, "model_dump"):
                                 order_executor_config = order_executor_raw.model_dump()
-                                logger.debug(f"✅ order_executor преобразован через model_dump() для {symbol}")
+                                logger.debug(
+                                    f"✅ order_executor преобразован через model_dump() для {symbol}"
+                                )
                             elif hasattr(order_executor_raw, "dict"):
                                 order_executor_config = order_executor_raw.dict()
-                                logger.debug(f"✅ order_executor преобразован через dict() для {symbol}")
+                                logger.debug(
+                                    f"✅ order_executor преобразован через dict() для {symbol}"
+                                )
                             elif hasattr(order_executor_raw, "__dict__"):
-                                order_executor_config = dict(order_executor_raw.__dict__)
-                                logger.debug(f"✅ order_executor преобразован через __dict__ для {symbol}")
+                                order_executor_config = dict(
+                                    order_executor_raw.__dict__
+                                )
+                                logger.debug(
+                                    f"✅ order_executor преобразован через __dict__ для {symbol}"
+                                )
                             else:
                                 logger.warning(
                                     f"⚠️ order_executor не может быть преобразован в dict для {symbol}: "
@@ -344,7 +366,7 @@ class FuturesOrderExecutor:
                             f"type={type(order_executor_config)}, "
                             f"keys={list(order_executor_config.keys()) if isinstance(order_executor_config, dict) else 'N/A'}"
                         )
-            
+
             limit_order_config = order_executor_config.get("limit_order", {})
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Преобразуем в dict если это объект
             if not isinstance(limit_order_config, dict):
@@ -380,7 +402,9 @@ class FuturesOrderExecutor:
             )  # По умолчанию 0% (best bid/ask)
 
             # ✅ НОВОЕ: Приоритет 1 - Per-symbol + Per-regime (если есть)
-            offset_percent = None  # Используем None для отслеживания, был ли найден offset
+            offset_percent = (
+                None  # Используем None для отслеживания, был ли найден offset
+            )
             if symbol and limit_order_config.get("by_symbol"):
                 by_symbol_dict = limit_order_config.get("by_symbol", {})
                 # ✅ ДОПОЛНИТЕЛЬНОЕ ЛОГИРОВАНИЕ: Проверяем что by_symbol не пустой
@@ -464,7 +488,11 @@ class FuturesOrderExecutor:
                             )
 
             # ✅ Приоритет 2 - Per-regime (если per-symbol не найден)
-            if offset_percent is None and regime and limit_order_config.get("by_regime"):
+            if (
+                offset_percent is None
+                and regime
+                and limit_order_config.get("by_regime")
+            ):
                 by_regime_dict = limit_order_config.get("by_regime", {})
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Преобразуем в dict если это объект
                 if not isinstance(by_regime_dict, dict):
@@ -490,9 +518,7 @@ class FuturesOrderExecutor:
                 regime_offset = regime_config.get("limit_offset_percent")
                 if regime_offset is not None:
                     offset_percent = regime_offset
-                    logger.debug(
-                        f"💰 Per-regime offset для {regime}: {offset_percent}%"
-                    )
+                    logger.debug(f"💰 Per-regime offset для {regime}: {offset_percent}%")
 
                 # Проверяем, нужно ли использовать рыночные ордера в этом режиме
                 use_market = regime_config.get("use_market_order", False)
@@ -569,7 +595,9 @@ class FuturesOrderExecutor:
                     # ✅ ИСПРАВЛЕНО: Если offset=0, используем минимальный offset 0.01% для гарантии исполнения
                     if offset_percent == 0.0:
                         # Для скальпинга нужна гарантия исполнения, используем минимальный offset
-                        min_offset = 0.01  # Минимальный offset 0.01% для гарантии исполнения
+                        min_offset = (
+                            0.01  # Минимальный offset 0.01% для гарантии исполнения
+                        )
                         limit_price = best_ask * (1 + min_offset / 100.0)
                         logger.debug(
                             f"💰 Для {symbol} BUY: offset=0, используем минимальный offset {min_offset}% "
@@ -605,7 +633,7 @@ class FuturesOrderExecutor:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для SELL проверяем актуальность best_bid
                 # Проблема: best_bid из стакана может быть устаревшим (например, $90,619 vs текущая $90,100)
                 # Решение: Используем best_bid только если он близок к current_price, иначе используем current_price
-                
+
                 # ✅ НОВОЕ: Проверяем актуальность best_bid
                 use_best_bid = False
                 if best_bid > 0 and current_price > 0:
@@ -623,7 +651,7 @@ class FuturesOrderExecutor:
                             f"best_bid={best_bid:.2f}, current={current_price:.2f}, spread={spread_pct:.3%} "
                             f"(используем current_price)"
                         )
-                
+
                 # ✅ ИСПРАВЛЕНО: Для SELL используем best_bid только если он актуален, иначе current_price
                 if use_best_bid:
                     limit_price = best_bid * (1 - offset_percent / 100.0)
@@ -637,7 +665,9 @@ class FuturesOrderExecutor:
                     )
                 else:
                     # Fallback: используем best_bid даже если устарел
-                    limit_price = best_bid * (1 - offset_percent / 100.0) if best_bid > 0 else 0.0
+                    limit_price = (
+                        best_bid * (1 - offset_percent / 100.0) if best_bid > 0 else 0.0
+                    )
                     logger.warning(
                         f"⚠️ Fallback для {symbol} SELL: используем best_bid={best_bid:.2f} "
                         f"(current_price недоступен)"
@@ -805,7 +835,7 @@ class FuturesOrderExecutor:
             if price_limits:
                 max_buy_price = price_limits.get("max_buy_price", 0)
                 min_sell_price = price_limits.get("min_sell_price", 0)
-                
+
                 if side.lower() == "buy" and max_buy_price > 0:
                     if price > max_buy_price:
                         logger.warning(
@@ -842,7 +872,7 @@ class FuturesOrderExecutor:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Инициализируем order_id как None
             order_id = None
-            
+
             if result.get("code") == "0":
                 order_id = result.get("data", [{}])[0].get("ordId")
                 logger.info(f"✅ Лимитный ордер размещен: {order_id}")
@@ -855,7 +885,7 @@ class FuturesOrderExecutor:
                         self.execution_stats["limit_orders_other"] += 1
                 except Exception:
                     pass
-                
+
                 return {
                     "success": True,
                     "order_id": order_id,
@@ -871,39 +901,59 @@ class FuturesOrderExecutor:
                 error_data = result.get("data", [{}])[0] if result.get("data") else {}
                 error_code = error_data.get("sCode", "")
                 error_msg = error_data.get("sMsg", "")
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ошибка 51006: Order price is not within the price limit
                 # Проверяем код ошибки и сообщение более гибко
-                if (error_code == "51006" or "51006" in str(error_code) or 
-                    "price limit" in error_msg.lower() or 
-                    "price is not within" in error_msg.lower()):
+                if (
+                    error_code == "51006"
+                    or "51006" in str(error_code)
+                    or "price limit" in error_msg.lower()
+                    or "price is not within" in error_msg.lower()
+                ):
                     # Извлекаем лимиты из сообщения об ошибке
                     import re
-                    max_buy_match = re.search(r'max buy price:\s*([\d,]+\.?\d*)', error_msg, re.IGNORECASE)
-                    min_sell_match = re.search(r'min sell price:\s*([\d,]+\.?\d*)', error_msg, re.IGNORECASE)
-                    
+
+                    max_buy_match = re.search(
+                        r"max buy price:\s*([\d,]+\.?\d*)", error_msg, re.IGNORECASE
+                    )
+                    min_sell_match = re.search(
+                        r"min sell price:\s*([\d,]+\.?\d*)", error_msg, re.IGNORECASE
+                    )
+
                     if max_buy_match or min_sell_match:
-                        max_buy_from_error = float(max_buy_match.group(1).replace(',', '')) if max_buy_match else None
-                        min_sell_from_error = float(min_sell_match.group(1).replace(',', '')) if min_sell_match else None
-                        
+                        max_buy_from_error = (
+                            float(max_buy_match.group(1).replace(",", ""))
+                            if max_buy_match
+                            else None
+                        )
+                        min_sell_from_error = (
+                            float(min_sell_match.group(1).replace(",", ""))
+                            if min_sell_match
+                            else None
+                        )
+
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Корректируем цену на основе реальных лимитов биржи
                         # Используем небольшой offset (0.1%) для гарантии прохождения
                         corrected_price = None
                         if side.lower() == "buy" and max_buy_from_error:
                             if price > max_buy_from_error:
-                                corrected_price = max_buy_from_error * 0.999  # 0.1% ниже лимита для безопасности
+                                corrected_price = (
+                                    max_buy_from_error * 0.999
+                                )  # 0.1% ниже лимита для безопасности
                                 logger.warning(
                                     f"⚠️ Цена BUY {price:.2f} превышает лимит биржи {max_buy_from_error:.2f}, "
                                     f"корректируем до {corrected_price:.2f} (0.1% ниже лимита)"
                                 )
                         elif side.lower() == "sell" and min_sell_from_error:
                             if price < min_sell_from_error:
-                                corrected_price = min_sell_from_error * 1.001  # 0.1% выше лимита для безопасности
+                                corrected_price = (
+                                    min_sell_from_error * 1.001
+                                )  # 0.1% выше лимита для безопасности
                                 logger.warning(
                                     f"⚠️ Цена SELL {price:.2f} ниже лимита биржи {min_sell_from_error:.2f}, "
                                     f"корректируем до {corrected_price:.2f} (0.1% выше лимита)"
                                 )
-                        
+
                         # ✅ КРИТИЧЕСКОЕ: Пробуем разместить ордер с исправленной ценой
                         if corrected_price is not None:
                             logger.info(
@@ -919,8 +969,12 @@ class FuturesOrderExecutor:
                                 post_only=post_only,
                             )
                             if retry_result.get("code") == "0":
-                                order_id = retry_result.get("data", [{}])[0].get("ordId")
-                                logger.info(f"✅ Лимитный ордер размещен с исправленной ценой: {order_id}")
+                                order_id = retry_result.get("data", [{}])[0].get(
+                                    "ordId"
+                                )
+                                logger.info(
+                                    f"✅ Лимитный ордер размещен с исправленной ценой: {order_id}"
+                                )
                                 return {
                                     "success": True,
                                     "order_id": order_id,
@@ -931,14 +985,23 @@ class FuturesOrderExecutor:
                                 }
                             else:
                                 # Если скорректированная цена тоже не прошла, логируем и пробуем рыночный ордер
-                                retry_error = retry_result.get("data", [{}])[0] if retry_result.get("data") else {}
-                                retry_error_msg = retry_error.get("sMsg", retry_result.get("msg", "Неизвестная ошибка"))
+                                retry_error = (
+                                    retry_result.get("data", [{}])[0]
+                                    if retry_result.get("data")
+                                    else {}
+                                )
+                                retry_error_msg = retry_error.get(
+                                    "sMsg",
+                                    retry_result.get("msg", "Неизвестная ошибка"),
+                                )
                                 logger.warning(
                                     f"⚠️ Скорректированная цена ({corrected_price:.2f}) также не прошла: {retry_error_msg}, "
                                     f"пробуем рыночный ордер"
                                 )
                                 # Fallback на рыночный ордер
-                                market_result = await self._place_market_order(symbol, side, size)
+                                market_result = await self._place_market_order(
+                                    symbol, side, size
+                                )
                                 if market_result.get("success"):
                                     logger.info(
                                         f"✅ Рыночный ордер размещен как fallback (лимитный был отклонен)"
@@ -949,7 +1012,9 @@ class FuturesOrderExecutor:
                             logger.warning(
                                 f"⚠️ Не удалось скорректировать цену для {symbol} {side}, пробуем рыночный ордер"
                             )
-                            market_result = await self._place_market_order(symbol, side, size)
+                            market_result = await self._place_market_order(
+                                symbol, side, size
+                            )
                             if market_result.get("success"):
                                 logger.info(
                                     f"✅ Рыночный ордер размещен как fallback (лимитный был отклонен)"
@@ -1066,7 +1131,7 @@ class FuturesOrderExecutor:
                             f"🔄 Пробуем скорректированную цену для {symbol} BUY: {price:.2f} → {corrected_price:.2f} "
                             f"(max_buy={parsed_max_buy:.2f}, offset=0.1%)"
                         )
-                    
+
                     # ✅ КРИТИЧЕСКОЕ: Пробуем разместить ордер с исправленной ценой
                     if corrected_price is not None:
                         # Пробуем разместить ордер с скорректированной ценой
@@ -1272,7 +1337,7 @@ class FuturesOrderExecutor:
 
             # Получаем ATR для текущей волатильности
             atr = await self._get_current_atr(symbol, entry_price)
-            
+
             # ✅ НОВОЕ: Логирование высокой волатильности (>5% за период)
             atr_percent = (atr / entry_price) * 100 if entry_price > 0 else 0
             if atr_percent > 5.0:  # > 5% волатильность
@@ -1333,7 +1398,7 @@ class FuturesOrderExecutor:
                         f"✅ Используется адаптивный sl_percent={sl_percent_value:.2f}% для {symbol} "
                         f"(regime={regime})"
                     )
-            
+
             if sl_percent_value is None:
                 # Fallback на глобальный sl_percent из конфига
                 sl_percent_value = getattr(self.scalping_config, "sl_percent", 1.2)
@@ -1480,23 +1545,25 @@ class FuturesOrderExecutor:
             # ✅ ИСПРАВЛЕНО: Если есть доступ к оркестратору - используем его метод
             if hasattr(self, "orchestrator") and self.orchestrator:
                 return self.orchestrator._get_regime_params(regime)
-            
+
             # ✅ ИСПРАВЛЕНО: Правильный путь к конфигу через scalping_config
             if not hasattr(self, "scalping_config") or not self.scalping_config:
                 logger.warning("⚠️ scalping_config не найден в OrderExecutor")
                 return {}
-            
+
             # Получаем adaptive_regime из scalping_config
             adaptive_regime = None
             if hasattr(self.scalping_config, "adaptive_regime"):
                 adaptive_regime = getattr(self.scalping_config, "adaptive_regime", None)
             elif isinstance(self.scalping_config, dict):
                 adaptive_regime = self.scalping_config.get("adaptive_regime", {})
-            
+
             if not adaptive_regime:
-                logger.warning(f"⚠️ adaptive_regime не найден в scalping_config для режима {regime}")
+                logger.warning(
+                    f"⚠️ adaptive_regime не найден в scalping_config для режима {regime}"
+                )
                 return {}
-            
+
             # Преобразуем в dict если нужно
             if not isinstance(adaptive_regime, dict):
                 if hasattr(adaptive_regime, "dict"):
@@ -1507,9 +1574,9 @@ class FuturesOrderExecutor:
                     adaptive_regime = dict(adaptive_regime.__dict__)
                 else:
                     adaptive_regime = {}
-            
+
             regime_params = adaptive_regime.get(regime.lower(), {})
-            
+
             # Преобразуем regime_params в dict если нужно
             if regime_params and not isinstance(regime_params, dict):
                 if hasattr(regime_params, "dict"):
@@ -1520,13 +1587,17 @@ class FuturesOrderExecutor:
                     regime_params = dict(regime_params.__dict__)
                 else:
                     regime_params = {}
-            
+
             if not regime_params:
-                logger.warning(f"⚠️ Параметры режима {regime} не найдены в adaptive_regime")
-            
+                logger.warning(
+                    f"⚠️ Параметры режима {regime} не найдены в adaptive_regime"
+                )
+
             return regime_params
         except Exception as e:
-            logger.error(f"❌ Ошибка получения параметров режима {regime}: {e}", exc_info=True)
+            logger.error(
+                f"❌ Ошибка получения параметров режима {regime}: {e}", exc_info=True
+            )
             return {}
 
     async def cancel_order(self, order_id: str, symbol: str) -> Dict[str, Any]:
@@ -1691,4 +1762,3 @@ if __name__ == "__main__":
     executor = FuturesOrderExecutor(config, client, slippage_guard)
 
     print("FuturesOrderExecutor готов к работе")
-

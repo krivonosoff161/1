@@ -94,8 +94,9 @@ class ExitAnalyzer:
             Решение о закрытии/продлении или None
         """
         import time
+
         analysis_start = time.perf_counter()
-        
+
         try:
             # Получаем позицию и метаданные
             position = await self.position_registry.get_position(symbol)
@@ -103,7 +104,9 @@ class ExitAnalyzer:
 
             if not position:
                 analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
-                logger.debug(f"ℹ️ ExitAnalyzer: Позиция {symbol} не найдена (за {analysis_time:.2f}ms)")
+                logger.debug(
+                    f"ℹ️ ExitAnalyzer: Позиция {symbol} не найдена (за {analysis_time:.2f}ms)"
+                )
                 return None
 
             # ✅ DEBUG-лог начала анализа
@@ -174,7 +177,7 @@ class ExitAnalyzer:
             if not regime:
                 regime = "ranging"
                 regime_source = "fallback"
-            
+
             # ✅ ЛОГИРОВАНИЕ источника режима (INFO для видимости)
             logger.info(
                 f"🔍 ExitAnalyzer {symbol}: режим={regime}, источник={regime_source}, "
@@ -188,7 +191,9 @@ class ExitAnalyzer:
 
             if not current_price:
                 analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
-                logger.warning(f"⚠️ ExitAnalyzer: Нет цены для {symbol} (за {analysis_time:.2f}ms)")
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Нет цены для {symbol} (за {analysis_time:.2f}ms)"
+                )
                 return None
 
             # Анализируем в зависимости от режима
@@ -243,8 +248,8 @@ class ExitAnalyzer:
         except Exception as e:
             analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
             logger.error(
-                f"❌ ExitAnalyzer: Ошибка анализа позиции {symbol} (за {analysis_time:.2f}ms): {e}", 
-                exc_info=True
+                f"❌ ExitAnalyzer: Ошибка анализа позиции {symbol} (за {analysis_time:.2f}ms): {e}",
+                exc_info=True,
             )
             return None
 
@@ -312,7 +317,9 @@ class ExitAnalyzer:
                 if self.scalping_config:
                     commission_config = getattr(self.scalping_config, "commission", {})
                     if isinstance(commission_config, dict):
-                        trading_fee_rate = commission_config.get("trading_fee_rate", 0.0010)
+                        trading_fee_rate = commission_config.get(
+                            "trading_fee_rate", 0.0010
+                        )
                     elif hasattr(commission_config, "trading_fee_rate"):
                         trading_fee_rate = getattr(
                             commission_config, "trading_fee_rate", 0.0010
@@ -820,7 +827,11 @@ class ExitAnalyzer:
 
             # 2. Рассчитываем PnL
             pnl_percent = self._calculate_pnl_percent(
-                entry_price, current_price, position_side, include_fees=True, entry_time=entry_time
+                entry_price,
+                current_price,
+                position_side,
+                include_fees=True,
+                entry_time=entry_time,
             )
 
             # 3. Проверка TP (Take Profit)
@@ -1001,7 +1012,11 @@ class ExitAnalyzer:
 
             # 2. Рассчитываем PnL
             pnl_percent = self._calculate_pnl_percent(
-                entry_price, current_price, position_side, include_fees=True, entry_time=entry_time
+                entry_price,
+                current_price,
+                position_side,
+                include_fees=True,
+                entry_time=entry_time,
             )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ для диагностики
@@ -1010,11 +1025,17 @@ class ExitAnalyzer:
                 gross_pnl_pct = (current_price - entry_price) / entry_price * 100
             else:
                 gross_pnl_pct = (entry_price - current_price) / entry_price * 100
-            
+
             # Показываем больше знаков для маленьких значений
-            pnl_format = f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
-            gross_format = f"{gross_pnl_pct:.4f}" if abs(gross_pnl_pct) < 0.1 else f"{gross_pnl_pct:.2f}"
-            
+            pnl_format = (
+                f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            )
+            gross_format = (
+                f"{gross_pnl_pct:.4f}"
+                if abs(gross_pnl_pct) < 0.1
+                else f"{gross_pnl_pct:.2f}"
+            )
+
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: entry_price={entry_price:.2f}, "
                 f"current_price={current_price:.2f}, side={position_side}, "
@@ -1023,7 +1044,9 @@ class ExitAnalyzer:
 
             # 3. Проверка TP (Take Profit) - в ranging режиме закрываем сразу
             tp_percent = self._get_tp_percent(symbol, "ranging")
-            pnl_format = f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            pnl_format = (
+                f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            )
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: TP={tp_percent:.2f}%, "
                 f"PnL%={pnl_format}%, достигнут={pnl_percent >= tp_percent}"
@@ -1042,7 +1065,9 @@ class ExitAnalyzer:
 
             # 4. Проверка big_profit_exit
             big_profit_exit_percent = self._get_big_profit_exit_percent(symbol)
-            pnl_format = f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            pnl_format = (
+                f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            )
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: big_profit_exit={big_profit_exit_percent:.2f}%, "
                 f"PnL%={pnl_format}%, достигнут={pnl_percent >= big_profit_exit_percent}"
@@ -1067,7 +1092,11 @@ class ExitAnalyzer:
             )
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.6)
-                pnl_format = f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+                pnl_format = (
+                    f"{pnl_percent:.4f}"
+                    if abs(pnl_percent) < 0.1
+                    else f"{pnl_percent:.2f}"
+                )
                 logger.info(
                     f"🔍 ExitAnalyzer RANGING {symbol}: partial_tp trigger={trigger_percent:.2f}%, "
                     f"PnL%={pnl_format}%, достигнут={pnl_percent >= trigger_percent}"
@@ -1191,7 +1220,11 @@ class ExitAnalyzer:
 
             # 2. Рассчитываем PnL
             pnl_percent = self._calculate_pnl_percent(
-                entry_price, current_price, position_side, include_fees=True, entry_time=entry_time
+                entry_price,
+                current_price,
+                position_side,
+                include_fees=True,
+                entry_time=entry_time,
             )
 
             # 3. Проверка TP (Take Profit) - в choppy режиме закрываем сразу (меньший TP)

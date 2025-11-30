@@ -28,9 +28,8 @@ import pytest
 async def test_tcc_integration_structure():
     """Проверяем структуру интеграции TCC с orchestrator"""
     # Проверяем, что TradingControlCenter импортируется корректно
-    from src.strategies.scalping.futures.core.trading_control_center import (
-        TradingControlCenter,
-    )
+    from src.strategies.scalping.futures.core.trading_control_center import \
+        TradingControlCenter
 
     # Проверяем, что класс существует и имеет нужные методы
     assert hasattr(TradingControlCenter, "run_main_loop")
@@ -72,9 +71,8 @@ async def test_tcc_delegation_pattern():
 @pytest.mark.asyncio
 async def test_tcc_lifecycle():
     """Проверяем жизненный цикл TCC: запуск → работа → остановка"""
-    from src.strategies.scalping.futures.core.trading_control_center import (
-        TradingControlCenter,
-    )
+    from src.strategies.scalping.futures.core.trading_control_center import \
+        TradingControlCenter
 
     # Создаем минимальные моки для TCC
     mock_client = MagicMock()
@@ -194,9 +192,8 @@ async def test_tcc_lifecycle():
 @pytest.mark.asyncio
 async def test_tcc_error_handling():
     """Проверяем обработку ошибок в TCC"""
-    from src.strategies.scalping.futures.core.trading_control_center import (
-        TradingControlCenter,
-    )
+    from src.strategies.scalping.futures.core.trading_control_center import \
+        TradingControlCenter
 
     # Создаем моки с ошибкой в generate_signals
     mock_client = MagicMock()
@@ -300,7 +297,3 @@ async def test_tcc_error_handling():
 
     # Проверяем, что цикл остановлен (ошибка не сломала его)
     assert tcc.is_running is False
-
-
-
-

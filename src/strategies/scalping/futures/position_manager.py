@@ -413,8 +413,9 @@ class FuturesPositionManager:
             position: Данные позиции
         """
         import time
+
         manage_start = time.perf_counter()
-        
+
         if not self.is_initialized:
             logger.warning("PositionManager не инициализирован")
             return
@@ -541,7 +542,7 @@ class FuturesPositionManager:
             manage_time = (time.perf_counter() - manage_start) * 1000  # мс
             logger.error(
                 f"❌ [MANAGE_POSITION] {symbol}: Ошибка за {manage_time:.2f}ms: {e}",
-                exc_info=True
+                exc_info=True,
             )
             logger.error(
                 f"❌ [MANAGE_POSITION] Ошибка управления позицией {symbol}: {e}",

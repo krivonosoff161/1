@@ -331,7 +331,7 @@ class EntryManager:
                     f"regime={regime}, signal.regime={signal.get('regime')}. "
                     f"Позиция будет использовать fallback 'ranging' в ExitAnalyzer"
                 )
-            
+
             metadata = PositionMetadata(
                 entry_time=entry_time_for_metadata,  # ✅ Используем entry_time из API или текущее время
                 regime=final_regime,  # Может быть None - ExitAnalyzer использует динамический режим

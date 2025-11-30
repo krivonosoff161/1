@@ -16,14 +16,13 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, Mock
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
-from src.strategies.scalping.futures.core.trading_control_center import (
-    TradingControlCenter,
-)
+from src.strategies.scalping.futures.core.trading_control_center import \
+    TradingControlCenter
 
 
 class MockClient:
@@ -345,4 +344,3 @@ async def test_tcc_manage_positions_empty(mock_tcc):
 
     # Проверяем, что manage_position не был вызван (нет позиций)
     mock_position_manager.manage_position.assert_not_called()
-

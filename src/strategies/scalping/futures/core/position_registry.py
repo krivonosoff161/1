@@ -104,10 +104,14 @@ class PositionMetadata:
 
         return cls(
             entry_time=entry_time or datetime.now(),
-            regime=deepcopy(data.get("regime")),  # ✅ deepcopy для защиты от вложенных структур
+            regime=deepcopy(
+                data.get("regime")
+            ),  # ✅ deepcopy для защиты от вложенных структур
             balance_profile=deepcopy(data.get("balance_profile")),
             entry_price=data.get("entry_price"),  # float - не нужен deepcopy
-            position_side=deepcopy(data.get("position_side")),  # str - не критично, но для единообразия
+            position_side=deepcopy(
+                data.get("position_side")
+            ),  # str - не критично, но для единообразия
             order_id=deepcopy(data.get("order_id")),
             tp_percent=data.get("tp_percent"),  # float - не нужен deepcopy
             sl_percent=data.get("sl_percent"),  # float - не нужен deepcopy
@@ -116,10 +120,16 @@ class PositionMetadata:
             margin_used=data.get("margin_used"),  # float - не нужен deepcopy
             created_at=created_at,  # datetime - immutable
             # ✅ НОВОЕ: Отслеживание максимальной прибыли
-            peak_profit_usd=data.get("peak_profit_usd", 0.0),  # float - не нужен deepcopy
+            peak_profit_usd=data.get(
+                "peak_profit_usd", 0.0
+            ),  # float - не нужен deepcopy
             peak_profit_time=peak_profit_time,  # datetime - immutable
-            peak_profit_price=data.get("peak_profit_price"),  # float - не нужен deepcopy
-            tp_extension_count=data.get("tp_extension_count", 0),  # int - не нужен deepcopy
+            peak_profit_price=data.get(
+                "peak_profit_price"
+            ),  # float - не нужен deepcopy
+            tp_extension_count=data.get(
+                "tp_extension_count", 0
+            ),  # int - не нужен deepcopy
         )
 
 
@@ -233,7 +243,9 @@ class PositionRegistry:
                     existing = self._metadata[symbol]
                     # Готовим обновленные поля с deepcopy для защиты от вложенных структур
                     updated_fields = {
-                        key: deepcopy(value)  # защита от вложенных структур (dict, list)
+                        key: deepcopy(
+                            value
+                        )  # защита от вложенных структур (dict, list)
                         for key, value in metadata_updates.items()
                         if hasattr(existing, key)
                     }

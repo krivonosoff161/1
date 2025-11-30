@@ -1666,7 +1666,7 @@ class SignalCoordinator:
                     regime = self.signal_generator.regime_manager.get_current_regime()
                 except Exception:
                     regime = None
-            
+
             # ✅ ПРОВЕРКА: Если regime не определен, это проблема адаптивной системы!
             if not regime:
                 logger.warning(
