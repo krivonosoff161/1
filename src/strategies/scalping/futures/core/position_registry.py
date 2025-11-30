@@ -8,7 +8,7 @@ PositionRegistry - Единый реестр всех позиций.
 import asyncio
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from loguru import logger
@@ -29,7 +29,7 @@ class PositionMetadata:
     leverage: Optional[int] = None
     size_in_coins: Optional[float] = None
     margin_used: Optional[float] = None
-    created_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     # ✅ НОВОЕ: Отслеживание максимальной прибыли
     peak_profit_usd: float = 0.0  # Максимальная прибыль в USD
     peak_profit_time: Optional[datetime] = None  # Время достижения максимума
@@ -77,7 +77,7 @@ class PositionMetadata:
                 entry_time = data["entry_time"]
 
         # Парсим created_at
-        created_at = datetime.now()
+        created_at = datetime.now(timezone.utc)
         if data.get("created_at"):
             if isinstance(data["created_at"], str):
                 try:
@@ -85,7 +85,7 @@ class PositionMetadata:
                         data["created_at"].replace("Z", "+00:00")
                     )
                 except:
-                    created_at = datetime.now()
+                    created_at = datetime.now(timezone.utc)
             elif isinstance(data["created_at"], datetime):
                 created_at = data["created_at"]
 
@@ -103,7 +103,7 @@ class PositionMetadata:
                 peak_profit_time = data["peak_profit_time"]
 
         return cls(
-            entry_time=entry_time or datetime.now(),
+            entry_time=entry_time or datetime.now(timezone.utc),
             regime=deepcopy(
                 data.get("regime")
             ),  # ✅ deepcopy для защиты от вложенных структур
@@ -168,7 +168,9 @@ class PositionRegistry:
             self._positions[symbol] = position.copy()
 
             if metadata is None:
-                metadata = PositionMetadata(entry_time=datetime.now())
+                from datetime import timezone
+
+                metadata = PositionMetadata(entry_time=datetime.now(timezone.utc))
 
             self._metadata[symbol] = metadata
 

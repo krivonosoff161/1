@@ -10,7 +10,7 @@ Trailing SL Coordinator для Futures торговли.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 from loguru import logger
@@ -474,10 +474,14 @@ class TrailingSLCoordinator:
                                     logger.warning(
                                         f"⚠️ Не удалось распарсить cTime/uTime для {symbol}: {e}, используем текущее время"
                                     )
-                                    position["entry_time"] = datetime.now()
+                                    from datetime import timezone
+
+                                    position["entry_time"] = datetime.now(timezone.utc)
                                     position["timestamp"] = position["entry_time"]
                             else:
-                                position["entry_time"] = datetime.now()
+                                from datetime import timezone
+
+                                position["entry_time"] = datetime.now(timezone.utc)
                                 position["timestamp"] = position["entry_time"]
                                 logger.debug(
                                     f"⚠️ entry_time не найден для {symbol}, используем текущее время"
@@ -681,7 +685,16 @@ class TrailingSLCoordinator:
                     if exit_decision:
                         action = exit_decision.get("action")
                         reason = exit_decision.get("reason", "exit_analyzer")
-                        decision_pnl = exit_decision.get("pnl_pct", profit_pct)
+                        # ✅ ИСПРАВЛЕНИЕ: pnl_pct из ExitAnalyzer в процентах (0.5 = 0.5%)
+                        # _calculate_pnl_percent возвращает проценты (0.5 = 0.5%)
+                        # profit_pct из TSL в долях (0.005 = 0.5%), конвертируем для единообразия
+                        decision_pnl_raw = exit_decision.get("pnl_pct")
+                        if decision_pnl_raw is not None:
+                            # pnl_pct из ExitAnalyzer уже в процентах
+                            decision_pnl = decision_pnl_raw
+                        else:
+                            # Fallback: используем profit_pct из TSL (в долях), конвертируем в проценты
+                            decision_pnl = profit_pct * 100.0 if profit_pct else 0.0
 
                         logger.info(
                             f"🎯 ExitAnalyzer решение для {symbol}: action={action}, "
@@ -775,6 +788,18 @@ class TrailingSLCoordinator:
                                 )
 
                             # Продолжаем - TSL будет работать с новыми параметрами
+                        # ✅ Если ExitAnalyzer вернул "hold" - просто продолжаем мониторинг
+                        elif action == "hold":
+                            hold_reason = exit_decision.get("reason", "hold")
+                            logger.debug(
+                                f"⏸️ ExitAnalyzer: Держим позицию {symbol} (reason={hold_reason})"
+                            )
+                            # Продолжаем мониторинг - не закрываем
+                        # ✅ Если action не распознан - логируем и продолжаем
+                        else:
+                            logger.warning(
+                                f"⚠️ ExitAnalyzer: Неизвестный action={action} для {symbol}, продолжаем мониторинг"
+                            )
                 except Exception as e:
                     logger.error(
                         f"❌ ExitAnalyzer: Ошибка анализа для {symbol}: {e}",
@@ -876,8 +901,13 @@ class TrailingSLCoordinator:
                     if self.debug_logger:
                         entry_time = position.get("entry_time")
                         if isinstance(entry_time, datetime):
+                            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                            if entry_time.tzinfo is None:
+                                entry_time = entry_time.replace(tzinfo=timezone.utc)
+                            elif entry_time.tzinfo != timezone.utc:
+                                entry_time = entry_time.astimezone(timezone.utc)
                             minutes_in_position = (
-                                datetime.now() - entry_time
+                                datetime.now(timezone.utc) - entry_time
                             ).total_seconds() / 60.0
                         elif tsl.entry_timestamp > 0:
                             minutes_in_position = (
@@ -1284,7 +1314,14 @@ class TrailingSLCoordinator:
                 return
 
             if isinstance(entry_time, datetime):
-                time_held = (datetime.now() - entry_time).total_seconds() / 60.0
+                # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                if entry_time.tzinfo is None:
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                elif entry_time.tzinfo != timezone.utc:
+                    entry_time = entry_time.astimezone(timezone.utc)
+                time_held = (
+                    datetime.now(timezone.utc) - entry_time
+                ).total_seconds() / 60.0
             else:
                 logger.debug(
                     f"⚠️ Неверный формат entry_time для {symbol}: {entry_time}"

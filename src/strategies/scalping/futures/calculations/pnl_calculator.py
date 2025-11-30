@@ -8,7 +8,7 @@ PnLCalculator - Расчет PnL, комиссий и duration.
 - Комиссии entry и exit
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 from loguru import logger
@@ -123,7 +123,13 @@ class PnLCalculator:
             pnl_percent_from_price = (net_pnl / notional_entry) * 100
 
             # 6. Расчет duration
-            duration_sec = (datetime.now() - entry_time).total_seconds()
+            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+            if isinstance(entry_time, datetime):
+                if entry_time.tzinfo is None:
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                elif entry_time.tzinfo != timezone.utc:
+                    entry_time = entry_time.astimezone(timezone.utc)
+            duration_sec = (datetime.now(timezone.utc) - entry_time).total_seconds()
             duration_min = duration_sec / 60.0
 
             return {

@@ -9,7 +9,7 @@ WebSocket Coordinator для Futures торговли.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
@@ -692,8 +692,13 @@ class WebSocketCoordinator:
                 # Вычисляем время в позиции
                 minutes_in_position = 0.0
                 if isinstance(entry_time, datetime):
+                    # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                    if entry_time.tzinfo is None:
+                        entry_time = entry_time.replace(tzinfo=timezone.utc)
+                    elif entry_time.tzinfo != timezone.utc:
+                        entry_time = entry_time.astimezone(timezone.utc)
                     minutes_in_position = (
-                        datetime.now() - entry_time
+                        datetime.now(timezone.utc) - entry_time
                     ).total_seconds() / 60.0
 
                 # Логируем закрытие через WebSocket

@@ -371,6 +371,8 @@ class FuturesScalpingOrchestrator:
             data_registry=self.data_registry,
             exit_analyzer=self.exit_analyzer,  # Передаем ExitAnalyzer для анализа
             check_interval=5.0,  # Проверка каждые 5 секунд
+            close_position_callback=self._close_position,  # ✅ НОВОЕ: Callback для закрытия
+            position_manager=self.position_manager,  # ✅ НОВОЕ: PositionManager для частичного закрытия
         )
         logger.info("✅ PositionMonitor инициализирован в orchestrator")
 
@@ -1394,7 +1396,9 @@ class FuturesScalpingOrchestrator:
                                 f"⚠️ Не удалось распарсить cTime/uTime для {symbol}: {e}, "
                                 f"используем текущее время (fallback)"
                             )
-                            entry_time_dt = datetime.now()
+                            from datetime import timezone
+
+                            entry_time_dt = datetime.now(timezone.utc)
                     else:
                         logger.warning(
                             f"⚠️ cTime/uTime не найдены для {symbol} в данных позиции, "
@@ -3293,8 +3297,13 @@ class FuturesScalpingOrchestrator:
 
             # Вычисляем время удержания
             if isinstance(entry_time, datetime):
+                # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                if entry_time.tzinfo is None:
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                elif entry_time.tzinfo != timezone.utc:
+                    entry_time = entry_time.astimezone(timezone.utc)
                 time_held = (
-                    datetime.now() - entry_time
+                    datetime.now(timezone.utc) - entry_time
                 ).total_seconds() / 60  # в минутах
             else:
                 # Если это строка или другой формат - пропускаем
@@ -3508,8 +3517,13 @@ class FuturesScalpingOrchestrator:
                 from datetime import datetime
 
                 if isinstance(entry_time, datetime):
+                    # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                    if entry_time.tzinfo is None:
+                        entry_time = entry_time.replace(tzinfo=timezone.utc)
+                    elif entry_time.tzinfo != timezone.utc:
+                        entry_time = entry_time.astimezone(timezone.utc)
                     minutes_in_position = (
-                        datetime.now() - entry_time
+                        datetime.now(timezone.utc) - entry_time
                     ).total_seconds() / 60.0
                 else:
                     minutes_in_position = 0.0

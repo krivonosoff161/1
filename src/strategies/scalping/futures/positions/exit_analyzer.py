@@ -5,7 +5,7 @@ ExitAnalyzer - Централизованное управление закры�
 Использует все ресурсы бота: ADX, Order Flow, MTF, индикаторы.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from loguru import logger
@@ -262,12 +262,14 @@ class ExitAnalyzer:
         position_side: str,
         include_fees: bool = True,
         entry_time: Optional[datetime] = None,
+        position: Optional[Any] = None,
+        metadata: Optional[Any] = None,
     ) -> float:
         """
         Расчет PnL% с учетом комиссии.
 
-        ✅ ИСПРАВЛЕНО: Не учитываем комиссию в первые 10 секунд после открытия
-        (это время для установления реальной цены, учитывая спред и проскальзывание)
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для фьючерсов считаем PnL% от МАРЖИ, а не от цены!
+        Биржа показывает PnL% от маржи (с учетом плеча), поэтому наш расчет должен совпадать.
 
         Args:
             entry_price: Цена входа
@@ -275,23 +277,120 @@ class ExitAnalyzer:
             position_side: Направление позиции ("long" или "short")
             include_fees: Учитывать комиссию
             entry_time: Время открытия позиции (опционально, для проверки первых 10 секунд)
+            position: Данные позиции (для получения margin и unrealizedPnl)
+            metadata: Метаданные позиции (для получения margin и unrealizedPnl)
 
         Returns:
-            PnL% от цены (с комиссией если include_fees=True и прошло >10 секунд)
+            PnL% от маржи (с комиссией если include_fees=True и прошло >10 секунд)
         """
         if entry_price == 0:
             return 0.0
 
-        # Базовая прибыль без комиссии
+        # ✅ ПРИОРИТЕТ 1: Пытаемся получить PnL% от маржи (как на бирже)
+        margin_used = None
+        unrealized_pnl = None
+
+        # Пробуем получить из position
+        if position and isinstance(position, dict):
+            try:
+                margin_str = position.get("margin") or position.get("imr") or "0"
+                if margin_str and str(margin_str).strip() and str(margin_str) != "0":
+                    margin_used = float(margin_str)
+                upl_str = position.get("upl") or position.get("unrealizedPnl") or "0"
+                if upl_str and str(upl_str).strip() and str(upl_str) != "0":
+                    unrealized_pnl = float(upl_str)
+            except (ValueError, TypeError) as e:
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Ошибка получения margin/upl из position: {e}"
+                )
+
+        # Пробуем получить из metadata
+        if (margin_used is None or margin_used == 0) and metadata:
+            try:
+                if hasattr(metadata, "margin") and metadata.margin:
+                    margin_used = float(metadata.margin)
+                elif hasattr(metadata, "margin_used") and metadata.margin_used:
+                    margin_used = float(metadata.margin_used)
+                if hasattr(metadata, "unrealized_pnl") and metadata.unrealized_pnl:
+                    unrealized_pnl = float(metadata.unrealized_pnl)
+            except (ValueError, TypeError) as e:
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Ошибка получения margin/upl из metadata: {e}"
+                )
+
+        # Если получили margin и unrealizedPnl - считаем от маржи (как на бирже)
+        if margin_used and margin_used > 0 and unrealized_pnl is not None:
+            gross_pnl_pct = (unrealized_pnl / margin_used) * 100  # В процентах
+
+            # Учитываем комиссию если нужно
+            if include_fees:
+                seconds_since_open = 0.0
+                if entry_time:
+                    try:
+                        if isinstance(entry_time, str):
+                            entry_time = datetime.fromisoformat(
+                                entry_time.replace("Z", "+00:00")
+                            )
+                        # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                        if isinstance(entry_time, datetime):
+                            if entry_time.tzinfo is None:
+                                entry_time = entry_time.replace(tzinfo=timezone.utc)
+                            elif entry_time.tzinfo != timezone.utc:
+                                entry_time = entry_time.astimezone(timezone.utc)
+                        seconds_since_open = (
+                            datetime.now(timezone.utc) - entry_time
+                        ).total_seconds()
+                    except Exception:
+                        pass
+
+                if seconds_since_open < 10.0:
+                    # В первые 10 секунд не учитываем комиссию
+                    logger.debug(
+                        f"⏱️ ExitAnalyzer: Позиция открыта {seconds_since_open:.1f} сек назад, "
+                        f"комиссия не учитывается (PnL% от маржи={gross_pnl_pct:.4f}%)"
+                    )
+                    return gross_pnl_pct
+                else:
+                    # После 10 секунд учитываем комиссию
+                    trading_fee_rate = 0.0010  # 0.1% по умолчанию
+                    if self.scalping_config:
+                        commission_config = getattr(
+                            self.scalping_config, "commission", {}
+                        )
+                        if isinstance(commission_config, dict):
+                            trading_fee_rate = commission_config.get(
+                                "trading_fee_rate", 0.0010
+                            )
+                        elif hasattr(commission_config, "trading_fee_rate"):
+                            trading_fee_rate = getattr(
+                                commission_config, "trading_fee_rate", 0.0010
+                            )
+
+                    # Комиссия в процентах от маржи (на круг)
+                    commission_pct = trading_fee_rate * 100  # 0.1% = 0.1
+                    net_pnl_pct = gross_pnl_pct - commission_pct
+                    logger.debug(
+                        f"💰 ExitAnalyzer: PnL% от маржи={gross_pnl_pct:.4f}%, "
+                        f"комиссия={commission_pct:.4f}%, Net PnL%={net_pnl_pct:.4f}%"
+                    )
+                    return net_pnl_pct
+            else:
+                return gross_pnl_pct
+
+        # ✅ FALLBACK: Если не получили margin, считаем от цены (старый метод)
+        # Это менее точно, но лучше чем ничего
+        logger.debug(
+            f"⚠️ ExitAnalyzer: margin/unrealizedPnl не найдены, используем расчет от цены (менее точно)"
+        )
+
+        # Базовая прибыль без комиссии (от цены)
         if position_side.lower() == "long":
-            gross_profit_pct = (current_price - entry_price) / entry_price
+            gross_profit_pct = (current_price - entry_price) / entry_price * 100
         else:  # short
-            gross_profit_pct = (entry_price - current_price) / entry_price
+            gross_profit_pct = (entry_price - current_price) / entry_price * 100
 
         # Учитываем комиссию если нужно
         if include_fees:
-            # ✅ ИСПРАВЛЕНИЕ: Не учитываем комиссию в первые 10 секунд после открытия
-            # (это время для установления реальной цены, учитывая спред и проскальзывание)
             seconds_since_open = 0.0
             if entry_time:
                 try:
@@ -299,20 +398,25 @@ class ExitAnalyzer:
                         entry_time = datetime.fromisoformat(
                             entry_time.replace("Z", "+00:00")
                         )
-                    seconds_since_open = (datetime.now() - entry_time).total_seconds()
+                    # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                    if isinstance(entry_time, datetime):
+                        if entry_time.tzinfo is None:
+                            entry_time = entry_time.replace(tzinfo=timezone.utc)
+                        elif entry_time.tzinfo != timezone.utc:
+                            entry_time = entry_time.astimezone(timezone.utc)
+                    seconds_since_open = (
+                        datetime.now(timezone.utc) - entry_time
+                    ).total_seconds()
                 except Exception:
                     pass
 
             if seconds_since_open < 10.0:
-                # В первые 10 секунд не учитываем комиссию (учитываем только спред)
                 logger.debug(
                     f"⏱️ ExitAnalyzer: Позиция открыта {seconds_since_open:.1f} сек назад, "
-                    f"комиссия не учитывается в profit_pct (учитываем только спред)"
+                    f"комиссия не учитывается (PnL% от цены={gross_profit_pct:.4f}%)"
                 )
                 return gross_profit_pct
             else:
-                # После 10 секунд учитываем комиссию
-                # Получаем комиссию из конфига (примерно 0.1% на круг)
                 trading_fee_rate = 0.0010  # 0.1% по умолчанию
                 if self.scalping_config:
                     commission_config = getattr(self.scalping_config, "commission", {})
@@ -325,7 +429,8 @@ class ExitAnalyzer:
                             commission_config, "trading_fee_rate", 0.0010
                         )
 
-                net_profit_pct = gross_profit_pct - trading_fee_rate
+                commission_pct = trading_fee_rate * 100
+                net_profit_pct = gross_profit_pct - commission_pct
                 return net_profit_pct
         else:
             return gross_profit_pct
@@ -406,6 +511,155 @@ class ExitAnalyzer:
             return float(getattr(self.scalping_config, config_key, default_value))
 
         return default_value
+
+    def _get_time_in_position_minutes(
+        self, metadata: Any, position: Any
+    ) -> Optional[float]:
+        """
+        Получение времени в позиции в минутах.
+
+        Args:
+            metadata: Метаданные позиции
+            position: Данные позиции
+
+        Returns:
+            Время в позиции в минутах или None если не удалось определить
+        """
+        try:
+            entry_time = None
+
+            # Приоритет 1: metadata.entry_time
+            if metadata and hasattr(metadata, "entry_time") and metadata.entry_time:
+                entry_time = metadata.entry_time
+                logger.debug(
+                    f"✅ ExitAnalyzer: entry_time получен из metadata.entry_time: {entry_time}"
+                )
+            elif isinstance(metadata, dict) and metadata.get("entry_time"):
+                entry_time = metadata.get("entry_time")
+                logger.debug(
+                    f"✅ ExitAnalyzer: entry_time получен из metadata dict: {entry_time}"
+                )
+
+            # Приоритет 2: position.cTime или openTime
+            if not entry_time and isinstance(position, dict):
+                entry_time = position.get("cTime") or position.get("openTime")
+                if entry_time:
+                    logger.debug(
+                        f"✅ ExitAnalyzer: entry_time получен из position: {entry_time}"
+                    )
+
+            if not entry_time:
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: entry_time не найден (metadata={metadata is not None}, "
+                    f"position={isinstance(position, dict)}, "
+                    f"metadata.entry_time={getattr(metadata, 'entry_time', None) if metadata else None})"
+                )
+                return None
+
+            # Конвертируем в datetime если нужно
+            if isinstance(entry_time, datetime):
+                # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                if entry_time.tzinfo is None:
+                    # Если без timezone, предполагаем что это UTC и добавляем timezone
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                elif entry_time.tzinfo != timezone.utc:
+                    # Если в другом timezone, конвертируем в UTC
+                    entry_time = entry_time.astimezone(timezone.utc)
+                entry_timestamp = entry_time.timestamp()
+            elif isinstance(entry_time, str):
+                if entry_time.isdigit():
+                    # Timestamp в миллисекундах
+                    entry_timestamp = int(entry_time) / 1000.0
+                else:
+                    # ISO формат строки
+                    entry_time_obj = datetime.fromisoformat(
+                        entry_time.replace("Z", "+00:00")
+                    )
+                    # Убеждаемся, что в UTC
+                    if entry_time_obj.tzinfo is None:
+                        entry_time_obj = entry_time_obj.replace(tzinfo=timezone.utc)
+                    elif entry_time_obj.tzinfo != timezone.utc:
+                        entry_time_obj = entry_time_obj.astimezone(timezone.utc)
+                    entry_timestamp = entry_time_obj.timestamp()
+            elif isinstance(entry_time, (int, float)):
+                # Timestamp (в миллисекундах если > 1000000000000, иначе в секундах)
+                entry_timestamp = (
+                    float(entry_time) / 1000.0
+                    if entry_time > 1000000000000
+                    else float(entry_time)
+                )
+            else:
+                return None
+
+            current_timestamp = datetime.now(timezone.utc).timestamp()
+            time_since_open = current_timestamp - entry_timestamp
+
+            # ✅ ЗАЩИТА: Если время отрицательное или слишком большое - ошибка расчета
+            if time_since_open < 0:
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Отрицательное время в позиции: {time_since_open:.1f} сек "
+                    f"(entry_timestamp={entry_timestamp}, current_timestamp={current_timestamp})"
+                )
+                return None
+
+            if time_since_open > 86400 * 7:  # Больше 7 дней - подозрительно
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Подозрительно большое время в позиции: {time_since_open/86400:.1f} дней"
+                )
+                return None
+
+            minutes = time_since_open / 60.0
+            return minutes
+
+        except Exception as e:
+            logger.debug(
+                f"⚠️ ExitAnalyzer: Ошибка расчета времени в позиции: {e}", exc_info=True
+            )
+            return None
+
+    def _get_max_holding_minutes(self, regime: str) -> float:
+        """
+        Получение max_holding_minutes из конфига по режиму.
+
+        Args:
+            regime: Режим рынка (trending, ranging, choppy)
+
+        Returns:
+            max_holding_minutes или 120.0 по умолчанию
+        """
+        max_holding_minutes = 120.0  # Default 2 часа
+
+        if self.scalping_config:
+            try:
+                adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                regime_config = None
+
+                if isinstance(adaptive_regime, dict):
+                    if regime and regime in adaptive_regime:
+                        regime_config = adaptive_regime.get(regime, {})
+                    elif "ranging" in adaptive_regime:
+                        regime_config = adaptive_regime.get("ranging", {})
+                else:
+                    if regime and hasattr(adaptive_regime, regime):
+                        regime_config = getattr(adaptive_regime, regime)
+                    elif hasattr(adaptive_regime, "ranging"):
+                        regime_config = getattr(adaptive_regime, "ranging")
+
+                if regime_config:
+                    if isinstance(regime_config, dict):
+                        max_holding_minutes = float(
+                            regime_config.get("max_holding_minutes", 120.0)
+                        )
+                    else:
+                        max_holding_minutes = float(
+                            getattr(regime_config, "max_holding_minutes", 120.0)
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Ошибка получения max_holding_minutes: {e}"
+                )
+
+        return max_holding_minutes
 
     def _get_partial_tp_params(self, regime: str) -> Dict[str, Any]:
         """
@@ -668,6 +922,12 @@ class ExitAnalyzer:
             entry_time = None
             if metadata and hasattr(metadata, "entry_time"):
                 entry_time = metadata.entry_time
+                # ✅ ИСПРАВЛЕНИЕ: Нормализуем timezone сразу при получении из metadata
+                if isinstance(entry_time, datetime):
+                    if entry_time.tzinfo is None:
+                        entry_time = entry_time.replace(tzinfo=timezone.utc)
+                    elif entry_time.tzinfo != timezone.utc:
+                        entry_time = entry_time.astimezone(timezone.utc)
             elif isinstance(metadata, dict):
                 entry_time_str = metadata.get("entry_time")
                 if entry_time_str:
@@ -676,17 +936,38 @@ class ExitAnalyzer:
                             entry_time = datetime.fromisoformat(
                                 entry_time_str.replace("Z", "+00:00")
                             )
+                            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                            if entry_time.tzinfo is None:
+                                entry_time = entry_time.replace(tzinfo=timezone.utc)
+                            elif entry_time.tzinfo != timezone.utc:
+                                entry_time = entry_time.astimezone(timezone.utc)
                         except:
                             pass
                     elif isinstance(entry_time_str, datetime):
                         entry_time = entry_time_str
+                        # ✅ ИСПРАВЛЕНИЕ: Нормализуем timezone сразу
+                        if entry_time.tzinfo is None:
+                            entry_time = entry_time.replace(tzinfo=timezone.utc)
+                        elif entry_time.tzinfo != timezone.utc:
+                            entry_time = entry_time.astimezone(timezone.utc)
 
             if not entry_time:
                 # Если entry_time не найден, разрешаем partial_tp (без проверки времени)
                 return True, "entry_time не найден, пропускаем проверку min_holding"
 
+            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC (offset-aware) - финальная проверка
+            if isinstance(entry_time, datetime):
+                if entry_time.tzinfo is None:
+                    # Если entry_time без timezone, добавляем UTC
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                elif entry_time.tzinfo != timezone.utc:
+                    # Если entry_time в другом timezone, конвертируем в UTC
+                    entry_time = entry_time.astimezone(timezone.utc)
+
             # Рассчитываем время удержания в минутах
-            duration_minutes = (datetime.now() - entry_time).total_seconds() / 60.0
+            duration_minutes = (
+                datetime.now(timezone.utc) - entry_time
+            ).total_seconds() / 60.0
 
             # Получаем базовый min_holding из конфига по режиму
             min_holding_minutes = None
@@ -832,6 +1113,8 @@ class ExitAnalyzer:
                 position_side,
                 include_fees=True,
                 entry_time=entry_time,
+                position=position,
+                metadata=metadata,
             )
 
             # 3. Проверка TP (Take Profit)
@@ -953,6 +1236,47 @@ class ExitAnalyzer:
                         "trend_strength": trend_data.get("trend_strength", 0),
                     }
 
+            # 8. ✅ НОВОЕ: Проверка Max Holding - учитываем время в позиции как фактор анализа
+            minutes_in_position = self._get_time_in_position_minutes(metadata, position)
+            max_holding_minutes = self._get_max_holding_minutes("trending")
+
+            if (
+                minutes_in_position is not None
+                and minutes_in_position >= max_holding_minutes
+            ):
+                # Время превышено - проверяем, есть ли сильные сигналы держать
+                trend_data = await self._analyze_trend_strength(symbol)
+                trend_strength = (
+                    trend_data.get("trend_strength", 0) if trend_data else 0
+                )
+
+                # Если сильный тренд (>= 0.7) и прибыль > 0.3% - продлеваем
+                if trend_strength >= 0.7 and pnl_percent > 0.3:
+                    logger.info(
+                        f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                        f"но сильный тренд (strength={trend_strength:.2f}) и прибыль {pnl_percent:.2f}% - продлеваем"
+                    )
+                    return {
+                        "action": "extend_tp",
+                        "reason": "max_holding_strong_trend",
+                        "pnl_pct": pnl_percent,
+                        "trend_strength": trend_strength,
+                        "minutes_in_position": minutes_in_position,
+                    }
+                else:
+                    # Нет сильных сигналов - закрываем по времени
+                    logger.info(
+                        f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                        f"нет сильных сигналов держать (trend_strength={trend_strength:.2f}, pnl={pnl_percent:.2f}%) - закрываем"
+                    )
+                    return {
+                        "action": "close",
+                        "reason": "max_holding_no_signals",
+                        "pnl_pct": pnl_percent,
+                        "minutes_in_position": minutes_in_position,
+                        "max_holding_minutes": max_holding_minutes,
+                    }
+
             # Нет причин для закрытия или продления
             return None
 
@@ -1017,6 +1341,8 @@ class ExitAnalyzer:
                 position_side,
                 include_fees=True,
                 entry_time=entry_time,
+                position=position,
+                metadata=metadata,
             )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ для диагностики
@@ -1155,12 +1481,107 @@ class ExitAnalyzer:
                     "reversal_signal": "order_flow_or_mtf",
                 }
 
+            # 7. ✅ НОВОЕ: Проверка Max Holding - учитываем время в позиции как фактор анализа
+            logger.debug(
+                f"🔍 ExitAnalyzer RANGING {symbol}: Проверка Max Holding - "
+                f"metadata={metadata is not None}, position={isinstance(position, dict)}, "
+                f"metadata.entry_time={getattr(metadata, 'entry_time', None) if metadata else None}"
+            )
+            minutes_in_position = self._get_time_in_position_minutes(metadata, position)
+            max_holding_minutes = self._get_max_holding_minutes("ranging")
+            logger.debug(
+                f"🔍 ExitAnalyzer RANGING {symbol}: minutes_in_position={minutes_in_position}, "
+                f"max_holding_minutes={max_holding_minutes}"
+            )
+
+            # Получаем параметры продления времени
+            extend_time_if_profitable = False
+            min_profit_for_extension = 0.5
+            extension_percent = 100
+            try:
+                adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                regime_config = None
+                if isinstance(adaptive_regime, dict):
+                    regime_config = adaptive_regime.get("ranging", {})
+                elif hasattr(adaptive_regime, "ranging"):
+                    regime_config = getattr(adaptive_regime, "ranging")
+
+                if regime_config:
+                    if isinstance(regime_config, dict):
+                        extend_time_if_profitable = regime_config.get(
+                            "extend_time_if_profitable", False
+                        )
+                        min_profit_for_extension = regime_config.get(
+                            "min_profit_for_extension", 0.5
+                        )
+                        extension_percent = regime_config.get("extension_percent", 100)
+                    else:
+                        extend_time_if_profitable = getattr(
+                            regime_config, "extend_time_if_profitable", False
+                        )
+                        min_profit_for_extension = getattr(
+                            regime_config, "min_profit_for_extension", 0.5
+                        )
+                        extension_percent = getattr(
+                            regime_config, "extension_percent", 100
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Ошибка получения extend_time_if_profitable: {e}"
+                )
+
+            actual_max_holding = max_holding_minutes
+            if extend_time_if_profitable and pnl_percent >= min_profit_for_extension:
+                extension_minutes = max_holding_minutes * (extension_percent / 100.0)
+                actual_max_holding = max_holding_minutes + extension_minutes
+
+            if (
+                minutes_in_position is not None
+                and minutes_in_position >= actual_max_holding
+            ):
+                # Время превышено - закрываем (в ranging режиме более консервативно)
+                logger.info(
+                    f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
+                    f"(базовое: {max_holding_minutes:.1f} мин) - закрываем по времени"
+                )
+                return {
+                    "action": "close",
+                    "reason": "max_holding_exceeded",
+                    "pnl_pct": pnl_percent,
+                    "minutes_in_position": minutes_in_position,
+                    "max_holding_minutes": actual_max_holding,
+                }
+            elif (
+                minutes_in_position is not None
+                and minutes_in_position >= max_holding_minutes
+            ):
+                # Базовое время превышено, но есть продление - проверяем прибыль
+                if (
+                    extend_time_if_profitable
+                    and pnl_percent >= min_profit_for_extension
+                ):
+                    logger.debug(
+                        f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                        f"но прибыль {pnl_percent:.2f}% >= {min_profit_for_extension:.2f}% - продлеваем до {actual_max_holding:.1f} мин"
+                    )
+                    # Продлеваем, но не закрываем пока
+                    return None
+
             # В ranging режиме не продлеваем TP - более консервативный подход
+            time_info = "N/A"
+            if minutes_in_position is not None:
+                if actual_max_holding is not None:
+                    time_info = (
+                        f"{minutes_in_position:.1f} мин / {actual_max_holding:.1f} мин"
+                    )
+                else:
+                    time_info = f"{minutes_in_position:.1f} мин"
+
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: Нет причин для закрытия - "
                 f"TP={tp_percent:.2f}% (не достигнут), big_profit={big_profit_exit_percent:.2f}% (не достигнут), "
                 f"partial_tp={partial_tp_params.get('trigger_percent', 0.6):.2f}% (не достигнут), "
-                f"текущий PnL%={pnl_percent:.2f}%"
+                f"текущий PnL%={pnl_percent:.2f}%, время: {time_info}"
             )
             return None
 
@@ -1225,6 +1646,8 @@ class ExitAnalyzer:
                 position_side,
                 include_fees=True,
                 entry_time=entry_time,
+                position=position,
+                metadata=metadata,
             )
 
             # 3. Проверка TP (Take Profit) - в choppy режиме закрываем сразу (меньший TP)
@@ -1311,6 +1734,27 @@ class ExitAnalyzer:
                     "reason": "reversal_detected",
                     "pnl_pct": pnl_percent,
                     "reversal_signal": "order_flow_or_mtf",
+                }
+
+            # 7. ✅ НОВОЕ: Проверка Max Holding - учитываем время в позиции как фактор анализа
+            minutes_in_position = self._get_time_in_position_minutes(metadata, position)
+            max_holding_minutes = self._get_max_holding_minutes("choppy")
+
+            if (
+                minutes_in_position is not None
+                and minutes_in_position >= max_holding_minutes
+            ):
+                # В choppy режиме закрываем строго по времени (быстрые закрытия)
+                logger.info(
+                    f"⏰ ExitAnalyzer CHOPPY: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин - "
+                    f"закрываем по времени (choppy режим - быстрые закрытия)"
+                )
+                return {
+                    "action": "close",
+                    "reason": "max_holding_exceeded_choppy",
+                    "pnl_pct": pnl_percent,
+                    "minutes_in_position": minutes_in_position,
+                    "max_holding_minutes": max_holding_minutes,
                 }
 
             # В choppy режиме не продлеваем TP - быстрые закрытия

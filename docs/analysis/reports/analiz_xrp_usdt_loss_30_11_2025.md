@@ -178,3 +178,4 @@ min_loss_increase_usd = max(0.20, position_value * 0.002)  # 0.2% от разм�
 
 
 
+

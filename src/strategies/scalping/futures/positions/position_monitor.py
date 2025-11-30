@@ -29,6 +29,8 @@ class PositionMonitor:
         data_registry: DataRegistry,
         exit_analyzer=None,  # ExitAnalyzer (будет создан позже)
         check_interval: float = 5.0,  # Интервал проверки в секундах
+        close_position_callback=None,  # ✅ НОВОЕ: Callback для закрытия позиций
+        position_manager=None,  # ✅ НОВОЕ: PositionManager для частичного закрытия
     ):
         """
         Инициализация PositionMonitor.
@@ -43,6 +45,8 @@ class PositionMonitor:
         self.data_registry = data_registry
         self.exit_analyzer = exit_analyzer
         self.check_interval = check_interval
+        self.close_position_callback = close_position_callback  # ✅ НОВОЕ
+        self.position_manager = position_manager  # ✅ НОВОЕ
 
         self.is_running = False
         self.monitor_task = None
@@ -161,9 +165,66 @@ class PositionMonitor:
             decision = await self.exit_analyzer.analyze_position(symbol)
 
             if decision:
-                logger.debug(
-                    f"✅ PositionMonitor: Получено решение для {symbol}: {decision.get('action', 'N/A')}"
+                action = decision.get("action")
+                reason = decision.get("reason", "exit_analyzer")
+                pnl_pct = decision.get("pnl_pct", 0.0)
+
+                logger.info(
+                    f"🎯 PositionMonitor: Решение для {symbol}: action={action}, "
+                    f"reason={reason}, pnl={pnl_pct:.2f}%"
                 )
+
+                # ✅ ОБРАБОТКА РЕШЕНИЙ ExitAnalyzer
+                if action == "close":
+                    if self.close_position_callback:
+                        logger.info(
+                            f"✅ PositionMonitor: Закрываем {symbol} (reason={reason})"
+                        )
+                        await self.close_position_callback(symbol, reason)
+                    else:
+                        logger.warning(
+                            f"⚠️ PositionMonitor: Решение закрыть {symbol}, но close_position_callback не установлен"
+                        )
+                elif action == "partial_close":
+                    fraction = decision.get("fraction", 0.5)
+                    if self.position_manager and hasattr(
+                        self.position_manager, "close_partial_position"
+                    ):
+                        try:
+                            partial_result = (
+                                await self.position_manager.close_partial_position(
+                                    symbol=symbol,
+                                    fraction=fraction,
+                                    reason=reason,
+                                )
+                            )
+                            if partial_result and partial_result.get("success"):
+                                logger.info(
+                                    f"✅ PositionMonitor: Частичное закрытие {symbol} выполнено: "
+                                    f"закрыто {fraction*100:.0f}%"
+                                )
+                        except Exception as e:
+                            logger.error(
+                                f"❌ PositionMonitor: Ошибка частичного закрытия {symbol}: {e}",
+                                exc_info=True,
+                            )
+                    else:
+                        logger.warning(
+                            f"⚠️ PositionMonitor: Решение частично закрыть {symbol}, но position_manager не доступен"
+                        )
+                elif action == "extend_tp":
+                    logger.debug(
+                        f"📈 PositionMonitor: TP продлен для {symbol} (reason={reason})"
+                    )
+                    # Продление TP обрабатывается в trailing_sl_coordinator
+                elif action == "hold":
+                    logger.debug(
+                        f"⏸️ PositionMonitor: Держим позицию {symbol} (reason={reason})"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️ PositionMonitor: Неизвестный action={action} для {symbol}"
+                    )
 
             return decision
 

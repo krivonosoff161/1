@@ -107,8 +107,10 @@ class EntryManager:
             position_data = await self._get_position_data(symbol, order_result)
 
             # 4. Создаем метаданные позиции
+            from datetime import timezone
+
             metadata = PositionMetadata(
-                entry_time=datetime.now(),
+                entry_time=datetime.now(timezone.utc),
                 regime=regime,
                 balance_profile=balance_profile,
                 entry_price=position_data.get("entry_price"),
@@ -316,12 +318,14 @@ class EntryManager:
                 }
 
             # 3. Создаем метаданные позиции
-            # ✅ КРИТИЧЕСКОЕ: Используем entry_time из API, если доступно, иначе datetime.now() (для новых позиций)
+            # ✅ КРИТИЧЕСКОЕ: Используем entry_time из API, если доступно, иначе datetime.now(timezone.utc) (для новых позиций)
             entry_time_for_metadata = position_data.get("entry_time")
             if not entry_time_for_metadata:
-                entry_time_for_metadata = (
-                    datetime.now()
-                )  # Для новых позиций используем текущее время
+                from datetime import timezone
+
+                entry_time_for_metadata = datetime.now(
+                    timezone.utc
+                )  # Для новых позиций используем текущее время в UTC
 
             # ✅ ПРОВЕРКА: Режим должен быть определен адаптивно!
             final_regime = regime or signal.get("regime")

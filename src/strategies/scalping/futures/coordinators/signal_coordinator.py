@@ -10,7 +10,7 @@ Signal Coordinator для Futures торговли.
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
@@ -2032,7 +2032,9 @@ class SignalCoordinator:
                 # Сохраняем в active_positions
                 if symbol not in self.active_positions_ref:
                     self.active_positions_ref[symbol] = {}
-                entry_time = datetime.now()
+                from datetime import timezone
+
+                entry_time = datetime.now(timezone.utc)
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем режим из сигнала для сохранения в позиции
                 # Режим должен быть в сигнале, так как он добавляется в signal_generator (строка 2330)
                 regime = signal.get("regime") if signal else None

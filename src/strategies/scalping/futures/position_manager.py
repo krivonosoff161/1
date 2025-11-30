@@ -10,7 +10,7 @@ Futures Position Manager для скальпинг стратегии.
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from loguru import logger
@@ -514,20 +514,14 @@ class FuturesPositionManager:
             logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка TP/SL")
             await self._check_tp_only(position)
 
-            # ✅ НОВОЕ: Проверка MAX_HOLDING - ПРИОРИТЕТ #3
+            # ✅ ИЗМЕНЕНО: MAX_HOLDING теперь проверяется в ExitAnalyzer как часть анализа
+            # Оставляем как fallback на случай, если ExitAnalyzer не используется
+            # Но приоритет отдаем ExitAnalyzer, который учитывает время вместе с другими факторами
             logger.debug(
-                f"🔄 [MANAGE_POSITION] {symbol}: Проверка MAX_HOLDING (ПРИОРИТЕТ #3)"
+                f"🔄 [MANAGE_POSITION] {symbol}: MAX_HOLDING проверяется в ExitAnalyzer (интегрировано в анализ)"
             )
-            max_holding_should_close = await self._check_max_holding(position)
-            if max_holding_should_close:
-                logger.info(
-                    f"🔄 [MANAGE_POSITION] {symbol}: MAX_HOLDING сработал, закрываем позицию"
-                )
-                await self._close_position_by_reason(position, "max_holding_exceeded")
-                return  # Закрыли по MAX_HOLDING, дальше не проверяем
-            logger.debug(
-                f"🔄 [MANAGE_POSITION] {symbol}: MAX_HOLDING не сработал, продолжаем"
-            )
+            # Примечание: _check_max_holding оставлен как fallback, но не вызывается здесь
+            # ExitAnalyzer анализирует время в позиции вместе с другими факторами (тренд, PnL, сигналы)
 
             # Обновление статистики
             logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Обновление статистики")
@@ -923,7 +917,7 @@ class FuturesPositionManager:
                 if entry_time:
                     if isinstance(entry_time, datetime):
                         position_age_seconds = (
-                            datetime.now() - entry_time
+                            datetime.now(timezone.utc) - entry_time
                         ).total_seconds()
                     elif isinstance(entry_time, (int, float)):
                         # Предполагаем что это timestamp
@@ -1166,7 +1160,7 @@ class FuturesPositionManager:
                 if entry_time:
                     if isinstance(entry_time, datetime):
                         minutes_in_position = (
-                            datetime.now() - entry_time
+                            datetime.now(timezone.utc) - entry_time
                         ).total_seconds() / 60.0
                     else:
                         try:
@@ -1425,8 +1419,6 @@ class FuturesPositionManager:
 
             try:
                 # Конвертируем время открытия (OKX использует миллисекунды)
-                from datetime import timezone
-
                 if isinstance(entry_time_str, datetime):
                     # Если это уже datetime объект, конвертируем в timestamp
                     if entry_time_str.tzinfo is None:
@@ -1459,8 +1451,6 @@ class FuturesPositionManager:
                     return False
 
                 # Используем UTC время для консистентности с биржей
-                from datetime import timezone
-
                 current_timestamp = datetime.now(timezone.utc).timestamp()
                 time_since_open = current_timestamp - entry_timestamp
 
@@ -1728,8 +1718,6 @@ class FuturesPositionManager:
                         entry_time_str = active_positions[symbol].get("entry_time", "")
 
                 if entry_time_str:
-                    from datetime import timezone
-
                     if isinstance(entry_time_str, datetime):
                         # Если это уже datetime объект, конвертируем в timestamp
                         if entry_time_str.tzinfo is None:
@@ -1856,8 +1844,6 @@ class FuturesPositionManager:
                                         "cTime", position.get("openTime", "")
                                     )
                                     if entry_time_str:
-                                        from datetime import timezone
-
                                         if (
                                             isinstance(entry_time_str, str)
                                             and entry_time_str.isdigit()
@@ -1899,8 +1885,25 @@ class FuturesPositionManager:
                                             ].get("entry_time")
                                             if entry_time_obj:
                                                 if isinstance(entry_time_obj, datetime):
+                                                    # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time_obj в UTC
+                                                    if entry_time_obj.tzinfo is None:
+                                                        entry_time_obj = (
+                                                            entry_time_obj.replace(
+                                                                tzinfo=timezone.utc
+                                                            )
+                                                        )
+                                                    elif (
+                                                        entry_time_obj.tzinfo
+                                                        != timezone.utc
+                                                    ):
+                                                        entry_time_obj = (
+                                                            entry_time_obj.astimezone(
+                                                                timezone.utc
+                                                            )
+                                                        )
                                                     time_since_open = (
-                                                        datetime.now() - entry_time_obj
+                                                        datetime.now(timezone.utc)
+                                                        - entry_time_obj
                                                     ).total_seconds()
                                 except Exception as e:
                                     logger.debug(
@@ -3456,7 +3459,13 @@ class FuturesPositionManager:
             net_pnl = gross_pnl - commission
 
             # Рассчитываем duration в секундах
-            duration_sec = (datetime.now() - entry_time).total_seconds()
+            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+            if isinstance(entry_time, datetime):
+                if entry_time.tzinfo is None:
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                elif entry_time.tzinfo != timezone.utc:
+                    entry_time = entry_time.astimezone(timezone.utc)
+            duration_sec = (datetime.now(timezone.utc) - entry_time).total_seconds()
             duration_min = duration_sec / 60.0
             duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
 
@@ -3507,8 +3516,31 @@ class FuturesPositionManager:
             )
 
             if result.get("code") == "0":
-                # ✅ ЗАДАЧА #8: Детальное логирование уже сделано выше перед закрытием
-                logger.info(f"✅ Позиция {symbol} успешно закрыта по {reason}")
+                # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ причины закрытия с PnL%
+                try:
+                    margin_used = float(actual_position.get("margin", 0))
+                    if margin_used > 0:
+                        pnl_percent_from_margin = (net_pnl / margin_used) * 100
+                        logger.info(
+                            f"✅ Позиция {symbol} успешно закрыта по причине: {reason} | "
+                            f"Entry: ${entry_price:.2f}, Exit: ${exit_price:.2f}, "
+                            f"Gross PnL: ${gross_pnl:.4f}, Net PnL: ${net_pnl:.4f} ({pnl_percent_from_margin:.2f}% от маржи), "
+                            f"Время в позиции: {duration_sec/60:.1f} мин"
+                        )
+                    else:
+                        logger.info(
+                            f"✅ Позиция {symbol} успешно закрыта по причине: {reason} | "
+                            f"Entry: ${entry_price:.2f}, Exit: ${exit_price:.2f}, "
+                            f"Gross PnL: ${gross_pnl:.4f}, Net PnL: ${net_pnl:.4f}, "
+                            f"Время в позиции: {duration_sec/60:.1f} мин"
+                        )
+                except Exception as e:
+                    logger.info(
+                        f"✅ Позиция {symbol} успешно закрыта по причине: {reason} | "
+                        f"Entry: ${entry_price:.2f}, Exit: ${exit_price:.2f}, "
+                        f"Gross PnL: ${gross_pnl:.4f}, Net PnL: ${net_pnl:.4f}, "
+                        f"Время в позиции: {duration_sec/60:.1f} мин (ошибка расчета PnL%: {e})"
+                    )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
                 trade_result = TradeResult(
@@ -3722,8 +3754,6 @@ class FuturesPositionManager:
                 # Для прибыльных позиций: обновляем если PnL больше
                 # Для убыточных позиций: обновляем если убыток уменьшился (PnL ближе к 0)
                 if metadata:
-                    from datetime import timezone
-
                     # ✅ ИСПРАВЛЕНИЕ #1: Первое обновление - устанавливаем текущий PnL (даже если отрицательный)
                     if (
                         metadata.peak_profit_usd == 0.0
@@ -4134,11 +4164,29 @@ class FuturesPositionManager:
                     # Если текущий убыток больше (по модулю) чем peak_profit_usd, значит убыток увеличился
                     if net_pnl < peak_profit:
                         # Убыток увеличился на достаточную величину - закрываем
-                        logger.warning(
-                            f"📉 Profit Drawdown для убыточной позиции {symbol}: "
-                            f"убыток увеличился с ${peak_profit:.4f} до ${net_pnl:.4f} "
-                            f"(увеличение=${loss_increase:.4f}, время в позиции={time_since_open:.1f}с)"
-                        )
+                        # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Рассчитываем PnL% для отображения
+                        try:
+                            margin_used = float(position.get("margin", 0))
+                            if margin_used > 0:
+                                pnl_percent_from_margin = (net_pnl / margin_used) * 100
+                                peak_pnl_percent = (peak_profit / margin_used) * 100
+                                logger.warning(
+                                    f"📉 [PROFIT_DRAWDOWN] Убыточная позиция {symbol} закрыта: "
+                                    f"убыток увеличился с ${peak_profit:.4f} ({peak_pnl_percent:.2f}%) до ${net_pnl:.4f} ({pnl_percent_from_margin:.2f}%) "
+                                    f"(увеличение=${loss_increase:.4f}, порог=${min_loss_increase_usd:.4f}, время в позиции={time_since_open/60:.1f} мин)"
+                                )
+                            else:
+                                logger.warning(
+                                    f"📉 [PROFIT_DRAWDOWN] Убыточная позиция {symbol} закрыта: "
+                                    f"убыток увеличился с ${peak_profit:.4f} до ${net_pnl:.4f} "
+                                    f"(увеличение=${loss_increase:.4f}, порог=${min_loss_increase_usd:.4f}, время в позиции={time_since_open/60:.1f} мин)"
+                                )
+                        except Exception:
+                            logger.warning(
+                                f"📉 [PROFIT_DRAWDOWN] Убыточная позиция {symbol} закрыта: "
+                                f"убыток увеличился с ${peak_profit:.4f} до ${net_pnl:.4f} "
+                                f"(увеличение=${loss_increase:.4f}, порог=${min_loss_increase_usd:.4f}, время в позиции={time_since_open/60:.1f} мин)"
+                            )
                         return True
                     else:
                         logger.debug(
@@ -4274,8 +4322,6 @@ class FuturesPositionManager:
 
             # Рассчитываем время в позиции
             try:
-                from datetime import timezone
-
                 if isinstance(entry_time_str, datetime):
                     # Если это уже datetime объект, конвертируем в timestamp
                     if entry_time_str.tzinfo is None:
@@ -4307,13 +4353,169 @@ class FuturesPositionManager:
                 time_since_open = current_timestamp - entry_timestamp
                 minutes_in_position = time_since_open / 60.0
 
-                if minutes_in_position >= max_holding_minutes:
-                    logger.warning(
-                        f"⏰ MAX HOLDING EXCEEDED: {symbol}\n"
-                        f"   Time in position: {minutes_in_position:.1f} min\n"
-                        f"   Max holding: {max_holding_minutes:.1f} min\n"
-                        f"   Regime: {regime}"
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем extend_time_if_profitable
+                # Если позиция в прибыли, продлеваем время удержания
+                actual_max_holding = max_holding_minutes
+                extend_time_if_profitable = False
+                min_profit_for_extension = 0.5  # Default 0.5%
+                extension_percent = 100  # Default 100% (удваиваем время)
+
+                try:
+                    if isinstance(regime_config, dict):
+                        extend_time_if_profitable = regime_config.get(
+                            "extend_time_if_profitable", False
+                        )
+                        min_profit_for_extension = regime_config.get(
+                            "min_profit_for_extension", 0.5
+                        )
+                        extension_percent = regime_config.get("extension_percent", 100)
+                    elif regime_config:
+                        extend_time_if_profitable = getattr(
+                            regime_config, "extend_time_if_profitable", False
+                        )
+                        min_profit_for_extension = getattr(
+                            regime_config, "min_profit_for_extension", 0.5
+                        )
+                        extension_percent = getattr(
+                            regime_config, "extension_percent", 100
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ [MAX_HOLDING] Ошибка получения extend_time_if_profitable: {e}"
                     )
+
+                # Если продление включено, проверяем прибыль и продлеваем время
+                if extend_time_if_profitable:
+                    try:
+                        # Рассчитываем текущий PnL
+                        margin_used = float(position.get("margin", 0))
+                        entry_price = float(position.get("avgPx", 0))
+                        current_price = float(position.get("markPx", 0))
+                        side = position.get("posSide", "long")
+
+                        details = await self.client.get_instrument_details(symbol)
+                        ct_val = float(details.get("ctVal", "0.01"))
+                        size = float(position.get("pos", "0"))
+                        size_in_coins = abs(size) * ct_val
+
+                        if side.lower() == "long":
+                            gross_pnl = size_in_coins * (current_price - entry_price)
+                        else:
+                            gross_pnl = size_in_coins * (entry_price - current_price)
+
+                        # Комиссия
+                        commission_config = getattr(
+                            self.scalping_config, "commission", {}
+                        )
+                        if isinstance(commission_config, dict):
+                            commission_rate = commission_config.get(
+                                "trading_fee_rate", 0.0010
+                            )
+                        else:
+                            commission_rate = getattr(
+                                commission_config, "trading_fee_rate", 0.0010
+                            )
+
+                        position_value = size_in_coins * entry_price
+                        commission = position_value * commission_rate * 2
+                        net_pnl = gross_pnl - commission
+
+                        # Рассчитываем PnL% от маржи
+                        if margin_used > 0:
+                            pnl_percent_from_margin = (net_pnl / margin_used) * 100
+
+                            # Если прибыль >= min_profit_for_extension, продлеваем время
+                            if pnl_percent_from_margin >= min_profit_for_extension:
+                                extension_minutes = max_holding_minutes * (
+                                    extension_percent / 100.0
+                                )
+                                actual_max_holding = (
+                                    max_holding_minutes + extension_minutes
+                                )
+                                logger.debug(
+                                    f"✅ [MAX_HOLDING] {symbol}: Позиция в прибыли {pnl_percent_from_margin:.2f}% >= {min_profit_for_extension:.2f}%, "
+                                    f"продлеваем время: {max_holding_minutes:.1f} мин → {actual_max_holding:.1f} мин "
+                                    f"(extension={extension_percent}%)"
+                                )
+                            else:
+                                logger.debug(
+                                    f"🔍 [MAX_HOLDING] {symbol}: Прибыль {pnl_percent_from_margin:.2f}% < {min_profit_for_extension:.2f}%, "
+                                    f"продление не применяется (время: {minutes_in_position:.1f} мин / {actual_max_holding:.1f} мин)"
+                                )
+                        else:
+                            logger.debug(
+                                f"⚠️ [MAX_HOLDING] {symbol}: margin_used=0, не можем проверить прибыль для продления"
+                            )
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ [MAX_HOLDING] {symbol}: Ошибка проверки прибыли для продления: {e}"
+                        )
+
+                if minutes_in_position >= actual_max_holding:
+                    # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Рассчитываем PnL% для отображения
+                    try:
+                        margin_used = float(position.get("margin", 0))
+                        entry_price = float(position.get("avgPx", 0))
+                        current_price = float(position.get("markPx", 0))
+                        side = position.get("posSide", "long")
+
+                        # Рассчитываем PnL
+                        details = await self.client.get_instrument_details(symbol)
+                        ct_val = float(details.get("ctVal", "0.01"))
+                        size = float(position.get("pos", "0"))
+                        size_in_coins = abs(size) * ct_val
+
+                        if side.lower() == "long":
+                            gross_pnl = size_in_coins * (current_price - entry_price)
+                        else:
+                            gross_pnl = size_in_coins * (entry_price - current_price)
+
+                        # Комиссия
+                        commission_config = getattr(
+                            self.scalping_config, "commission", {}
+                        )
+                        if isinstance(commission_config, dict):
+                            commission_rate = commission_config.get(
+                                "trading_fee_rate", 0.0010
+                            )
+                        else:
+                            commission_rate = getattr(
+                                commission_config, "trading_fee_rate", 0.0010
+                            )
+
+                        position_value = size_in_coins * entry_price
+                        commission = position_value * commission_rate * 2
+                        net_pnl = gross_pnl - commission
+
+                        if margin_used > 0:
+                            pnl_percent_from_margin = (net_pnl / margin_used) * 100
+                            extension_info = ""
+                            if actual_max_holding > max_holding_minutes:
+                                extension_info = f" (продлено до {actual_max_holding:.1f} мин, но время истекло)"
+                            logger.warning(
+                                f"⏰ [MAX_HOLDING] Позиция {symbol} {side.upper()} закрыта: "
+                                f"время в позиции {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин (базовое: {max_holding_minutes:.1f} мин, regime={regime}){extension_info} | "
+                                f"Entry: ${entry_price:.2f}, Exit: ${current_price:.2f}, "
+                                f"Gross PnL: ${gross_pnl:.4f}, Net Pnl: ${net_pnl:.4f} ({pnl_percent_from_margin:.2f}% от маржи), "
+                                f"Комиссия: ${commission:.4f}"
+                            )
+                        else:
+                            extension_info = ""
+                            if actual_max_holding > max_holding_minutes:
+                                extension_info = f" (продлено до {actual_max_holding:.1f} мин, но время истекло)"
+                            logger.warning(
+                                f"⏰ [MAX_HOLDING] Позиция {symbol} {side.upper()} закрыта: "
+                                f"время в позиции {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин (базовое: {max_holding_minutes:.1f} мин, regime={regime}){extension_info} | "
+                                f"Entry: ${entry_price:.2f}, Exit: ${current_price:.2f}, "
+                                f"Gross PnL: ${gross_pnl:.4f}, Net Pnl: ${net_pnl:.4f}, "
+                                f"Комиссия: ${commission:.4f}"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"⏰ [MAX_HOLDING] Позиция {symbol} закрыта: "
+                            f"время в позиции {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин (regime={regime}) "
+                            f"(ошибка расчета PnL: {e})"
+                        )
                     return True
                 else:
                     logger.debug(
@@ -4584,7 +4786,15 @@ class FuturesPositionManager:
                         gross_pnl = (entry_price - exit_price) * size_in_coins
 
                     net_pnl = gross_pnl - commission
-                    duration_sec = (datetime.now() - entry_time).total_seconds()
+                    # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                    if isinstance(entry_time, datetime):
+                        if entry_time.tzinfo is None:
+                            entry_time = entry_time.replace(tzinfo=timezone.utc)
+                        elif entry_time.tzinfo != timezone.utc:
+                            entry_time = entry_time.astimezone(timezone.utc)
+                    duration_sec = (
+                        datetime.now(timezone.utc) - entry_time
+                    ).total_seconds()
                     duration_min = duration_sec / 60.0
                     duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
 
@@ -4746,14 +4956,78 @@ class FuturesPositionManager:
                 f"останется {remaining_size_contracts:.6f} контрактов"
             )
 
-            # Получаем ctVal для расчетов
+            # Получаем ctVal, minSz и lotSz для расчетов
             try:
                 details = await self.client.get_instrument_details(symbol)
                 ct_val = float(details.get("ctVal", "0.01"))
-                close_size_coins = close_size_contracts * ct_val
+                min_sz = float(details.get("minSz", "0.01"))  # ✅ Минимальный размер
+                lot_sz = float(details.get("lotSz", "0.01"))  # ✅ Размер лота
             except Exception as e:
-                logger.error(f"❌ Не удалось получить ctVal для {symbol}: {e}")
+                logger.error(
+                    f"❌ Не удалось получить детали инструмента для {symbol}: {e}"
+                )
                 return None
+
+            # ✅ ИСПРАВЛЕНИЕ: Проверка минимального размера ДО округления
+            # Если размер частичного закрытия меньше минимума, проверяем варианты
+            if close_size_contracts < min_sz:
+                logger.warning(
+                    f"⚠️ Частичное закрытие {symbol}: размер {close_size_contracts:.6f} контрактов "
+                    f"меньше минимума {min_sz:.6f}. Текущий размер={abs(current_size):.6f}, "
+                    f"fraction={fraction*100:.0f}%."
+                )
+
+                # Проверяем, можем ли закрыть всю позицию
+                if abs(current_size) >= min_sz:
+                    # Если вся позиция >= минимума, закрываем всю
+                    close_size_contracts = abs(current_size)
+                    fraction = 1.0
+                    logger.info(
+                        f"✅ Частичное закрытие {symbol} заменено на полное закрытие "
+                        f"(размер частичного закрытия {close_size_contracts:.6f} < minSz {min_sz:.6f})"
+                    )
+                else:
+                    # Если даже вся позиция меньше минимума - не закрываем
+                    logger.warning(
+                        f"⚠️ Невозможно закрыть {symbol}: даже полный размер {abs(current_size):.6f} "
+                        f"меньше минимума {min_sz:.6f}. Пропускаем закрытие."
+                    )
+                    return {
+                        "success": False,
+                        "error": f"Размер позиции {abs(current_size):.6f} меньше минимума {min_sz:.6f}",
+                    }
+
+            # ✅ ИСПРАВЛЕНИЕ: Округляем размер до lotSz ПОСЛЕ проверки minSz
+            if lot_sz > 0:
+                # Округляем до ближайшего кратного lotSz
+                original_size = close_size_contracts
+                close_size_contracts = round(close_size_contracts / lot_sz) * lot_sz
+
+                # Проверяем после округления
+                if close_size_contracts < min_sz:
+                    # Если после округления меньше минимума, используем минимум (если это не больше всей позиции)
+                    if min_sz <= abs(current_size):
+                        close_size_contracts = min_sz
+                        logger.debug(
+                            f"🔧 Размер частичного закрытия {symbol} округлен до минимума: {close_size_contracts:.6f} "
+                            f"(было {original_size:.6f}, minSz={min_sz:.6f})"
+                        )
+                    else:
+                        # Если минимум больше всей позиции - закрываем всю
+                        close_size_contracts = abs(current_size)
+                        fraction = 1.0
+                        logger.info(
+                            f"✅ Частичное закрытие {symbol} заменено на полное закрытие "
+                            f"(minSz {min_sz:.6f} > размер позиции {abs(current_size):.6f})"
+                        )
+                else:
+                    logger.debug(
+                        f"🔧 Размер частичного закрытия {symbol} округлен до lotSz: {close_size_contracts:.6f} "
+                        f"(было {original_size:.6f}, lotSz={lot_sz:.6f})"
+                    )
+
+            # Рассчитываем close_size_coins для PnL
+            close_size_coins = close_size_contracts * ct_val
 
             # Определение стороны закрытия
             close_side = "sell" if side.lower() == "long" else "buy"
