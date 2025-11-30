@@ -412,6 +412,9 @@ class FuturesPositionManager:
         Args:
             position: Данные позиции
         """
+        import time
+        manage_start = time.perf_counter()
+        
         if not self.is_initialized:
             logger.warning("PositionManager не инициализирован")
             return
@@ -529,11 +532,17 @@ class FuturesPositionManager:
             logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Обновление статистики")
             await self._update_position_stats(position)
 
+            manage_time = (time.perf_counter() - manage_start) * 1000  # мс
             logger.debug(
-                f"🔄 [MANAGE_POSITION] {symbol}: Завершено, позиция остается открытой"
+                f"🔄 [MANAGE_POSITION] {symbol}: Завершено за {manage_time:.2f}ms, позиция остается открытой"
             )
 
         except Exception as e:
+            manage_time = (time.perf_counter() - manage_start) * 1000  # мс
+            logger.error(
+                f"❌ [MANAGE_POSITION] {symbol}: Ошибка за {manage_time:.2f}ms: {e}",
+                exc_info=True
+            )
             logger.error(
                 f"❌ [MANAGE_POSITION] Ошибка управления позицией {symbol}: {e}",
                 exc_info=True,

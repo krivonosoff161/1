@@ -433,3 +433,6 @@ if symbol == "XRP-USDT" and signal.get("side") == "sell":
 5. **ВАЖНО:** Добавить фильтр для XRP-USDT SHORT
 6. **ОПЦИОНАЛЬНО:** Адаптивный `ph_time_limit` на основе волатильности
 
+
+
+

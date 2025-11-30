@@ -323,9 +323,18 @@ class EntryManager:
                     datetime.now()
                 )  # Для новых позиций используем текущее время
 
+            # ✅ ПРОВЕРКА: Режим должен быть определен адаптивно!
+            final_regime = regime or signal.get("regime")
+            if not final_regime:
+                logger.warning(
+                    f"⚠️ КРИТИЧНО: Режим не определен для {symbol} при сохранении metadata! "
+                    f"regime={regime}, signal.regime={signal.get('regime')}. "
+                    f"Позиция будет использовать fallback 'ranging' в ExitAnalyzer"
+                )
+            
             metadata = PositionMetadata(
                 entry_time=entry_time_for_metadata,  # ✅ Используем entry_time из API или текущее время
-                regime=regime or signal.get("regime"),
+                regime=final_regime,  # Может быть None - ExitAnalyzer использует динамический режим
                 balance_profile=balance_profile,
                 entry_price=position_data.get("entry_price"),
                 position_side=position_data.get("position_side"),

@@ -1666,6 +1666,16 @@ class SignalCoordinator:
                     regime = self.signal_generator.regime_manager.get_current_regime()
                 except Exception:
                     regime = None
+            
+            # ✅ ПРОВЕРКА: Если regime не определен, это проблема адаптивной системы!
+            if not regime:
+                logger.warning(
+                    f"⚠️ КРИТИЧНО: Режим не определен для {symbol} при открытии позиции! "
+                    f"regime_managers={hasattr(self.signal_generator, 'regime_managers')}, "
+                    f"regime_manager={hasattr(self.signal_generator, 'regime_manager')}, "
+                    f"signal.regime={signal.get('regime')}. "
+                    f"Используется fallback из signal или 'ranging'"
+                )
 
             # ✅ НОВОЕ: Получаем balance_profile из DataRegistry
             balance_profile = None

@@ -324,3 +324,6 @@ async def _check_profit_harvesting(self, position: Dict[str, Any]) -> bool:
 
 **НО:** Можно добавить больше "умности" через фильтры индикаторов, если нужно!
 
+
+
+

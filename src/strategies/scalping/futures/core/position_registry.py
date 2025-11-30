@@ -6,7 +6,8 @@ PositionRegistry - Единый реестр всех позиций.
 """
 
 import asyncio
-from dataclasses import dataclass, field
+from copy import deepcopy
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -103,22 +104,22 @@ class PositionMetadata:
 
         return cls(
             entry_time=entry_time or datetime.now(),
-            regime=data.get("regime"),
-            balance_profile=data.get("balance_profile"),
-            entry_price=data.get("entry_price"),
-            position_side=data.get("position_side"),
-            order_id=data.get("order_id"),
-            tp_percent=data.get("tp_percent"),
-            sl_percent=data.get("sl_percent"),
-            leverage=data.get("leverage"),
-            size_in_coins=data.get("size_in_coins"),
-            margin_used=data.get("margin_used"),
-            created_at=created_at,
+            regime=deepcopy(data.get("regime")),  # ✅ deepcopy для защиты от вложенных структур
+            balance_profile=deepcopy(data.get("balance_profile")),
+            entry_price=data.get("entry_price"),  # float - не нужен deepcopy
+            position_side=deepcopy(data.get("position_side")),  # str - не критично, но для единообразия
+            order_id=deepcopy(data.get("order_id")),
+            tp_percent=data.get("tp_percent"),  # float - не нужен deepcopy
+            sl_percent=data.get("sl_percent"),  # float - не нужен deepcopy
+            leverage=data.get("leverage"),  # int - не нужен deepcopy
+            size_in_coins=data.get("size_in_coins"),  # float - не нужен deepcopy
+            margin_used=data.get("margin_used"),  # float - не нужен deepcopy
+            created_at=created_at,  # datetime - immutable
             # ✅ НОВОЕ: Отслеживание максимальной прибыли
-            peak_profit_usd=data.get("peak_profit_usd", 0.0),
-            peak_profit_time=peak_profit_time,
-            peak_profit_price=data.get("peak_profit_price"),
-            tp_extension_count=data.get("tp_extension_count", 0),
+            peak_profit_usd=data.get("peak_profit_usd", 0.0),  # float - не нужен deepcopy
+            peak_profit_time=peak_profit_time,  # datetime - immutable
+            peak_profit_price=data.get("peak_profit_price"),  # float - не нужен deepcopy
+            tp_extension_count=data.get("tp_extension_count", 0),  # int - не нужен deepcopy
         )
 
 
@@ -191,10 +192,14 @@ class PositionRegistry:
             symbol: Торговый символ
 
         Returns:
-            Метаданные позиции или None
+            Копия метаданных позиции или None (защита от мутаций)
         """
         async with self._lock:
-            return self._metadata.get(symbol)
+            metadata = self._metadata.get(symbol)
+            if metadata is None:
+                return None
+            # ✅ Возвращаем копию через replace() для защиты от мутаций
+            return replace(metadata)
 
     async def update_position(
         self,
@@ -224,10 +229,16 @@ class PositionRegistry:
             # Обновляем metadata
             if metadata_updates:
                 if symbol in self._metadata:
-                    # Обновляем существующие метаданные
-                    for key, value in metadata_updates.items():
-                        if hasattr(self._metadata[symbol], key):
-                            setattr(self._metadata[symbol], key, value)
+                    # ✅ Создаем новый объект через replace() вместо мутации через setattr()
+                    existing = self._metadata[symbol]
+                    # Готовим обновленные поля с deepcopy для защиты от вложенных структур
+                    updated_fields = {
+                        key: deepcopy(value)  # защита от вложенных структур (dict, list)
+                        for key, value in metadata_updates.items()
+                        if hasattr(existing, key)
+                    }
+                    # Создаем новый объект с обновленными полями
+                    self._metadata[symbol] = replace(existing, **updated_fields)
                 else:
                     # Создаем новые метаданные
                     self._metadata[symbol] = PositionMetadata.from_dict(

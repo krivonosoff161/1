@@ -93,33 +93,30 @@ class ExitAnalyzer:
         Returns:
             Решение о закрытии/продлении или None
         """
+        import time
+        analysis_start = time.perf_counter()
+        
         try:
             # Получаем позицию и метаданные
             position = await self.position_registry.get_position(symbol)
             metadata = await self.position_registry.get_metadata(symbol)
 
             if not position:
-                logger.debug(f"ℹ️ ExitAnalyzer: Позиция {symbol} не найдена")
+                analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
+                logger.debug(f"ℹ️ ExitAnalyzer: Позиция {symbol} не найдена (за {analysis_time:.2f}ms)")
                 return None
 
+            # ✅ DEBUG-лог начала анализа
+            logger.debug(f"📊 ExitAnalyzer: Начало анализа позиции {symbol}")
+
             # Получаем режим рынка
+            # ✅ ИСПРАВЛЕНИЕ: Всегда берем актуальный режим из signal_generator, а не из metadata
+            # (metadata содержит режим на момент открытия позиции, который может устареть)
             regime = None
-            if metadata and hasattr(metadata, "regime"):
-                regime = metadata.regime
-            elif isinstance(position, dict):
-                regime = position.get("regime")
+            regime_source = None
 
-            # Если режим не найден, получаем из DataRegistry или signal_generator
-            if not regime:
-                regime_data = await self.data_registry.get_regime(symbol)
-                if regime_data:
-                    if hasattr(regime_data, "regime"):
-                        regime = regime_data.regime
-                    elif isinstance(regime_data, dict):
-                        regime = regime_data.get("regime")
-
-            # Если все еще не найден, пробуем из signal_generator
-            if not regime and self.signal_generator:
+            # ✅ ПРИОРИТЕТ: Сначала пытаемся получить актуальный режим из signal_generator
+            if self.signal_generator:
                 try:
                     if (
                         hasattr(self.signal_generator, "regime_managers")
@@ -133,6 +130,7 @@ class ExitAnalyzer:
                                 if hasattr(regime_obj, "value")
                                 else str(regime_obj).lower()
                             )
+                            regime_source = "signal_generator.regime_managers"
                     elif (
                         hasattr(self.signal_generator, "regime_manager")
                         and self.signal_generator.regime_manager
@@ -146,21 +144,51 @@ class ExitAnalyzer:
                                 if hasattr(regime_obj, "value")
                                 else str(regime_obj).lower()
                             )
+                            regime_source = "signal_generator.regime_manager"
                 except Exception as e:
                     logger.debug(
                         f"⚠️ ExitAnalyzer: Не удалось получить режим из signal_generator: {e}"
                     )
 
-            # Fallback на ranging
+            # Fallback: если не получили из signal_generator, пробуем из DataRegistry
+            if not regime:
+                regime_data = await self.data_registry.get_regime(symbol)
+                if regime_data:
+                    if hasattr(regime_data, "regime"):
+                        regime = regime_data.regime
+                        regime_source = "data_registry"
+                    elif isinstance(regime_data, dict):
+                        regime = regime_data.get("regime")
+                        regime_source = "data_registry_dict"
+
+            # Fallback: если не получили из DataRegistry, пробуем из metadata (старый режим)
+            if not regime:
+                if metadata and hasattr(metadata, "regime"):
+                    regime = metadata.regime
+                    regime_source = "metadata"
+                elif isinstance(position, dict):
+                    regime = position.get("regime")
+                    regime_source = "position_dict"
+
+            # Fallback: если ничего не нашли, используем ranging
             if not regime:
                 regime = "ranging"
+                regime_source = "fallback"
+            
+            # ✅ ЛОГИРОВАНИЕ источника режима (INFO для видимости)
+            logger.info(
+                f"🔍 ExitAnalyzer {symbol}: режим={regime}, источник={regime_source}, "
+                f"metadata.regime={getattr(metadata, 'regime', None) if metadata else None}, "
+                f"position.regime={position.get('regime') if isinstance(position, dict) else None}"
+            )
 
             # Получаем рыночные данные
             market_data = await self.data_registry.get_market_data(symbol)
             current_price = await self.data_registry.get_price(symbol)
 
             if not current_price:
-                logger.warning(f"⚠️ ExitAnalyzer: Нет цены для {symbol}")
+                analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
+                logger.warning(f"⚠️ ExitAnalyzer: Нет цены для {symbol} (за {analysis_time:.2f}ms)")
                 return None
 
             # Анализируем в зависимости от режима
@@ -183,7 +211,24 @@ class ExitAnalyzer:
                     symbol, position, metadata, market_data, current_price
                 )
 
-            # Логируем решение
+            # ✅ INFO-логи для отслеживания решений
+            analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
+            if decision:
+                action = decision.get("action", "unknown")
+                reason = decision.get("reason", "unknown")
+                pnl_pct = decision.get("pnl_pct", 0.0)
+                logger.info(
+                    f"📊 ExitAnalyzer: Решение для {symbol} (режим={regime}): "
+                    f"action={action}, reason={reason}, PnL={pnl_pct:.2f}% (за {analysis_time:.2f}ms)"
+                )
+            else:
+                # Логируем, что решение не принято (hold)
+                analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
+                logger.debug(
+                    f"📊 ExitAnalyzer: Для {symbol} (режим={regime}) решение не принято за {analysis_time:.2f}ms - удерживаем позицию"
+                )
+
+            # Логируем решение в exit_decision_logger (если есть)
             if decision and self.exit_decision_logger:
                 try:
                     if hasattr(self.exit_decision_logger, "log_decision"):
@@ -196,8 +241,10 @@ class ExitAnalyzer:
             return decision
 
         except Exception as e:
+            analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
             logger.error(
-                f"❌ ExitAnalyzer: Ошибка анализа позиции {symbol}: {e}", exc_info=True
+                f"❌ ExitAnalyzer: Ошибка анализа позиции {symbol} (за {analysis_time:.2f}ms): {e}", 
+                exc_info=True
             )
             return None
 
@@ -209,18 +256,23 @@ class ExitAnalyzer:
         current_price: float,
         position_side: str,
         include_fees: bool = True,
+        entry_time: Optional[datetime] = None,
     ) -> float:
         """
         Расчет PnL% с учетом комиссии.
+
+        ✅ ИСПРАВЛЕНО: Не учитываем комиссию в первые 10 секунд после открытия
+        (это время для установления реальной цены, учитывая спред и проскальзывание)
 
         Args:
             entry_price: Цена входа
             current_price: Текущая цена
             position_side: Направление позиции ("long" или "short")
             include_fees: Учитывать комиссию
+            entry_time: Время открытия позиции (опционально, для проверки первых 10 секунд)
 
         Returns:
-            PnL% от цены (с комиссией если include_fees=True)
+            PnL% от цены (с комиссией если include_fees=True и прошло >10 секунд)
         """
         if entry_price == 0:
             return 0.0
@@ -233,19 +285,41 @@ class ExitAnalyzer:
 
         # Учитываем комиссию если нужно
         if include_fees:
-            # Получаем комиссию из конфига (примерно 0.1% на круг)
-            trading_fee_rate = 0.0010  # 0.1% по умолчанию
-            if self.scalping_config:
-                commission_config = getattr(self.scalping_config, "commission", {})
-                if isinstance(commission_config, dict):
-                    trading_fee_rate = commission_config.get("trading_fee_rate", 0.0010)
-                elif hasattr(commission_config, "trading_fee_rate"):
-                    trading_fee_rate = getattr(
-                        commission_config, "trading_fee_rate", 0.0010
-                    )
+            # ✅ ИСПРАВЛЕНИЕ: Не учитываем комиссию в первые 10 секунд после открытия
+            # (это время для установления реальной цены, учитывая спред и проскальзывание)
+            seconds_since_open = 0.0
+            if entry_time:
+                try:
+                    if isinstance(entry_time, str):
+                        entry_time = datetime.fromisoformat(
+                            entry_time.replace("Z", "+00:00")
+                        )
+                    seconds_since_open = (datetime.now() - entry_time).total_seconds()
+                except Exception:
+                    pass
 
-            net_profit_pct = gross_profit_pct - trading_fee_rate
-            return net_profit_pct
+            if seconds_since_open < 10.0:
+                # В первые 10 секунд не учитываем комиссию (учитываем только спред)
+                logger.debug(
+                    f"⏱️ ExitAnalyzer: Позиция открыта {seconds_since_open:.1f} сек назад, "
+                    f"комиссия не учитывается в profit_pct (учитываем только спред)"
+                )
+                return gross_profit_pct
+            else:
+                # После 10 секунд учитываем комиссию
+                # Получаем комиссию из конфига (примерно 0.1% на круг)
+                trading_fee_rate = 0.0010  # 0.1% по умолчанию
+                if self.scalping_config:
+                    commission_config = getattr(self.scalping_config, "commission", {})
+                    if isinstance(commission_config, dict):
+                        trading_fee_rate = commission_config.get("trading_fee_rate", 0.0010)
+                    elif hasattr(commission_config, "trading_fee_rate"):
+                        trading_fee_rate = getattr(
+                            commission_config, "trading_fee_rate", 0.0010
+                        )
+
+                net_profit_pct = gross_profit_pct - trading_fee_rate
+                return net_profit_pct
         else:
             return gross_profit_pct
 
@@ -535,6 +609,7 @@ class ExitAnalyzer:
                 )
 
         # Fallback для position_side
+        original_position_side = position_side
         if not position_side:
             if (
                 metadata
@@ -548,8 +623,17 @@ class ExitAnalyzer:
                     position_side = pos_side_raw
                 else:
                     position_side = position.get("position_side", "long")
+                    if position_side == "long":
+                        logger.warning(
+                            f"⚠️ FALLBACK position_side: Используется 'long' для {symbol} "
+                            f"(posSide={pos_side_raw}, position.position_side={position.get('position_side')})"
+                        )
             else:
                 position_side = "long"  # Последний fallback
+                logger.warning(
+                    f"⚠️ FALLBACK position_side: Используется 'long' для {symbol} "
+                    f"(metadata={metadata is not None}, position={isinstance(position, dict)})"
+                )
 
         return entry_price if entry_price and entry_price > 0 else None, position_side
 
@@ -727,9 +811,16 @@ class ExitAnalyzer:
                 )
                 return None
 
+            # Получаем entry_time из metadata для правильного расчета комиссии
+            entry_time = None
+            if metadata and hasattr(metadata, "entry_time"):
+                entry_time = metadata.entry_time
+            elif isinstance(metadata, dict):
+                entry_time = metadata.get("entry_time")
+
             # 2. Рассчитываем PnL
             pnl_percent = self._calculate_pnl_percent(
-                entry_price, current_price, position_side, include_fees=True
+                entry_price, current_price, position_side, include_fees=True, entry_time=entry_time
             )
 
             # 3. Проверка TP (Take Profit)
@@ -901,13 +992,42 @@ class ExitAnalyzer:
                 )
                 return None
 
+            # Получаем entry_time из metadata для правильного расчета комиссии
+            entry_time = None
+            if metadata and hasattr(metadata, "entry_time"):
+                entry_time = metadata.entry_time
+            elif isinstance(metadata, dict):
+                entry_time = metadata.get("entry_time")
+
             # 2. Рассчитываем PnL
             pnl_percent = self._calculate_pnl_percent(
-                entry_price, current_price, position_side, include_fees=True
+                entry_price, current_price, position_side, include_fees=True, entry_time=entry_time
+            )
+
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ для диагностики
+            # Рассчитываем gross PnL для сравнения
+            if position_side.lower() == "long":
+                gross_pnl_pct = (current_price - entry_price) / entry_price * 100
+            else:
+                gross_pnl_pct = (entry_price - current_price) / entry_price * 100
+            
+            # Показываем больше знаков для маленьких значений
+            pnl_format = f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            gross_format = f"{gross_pnl_pct:.4f}" if abs(gross_pnl_pct) < 0.1 else f"{gross_pnl_pct:.2f}"
+            
+            logger.info(
+                f"🔍 ExitAnalyzer RANGING {symbol}: entry_price={entry_price:.2f}, "
+                f"current_price={current_price:.2f}, side={position_side}, "
+                f"Gross PnL%={gross_format}%, Net PnL%={pnl_format}% (с комиссией), entry_time={entry_time}"
             )
 
             # 3. Проверка TP (Take Profit) - в ranging режиме закрываем сразу
             tp_percent = self._get_tp_percent(symbol, "ranging")
+            pnl_format = f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            logger.info(
+                f"🔍 ExitAnalyzer RANGING {symbol}: TP={tp_percent:.2f}%, "
+                f"PnL%={pnl_format}%, достигнут={pnl_percent >= tp_percent}"
+            )
             if pnl_percent >= tp_percent:
                 logger.info(
                     f"🎯 ExitAnalyzer RANGING: TP достигнут для {symbol}: "
@@ -922,6 +1042,11 @@ class ExitAnalyzer:
 
             # 4. Проверка big_profit_exit
             big_profit_exit_percent = self._get_big_profit_exit_percent(symbol)
+            pnl_format = f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            logger.info(
+                f"🔍 ExitAnalyzer RANGING {symbol}: big_profit_exit={big_profit_exit_percent:.2f}%, "
+                f"PnL%={pnl_format}%, достигнут={pnl_percent >= big_profit_exit_percent}"
+            )
             if pnl_percent >= big_profit_exit_percent:
                 logger.info(
                     f"💰 ExitAnalyzer RANGING: Big profit exit достигнут для {symbol}: "
@@ -936,8 +1061,17 @@ class ExitAnalyzer:
 
             # 5. Проверка partial_tp с учетом adaptive_min_holding
             partial_tp_params = self._get_partial_tp_params("ranging")
+            logger.info(
+                f"🔍 ExitAnalyzer RANGING {symbol}: partial_tp enabled={partial_tp_params.get('enabled', False)}, "
+                f"trigger_percent={partial_tp_params.get('trigger_percent', 0.6):.2f}%"
+            )
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.6)
+                pnl_format = f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+                logger.info(
+                    f"🔍 ExitAnalyzer RANGING {symbol}: partial_tp trigger={trigger_percent:.2f}%, "
+                    f"PnL%={pnl_format}%, достигнут={pnl_percent >= trigger_percent}"
+                )
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
                     (
@@ -993,6 +1127,12 @@ class ExitAnalyzer:
                 }
 
             # В ranging режиме не продлеваем TP - более консервативный подход
+            logger.info(
+                f"🔍 ExitAnalyzer RANGING {symbol}: Нет причин для закрытия - "
+                f"TP={tp_percent:.2f}% (не достигнут), big_profit={big_profit_exit_percent:.2f}% (не достигнут), "
+                f"partial_tp={partial_tp_params.get('trigger_percent', 0.6):.2f}% (не достигнут), "
+                f"текущий PnL%={pnl_percent:.2f}%"
+            )
             return None
 
         except Exception as e:
@@ -1042,9 +1182,16 @@ class ExitAnalyzer:
                 )
                 return None
 
+            # Получаем entry_time из metadata для правильного расчета комиссии
+            entry_time = None
+            if metadata and hasattr(metadata, "entry_time"):
+                entry_time = metadata.entry_time
+            elif isinstance(metadata, dict):
+                entry_time = metadata.get("entry_time")
+
             # 2. Рассчитываем PnL
             pnl_percent = self._calculate_pnl_percent(
-                entry_price, current_price, position_side, include_fees=True
+                entry_price, current_price, position_side, include_fees=True, entry_time=entry_time
             )
 
             # 3. Проверка TP (Take Profit) - в choppy режиме закрываем сразу (меньший TP)

@@ -210,3 +210,6 @@ class SmartExitCoordinator:
                 f"⚠️ SmartExitCoordinator: Ошибка применения фильтра для {symbol}: {e}"
             )
             return False  # В случае ошибки не закрываем
+
+
+

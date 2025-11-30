@@ -36,6 +36,7 @@ from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
 from .coordinators.websocket_coordinator import WebSocketCoordinator
 from .core.data_registry import DataRegistry
 from .core.position_registry import PositionRegistry
+from .core.trading_control_center import TradingControlCenter
 from .indicators.fast_adx import FastADX
 from .indicators.funding_rate_monitor import FundingRateMonitor
 from .indicators.order_flow_indicator import OrderFlowIndicator
@@ -643,6 +644,28 @@ class FuturesScalpingOrchestrator:
         )
         logger.info("✅ SmartExitCoordinator инициализирован")
 
+        # ✅ РЕФАКТОРИНГ: Инициализация TradingControlCenter для координации торговой логики
+        # Создаем ПОСЛЕ всех модулей, чтобы передать все зависимости
+        self.trading_control_center = TradingControlCenter(
+            client=self.client,
+            signal_generator=self.signal_generator,
+            signal_coordinator=self.signal_coordinator,
+            position_manager=self.position_manager,
+            position_registry=self.position_registry,
+            data_registry=self.data_registry,
+            order_coordinator=self.order_coordinator,
+            trailing_sl_coordinator=self.trailing_sl_coordinator,
+            performance_tracker=self.performance_tracker,
+            trading_statistics=self.trading_statistics,
+            liquidation_guard=self.liquidation_guard,
+            config_manager=self.config_manager,
+            scalping_config=self.scalping_config,
+            active_positions=self.active_positions,  # Прокси к position_registry
+            normalize_symbol=self._normalize_symbol,
+            sync_positions_with_exchange=self._sync_positions_with_exchange,
+        )
+        logger.info("✅ TradingControlCenter инициализирован в orchestrator")
+
         # WebSocket Coordinator (создаем ПОСЛЕ SignalCoordinator, т.к. используем его callback)
         self.websocket_coordinator = WebSocketCoordinator(
             ws_manager=self.ws_manager,
@@ -703,9 +726,9 @@ class FuturesScalpingOrchestrator:
             await self.position_monitor.start()
             logger.info("✅ PositionMonitor запущен (фоновая задача)")
 
-            # Основной торговый цикл
+            # ✅ РЕФАКТОРИНГ: Основной торговый цикл делегирован в TradingControlCenter
             self.is_running = True
-            await self._main_trading_loop()
+            await self.trading_control_center.run_main_loop()
 
         except Exception as e:
             logger.error(f"❌ Критическая ошибка в Futures Orchestrator: {e}")
@@ -718,6 +741,11 @@ class FuturesScalpingOrchestrator:
         logger.info("🛑 Остановка Futures торгового бота...")
 
         self.is_running = False
+
+        # ✅ РЕФАКТОРИНГ: Остановка TradingControlCenter
+        if hasattr(self, "trading_control_center") and self.trading_control_center:
+            await self.trading_control_center.stop()
+            logger.info("✅ TradingControlCenter остановлен")
 
         # Остановка модулей безопасности
         await self.liquidation_guard.stop_monitoring()

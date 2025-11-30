@@ -1272,6 +1272,15 @@ class FuturesOrderExecutor:
 
             # Получаем ATR для текущей волатильности
             atr = await self._get_current_atr(symbol, entry_price)
+            
+            # ✅ НОВОЕ: Логирование высокой волатильности (>5% за период)
+            atr_percent = (atr / entry_price) * 100 if entry_price > 0 else 0
+            if atr_percent > 5.0:  # > 5% волатильность
+                logger.warning(
+                    f"⚠️ Высокая волатильность для {symbol}: "
+                    f"ATR={atr_percent:.2f}%, entry_price={entry_price:.2f}, "
+                    f"ATR_abs={atr:.2f}"
+                )
 
             # Получаем режим рынка (если доступен)
             regime = signal.get("regime", "ranging")
@@ -1314,6 +1323,44 @@ class FuturesOrderExecutor:
             tp_distance = atr * tp_multiplier
             sl_distance = atr * sl_multiplier
 
+            # ✅ FALLBACK: если ATR-based SL слишком мал → использовать sl_percent
+            # Получаем sl_percent из regime_params или из глобального конфига
+            sl_percent_value = None
+            if regime_params:
+                sl_percent_value = regime_params.get("sl_percent")
+                if sl_percent_value is not None:
+                    logger.info(
+                        f"✅ Используется адаптивный sl_percent={sl_percent_value:.2f}% для {symbol} "
+                        f"(regime={regime})"
+                    )
+            
+            if sl_percent_value is None:
+                # Fallback на глобальный sl_percent из конфига
+                sl_percent_value = getattr(self.scalping_config, "sl_percent", 1.2)
+                logger.warning(
+                    f"⚠️ FALLBACK: Используется глобальный sl_percent={sl_percent_value:.2f}% для {symbol} "
+                    f"(regime={regime}, regime_params={'пуст' if not regime_params else 'не содержит sl_percent'})"
+                )
+
+            # Рассчитываем минимальный SL в абсолютных единицах
+            sl_percent_abs = entry_price * (sl_percent_value / 100.0)
+
+            # ✅ ИСПРАВЛЕНО: Если ATR-based SL меньше минимального → используем sl_percent
+            # НО: если ATR-based SL больше минимального, используем ATR-based (он более точный)
+            if sl_distance < sl_percent_abs:
+                old_sl_distance = sl_distance
+                sl_distance = sl_percent_abs
+                logger.info(
+                    f"⚠️ ATR-based SL слишком мал ({old_sl_distance/entry_price*100:.2f}%) "
+                    f"→ используем sl_percent fallback ({sl_percent_value:.2f}%) для {symbol} "
+                    f"(regime={regime}, ATR-based={old_sl_distance/entry_price*100:.2f}% < {sl_percent_value:.2f}%)"
+                )
+            else:
+                logger.info(
+                    f"✅ Используется ATR-based SL ({sl_distance/entry_price*100:.2f}%) для {symbol} "
+                    f"(regime={regime}, больше минимального {sl_percent_value:.2f}%)"
+                )
+
             if side.lower() == "buy":
                 tp_price = entry_price + tp_distance
                 sl_price = entry_price - sl_distance
@@ -1321,11 +1368,12 @@ class FuturesOrderExecutor:
                 tp_price = entry_price - tp_distance
                 sl_price = entry_price + sl_distance
 
-            logger.debug(
-                f"🎯 Aдаптивные TP/SL для {symbol}: "
+            logger.info(
+                f"🎯 Адаптивные TP/SL для {symbol}: "
                 f"regime={regime}, ATR={atr:.2f}, "
                 f"TP={tp_distance/entry_price*100:.2f}%, "
-                f"SL={sl_distance/entry_price*100:.2f}%"
+                f"SL={sl_distance/entry_price*100:.2f}%, "
+                f"entry={entry_price:.2f}, tp_price={tp_price:.2f}, sl_price={sl_price:.2f}"
             )
 
             return tp_price, sl_price
@@ -1429,14 +1477,56 @@ class FuturesOrderExecutor:
     def _get_regime_params(self, regime: str) -> dict:
         """Получает параметры режима из ARM"""
         try:
-            # Если есть доступ к оркестратору
-            if hasattr(self, "orchestrator"):
+            # ✅ ИСПРАВЛЕНО: Если есть доступ к оркестратору - используем его метод
+            if hasattr(self, "orchestrator") and self.orchestrator:
                 return self.orchestrator._get_regime_params(regime)
-            # Иначе из конфига
-            adaptive_regime = self.config.get("adaptive_regime", {})
-            return adaptive_regime.get(regime, {})
+            
+            # ✅ ИСПРАВЛЕНО: Правильный путь к конфигу через scalping_config
+            if not hasattr(self, "scalping_config") or not self.scalping_config:
+                logger.warning("⚠️ scalping_config не найден в OrderExecutor")
+                return {}
+            
+            # Получаем adaptive_regime из scalping_config
+            adaptive_regime = None
+            if hasattr(self.scalping_config, "adaptive_regime"):
+                adaptive_regime = getattr(self.scalping_config, "adaptive_regime", None)
+            elif isinstance(self.scalping_config, dict):
+                adaptive_regime = self.scalping_config.get("adaptive_regime", {})
+            
+            if not adaptive_regime:
+                logger.warning(f"⚠️ adaptive_regime не найден в scalping_config для режима {regime}")
+                return {}
+            
+            # Преобразуем в dict если нужно
+            if not isinstance(adaptive_regime, dict):
+                if hasattr(adaptive_regime, "dict"):
+                    adaptive_regime = adaptive_regime.dict()
+                elif hasattr(adaptive_regime, "model_dump"):
+                    adaptive_regime = adaptive_regime.model_dump()
+                elif hasattr(adaptive_regime, "__dict__"):
+                    adaptive_regime = dict(adaptive_regime.__dict__)
+                else:
+                    adaptive_regime = {}
+            
+            regime_params = adaptive_regime.get(regime.lower(), {})
+            
+            # Преобразуем regime_params в dict если нужно
+            if regime_params and not isinstance(regime_params, dict):
+                if hasattr(regime_params, "dict"):
+                    regime_params = regime_params.dict()
+                elif hasattr(regime_params, "model_dump"):
+                    regime_params = regime_params.model_dump()
+                elif hasattr(regime_params, "__dict__"):
+                    regime_params = dict(regime_params.__dict__)
+                else:
+                    regime_params = {}
+            
+            if not regime_params:
+                logger.warning(f"⚠️ Параметры режима {regime} не найдены в adaptive_regime")
+            
+            return regime_params
         except Exception as e:
-            logger.warning(f"Ошибка получения параметров режима: {e}")
+            logger.error(f"❌ Ошибка получения параметров режима {regime}: {e}", exc_info=True)
             return {}
 
     async def cancel_order(self, order_id: str, symbol: str) -> Dict[str, Any]:

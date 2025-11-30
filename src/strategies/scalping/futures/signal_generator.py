@@ -3509,6 +3509,13 @@ class FuturesSignalGenerator:
                 )
                 if current_regime_name:
                     signal["regime"] = current_regime_name
+                else:
+                    # ✅ ИСПРАВЛЕНО: Явно устанавливаем fallback, если режим не определен
+                    signal["regime"] = "ranging"
+                    logger.warning(
+                        f"⚠️ Режим не определен для {symbol} при генерации сигнала, "
+                        f"используется fallback 'ranging'"
+                    )
 
                 symbol_profile = self.symbol_profiles.get(symbol, {})
                 regime_key = (current_regime_name or "ranging").lower()
@@ -4076,6 +4083,13 @@ class FuturesSignalGenerator:
                 )
                 if current_regime_name:
                     signal["regime"] = current_regime_name
+                else:
+                    # ✅ ИСПРАВЛЕНО: Явно устанавливаем fallback, если режим не определен
+                    signal["regime"] = "ranging"
+                    logger.warning(
+                        f"⚠️ Режим не определен для {symbol} при генерации сигнала, "
+                        f"используется fallback 'ranging'"
+                    )
 
                 symbol_profile = self.symbol_profiles.get(symbol, {})
                 regime_key = (current_regime_name or "ranging").lower()

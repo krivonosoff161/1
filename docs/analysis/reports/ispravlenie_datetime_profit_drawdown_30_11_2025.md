@@ -145,3 +145,6 @@ entry_time_normalized = entry_time.replace(tzinfo=timezone.utc)  # Создае�
 
 **Все пары (BTC-USDT, ETH-USDT, SOL-USDT, DOGE-USDT, XRP-USDT) теперь защищены от этой ошибки!** ✅
 
+
+
+
