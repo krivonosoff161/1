@@ -5,6 +5,7 @@ ExitAnalyzer - Централизованное управление закры�
 Использует все ресурсы бота: ADX, Order Flow, MTF, индикаторы.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -32,6 +33,7 @@ class ExitAnalyzer:
         orchestrator=None,  # Orchestrator для доступа к ADX, Order Flow, MTF
         config_manager=None,  # ConfigManager для получения параметров
         signal_generator=None,  # SignalGenerator для получения режима и индикаторов
+        signal_locks_ref: Optional[Dict[str, asyncio.Lock]] = None,  # ✅ FIX: Race condition
     ):
         """
         Инициализация ExitAnalyzer.
@@ -43,6 +45,7 @@ class ExitAnalyzer:
             orchestrator: Orchestrator для доступа к модулям (опционально)
             config_manager: ConfigManager для получения параметров (опционально)
             signal_generator: SignalGenerator для получения режима (опционально)
+            signal_locks_ref: Ссылка на словарь блокировок по символам (опционально)
         """
         self.position_registry = position_registry
         self.data_registry = data_registry
@@ -50,6 +53,9 @@ class ExitAnalyzer:
         self.orchestrator = orchestrator
         self.config_manager = config_manager
         self.signal_generator = signal_generator
+        
+        # ✅ FIX: Используем существующие locks для предотвращения race condition
+        self._signal_locks_ref = signal_locks_ref or {}
 
         # Получаем доступ к модулям через orchestrator
         self.fast_adx = None
@@ -96,6 +102,19 @@ class ExitAnalyzer:
         import time
 
         analysis_start = time.perf_counter()
+        
+        # ✅ FIX: Получаем или создаём lock для символа (предотвращение race condition)
+        if symbol not in self._signal_locks_ref:
+            self._signal_locks_ref[symbol] = asyncio.Lock()
+        
+        async with self._signal_locks_ref[symbol]:
+            return await self._analyze_position_impl(symbol, analysis_start)
+
+    async def _analyze_position_impl(
+        self, symbol: str, analysis_start: float
+    ) -> Optional[Dict[str, Any]]:
+        """Внутренняя реализация analyze_position под lock."""
+        import time
 
         try:
             # Получаем позицию и метаданные

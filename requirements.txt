@@ -20,3 +20,4 @@ alembic==1.12.1
 redis==5.0.1
 prometheus-client==0.18.0
 psutil==5.9.6  # ✅ НОВОЕ: Для логирования memory usage
+cachetools==6.2.2  # ✅ НОВОЕ: Для TTLCache (идемпотентность posId)

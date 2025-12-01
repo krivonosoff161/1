@@ -6,8 +6,10 @@ Risk Manager для Futures торговли.
 - Проверка безопасности маржи
 - Интеграция с ConfigManager
 - Интеграция с существующими risk модулями
+- ✅ FIX: Circuit breaker для серии убытков
 """
 
+import time
 from typing import Any, Dict, Optional
 
 from loguru import logger
@@ -66,7 +68,17 @@ class FuturesRiskManager:
 
         # Получаем symbol_profiles из config_manager
         self.symbol_profiles = config_manager.get_symbol_profiles()
-
+        
+        # ✅ FIX: Circuit breaker для серии убытков - АДАПТИВНО из конфига
+        self.pair_loss_streak: Dict[str, int] = {}  # symbol → кол-во убытков подряд
+        self.pair_block_until: Dict[str, float] = {}  # symbol → monotonic time до которого блок
+        
+        # ✅ FIX: Читаем из конфига, не хард-код
+        self._max_consecutive_losses = getattr(self.risk_config, "consecutive_losses_limit", None) or 5
+        self._block_duration_minutes = getattr(self.risk_config, "pair_block_duration_min", None) or 30
+        
+        logger.info(f"ADAPT_LOAD consecutive_losses_limit={self._max_consecutive_losses}")
+        logger.info(f"ADAPT_LOAD pair_block_duration_min={self._block_duration_minutes}")
         logger.info("✅ FuturesRiskManager initialized")
 
     def _get_symbol_regime_profile(
@@ -128,6 +140,53 @@ class FuturesRiskManager:
             self.orchestrator, "_check_emergency_stop_unlock"
         ):
             return await self.orchestrator._check_emergency_stop_unlock()
+
+    # ✅ FIX: Circuit breaker методы для серии убытков
+    def record_trade_result(self, symbol: str, is_profit: bool):
+        """
+        Записывает результат сделки для circuit breaker.
+        Вызывать после закрытия каждой сделки.
+        """
+        if is_profit:
+            # Сбрасываем серию при прибыли
+            if symbol in self.pair_loss_streak:
+                old_streak = self.pair_loss_streak[symbol]
+                if old_streak > 0:
+                    logger.info(f"PAIR_STREAK_RESET {symbol}: {old_streak} → 0 (profit)")
+            self.pair_loss_streak[symbol] = 0
+        else:
+            # Увеличиваем серию при убытке
+            self.pair_loss_streak[symbol] = self.pair_loss_streak.get(symbol, 0) + 1
+            streak = self.pair_loss_streak[symbol]
+            
+            if streak < self._max_consecutive_losses:
+                logger.info(f"PAIR_STREAK {symbol} {streak}/{self._max_consecutive_losses}")
+            else:
+                # Блокируем пару
+                block_until = time.monotonic() + (self._block_duration_minutes * 60)
+                self.pair_block_until[symbol] = block_until
+                logger.critical(
+                    f"PAIR_BLOCK {symbol} {streak}/{self._max_consecutive_losses} "
+                    f"→ blocked for {self._block_duration_minutes} min"
+                )
+    
+    def is_symbol_blocked(self, symbol: str) -> bool:
+        """Проверяет, заблокирован ли символ из-за серии убытков."""
+        if symbol not in self.pair_block_until:
+            return False
+        
+        block_until = self.pair_block_until[symbol]
+        if time.monotonic() >= block_until:
+            # Блокировка истекла - сбрасываем
+            del self.pair_block_until[symbol]
+            self.pair_loss_streak[symbol] = 0
+            logger.info(f"PAIR_UNBLOCK {symbol}: block expired, streak reset")
+            return False
+        
+        # Блокировка активна
+        remaining = (block_until - time.monotonic()) / 60
+        logger.debug(f"PAIR_BLOCKED {symbol}: {remaining:.1f} min remaining")
+        return True
 
     async def calculate_position_size(
         self,

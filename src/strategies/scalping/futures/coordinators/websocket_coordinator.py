@@ -544,8 +544,8 @@ class WebSocketCoordinator:
 
                     # Сохраняем entry_time и другие метаданные при обновлении
                     if "entry_time" not in self.active_positions_ref[symbol]:
-                        update_data["entry_time"] = datetime.now()
-                        update_data["timestamp"] = datetime.now()
+                        update_data["entry_time"] = datetime.now(timezone.utc)
+                        update_data["timestamp"] = datetime.now(timezone.utc)
                     # Сохраняем режим и другие метаданные, если они есть
                     saved_regime = self.active_positions_ref[symbol].get("regime")
                     saved_position_side = self.active_positions_ref[symbol].get(
@@ -684,9 +684,10 @@ class WebSocketCoordinator:
                     )
 
                 # Получаем детали позиции для логирования
-                entry_price = position.get("entry_price", 0)
+                # ✅ FIX: Приводим к float чтобы избежать TypeError
+                entry_price = float(position.get("entry_price", 0) or 0)
                 entry_time = position.get("entry_time")
-                size = position.get("size", 0)
+                size = float(position.get("size", 0) or 0)
                 side = position.get("position_side", "unknown")
 
                 # Вычисляем время в позиции

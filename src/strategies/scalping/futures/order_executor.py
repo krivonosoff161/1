@@ -130,7 +130,13 @@ class FuturesOrderExecutor:
             )
 
             if not is_valid:
-                logger.warning(f"Сигнал не прошел валидацию: {reason}")
+                # ✅ FIX: Улучшенный logging для gap/spread блокировки
+                if "спред" in reason.lower() or "spread" in reason.lower():
+                    logger.warning(f"GAP_BLOCK {symbol}: {reason}")
+                elif "проскальзывание" in reason.lower() or "slippage" in reason.lower():
+                    logger.warning(f"SLIPPAGE_BLOCK {symbol}: {reason}")
+                else:
+                    logger.warning(f"VALIDATION_BLOCK {symbol}: {reason}")
                 return {"success": False, "error": f"Валидация не пройдена: {reason}"}
 
             # Исполнение ордера
@@ -745,9 +751,16 @@ class FuturesOrderExecutor:
                     f"⚠️ Не удалось получить лучшие цены перед market-ордером {symbol}: {e}"
                 )
 
+            # ✅ FIX: Замер latency (send_time → fill_time)
+            import time as _time
+            send_time = _time.perf_counter()
+            
             result = await self.client.place_futures_order(
                 symbol=symbol, side=side, size=size, order_type="market"
             )
+            
+            fill_time = _time.perf_counter()
+            latency_ms = int((fill_time - send_time) * 1000)
 
             if result.get("code") == "0":
                 order_id = result.get("data", [{}])[0].get("ordId")
@@ -779,6 +792,12 @@ class FuturesOrderExecutor:
                         logger.debug(
                             f"📏 Slippage {symbol} {side}: {slippage_bps:.2f} bps (ref={ref:.4f}, fill={fill_px:.4f})"
                         )
+                        # ✅ FIX: FILL log с latency и slippage
+                        logger.info(
+                            f"FILL {symbol} latency={latency_ms}ms slippage={slippage_bps:.2f}bps"
+                        )
+                        if latency_ms > 300:
+                            logger.warning(f"FILL_LATENCY_HIGH {symbol} {latency_ms}ms")
                 except Exception as e:
                     logger.debug(
                         f"⚠️ Не удалось обновить метрики slippage для {symbol}: {e}"
@@ -820,15 +839,19 @@ class FuturesOrderExecutor:
             limit_order_config = order_executor_config.get("limit_order", {})
 
             # Получаем post_only по режиму
+            # ✅ FIX: post_only=True по умолчанию для экономии комиссий (0.02% вместо 0.05%)
             if regime:
                 regime_config = limit_order_config.get("by_regime", {}).get(
                     regime.lower(), {}
                 )
                 post_only = regime_config.get(
-                    "post_only", limit_order_config.get("post_only", False)
+                    "post_only", limit_order_config.get("post_only", True)
                 )
             else:
-                post_only = limit_order_config.get("post_only", False)
+                post_only = limit_order_config.get("post_only", True)
+            
+            if post_only:
+                logger.info(f"POST_ONLY enabled {symbol} (maker fee 0.02%)")
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ценовые лимиты перед размещением ордера
             price_limits = await self.client.get_price_limits(symbol)

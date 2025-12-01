@@ -3370,7 +3370,7 @@ class FuturesPositionManager:
                 logger.warning(
                     f"⚠️ Не удалось найти entry_time для {symbol}, используем текущее время (duration_sec может быть 0)"
                 )
-                entry_time = datetime.now()
+                entry_time = datetime.now(timezone.utc)
 
             # ✅ ЗАДАЧА #10: Получаем комиссию из конфига (может быть в scalping или на верхнем уровне)
             commission_config = getattr(self.scalping_config, "commission", None)
@@ -3523,24 +3523,36 @@ class FuturesPositionManager:
                         pnl_percent_from_margin = (net_pnl / margin_used) * 100
                         logger.info(
                             f"✅ Позиция {symbol} успешно закрыта по причине: {reason} | "
-                            f"Entry: ${entry_price:.2f}, Exit: ${exit_price:.2f}, "
+                            f"Entry: ${entry_price:.6f}, Exit: ${exit_price:.6f}, "
                             f"Gross PnL: ${gross_pnl:.4f}, Net PnL: ${net_pnl:.4f} ({pnl_percent_from_margin:.2f}% от маржи), "
                             f"Время в позиции: {duration_sec/60:.1f} мин"
                         )
                     else:
                         logger.info(
                             f"✅ Позиция {symbol} успешно закрыта по причине: {reason} | "
-                            f"Entry: ${entry_price:.2f}, Exit: ${exit_price:.2f}, "
+                            f"Entry: ${entry_price:.6f}, Exit: ${exit_price:.6f}, "
                             f"Gross PnL: ${gross_pnl:.4f}, Net PnL: ${net_pnl:.4f}, "
                             f"Время в позиции: {duration_sec/60:.1f} мин"
                         )
                 except Exception as e:
                     logger.info(
                         f"✅ Позиция {symbol} успешно закрыта по причине: {reason} | "
-                        f"Entry: ${entry_price:.2f}, Exit: ${exit_price:.2f}, "
+                        f"Entry: ${entry_price:.6f}, Exit: ${exit_price:.6f}, "
                         f"Gross PnL: ${gross_pnl:.4f}, Net PnL: ${net_pnl:.4f}, "
                         f"Время в позиции: {duration_sec/60:.1f} мин (ошибка расчета PnL%: {e})"
                     )
+
+                # ✅ FIX: EXIT_HIT log + slippage warning
+                try:
+                    # Рассчитываем slippage относительно entry_price (% от цены входа)
+                    exit_slippage = abs(exit_price - entry_price) / entry_price * 100 if entry_price > 0 else 0
+                    logger.info(
+                        f"EXIT_HIT {symbol} type={reason} fill={exit_price:.4f} slippage={exit_slippage:.2f}%"
+                    )
+                    if exit_slippage > 0.3:
+                        logger.warning(f"EXIT_SLIP_HIGH {symbol} {exit_slippage:.2f}%")
+                except Exception:
+                    pass
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
                 trade_result = TradeResult(
@@ -3554,11 +3566,17 @@ class FuturesPositionManager:
                     net_pnl=net_pnl,
                     duration_sec=duration_sec,
                     reason=reason,
-                    timestamp=datetime.now(),
+                    timestamp=datetime.now(timezone.utc),
                 )
 
                 # Обновление статистики
                 self._update_close_stats(reason)
+                
+                # ✅ FIX: Circuit breaker - записываем результат сделки
+                if hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "risk_manager"):
+                        is_profit = net_pnl > 0
+                        self.orchestrator.risk_manager.record_trade_result(symbol, is_profit)
 
                 # Удаление из активных позиций
                 if symbol in self.active_positions:
@@ -4690,7 +4708,7 @@ class FuturesPositionManager:
                                 entry_time = None
 
                     if entry_time is None:
-                        entry_time = datetime.now()
+                        entry_time = datetime.now(timezone.utc)
 
                     # ✅ ЗАДАЧА #10: Комиссия из конфига (может быть в scalping или на верхнем уровне)
                     commission_config = getattr(

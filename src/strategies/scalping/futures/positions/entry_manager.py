@@ -8,6 +8,7 @@ EntryManager - Управление открытием позиций.
 - Инициализацию Trailing Stop Loss
 """
 
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -132,7 +133,7 @@ class EntryManager:
 
             logger.info(
                 f"✅ EntryManager: Позиция {symbol} открыта и зарегистрирована "
-                f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.2f}, "
+                f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.6f}, "
                 f"side={position_data.get('position_side')}, regime={regime})"
             )
 
@@ -276,13 +277,56 @@ class EntryManager:
                         }
                         break
 
-                # Если позицию не нашли, используем данные из order_result
+                # Если позицию не нашли, делаем retry с задержкой
                 if not position_data:
                     logger.warning(
-                        f"⚠️ EntryManager: Позиция {symbol} не найдена на бирже после открытия, "
-                        f"используем данные из order_result"
+                        f"⚠️ EntryManager: Позиция {symbol} не найдена сразу, ждём 0.5 сек и делаем retry..."
+                    )
+                    await asyncio.sleep(0.5)
+                    
+                    # Retry получения позиции
+                    try:
+                        positions_retry = await client.get_positions()
+                        for pos in positions_retry:
+                            pos_inst_id = pos.get("instId", "")
+                            pos_size = abs(float(pos.get("pos", "0")))
+                            if (pos_inst_id == inst_id or pos_inst_id == symbol) and pos_size > 0.000001:
+                                pos_side_raw = pos.get("posSide", "").lower()
+                                position_side = pos_side_raw if pos_side_raw in ["long", "short"] else ("long" if float(pos.get("pos", "0")) > 0 else "short")
+                                
+                                # ✅ FIX: Получаем ТОЧНУЮ цену avgPx с биржи
+                                real_entry_price = float(pos.get("avgPx", "0"))
+                                logger.info(f"✅ Retry успешен! Получена реальная entry_price={real_entry_price:.6f} для {symbol}")
+                                
+                                position_data = {
+                                    "symbol": symbol,
+                                    "instId": pos.get("instId", ""),
+                                    "pos": pos.get("pos", "0"),
+                                    "posSide": position_side,
+                                    "avgPx": pos.get("avgPx", "0"),
+                                    "markPx": pos.get("markPx", pos.get("avgPx", "0")),
+                                    "size": pos_size,
+                                    "entry_price": real_entry_price,
+                                    "position_side": position_side,
+                                    "margin_used": float(pos.get("margin", "0")) if pos.get("margin") else 0.0,
+                                }
+                                break
+                    except Exception as retry_e:
+                        logger.warning(f"⚠️ Retry не удался: {retry_e}")
+                
+                # Если всё ещё не нашли — используем order_result.price (лимитная цена)
+                if not position_data:
+                    logger.warning(
+                        f"⚠️ EntryManager: Позиция {symbol} не найдена на бирже после retry, "
+                        f"используем цену из order_result"
                     )
                     side = signal.get("side", "").lower()
+                    # ✅ FIX: Используем order_result.price (лимитная цена) вместо signal.price (может быть округлена)
+                    fallback_price = order_result.get("price", signal.get("price", 0.0))
+                    if isinstance(fallback_price, str):
+                        fallback_price = float(fallback_price) if fallback_price else 0.0
+                    logger.info(f"📊 Fallback entry_price={fallback_price:.6f} для {symbol} (из order_result)")
+                    
                     position_data = {
                         "symbol": symbol,
                         "instId": f"{symbol}-SWAP",
@@ -290,10 +334,10 @@ class EntryManager:
                         if side == "buy"
                         else str(-position_size),
                         "posSide": "long" if side == "buy" else "short",
-                        "avgPx": signal.get("price", "0"),
-                        "markPx": signal.get("price", "0"),
+                        "avgPx": str(fallback_price),
+                        "markPx": str(fallback_price),
                         "size": position_size,
-                        "entry_price": signal.get("price", 0.0),
+                        "entry_price": fallback_price,
                         "position_side": "long" if side == "buy" else "short",
                         "margin_used": 0.0,  # Будет рассчитано позже
                     }
@@ -301,18 +345,24 @@ class EntryManager:
             except Exception as e:
                 logger.warning(
                     f"⚠️ EntryManager: Ошибка получения данных позиции с биржи для {symbol}: {e}, "
-                    f"используем упрощенные данные"
+                    f"используем данные из order_result"
                 )
                 side = signal.get("side", "").lower()
+                # ✅ FIX: Используем order_result.price вместо signal.price
+                fallback_price = order_result.get("price", signal.get("price", 0.0))
+                if isinstance(fallback_price, str):
+                    fallback_price = float(fallback_price) if fallback_price else 0.0
+                logger.info(f"📊 Exception fallback entry_price={fallback_price:.6f} для {symbol}")
+                
                 position_data = {
                     "symbol": symbol,
                     "instId": f"{symbol}-SWAP",
                     "pos": str(position_size) if side == "buy" else str(-position_size),
                     "posSide": "long" if side == "buy" else "short",
-                    "avgPx": signal.get("price", "0"),
-                    "markPx": signal.get("price", "0"),
+                    "avgPx": str(fallback_price),
+                    "markPx": str(fallback_price),
                     "size": position_size,
-                    "entry_price": signal.get("price", 0.0),
+                    "entry_price": fallback_price,
                     "position_side": "long" if side == "buy" else "short",
                     "margin_used": 0.0,
                 }
@@ -359,7 +409,7 @@ class EntryManager:
 
             logger.info(
                 f"✅ EntryManager: Позиция {symbol} открыта и зарегистрирована в PositionRegistry "
-                f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.2f}, "
+                f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.6f}, "
                 f"side={position_data.get('position_side')}, regime={regime})"
             )
 

@@ -13,6 +13,7 @@ import time
 from typing import Callable, Dict, Optional
 
 import aiohttp
+from cachetools import TTLCache
 from loguru import logger
 
 
@@ -72,6 +73,13 @@ class PrivateWebSocketManager:
 
         # Флаг для остановки
         self.should_run = True
+        
+        # ✅ FIX: Дедупликация posId с TTL 5 минут (предотвращает двойную обработку)
+        self.seen_pos: TTLCache = TTLCache(maxsize=10_000, ttl=300)
+        
+        # ✅ FIX: Счётчик reconnect с exponential backoff
+        self._reconnect_attempts = 0
+        self._max_reconnect_attempts = 10
 
         logger.info(f"PrivateWebSocketManager инициализирован (sandbox={sandbox})")
 
@@ -333,7 +341,19 @@ class PrivateWebSocketManager:
             if channel == "positions":
                 positions_data = data.get("data", [])
                 if positions_data and self.position_callback:
-                    await self.position_callback(positions_data)
+                    # ✅ FIX: Дедупликация по posId (биржа может слать дубли)
+                    filtered_positions = []
+                    for pos in positions_data:
+                        pos_id = pos.get("posId")
+                        if pos_id and pos_id in self.seen_pos:
+                            logger.debug(f"⏭️ Пропуск дубликата позиции: {pos_id}")
+                            continue
+                        if pos_id:
+                            self.seen_pos[pos_id] = True
+                        filtered_positions.append(pos)
+                    
+                    if filtered_positions:
+                        await self.position_callback(filtered_positions)
 
             elif channel == "orders":
                 orders_data = data.get("data", [])
@@ -369,17 +389,45 @@ class PrivateWebSocketManager:
 
         # Пытаемся переподключиться
         if self.should_run:
-            logger.info("🔄 Попытка переподключения Private WebSocket...")
-            await asyncio.sleep(5)
+            # ✅ FIX: Проверка лимита переподключений
+            if self._reconnect_attempts >= self._max_reconnect_attempts:
+                logger.critical(
+                    f"WS_MAX_RECONNECT reached ({self._max_reconnect_attempts}), stopping"
+                )
+                self.should_run = False
+                return
+            
+            # ✅ FIX: Exponential backoff (5, 10, 20, 40... max 300 сек)
+            delay = min(5 * (2 ** self._reconnect_attempts), 300)
+            self._reconnect_attempts += 1
+            
+            logger.info(
+                f"🔄 Попытка переподключения Private WebSocket "
+                f"({self._reconnect_attempts}/{self._max_reconnect_attempts}, delay={delay}s)..."
+            )
+            
+            # ✅ FIX: Закрываем старый сокет перед reconnect (предотвращает утечку)
+            if self.ws and not self.ws.closed:
+                try:
+                    await self.ws.close()
+                    logger.info("WS_DISCONNECT old socket closed")
+                except Exception:
+                    pass
+                self.ws = None
+            
+            await asyncio.sleep(delay)
             if self.should_run:
-                await self.connect()
-                # Восстанавливаем подписки
-                if self.position_callback:
-                    await self.subscribe_positions(self.position_callback)
-                if self.order_callback:
-                    await self.subscribe_orders(self.order_callback)
-                if self.account_callback:
-                    await self.subscribe_account(self.account_callback)
+                success = await self.connect()
+                if success:
+                    # ✅ FIX: Сброс счётчика после успешного подключения
+                    self._reconnect_attempts = 0
+                    # Восстанавливаем подписки
+                    if self.position_callback:
+                        await self.subscribe_positions(self.position_callback)
+                    if self.order_callback:
+                        await self.subscribe_orders(self.order_callback)
+                    if self.account_callback:
+                        await self.subscribe_account(self.account_callback)
 
     async def disconnect(self):
         """Отключение от Private WebSocket."""

@@ -13,7 +13,7 @@ Futures Orchestrator для скальпинг стратегии.
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -351,6 +351,9 @@ class FuturesScalpingOrchestrator:
             short_threshold=of_short,
         )
 
+        # ✅ FIX: Создаём signal_locks раньше для ExitAnalyzer (предотвращение race condition)
+        self.signal_locks = {}  # Будет создаваться по требованию
+        
         # ✅ НОВОЕ: Инициализация ExitAnalyzer после создания fast_adx и order_flow
         # (position_registry и data_registry уже созданы выше)
         # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия позиций
@@ -361,6 +364,7 @@ class FuturesScalpingOrchestrator:
             orchestrator=self,  # Передаем orchestrator для доступа к модулям
             config_manager=self.config_manager,
             signal_generator=self.signal_generator,
+            signal_locks_ref=self.signal_locks,  # ✅ FIX: Передаём signal_locks для race condition
         )
         logger.info("✅ ExitAnalyzer инициализирован в orchestrator")
 
@@ -555,7 +559,7 @@ class FuturesScalpingOrchestrator:
         self.last_orders_check_time = {}
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Блокировки для предотвращения race condition
         # Блокировка обработки сигналов по символам: {symbol: asyncio.Lock}
-        self.signal_locks = {}  # Будет создаваться по требованию
+        # (signal_locks уже создан выше для ExitAnalyzer)
 
         # ✅ МОДЕРНИЗАЦИЯ: Параметры синхронизации состояния с биржей (адаптивные)
         check_interval = getattr(self.scalping_config, "check_interval", 5.0) or 5.0
@@ -1404,7 +1408,7 @@ class FuturesScalpingOrchestrator:
                             f"⚠️ cTime/uTime не найдены для {symbol} в данных позиции, "
                             f"используем текущее время (fallback)"
                         )
-                        entry_time_dt = datetime.now()
+                        entry_time_dt = datetime.now(timezone.utc)
 
                     self.active_positions[symbol] = {
                         "instId": inst_id,
@@ -1414,7 +1418,7 @@ class FuturesScalpingOrchestrator:
                         "entry_price": entry_price,
                         "margin": float(pos.get("margin", "0")),
                         "entry_time": entry_time_dt,  # ✅ КРИТИЧЕСКОЕ: Реальное время открытия из API
-                        "timestamp": datetime.now(),
+                        "timestamp": datetime.now(timezone.utc),
                         "time_extended": False,
                     }
 
@@ -1636,6 +1640,11 @@ class FuturesScalpingOrchestrator:
 
             symbol = inst_id.replace("-SWAP", "")
             seen_symbols.add(symbol)
+            
+            # ✅ FIX: DRIFT_ADD log — позиция на бирже, но нет в реестре
+            is_drift_add = symbol not in self.active_positions
+            if is_drift_add:
+                logger.critical(f"DRIFT_ADD {symbol} found on exchange but not in registry")
 
             try:
                 entry_price = float(pos.get("avgPx", 0) or 0)
@@ -1692,7 +1701,8 @@ class FuturesScalpingOrchestrator:
             total_margin += max(margin, 0.0)
 
             effective_price = entry_price or mark_price
-            timestamp = datetime.now()
+            # ✅ FIX #3: Используем UTC для корректного расчета времени в позиции
+            timestamp = datetime.now(timezone.utc)
             active_position = self.active_positions.setdefault(symbol, {})
             if "entry_time" not in active_position:
                 active_position["entry_time"] = timestamp
@@ -1738,6 +1748,46 @@ class FuturesScalpingOrchestrator:
                     "regime": regime,  # ✅ КРИТИЧЕСКОЕ: Сохраняем режим для адаптивных TP
                 }
             )
+
+            # ✅ FIX #1: DRIFT_ADD — принудительная регистрация в PositionRegistry
+            if is_drift_add:
+                try:
+                    # Проверяем что позиции нет в registry
+                    has_in_registry = await self.position_registry.has_position(symbol)
+                    if not has_in_registry:
+                        # Создаём данные позиции для registry
+                        position_data = {
+                            "symbol": symbol,
+                            "instId": inst_id,
+                            "pos": str(pos_size),
+                            "posSide": position_side,
+                            "avgPx": str(effective_price),
+                            "markPx": str(mark_price),
+                            "size": size_in_coins,
+                            "entry_price": effective_price,
+                            "position_side": position_side,
+                            "margin_used": margin,
+                        }
+                        # Создаём metadata
+                        from .positions.entry_manager import PositionMetadata
+                        metadata = PositionMetadata(
+                            entry_time=timestamp,
+                            regime=regime,
+                            balance_profile="small",  # Fallback
+                            entry_price=effective_price,
+                            position_side=position_side,
+                            size_in_coins=size_in_coins,
+                            margin_used=margin,
+                        )
+                        # Регистрируем
+                        await self.position_registry.register_position(
+                            symbol=symbol,
+                            position=position_data,
+                            metadata=metadata,
+                        )
+                        logger.warning(f"DRIFT_ADD_SYNCED {symbol} force-registered in PositionRegistry")
+                except Exception as e:
+                    logger.error(f"DRIFT_ADD_SYNC_FAILED {symbol}: {e}")
 
             # ✅ НОВОЕ: Логируем ADL для всех позиций (если доступно)
             if "adl_rank" in active_position:
@@ -1812,6 +1862,12 @@ class FuturesScalpingOrchestrator:
                         f"⚠️ Не удалось инициализировать TrailingStopLoss для {symbol} "
                         f"при синхронизации: entry_price={effective_price}, side={trailing_side}"
                     )
+                # ✅ FIX #2: Логируем создание TSL для DRIFT_ADD позиций
+                elif is_drift_add:
+                    logger.warning(
+                        f"DRIFT_ADD_TSL_CREATED {symbol} TSL initialized "
+                        f"(entry={effective_price:.4f}, side={trailing_side}, regime={regime})"
+                    )
 
             if effective_price > 0:
                 self.max_size_limiter.position_sizes[symbol] = (
@@ -1820,6 +1876,8 @@ class FuturesScalpingOrchestrator:
 
         stale_symbols = set(self.active_positions.keys()) - seen_symbols
         for symbol in list(stale_symbols):
+            # ✅ FIX: DRIFT_REMOVE log — позиция в реестре, но нет на бирже
+            logger.warning(f"DRIFT_REMOVE {symbol} not on exchange")
             logger.info(
                 f"♻️ Позиция {symbol} отсутствует на бирже, очищаем локальное состояние"
             )
@@ -3507,8 +3565,9 @@ class FuturesScalpingOrchestrator:
 
             try:
                 # ✅ ЛОГИРОВАНИЕ: Логируем причину закрытия и детали позиции
-                entry_price = position.get("entry_price", 0)
-                size = position.get("size", 0)
+                # ✅ FIX: Приводим к float чтобы избежать TypeError при сравнении str vs int
+                entry_price = float(position.get("entry_price", 0) or 0)
+                size = float(position.get("size", 0) or 0)
                 side = position.get("position_side", "unknown")
                 entry_time = position.get("entry_time")
 
@@ -3669,8 +3728,9 @@ class FuturesScalpingOrchestrator:
                             f"⚠️ Не удалось обновить маржу с биржи после закрытия позиции: {e}"
                         )
 
-                position_size = position.get("size", 0)
-                entry_price = position.get("entry_price", 0)
+                # ✅ FIX: Приводим к float чтобы избежать TypeError
+                position_size = float(position.get("size", 0) or 0)
+                entry_price = float(position.get("entry_price", 0) or 0)
                 if position_size > 0 and entry_price > 0:
                     size_usd = position_size * entry_price
                     if symbol in self.max_size_limiter.position_sizes:

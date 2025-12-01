@@ -32,15 +32,19 @@ class PnLCalculator:
         self.client = client
         self.config = config
 
-        # Комиссии по умолчанию
-        self.maker_fee_rate = 0.0002  # 0.02%
-        self.taker_fee_rate = 0.0005  # 0.05%
+        # ✅ FIX: Комиссии из конфига (не хард-код)
+        self.maker_fee_rate = 0.0002  # Fallback
+        self.taker_fee_rate = 0.0005  # Fallback
 
         if config:
             # Загружаем комиссии из конфига
-            commission_config = getattr(config, "scalping", {}).get(
-                "commission", {}
-            ) or getattr(config, "commission", {})
+            commission_config = getattr(config, "scalping", {})
+            if hasattr(commission_config, "commission"):
+                commission_config = commission_config.commission
+            elif isinstance(commission_config, dict):
+                commission_config = commission_config.get("commission", {})
+            else:
+                commission_config = getattr(config, "commission", {})
             if isinstance(commission_config, dict):
                 self.maker_fee_rate = commission_config.get(
                     "maker_fee_rate", self.maker_fee_rate
@@ -56,6 +60,9 @@ class PnLCalculator:
                     commission_config, "taker_fee_rate", self.taker_fee_rate
                 )
 
+        # ✅ FIX: ADAPT_LOAD логирование
+        logger.info(f"ADAPT_LOAD maker_fee_rate={self.maker_fee_rate:.4%}")
+        logger.info(f"ADAPT_LOAD taker_fee_rate={self.taker_fee_rate:.4%}")
         logger.info(
             f"✅ PnLCalculator инициализирован "
             f"(maker={self.maker_fee_rate:.4%}, taker={self.taker_fee_rate:.4%})"
