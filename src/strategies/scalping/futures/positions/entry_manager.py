@@ -283,21 +283,33 @@ class EntryManager:
                         f"⚠️ EntryManager: Позиция {symbol} не найдена сразу, ждём 0.5 сек и делаем retry..."
                     )
                     await asyncio.sleep(0.5)
-                    
+
                     # Retry получения позиции
                     try:
                         positions_retry = await client.get_positions()
                         for pos in positions_retry:
                             pos_inst_id = pos.get("instId", "")
                             pos_size = abs(float(pos.get("pos", "0")))
-                            if (pos_inst_id == inst_id or pos_inst_id == symbol) and pos_size > 0.000001:
+                            if (
+                                pos_inst_id == inst_id or pos_inst_id == symbol
+                            ) and pos_size > 0.000001:
                                 pos_side_raw = pos.get("posSide", "").lower()
-                                position_side = pos_side_raw if pos_side_raw in ["long", "short"] else ("long" if float(pos.get("pos", "0")) > 0 else "short")
-                                
+                                position_side = (
+                                    pos_side_raw
+                                    if pos_side_raw in ["long", "short"]
+                                    else (
+                                        "long"
+                                        if float(pos.get("pos", "0")) > 0
+                                        else "short"
+                                    )
+                                )
+
                                 # ✅ FIX: Получаем ТОЧНУЮ цену avgPx с биржи
                                 real_entry_price = float(pos.get("avgPx", "0"))
-                                logger.info(f"✅ Retry успешен! Получена реальная entry_price={real_entry_price:.6f} для {symbol}")
-                                
+                                logger.info(
+                                    f"✅ Retry успешен! Получена реальная entry_price={real_entry_price:.6f} для {symbol}"
+                                )
+
                                 position_data = {
                                     "symbol": symbol,
                                     "instId": pos.get("instId", ""),
@@ -308,12 +320,14 @@ class EntryManager:
                                     "size": pos_size,
                                     "entry_price": real_entry_price,
                                     "position_side": position_side,
-                                    "margin_used": float(pos.get("margin", "0")) if pos.get("margin") else 0.0,
+                                    "margin_used": float(pos.get("margin", "0"))
+                                    if pos.get("margin")
+                                    else 0.0,
                                 }
                                 break
                     except Exception as retry_e:
                         logger.warning(f"⚠️ Retry не удался: {retry_e}")
-                
+
                 # Если всё ещё не нашли — используем order_result.price (лимитная цена)
                 if not position_data:
                     logger.warning(
@@ -324,9 +338,13 @@ class EntryManager:
                     # ✅ FIX: Используем order_result.price (лимитная цена) вместо signal.price (может быть округлена)
                     fallback_price = order_result.get("price", signal.get("price", 0.0))
                     if isinstance(fallback_price, str):
-                        fallback_price = float(fallback_price) if fallback_price else 0.0
-                    logger.info(f"📊 Fallback entry_price={fallback_price:.6f} для {symbol} (из order_result)")
-                    
+                        fallback_price = (
+                            float(fallback_price) if fallback_price else 0.0
+                        )
+                    logger.info(
+                        f"📊 Fallback entry_price={fallback_price:.6f} для {symbol} (из order_result)"
+                    )
+
                     position_data = {
                         "symbol": symbol,
                         "instId": f"{symbol}-SWAP",
@@ -352,8 +370,10 @@ class EntryManager:
                 fallback_price = order_result.get("price", signal.get("price", 0.0))
                 if isinstance(fallback_price, str):
                     fallback_price = float(fallback_price) if fallback_price else 0.0
-                logger.info(f"📊 Exception fallback entry_price={fallback_price:.6f} для {symbol}")
-                
+                logger.info(
+                    f"📊 Exception fallback entry_price={fallback_price:.6f} для {symbol}"
+                )
+
                 position_data = {
                     "symbol": symbol,
                     "instId": f"{symbol}-SWAP",

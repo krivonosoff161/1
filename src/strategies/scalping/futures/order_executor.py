@@ -133,7 +133,9 @@ class FuturesOrderExecutor:
                 # ✅ FIX: Улучшенный logging для gap/spread блокировки
                 if "спред" in reason.lower() or "spread" in reason.lower():
                     logger.warning(f"GAP_BLOCK {symbol}: {reason}")
-                elif "проскальзывание" in reason.lower() or "slippage" in reason.lower():
+                elif (
+                    "проскальзывание" in reason.lower() or "slippage" in reason.lower()
+                ):
                     logger.warning(f"SLIPPAGE_BLOCK {symbol}: {reason}")
                 else:
                     logger.warning(f"VALIDATION_BLOCK {symbol}: {reason}")
@@ -753,12 +755,13 @@ class FuturesOrderExecutor:
 
             # ✅ FIX: Замер latency (send_time → fill_time)
             import time as _time
+
             send_time = _time.perf_counter()
-            
+
             result = await self.client.place_futures_order(
                 symbol=symbol, side=side, size=size, order_type="market"
             )
-            
+
             fill_time = _time.perf_counter()
             latency_ms = int((fill_time - send_time) * 1000)
 
@@ -849,7 +852,7 @@ class FuturesOrderExecutor:
                 )
             else:
                 post_only = limit_order_config.get("post_only", True)
-            
+
             if post_only:
                 logger.info(f"POST_ONLY enabled {symbol} (maker fee 0.02%)")
 

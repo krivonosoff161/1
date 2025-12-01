@@ -112,7 +112,7 @@ class TrailingSLCoordinator:
     async def on_regime_change(self, new_regime: str, symbol: Optional[str] = None):
         """
         ✅ FIX: Перезагрузка параметров трейлинга при смене режима.
-        
+
         Args:
             new_regime: Новый режим рынка (trending/ranging/choppy)
             symbol: Конкретный символ (если None — для всех)
@@ -122,17 +122,19 @@ class TrailingSLCoordinator:
             if not params:
                 logger.warning(f"⚠️ Не найдены TSL параметры для режима {new_regime}")
                 return
-            
+
             trail_distance_mult = params.get("trail_distance_multiplier", 1.0)
             trail_start_mult = params.get("trail_start_multiplier", 1.0)
-            
+
             logger.info(
                 f"TRAIL_RELOAD regime={new_regime} dist_mult={trail_distance_mult:.1f} start_mult={trail_start_mult:.1f}"
             )
-            
+
             # Обновляем параметры для конкретного символа или всех
-            symbols_to_update = [symbol] if symbol else list(self.trailing_sl_by_symbol.keys())
-            
+            symbols_to_update = (
+                [symbol] if symbol else list(self.trailing_sl_by_symbol.keys())
+            )
+
             for sym in symbols_to_update:
                 tsl = self.trailing_sl_by_symbol.get(sym)
                 if tsl:
@@ -140,9 +142,13 @@ class TrailingSLCoordinator:
                     if hasattr(tsl, "regime_multiplier"):
                         tsl.regime_multiplier = params.get("regime_multiplier", 1.0)
                     if hasattr(tsl, "high_profit_threshold"):
-                        tsl.high_profit_threshold = params.get("high_profit_threshold", 0.01)
+                        tsl.high_profit_threshold = params.get(
+                            "high_profit_threshold", 0.01
+                        )
                     if hasattr(tsl, "high_profit_max_factor"):
-                        tsl.high_profit_max_factor = params.get("high_profit_max_factor", 2.0)
+                        tsl.high_profit_max_factor = params.get(
+                            "high_profit_max_factor", 2.0
+                        )
                     logger.debug(f"✅ TSL для {sym} обновлён под режим {new_regime}")
         except Exception as e:
             logger.error(f"❌ Ошибка перезагрузки TSL параметров: {e}")
@@ -574,12 +580,14 @@ class TrailingSLCoordinator:
             stop_loss = tsl.get_stop_loss()
             profit_pct = tsl.get_profit_pct(current_price, include_fees=True)
             profit_pct_gross = tsl.get_profit_pct(current_price, include_fees=False)
-            
+
             # ✅ FIX: TRAIL_DISTANCE_NARROW warning — слишком узкая дистанция
             if stop_loss and current_price > 0:
                 distance_pct = abs(current_price - stop_loss) / current_price * 100
                 if distance_pct < 0.05:
-                    logger.warning(f"TRAIL_DISTANCE_NARROW {symbol} {distance_pct:.2f}%")
+                    logger.warning(
+                        f"TRAIL_DISTANCE_NARROW {symbol} {distance_pct:.2f}%"
+                    )
 
             position_side = position.get(
                 "position_side", position.get("posSide", "long")

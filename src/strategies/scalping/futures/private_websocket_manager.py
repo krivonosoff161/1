@@ -73,10 +73,10 @@ class PrivateWebSocketManager:
 
         # Флаг для остановки
         self.should_run = True
-        
+
         # ✅ FIX: Дедупликация posId с TTL 5 минут (предотвращает двойную обработку)
         self.seen_pos: TTLCache = TTLCache(maxsize=10_000, ttl=300)
-        
+
         # ✅ FIX: Счётчик reconnect с exponential backoff
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 10
@@ -351,7 +351,7 @@ class PrivateWebSocketManager:
                         if pos_id:
                             self.seen_pos[pos_id] = True
                         filtered_positions.append(pos)
-                    
+
                     if filtered_positions:
                         await self.position_callback(filtered_positions)
 
@@ -396,16 +396,16 @@ class PrivateWebSocketManager:
                 )
                 self.should_run = False
                 return
-            
+
             # ✅ FIX: Exponential backoff (5, 10, 20, 40... max 300 сек)
-            delay = min(5 * (2 ** self._reconnect_attempts), 300)
+            delay = min(5 * (2**self._reconnect_attempts), 300)
             self._reconnect_attempts += 1
-            
+
             logger.info(
                 f"🔄 Попытка переподключения Private WebSocket "
                 f"({self._reconnect_attempts}/{self._max_reconnect_attempts}, delay={delay}s)..."
             )
-            
+
             # ✅ FIX: Закрываем старый сокет перед reconnect (предотвращает утечку)
             if self.ws and not self.ws.closed:
                 try:
@@ -414,7 +414,7 @@ class PrivateWebSocketManager:
                 except Exception:
                     pass
                 self.ws = None
-            
+
             await asyncio.sleep(delay)
             if self.should_run:
                 success = await self.connect()

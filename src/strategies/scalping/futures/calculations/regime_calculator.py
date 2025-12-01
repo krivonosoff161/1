@@ -114,14 +114,16 @@ class RegimeCalculator:
                     regime_config = adaptive_regime.get(regime.lower(), {})
                     if isinstance(regime_config, dict):
                         tp_percent = regime_config.get("tp_percent")
-                
+
                 # Fallback на глобальный tp_percent
                 if tp_percent is None:
                     tp_percent = getattr(self.config.scalping, "tp_percent", 0.5)
             else:
                 tp_percent = 0.5  # Ultimate fallback
-            
-            logger.info(f"ADAPT_LOAD tp_percent={tp_percent} regime={regime} symbol={symbol}")
+
+            logger.info(
+                f"ADAPT_LOAD tp_percent={tp_percent} regime={regime} symbol={symbol}"
+            )
 
         # 4. Balance profile boost
         if balance_profile:
@@ -207,14 +209,16 @@ class RegimeCalculator:
                     regime_config = adaptive_regime.get(regime.lower(), {})
                     if isinstance(regime_config, dict):
                         sl_percent = regime_config.get("sl_percent")
-                
+
                 # Fallback на глобальный sl_percent
                 if sl_percent is None:
                     sl_percent = getattr(self.config.scalping, "sl_percent", 0.3)
             else:
                 sl_percent = 0.3  # Ultimate fallback
-            
-            logger.info(f"ADAPT_LOAD sl_percent={sl_percent} regime={regime} symbol={symbol}")
+
+            logger.info(
+                f"ADAPT_LOAD sl_percent={sl_percent} regime={regime} symbol={symbol}"
+            )
 
         # 4. Balance profile boost (для SL обычно не применяется или применяется обратно)
         # TODO: Определить, нужен ли boost для SL

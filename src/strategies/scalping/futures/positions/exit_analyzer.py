@@ -33,7 +33,9 @@ class ExitAnalyzer:
         orchestrator=None,  # Orchestrator для доступа к ADX, Order Flow, MTF
         config_manager=None,  # ConfigManager для получения параметров
         signal_generator=None,  # SignalGenerator для получения режима и индикаторов
-        signal_locks_ref: Optional[Dict[str, asyncio.Lock]] = None,  # ✅ FIX: Race condition
+        signal_locks_ref: Optional[
+            Dict[str, asyncio.Lock]
+        ] = None,  # ✅ FIX: Race condition
     ):
         """
         Инициализация ExitAnalyzer.
@@ -53,7 +55,7 @@ class ExitAnalyzer:
         self.orchestrator = orchestrator
         self.config_manager = config_manager
         self.signal_generator = signal_generator
-        
+
         # ✅ FIX: Используем существующие locks для предотвращения race condition
         self._signal_locks_ref = signal_locks_ref or {}
 
@@ -102,11 +104,11 @@ class ExitAnalyzer:
         import time
 
         analysis_start = time.perf_counter()
-        
+
         # ✅ FIX: Получаем или создаём lock для символа (предотвращение race condition)
         if symbol not in self._signal_locks_ref:
             self._signal_locks_ref[symbol] = asyncio.Lock()
-        
+
         async with self._signal_locks_ref[symbol]:
             return await self._analyze_position_impl(symbol, analysis_start)
 

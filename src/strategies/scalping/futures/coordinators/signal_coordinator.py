@@ -139,7 +139,7 @@ class SignalCoordinator:
                 symbol = signal.get("symbol")
                 side = signal.get("side")
                 strength = signal.get("strength", 0)
-                
+
                 # ✅ FIX: Circuit breaker - проверяем блокировку символа
                 if self.risk_manager and self.risk_manager.is_symbol_blocked(symbol):
                     logger.debug(f"SKIP_BLOCK {symbol}: blocked by consecutive losses")
@@ -792,7 +792,7 @@ class SignalCoordinator:
                 if self.normalize_symbol_callback
                 else symbol
             )
-            
+
             # ✅ FIX: Circuit breaker - проверяем блокировку символа (до блокировки)
             if self.risk_manager and self.risk_manager.is_symbol_blocked(symbol):
                 logger.debug(f"SKIP_BLOCK {symbol}: blocked by consecutive losses")
@@ -1162,32 +1162,47 @@ class SignalCoordinator:
                         atr_14 = symbol_signal.get("atr", 0)
                         regime = symbol_signal.get("regime", "ranging")
                         entry_price = symbol_signal.get("price", price)
-                        
+
                         if atr_14 > 0 and entry_price > 0:
                             # Получаем SL-множитель для расчёта ожидаемого движения
                             sl_mult = 0.5  # Default
                             if hasattr(self, "config_manager") and self.config_manager:
                                 try:
-                                    regime_params = self.config_manager.get_regime_params(regime)
+                                    regime_params = (
+                                        self.config_manager.get_regime_params(regime)
+                                    )
                                     if regime_params:
-                                        sl_mult = regime_params.get("sl_atr_multiplier", 0.5)
+                                        sl_mult = regime_params.get(
+                                            "sl_atr_multiplier", 0.5
+                                        )
                                 except Exception:
                                     pass
-                            
-                            expected_move = (atr_14 / entry_price) * sl_mult  # % движение
-                            
+
+                            expected_move = (
+                                atr_14 / entry_price
+                            ) * sl_mult  # % движение
+
                             # Считаем затраты: maker + taker + slippage buffer
                             maker_fee = 0.0002  # 0.02%
                             taker_fee = 0.0005  # 0.05%
                             slippage_buffer = 0.0005  # 0.05%
-                            if hasattr(self, "scalping_config") and self.scalping_config:
+                            if (
+                                hasattr(self, "scalping_config")
+                                and self.scalping_config
+                            ):
                                 comm = getattr(self.scalping_config, "commission", None)
                                 if comm:
-                                    maker_fee = getattr(comm, "maker_fee_rate", 0.0002) or 0.0002
-                                    taker_fee = getattr(comm, "taker_fee_rate", 0.0005) or 0.0005
-                            
+                                    maker_fee = (
+                                        getattr(comm, "maker_fee_rate", 0.0002)
+                                        or 0.0002
+                                    )
+                                    taker_fee = (
+                                        getattr(comm, "taker_fee_rate", 0.0005)
+                                        or 0.0005
+                                    )
+
                             total_cost = maker_fee + taker_fee + slippage_buffer
-                            
+
                             if expected_move < total_cost:
                                 logger.debug(
                                     f"SIGNAL_SKIP {symbol} EV_NEGATIVE move={expected_move:.4f} cost={total_cost:.4f}"

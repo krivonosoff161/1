@@ -353,7 +353,7 @@ class FuturesScalpingOrchestrator:
 
         # ✅ FIX: Создаём signal_locks раньше для ExitAnalyzer (предотвращение race condition)
         self.signal_locks = {}  # Будет создаваться по требованию
-        
+
         # ✅ НОВОЕ: Инициализация ExitAnalyzer после создания fast_adx и order_flow
         # (position_registry и data_registry уже созданы выше)
         # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия позиций
@@ -1640,11 +1640,13 @@ class FuturesScalpingOrchestrator:
 
             symbol = inst_id.replace("-SWAP", "")
             seen_symbols.add(symbol)
-            
+
             # ✅ FIX: DRIFT_ADD log — позиция на бирже, но нет в реестре
             is_drift_add = symbol not in self.active_positions
             if is_drift_add:
-                logger.critical(f"DRIFT_ADD {symbol} found on exchange but not in registry")
+                logger.critical(
+                    f"DRIFT_ADD {symbol} found on exchange but not in registry"
+                )
 
             try:
                 entry_price = float(pos.get("avgPx", 0) or 0)
@@ -1770,6 +1772,7 @@ class FuturesScalpingOrchestrator:
                         }
                         # Создаём metadata
                         from .positions.entry_manager import PositionMetadata
+
                         metadata = PositionMetadata(
                             entry_time=timestamp,
                             regime=regime,
@@ -1785,7 +1788,9 @@ class FuturesScalpingOrchestrator:
                             position=position_data,
                             metadata=metadata,
                         )
-                        logger.warning(f"DRIFT_ADD_SYNCED {symbol} force-registered in PositionRegistry")
+                        logger.warning(
+                            f"DRIFT_ADD_SYNCED {symbol} force-registered in PositionRegistry"
+                        )
                 except Exception as e:
                     logger.error(f"DRIFT_ADD_SYNC_FAILED {symbol}: {e}")
 

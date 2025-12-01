@@ -3545,7 +3545,11 @@ class FuturesPositionManager:
                 # ✅ FIX: EXIT_HIT log + slippage warning
                 try:
                     # Рассчитываем slippage относительно entry_price (% от цены входа)
-                    exit_slippage = abs(exit_price - entry_price) / entry_price * 100 if entry_price > 0 else 0
+                    exit_slippage = (
+                        abs(exit_price - entry_price) / entry_price * 100
+                        if entry_price > 0
+                        else 0
+                    )
                     logger.info(
                         f"EXIT_HIT {symbol} type={reason} fill={exit_price:.4f} slippage={exit_slippage:.2f}%"
                     )
@@ -3571,12 +3575,14 @@ class FuturesPositionManager:
 
                 # Обновление статистики
                 self._update_close_stats(reason)
-                
+
                 # ✅ FIX: Circuit breaker - записываем результат сделки
                 if hasattr(self, "orchestrator") and self.orchestrator:
                     if hasattr(self.orchestrator, "risk_manager"):
                         is_profit = net_pnl > 0
-                        self.orchestrator.risk_manager.record_trade_result(symbol, is_profit)
+                        self.orchestrator.risk_manager.record_trade_result(
+                            symbol, is_profit
+                        )
 
                 # Удаление из активных позиций
                 if symbol in self.active_positions:
