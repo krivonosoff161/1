@@ -3550,13 +3550,14 @@ class FuturesScalpingOrchestrator:
             self._closing_locks = {}  # symbol -> asyncio.Lock
         if not hasattr(self, "_closing_positions_cache"):
             from cachetools import TTLCache
+
             # TTLCache с TTL 60 секунд - достаточно для закрытия позиции
             self._closing_positions_cache = TTLCache(maxsize=100, ttl=60.0)
-        
+
         # Получаем или создаем Lock для этого символа
         if symbol not in self._closing_locks:
             self._closing_locks[symbol] = asyncio.Lock()
-        
+
         # ✅ Используем Lock для предотвращения одновременного закрытия
         async with self._closing_locks[symbol]:
             # ✅ Проверяем TTLCache - если позиция недавно закрывалась, пропускаем
@@ -3565,10 +3566,10 @@ class FuturesScalpingOrchestrator:
                     f"⚠️ Позиция {symbol} уже закрывается (TTLCache, reason={reason}), пропускаем"
                 )
                 return
-            
+
             # ✅ Помечаем в TTLCache
             self._closing_positions_cache[symbol] = True
-            
+
             try:
                 position = self.active_positions.get(symbol, {})
 
@@ -3586,7 +3587,7 @@ class FuturesScalpingOrchestrator:
                     entry_price = float(entry_price_raw) if entry_price_raw else 0.0
                 except (ValueError, TypeError):
                     entry_price = 0.0
-                
+
                 size_raw = position.get("size", 0) or 0
                 try:
                     size = float(size_raw) if size_raw else 0.0
@@ -3756,10 +3757,12 @@ class FuturesScalpingOrchestrator:
                 # Обрабатываем случаи, когда значения могут быть строками, None или пустыми
                 position_size_raw = position.get("size", 0) or 0
                 try:
-                    position_size = float(position_size_raw) if position_size_raw else 0.0
+                    position_size = (
+                        float(position_size_raw) if position_size_raw else 0.0
+                    )
                 except (ValueError, TypeError):
                     position_size = 0.0
-                
+
                 entry_price_raw = position.get("entry_price", 0) or 0
                 try:
                     entry_price = float(entry_price_raw) if entry_price_raw else 0.0
@@ -3792,7 +3795,10 @@ class FuturesScalpingOrchestrator:
             finally:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Убираем из TTLCache (автоматически через TTL, но можно вручную)
                 # TTLCache автоматически удалит через 60 секунд, но удаляем сразу для освобождения места
-                if hasattr(self, "_closing_positions_cache") and symbol in self._closing_positions_cache:
+                if (
+                    hasattr(self, "_closing_positions_cache")
+                    and symbol in self._closing_positions_cache
+                ):
                     try:
                         del self._closing_positions_cache[symbol]
                     except KeyError:

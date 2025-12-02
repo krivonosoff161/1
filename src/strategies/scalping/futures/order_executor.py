@@ -547,7 +547,7 @@ class FuturesOrderExecutor:
                     f"(per-symbol+regime и per-regime не найдены для {symbol}, regime={regime or 'N/A'}, "
                     f"by_symbol exists={by_symbol_exists}, by_regime exists={by_regime_exists})"
                 )
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка, что offset_percent не слишком большой
             # Если offset > 1% - это ошибка конфига или чтения
             if offset_percent > 1.0:
@@ -717,14 +717,18 @@ class FuturesOrderExecutor:
             # Финальная проверка лимитов биржи уже выполнена выше
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем разницу между limit_price и current_price
-            price_diff_pct = abs(limit_price - current_price) / current_price * 100 if current_price > 0 else 0
+            price_diff_pct = (
+                abs(limit_price - current_price) / current_price * 100
+                if current_price > 0
+                else 0
+            )
             if price_diff_pct > 1.0:  # Если разница > 1% - это проблема!
                 logger.error(
                     f"❌ КРИТИЧЕСКАЯ ОШИБКА: Лимитная цена для {symbol} {side} слишком далеко от текущей! "
                     f"limit_price={limit_price:.2f}, current_price={current_price:.2f}, "
                     f"разница={price_diff_pct:.2f}%, offset={offset_percent:.3f}%, режим={regime or 'N/A'}"
                 )
-            
+
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем все детали расчета лимитной цены
             logger.info(
                 f"💰 Лимитная цена для {symbol} {side}: {limit_price:.2f} "
@@ -756,17 +760,19 @@ class FuturesOrderExecutor:
                 inst_details = await self.client.get_instrument_details(symbol)
                 ct_val = float(inst_details.get("ctVal", 0.01))
                 min_sz = float(inst_details.get("minSz", 0.01))
-                
+
                 # Конвертируем размер из монет в контракты
                 size_in_contracts = size / ct_val if ct_val > 0 else 0
-                
+
                 if size_in_contracts < min_sz:
                     error_msg = f"❌ Размер ордера {size:.6f} монет ({size_in_contracts:.6f} контрактов) меньше минимального {min_sz:.6f} контрактов для {symbol}"
                     logger.error(error_msg)
                     return {"success": False, "error": error_msg, "code": "35027"}
             except Exception as e:
-                logger.warning(f"⚠️ Не удалось проверить минимальный размер для {symbol}: {e}, пропускаем проверку")
-            
+                logger.warning(
+                    f"⚠️ Не удалось проверить минимальный размер для {symbol}: {e}, пропускаем проверку"
+                )
+
             logger.info(f"📈 Размещение рыночного ордера: {symbol} {side} {size:.6f}")
 
             # Для метрик: зафиксируем лучшие цены до отправки
@@ -918,17 +924,19 @@ class FuturesOrderExecutor:
                 inst_details = await self.client.get_instrument_details(symbol)
                 ct_val = float(inst_details.get("ctVal", 0.01))
                 min_sz = float(inst_details.get("minSz", 0.01))
-                
+
                 # Конвертируем размер из монет в контракты
                 size_in_contracts = size / ct_val if ct_val > 0 else 0
-                
+
                 if size_in_contracts < min_sz:
                     error_msg = f"❌ Размер ордера {size:.6f} монет ({size_in_contracts:.6f} контрактов) меньше минимального {min_sz:.6f} контрактов для {symbol}"
                     logger.error(error_msg)
                     return {"success": False, "error": error_msg, "code": "35027"}
             except Exception as e:
-                logger.warning(f"⚠️ Не удалось проверить минимальный размер для {symbol}: {e}, пропускаем проверку")
-            
+                logger.warning(
+                    f"⚠️ Не удалось проверить минимальный размер для {symbol}: {e}, пропускаем проверку"
+                )
+
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем все детали размещения ордера
             logger.info(
                 f"📊 Размещение лимитного ордера: {symbol} {side} {size:.6f} @ {price:.2f} "

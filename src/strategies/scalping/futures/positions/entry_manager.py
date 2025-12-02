@@ -84,7 +84,7 @@ class EntryManager:
             if has_position:
                 logger.debug(f"ℹ️ EntryManager: Позиция {symbol} уже открыта в реестре")
                 return False
-            
+
             # ✅ НОВОЕ: Дополнительная проверка на бирже (синхронизация)
             # Получаем актуальные позиции с биржи для проверки
             try:
@@ -96,8 +96,10 @@ class EntryManager:
                         if abs(pos_size) >= 1e-8:  # Позиция существует на бирже
                             pos_side = pos.get("posSide", "long").lower()
                             signal_side = signal.get("side", "buy").lower()
-                            signal_position_side = "long" if signal_side == "buy" else "short"
-                            
+                            signal_position_side = (
+                                "long" if signal_side == "buy" else "short"
+                            )
+
                             logger.warning(
                                 f"⚠️ EntryManager: Позиция {symbol} {pos_side.upper()} уже существует на бирже "
                                 f"(size={pos_size:.6f}), блокируем открытие новой позиции {signal_position_side.upper()}"
@@ -236,8 +238,6 @@ class EntryManager:
             # 2. Получаем данные открытой позиции с биржи
             try:
                 # Ждем немного для синхронизации позиций на бирже
-                import asyncio
-
                 await asyncio.sleep(1)
 
                 # Получаем позицию с биржи

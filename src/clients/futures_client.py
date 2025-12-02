@@ -773,7 +773,9 @@ class OKXFuturesClient:
         size_in_contracts: bool = False,
         reduce_only: bool = False,
         post_only: bool = False,  # ✅ НОВОЕ: Post-only опция для гарантии maker fee
-        cl_ord_id: Optional[str] = None,  # ✅ КРИТИЧЕСКОЕ: Уникальный ID для предотвращения дубликатов
+        cl_ord_id: Optional[
+            str
+        ] = None,  # ✅ КРИТИЧЕСКОЕ: Уникальный ID для предотвращения дубликатов
     ) -> dict:
         """
         Рыночный или лимитный ордер
