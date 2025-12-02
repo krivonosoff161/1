@@ -78,11 +78,36 @@ class EntryManager:
                 logger.error("❌ EntryManager: Сигнал не содержит symbol")
                 return False
 
-            # Проверяем, нет ли уже открытой позиции
+            # ✅ УЛУЧШЕНИЕ: Синхронизация реестра с биржей перед открытием позиции
+            # Проверяем, нет ли уже открытой позиции в реестре
             has_position = await self.position_registry.has_position(symbol)
             if has_position:
-                logger.debug(f"ℹ️ EntryManager: Позиция {symbol} уже открыта")
+                logger.debug(f"ℹ️ EntryManager: Позиция {symbol} уже открыта в реестре")
                 return False
+            
+            # ✅ НОВОЕ: Дополнительная проверка на бирже (синхронизация)
+            # Получаем актуальные позиции с биржи для проверки
+            try:
+                exchange_positions = await self.client.get_positions(symbol)
+                for pos in exchange_positions:
+                    inst_id = pos.get("instId", "").replace("-SWAP", "")
+                    if inst_id == symbol:
+                        pos_size = float(pos.get("pos", "0"))
+                        if abs(pos_size) >= 1e-8:  # Позиция существует на бирже
+                            pos_side = pos.get("posSide", "long").lower()
+                            signal_side = signal.get("side", "buy").lower()
+                            signal_position_side = "long" if signal_side == "buy" else "short"
+                            
+                            logger.warning(
+                                f"⚠️ EntryManager: Позиция {symbol} {pos_side.upper()} уже существует на бирже "
+                                f"(size={pos_size:.6f}), блокируем открытие новой позиции {signal_position_side.upper()}"
+                            )
+                            return False
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ EntryManager: Ошибка проверки позиций на бирже для {symbol}: {e}. "
+                    f"Продолжаем открытие позиции (может быть race condition)"
+                )
 
             # 1. Расчет размера позиции
             position_size = await self._calculate_position_size(

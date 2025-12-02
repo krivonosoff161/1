@@ -37,6 +37,7 @@ class TradeResult:
     duration_sec: float
     reason: str
     timestamp: datetime
+    funding_fee: float = 0.0  # ✅ КРИТИЧЕСКОЕ: Funding fee для фьючерсов
 
 
 class PositionManager:

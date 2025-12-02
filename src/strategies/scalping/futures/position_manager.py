@@ -9,6 +9,7 @@ Futures Position Manager для скальпинг стратегии.
 """
 
 import asyncio
+import random
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -1466,6 +1467,12 @@ class FuturesPositionManager:
                 )
                 return False
 
+            # ✅ FIX: Инициализируем переменные до блока try
+            ph_threshold_adjusted = ph_threshold  # Fallback значение
+            commission = 0.0
+            net_pnl_usd = 0.0
+            pnl_usd = 0.0
+            
             # Рассчитываем PnL в USD
             try:
                 # Получаем размер позиции в монетах
@@ -1479,6 +1486,7 @@ class FuturesPositionManager:
                 else:  # short
                     pnl_usd = size_in_coins * (entry_price - current_price)
 
+                # ✅ УЛУЧШЕНИЕ: Учитываем комиссии при расчете порога PH
                 # Вычитаем комиссию (открытие + закрытие)
                 # ✅ ИСПРАВЛЕНО: Комиссия из конфига (может быть в scalping или на верхнем уровне)
                 commission_config = getattr(self.scalping_config, "commission", None)
@@ -1512,12 +1520,24 @@ class FuturesPositionManager:
                 position_value = size_in_coins * entry_price
                 commission = position_value * commission_rate * 2  # Открытие + закрытие
                 net_pnl_usd = pnl_usd - commission
+                
+                # ✅ НОВОЕ: Оптимизация порога PH - учитываем комиссии
+                # Если порог PH указан как gross (без учета комиссий), корректируем его
+                # Для позиции с комиссией commission, чтобы достичь net_pnl >= ph_threshold,
+                # нужно gross_pnl >= ph_threshold + commission
+                ph_threshold_adjusted = ph_threshold + commission
+                logger.debug(
+                    f"🔍 PH для {symbol}: Порог скорректирован с учетом комиссий | "
+                    f"original=${ph_threshold:.2f}, adjusted=${ph_threshold_adjusted:.2f} "
+                    f"(commission=${commission:.4f})"
+                )
 
-                # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #5: Расчет PnL
+                # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #5: Расчет PnL с учетом скорректированного порога
                 logger.debug(
                     f"🔍 PH для {symbol}: PnL расчет | "
                     f"gross=${pnl_usd:.4f}, commission=${commission:.4f}, "
-                    f"net=${net_pnl_usd:.4f}, threshold=${ph_threshold:.2f}"
+                    f"net=${net_pnl_usd:.4f}, threshold=${ph_threshold:.2f}, "
+                    f"threshold_adjusted=${ph_threshold_adjusted:.2f}"
                 )
 
             except Exception as e:
@@ -1570,18 +1590,20 @@ class FuturesPositionManager:
 
             min_holding_seconds = min_holding_minutes * 60.0
 
-            # ✅ НОВОЕ: Игнорируем MIN_HOLDING для экстремально больших прибылей (> 1.5x порога)
+            # ✅ УЛУЧШЕНИЕ: Используем скорректированный порог для экстремальной прибыли
+            # ✅ НОВОЕ: Игнорируем MIN_HOLDING для экстремально больших прибылей (> 1.5x скорректированного порога)
             # Это позволяет закрывать позиции немедленно при сверхприбыли, не дожидаясь min_holding
             # ✅ ОПТИМИЗАЦИЯ: Уменьшен порог с 2x до 1.5x для более агрессивного закрытия
-            extreme_profit_threshold = ph_threshold * 1.5  # ✅ ИЗМЕНЕНО: 1.5x вместо 2x
+            extreme_profit_threshold = ph_threshold_adjusted * 1.5  # ✅ ИЗМЕНЕНО: используем скорректированный порог
             ignore_min_holding = False
             if net_pnl_usd >= extreme_profit_threshold:
                 ignore_min_holding = True
                 logger.info(
                     f"🚨 ЭКСТРЕМАЛЬНАЯ ПРИБЫЛЬ! {symbol}: ${net_pnl_usd:.4f} "
-                    f"(1.5x порога: ${extreme_profit_threshold:.2f}) - игнорируем MIN_HOLDING и TIME_LIMIT"
+                    f"(1.5x скорректированного порога: ${extreme_profit_threshold:.2f}) - игнорируем MIN_HOLDING и TIME_LIMIT"
                 )
 
+            # ✅ УЛУЧШЕНИЕ: Используем скорректированный порог для проверки MIN_HOLDING
             # ✅ Проверяем MIN_HOLDING: если позиция открыта меньше min_holding, НЕ закрываем по PH
             # ИСКЛЮЧЕНИЕ: игнорируем для экстремально больших прибылей
             if not ignore_min_holding and time_since_open < min_holding_seconds:
@@ -1598,35 +1620,36 @@ class FuturesPositionManager:
             should_close = False
             close_reason = ""
 
-            # ✅ ИСПРАВЛЕНО: Определяем порог экстремальной прибыли 2x
-            extreme_profit_2x = ph_threshold * 2.0
+            # ✅ УЛУЧШЕНИЕ: Используем скорректированный порог для всех проверок
+            # ✅ ИСПРАВЛЕНО: Определяем порог экстремальной прибыли 2x (на основе скорректированного порога)
+            extreme_profit_2x = ph_threshold_adjusted * 2.0
 
             if ignore_min_holding:
                 # ✅ ИСПРАВЛЕНО: Для экстремальных прибылей >= 2x полностью игнорируем ph_time_limit
                 if net_pnl_usd >= extreme_profit_2x:
                     # Экстремальная прибыль >= 2x: игнорируем ph_time_limit
-                    if net_pnl_usd >= ph_threshold:
+                    if net_pnl_usd >= ph_threshold_adjusted:
                         should_close = True
                         close_reason = (
                             "EXTREME PROFIT 2x+ (ignoring time_limit and min_holding)"
                         )
                         logger.debug(
                             f"✅ PH для {symbol}: Условие экстремальной прибыли 2x+ выполнено "
-                            f"(profit=${net_pnl_usd:.4f} >= 2x threshold=${extreme_profit_2x:.2f})"
+                            f"(profit=${net_pnl_usd:.4f} >= 2x adjusted_threshold=${extreme_profit_2x:.2f})"
                         )
                     else:
                         logger.debug(
                             f"❌ PH для {symbol}: Экстремальная прибыль 2x+, но недостаточно для закрытия "
-                            f"(profit=${net_pnl_usd:.4f} < threshold=${ph_threshold:.2f})"
+                            f"(profit=${net_pnl_usd:.4f} < adjusted_threshold=${ph_threshold_adjusted:.2f})"
                         )
-                elif net_pnl_usd >= ph_threshold:
+                elif net_pnl_usd >= ph_threshold_adjusted:
                     # Экстремальная прибыль >= 1.5x но < 2x: игнорируем min_holding, но проверяем ph_time_limit
                     if time_since_open < ph_time_limit:
                         should_close = True
                         close_reason = "EXTREME PROFIT 1.5x+ (ignoring min_holding, within time_limit)"
                         logger.debug(
                             f"✅ PH для {symbol}: Условие экстремальной прибыли 1.5x+ выполнено "
-                            f"(profit=${net_pnl_usd:.4f} >= threshold=${ph_threshold:.2f}, "
+                            f"(profit=${net_pnl_usd:.4f} >= adjusted_threshold=${ph_threshold_adjusted:.2f}, "
                             f"time={time_since_open:.1f}с < {ph_time_limit}с)"
                         )
                     else:
@@ -1637,23 +1660,23 @@ class FuturesPositionManager:
                 else:
                     logger.debug(
                         f"❌ PH для {symbol}: Экстремальная прибыль, но недостаточно для закрытия "
-                        f"(profit=${net_pnl_usd:.4f} < threshold=${ph_threshold:.2f})"
+                        f"(profit=${net_pnl_usd:.4f} < adjusted_threshold=${ph_threshold_adjusted:.2f})"
                     )
             else:
-                # Обычная прибыль: проверяем ph_time_limit
-                if net_pnl_usd >= ph_threshold and time_since_open < ph_time_limit:
+                # Обычная прибыль: проверяем ph_time_limit (используем скорректированный порог)
+                if net_pnl_usd >= ph_threshold_adjusted and time_since_open < ph_time_limit:
                     should_close = True
                     close_reason = "NORMAL PROFIT (within time_limit)"
                     logger.debug(
                         f"✅ PH для {symbol}: Условие обычной прибыли выполнено "
-                        f"(profit=${net_pnl_usd:.4f} >= ${ph_threshold:.2f}, "
+                        f"(profit=${net_pnl_usd:.4f} >= adjusted_threshold=${ph_threshold_adjusted:.2f}, "
                         f"time={time_since_open:.1f}с < {ph_time_limit}с)"
                     )
                 else:
-                    if net_pnl_usd < ph_threshold:
+                    if net_pnl_usd < ph_threshold_adjusted:
                         logger.debug(
                             f"❌ PH для {symbol}: Прибыль недостаточна "
-                            f"(${net_pnl_usd:.4f} < ${ph_threshold:.2f})"
+                            f"(${net_pnl_usd:.4f} < adjusted_threshold=${ph_threshold_adjusted:.2f})"
                         )
                     if time_since_open >= ph_time_limit:
                         logger.debug(
@@ -1664,7 +1687,8 @@ class FuturesPositionManager:
             if should_close:
                 logger.info(
                     f"💰💰💰 PROFIT HARVESTING TRIGGERED! {symbol} {side.upper()}\n"
-                    f"   Quick profit: ${net_pnl_usd:.4f} (threshold: ${ph_threshold:.2f})\n"
+                    f"   Quick profit: ${net_pnl_usd:.4f} (threshold: ${ph_threshold:.2f}, adjusted: ${ph_threshold_adjusted:.2f})\n"
+                    f"   Commission: ${commission:.4f} (включена в adjusted threshold)\n"
                     f"   Time: {time_since_open:.1f}s (limit: {ph_time_limit}s, min_holding: {min_holding_seconds:.1f}s)\n"
                     f"   Entry: ${entry_price:.4f} → Exit: ${current_price:.4f}\n"
                     f"   Regime: {market_regime or 'N/A'}\n"
@@ -1672,12 +1696,12 @@ class FuturesPositionManager:
                 )
                 return True
 
-            # Логируем прогресс к PH (если близко)
+            # ✅ УЛУЧШЕНИЕ: Логируем прогресс к PH с учетом скорректированного порога
             if time_since_open < ph_time_limit and net_pnl_usd > 0:
-                progress = (net_pnl_usd / ph_threshold) * 100 if ph_threshold > 0 else 0
+                progress = (net_pnl_usd / ph_threshold_adjusted) * 100 if ph_threshold_adjusted > 0 else 0
                 if progress >= 50:  # Логируем только если >50% прогресса
                     logger.debug(
-                        f"📊 PH прогресс {symbol}: ${net_pnl_usd:.4f} / ${ph_threshold:.2f} "
+                        f"📊 PH прогресс {symbol}: ${net_pnl_usd:.4f} / ${ph_threshold_adjusted:.2f} "
                         f"({progress:.0f}%), время: {time_since_open:.1f}s / {ph_time_limit}s"
                     )
 
@@ -3005,6 +3029,29 @@ class FuturesPositionManager:
                                     f"продолжаем с исходным размером"
                                 )
 
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем, что размер позиции > 0 перед reduce-only
+                            # Это предотвращает ошибку 51169 "don't have any positions to reduce"
+                            if actual_size <= 0:
+                                logger.warning(
+                                    f"⚠️ Partial TP пропущен для {symbol}: "
+                                    f"позиция уже закрыта (size={actual_size:.6f})"
+                                )
+                                return
+                            
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем, что size_partial не превышает actual_size
+                            if size_partial > actual_size:
+                                size_partial = actual_size
+                                logger.warning(
+                                    f"⚠️ Partial TP размер скорректирован для {symbol}: "
+                                    f"требуемый {size_partial:.6f} > доступный {actual_size:.6f}, "
+                                    f"используем {actual_size:.6f}"
+                                )
+                            
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Генерируем уникальный clOrdID для предотвращения дубликатов
+                            timestamp_ms = int(time.time() * 1000)
+                            random_suffix = random.randint(1000, 9999)
+                            unique_cl_ord_id = f"TP_{symbol}_{timestamp_ms}_{random_suffix}"[:32]  # OKX макс 32 символа
+                            
                             # Размещаем лимитный reduce-only ордер (size уже в контрактах)
                             result = await self.client.place_futures_order(
                                 symbol=symbol,
@@ -3015,6 +3062,7 @@ class FuturesPositionManager:
                                 size_in_contracts=True,
                                 reduce_only=True,
                                 post_only=ptp_post_only,
+                                cl_ord_id=unique_cl_ord_id,
                             )
                             if isinstance(result, dict) and result.get("code") == "0":
                                 # Помечаем, что partial TP выставлен
@@ -3032,6 +3080,11 @@ class FuturesPositionManager:
                                 logger.warning(
                                     f"⚠️ Partial TP лимит не размещён для {symbol}: {result}. Fallback → MARKET reduce_only"
                                 )
+                                # ✅ Генерируем новый уникальный clOrdID для market ордера
+                                timestamp_ms = int(time.time() * 1000)
+                                random_suffix = random.randint(1000, 9999)
+                                market_cl_ord_id = f"TP_MKT_{symbol}_{timestamp_ms}_{random_suffix}"[:32]
+                                
                                 market_res = await self.client.place_futures_order(
                                     symbol=symbol,
                                     side=close_side,
@@ -3039,6 +3092,7 @@ class FuturesPositionManager:
                                     order_type="market",
                                     size_in_contracts=True,
                                     reduce_only=True,
+                                    cl_ord_id=market_cl_ord_id,
                                 )
                                 if (
                                     isinstance(market_res, dict)
@@ -3142,18 +3196,44 @@ class FuturesPositionManager:
                         actual_position = pos
                         break
 
-            # Если позиция уже закрыта, просто удаляем из активных
+            # ✅ УЛУЧШЕНИЕ: Проверка перед закрытием - позиция существует на бирже
             if actual_position is None:
                 logger.info(
-                    f"⚠️ Позиция {symbol} уже закрыта на бирже, удаляем из активных"
+                    f"⚠️ Позиция {symbol} уже закрыта на бирже, удаляем из активных (reason={reason})"
                 )
                 if symbol in self.active_positions:
                     del self.active_positions[symbol]
+                # ✅ НОВОЕ: Удаляем из PositionRegistry
+                if hasattr(self, "position_registry"):
+                    await self.position_registry.unregister_position(symbol)
                 return None
 
             size = float(actual_position.get("pos", "0"))
             side = actual_position.get("posSide", "long")
             entry_price = float(actual_position.get("avgPx", "0"))
+            
+            # ✅ НОВОЕ: Проверка правильного направления позиции
+            # Получаем ожидаемое направление из position (если есть)
+            expected_side = position.get("posSide", side).lower()
+            if side.lower() != expected_side:
+                logger.warning(
+                    f"⚠️ Несоответствие направления позиции для {symbol}: "
+                    f"ожидалось {expected_side.upper()}, на бирже {side.upper()}. "
+                    f"Используем направление с биржи (reason={reason})"
+                )
+                # Используем направление с биржи (более актуальное)
+                side = actual_position.get("posSide", "long")
+            
+            # ✅ НОВОЕ: Проверка размера позиции
+            if abs(size) < 1e-8:
+                logger.warning(
+                    f"⚠️ Позиция {symbol} имеет нулевой размер на бирже, удаляем из активных (reason={reason})"
+                )
+                if symbol in self.active_positions:
+                    del self.active_positions[symbol]
+                if hasattr(self, "position_registry"):
+                    await self.position_registry.unregister_position(symbol)
+                return None
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем актуальную цену из стакана перед закрытием
             # Проблема: markPx может быть устаревшим (как и best_bid при открытии)
@@ -3516,30 +3596,79 @@ class FuturesPositionManager:
             )
 
             if result.get("code") == "0":
-                # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ причины закрытия с PnL%
+                # ✅ FIX: Получаем funding_fee из позиции перед созданием trade_result
+                funding_fee = 0.0
+                try:
+                    # Пытаемся получить funding_fee из позиции
+                    if "fundingFee" in actual_position:
+                        funding_fee = float(actual_position.get("fundingFee", 0) or 0)
+                    elif "funding_fee" in actual_position:
+                        funding_fee = float(actual_position.get("funding_fee", 0) or 0)
+                    else:
+                        # Пробуем получить через close_position_manually (если доступен)
+                        funding_fee = 0.0
+                except Exception as e:
+                    logger.debug(f"⚠️ Не удалось получить funding_fee для {symbol}: {e}")
+                    funding_fee = 0.0
+                
+                # ✅ УЛУЧШЕНИЕ: Детальное логирование причины закрытия с полной информацией
                 try:
                     margin_used = float(actual_position.get("margin", 0))
+                    # ✅ FIX: Используем уже определенные переменные commission_entry и commission_exit
+                    # commission_entry и commission_exit уже определены выше (строки 3528-3529)
+                    
+                    # ✅ НОВОЕ: Детальная информация о причине закрытия
+                    reason_details = {
+                        "profit_harvest": "💰 Profit Harvesting (быстрая фиксация прибыли)",
+                        "profit_drawdown": "📉 Profit Drawdown (откат от пика прибыли)",
+                        "tp": "🎯 Take Profit (достигнут целевой уровень)",
+                        "sl": "🛑 Stop Loss (достигнут стоп-лосс)",
+                        "trailing_sl": "📊 Trailing Stop Loss (трейлинг стоп)",
+                        "emergency": "🚨 Emergency Close (аварийное закрытие)",
+                        "max_holding": "⏱️ Max Holding (превышено максимальное время)",
+                        "partial_tp": "📈 Partial Take Profit (частичный тейк)",
+                        "smart_indicator_filter": "🧠 Smart Indicator Filter (умный фильтр)",
+                    }.get(reason, f"❓ {reason}")
+                    
                     if margin_used > 0:
                         pnl_percent_from_margin = (net_pnl / margin_used) * 100
                         logger.info(
-                            f"✅ Позиция {symbol} успешно закрыта по причине: {reason} | "
-                            f"Entry: ${entry_price:.6f}, Exit: ${exit_price:.6f}, "
-                            f"Gross PnL: ${gross_pnl:.4f}, Net PnL: ${net_pnl:.4f} ({pnl_percent_from_margin:.2f}% от маржи), "
-                            f"Время в позиции: {duration_sec/60:.1f} мин"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"✅ ПОЗИЦИЯ ЗАКРЫТА: {symbol} {side.upper()}\n"
+                            f"   Причина: {reason_details}\n"
+                            f"   Entry: ${entry_price:.6f} → Exit: ${exit_price:.6f}\n"
+                            f"   Размер: {abs(size):.6f} контрактов\n"
+                            f"   Gross PnL: ${gross_pnl:.4f} USDT\n"
+                            f"   Комиссия вход: ${commission_entry:.4f} USDT\n"
+                            f"   Комиссия выход: ${commission_exit:.4f} USDT\n"
+                            f"   Funding Fee: ${funding_fee:.4f} USDT\n"
+                            f"   Net PnL: ${net_pnl:.4f} USDT ({pnl_percent_from_margin:.2f}% от маржи)\n"
+                            f"   Время в позиции: {duration_sec/60:.1f} мин ({duration_sec:.1f} сек)\n"
+                            f"   Slippage: {abs(exit_price - entry_price) / entry_price * 100:.3f}%\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                         )
                     else:
                         logger.info(
-                            f"✅ Позиция {symbol} успешно закрыта по причине: {reason} | "
-                            f"Entry: ${entry_price:.6f}, Exit: ${exit_price:.6f}, "
-                            f"Gross PnL: ${gross_pnl:.4f}, Net PnL: ${net_pnl:.4f}, "
-                            f"Время в позиции: {duration_sec/60:.1f} мин"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"✅ ПОЗИЦИЯ ЗАКРЫТА: {symbol} {side.upper()}\n"
+                            f"   Причина: {reason_details}\n"
+                            f"   Entry: ${entry_price:.6f} → Exit: ${exit_price:.6f}\n"
+                            f"   Размер: {abs(size):.6f} контрактов\n"
+                            f"   Gross PnL: ${gross_pnl:.4f} USDT\n"
+                            f"   Комиссия вход: ${commission_entry:.4f} USDT\n"
+                            f"   Комиссия выход: ${commission_exit:.4f} USDT\n"
+                            f"   Funding Fee: ${funding_fee:.4f} USDT\n"
+                            f"   Net PnL: ${net_pnl:.4f} USDT\n"
+                            f"   Время в позиции: {duration_sec/60:.1f} мин ({duration_sec:.1f} сек)\n"
+                            f"   Slippage: {abs(exit_price - entry_price) / entry_price * 100:.3f}%\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                         )
                 except Exception as e:
                     logger.info(
                         f"✅ Позиция {symbol} успешно закрыта по причине: {reason} | "
                         f"Entry: ${entry_price:.6f}, Exit: ${exit_price:.6f}, "
                         f"Gross PnL: ${gross_pnl:.4f}, Net PnL: ${net_pnl:.4f}, "
-                        f"Время в позиции: {duration_sec/60:.1f} мин (ошибка расчета PnL%: {e})"
+                        f"Время в позиции: {duration_sec/60:.1f} мин (ошибка расчета деталей: {e})"
                     )
 
                 # ✅ FIX: EXIT_HIT log + slippage warning
@@ -3559,6 +3688,7 @@ class FuturesPositionManager:
                     pass
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
+                # ✅ FIX: Создаем trade_result ПЕРЕД использованием в логировании
                 trade_result = TradeResult(
                     symbol=symbol,
                     side=side.lower(),  # "long" или "short"
@@ -3571,6 +3701,7 @@ class FuturesPositionManager:
                     duration_sec=duration_sec,
                     reason=reason,
                     timestamp=datetime.now(timezone.utc),
+                    funding_fee=funding_fee,  # ✅ КРИТИЧЕСКОЕ: Учитываем funding fee
                 )
 
                 # Обновление статистики
@@ -4809,7 +4940,24 @@ class FuturesPositionManager:
                     else:
                         gross_pnl = (entry_price - exit_price) * size_in_coins
 
-                    net_pnl = gross_pnl - commission
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем funding fee из позиции
+                    funding_fee = 0.0
+                    try:
+                        # Пробуем получить funding fee из позиции
+                        if "fundingFee" in actual_position:
+                            funding_fee = float(actual_position.get("fundingFee", 0) or 0)
+                        elif "funding_fee" in actual_position:
+                            funding_fee = float(actual_position.get("funding_fee", 0) or 0)
+                        elif "fee" in actual_position:
+                            # OKX может возвращать fee, который включает funding
+                            fee_value = actual_position.get("fee", 0)
+                            if fee_value:
+                                funding_fee = float(fee_value) or 0.0
+                    except (ValueError, TypeError):
+                        funding_fee = 0.0
+                    
+                    # ✅ Учитываем funding fee в net PnL
+                    net_pnl = gross_pnl - commission - funding_fee
                     # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
                     if isinstance(entry_time, datetime):
                         if entry_time.tzinfo is None:
@@ -4861,6 +5009,7 @@ class FuturesPositionManager:
                         duration_sec=duration_sec,
                         reason=reason,  # ✅ ИСПРАВЛЕНО: Используем переданный reason вместо "manual"
                         timestamp=datetime.now(),
+                        funding_fee=funding_fee,  # ✅ КРИТИЧЕСКОЕ: Учитываем funding fee
                     )
                     # ✅ Метрики: суммарное время удержания и счётчики закрытий
                     try:

@@ -152,11 +152,26 @@ class FuturesRiskManager:
             return await self.orchestrator._check_emergency_stop_unlock()
 
     # ✅ FIX: Circuit breaker методы для серии убытков
-    def record_trade_result(self, symbol: str, is_profit: bool):
+    def record_trade_result(self, symbol: str, is_profit: bool, error_code: Optional[str] = None, error_msg: Optional[str] = None):
         """
         Записывает результат сделки для circuit breaker.
         Вызывать после закрытия каждой сделки.
+        
+        Args:
+            symbol: Торговый символ
+            is_profit: True если прибыль, False если убыток
+            error_code: Код ошибки (например, "51169") - для фильтрации технических ошибок
+            error_msg: Сообщение об ошибке - для дополнительной проверки
         """
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Не считаем технические ошибки (51169) как убытки
+        # Ошибка 51169 = "Order failed because you don't have any positions to reduce"
+        # Это техническая ошибка, а не убыток от рынка
+        if not is_profit and (error_code == "51169" or (error_msg and "don't have any positions" in error_msg.lower())):
+            logger.debug(
+                f"⚠️ Техническая ошибка {error_code} для {symbol} не считается убытком для PAIR_BLOCK"
+            )
+            return  # Не записываем как убыток
+        
         if is_profit:
             # Сбрасываем серию при прибыли
             if symbol in self.pair_loss_streak:
@@ -664,9 +679,10 @@ class FuturesRiskManager:
                         raw_multiplier = base_atr_percent / (
                             current_atr_percent / 100.0
                         )
-                        volatility_multiplier = max(
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Приводим к float, чтобы избежать умножения строки
+                        volatility_multiplier = float(max(
                             min_multiplier, min(raw_multiplier, max_multiplier)
-                        )
+                        ))
 
                         logger.info(
                             f"  4a. Волатильность (ATR): текущая={current_atr_percent:.4f}%, "

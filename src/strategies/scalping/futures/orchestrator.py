@@ -3545,34 +3545,53 @@ class FuturesScalpingOrchestrator:
 
     async def _close_position(self, symbol: str, reason: str):
         """Закрытие позиции через position_manager"""
-        try:
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем, что позиция еще не закрывается
-            # Это предотвращает множественные попытки закрытия одной и той же позиции
-            if not hasattr(self, "_closing_positions"):
-                self._closing_positions = set()
-
-            if symbol in self._closing_positions:
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Инициализируем asyncio.Lock и TTLCache для защиты от race condition
+        if not hasattr(self, "_closing_locks"):
+            self._closing_locks = {}  # symbol -> asyncio.Lock
+        if not hasattr(self, "_closing_positions_cache"):
+            from cachetools import TTLCache
+            # TTLCache с TTL 60 секунд - достаточно для закрытия позиции
+            self._closing_positions_cache = TTLCache(maxsize=100, ttl=60.0)
+        
+        # Получаем или создаем Lock для этого символа
+        if symbol not in self._closing_locks:
+            self._closing_locks[symbol] = asyncio.Lock()
+        
+        # ✅ Используем Lock для предотвращения одновременного закрытия
+        async with self._closing_locks[symbol]:
+            # ✅ Проверяем TTLCache - если позиция недавно закрывалась, пропускаем
+            if symbol in self._closing_positions_cache:
                 logger.debug(
-                    f"⚠️ Позиция {symbol} уже закрывается (reason={reason}), пропускаем"
+                    f"⚠️ Позиция {symbol} уже закрывается (TTLCache, reason={reason}), пропускаем"
                 )
                 return
-
-            position = self.active_positions.get(symbol, {})
-
-            if not position:
-                logger.debug(
-                    f"⚠️ Позиция {symbol} уже закрыта или не найдена (reason={reason})"
-                )
-                return
-
-            # ✅ Помечаем позицию как закрывающуюся
-            self._closing_positions.add(symbol)
-
+            
+            # ✅ Помечаем в TTLCache
+            self._closing_positions_cache[symbol] = True
+            
             try:
+                position = self.active_positions.get(symbol, {})
+
+                if not position:
+                    logger.debug(
+                        f"⚠️ Позиция {symbol} уже закрыта или не найдена (reason={reason})"
+                    )
+                    return
+
                 # ✅ ЛОГИРОВАНИЕ: Логируем причину закрытия и детали позиции
-                # ✅ FIX: Приводим к float чтобы избежать TypeError при сравнении str vs int
-                entry_price = float(position.get("entry_price", 0) or 0)
-                size = float(position.get("size", 0) or 0)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Приводим к float чтобы избежать TypeError при сравнении str vs int
+                # Обрабатываем случаи, когда entry_price может быть строкой, None или пустой строкой
+                entry_price_raw = position.get("entry_price", 0) or 0
+                try:
+                    entry_price = float(entry_price_raw) if entry_price_raw else 0.0
+                except (ValueError, TypeError):
+                    entry_price = 0.0
+                
+                size_raw = position.get("size", 0) or 0
+                try:
+                    size = float(size_raw) if size_raw else 0.0
+                except (ValueError, TypeError):
+                    size = 0.0
                 side = position.get("position_side", "unknown")
                 entry_time = position.get("entry_time")
 
@@ -3733,9 +3752,19 @@ class FuturesScalpingOrchestrator:
                             f"⚠️ Не удалось обновить маржу с биржи после закрытия позиции: {e}"
                         )
 
-                # ✅ FIX: Приводим к float чтобы избежать TypeError
-                position_size = float(position.get("size", 0) or 0)
-                entry_price = float(position.get("entry_price", 0) or 0)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Приводим к float чтобы избежать TypeError
+                # Обрабатываем случаи, когда значения могут быть строками, None или пустыми
+                position_size_raw = position.get("size", 0) or 0
+                try:
+                    position_size = float(position_size_raw) if position_size_raw else 0.0
+                except (ValueError, TypeError):
+                    position_size = 0.0
+                
+                entry_price_raw = position.get("entry_price", 0) or 0
+                try:
+                    entry_price = float(entry_price_raw) if entry_price_raw else 0.0
+                except (ValueError, TypeError):
+                    entry_price = 0.0
                 if position_size > 0 and entry_price > 0:
                     size_usd = position_size * entry_price
                     if symbol in self.max_size_limiter.position_sizes:
@@ -3761,16 +3790,13 @@ class FuturesScalpingOrchestrator:
             except Exception as e:
                 logger.error(f"Ошибка закрытия позиции {symbol}: {e}")
             finally:
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Убираем позицию из списка закрывающихся
-                # Это позволяет закрыть позицию снова, если она откроется заново
-                if hasattr(self, "_closing_positions"):
-                    self._closing_positions.discard(symbol)
-
-        except Exception as e:
-            logger.error(f"Критическая ошибка закрытия позиции {symbol}: {e}")
-            # ✅ Убираем позицию из списка закрывающихся при критической ошибке
-            if hasattr(self, "_closing_positions"):
-                self._closing_positions.discard(symbol)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Убираем из TTLCache (автоматически через TTL, но можно вручную)
+                # TTLCache автоматически удалит через 60 секунд, но удаляем сразу для освобождения места
+                if hasattr(self, "_closing_positions_cache") and symbol in self._closing_positions_cache:
+                    try:
+                        del self._closing_positions_cache[symbol]
+                    except KeyError:
+                        pass  # Уже удалено
 
     @property
     def active_positions(self) -> Dict[str, Dict[str, Any]]:

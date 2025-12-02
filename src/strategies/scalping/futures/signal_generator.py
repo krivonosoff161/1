@@ -3508,7 +3508,16 @@ class FuturesSignalGenerator:
                     regime_manager.get_current_regime() if regime_manager else None
                 )
                 if current_regime_name:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Приводим режим к lowercase для совпадения с конфигом
+                    if isinstance(current_regime_name, str):
+                        current_regime_name = current_regime_name.lower()
+                    else:
+                        # Если это объект (например, Regime enum), конвертируем в строку
+                        current_regime_name = str(current_regime_name).lower()
                     signal["regime"] = current_regime_name
+                    logger.debug(
+                        f"✅ Режим для {symbol}: {current_regime_name} (добавлен в сигнал)"
+                    )
                 else:
                     # ✅ ИСПРАВЛЕНО: Явно устанавливаем fallback, если режим не определен
                     signal["regime"] = "ranging"
@@ -4082,7 +4091,16 @@ class FuturesSignalGenerator:
                     regime_manager.get_current_regime() if regime_manager else None
                 )
                 if current_regime_name:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Приводим режим к lowercase для совпадения с конфигом
+                    if isinstance(current_regime_name, str):
+                        current_regime_name = current_regime_name.lower()
+                    else:
+                        # Если это объект (например, Regime enum), конвертируем в строку
+                        current_regime_name = str(current_regime_name).lower()
                     signal["regime"] = current_regime_name
+                    logger.debug(
+                        f"✅ Режим для {symbol}: {current_regime_name} (добавлен в сигнал)"
+                    )
                 else:
                     # ✅ ИСПРАВЛЕНО: Явно устанавливаем fallback, если режим не определен
                     signal["regime"] = "ranging"

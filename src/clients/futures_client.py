@@ -773,6 +773,7 @@ class OKXFuturesClient:
         size_in_contracts: bool = False,
         reduce_only: bool = False,
         post_only: bool = False,  # ✅ НОВОЕ: Post-only опция для гарантии maker fee
+        cl_ord_id: Optional[str] = None,  # ✅ КРИТИЧЕСКОЕ: Уникальный ID для предотвращения дубликатов
     ) -> dict:
         """
         Рыночный или лимитный ордер
@@ -871,6 +872,11 @@ class OKXFuturesClient:
 
         if price:
             payload["px"] = str(price)
+
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавляем clOrdId для предотвращения дубликатов
+        # OKX требует уникальный clOrdId (макс 32 символа)
+        if cl_ord_id:
+            payload["clOrdId"] = cl_ord_id[:32]  # Ограничиваем до 32 символов
 
         return await self._make_request("POST", "/api/v5/trade/order", data=payload)
 
