@@ -10,11 +10,11 @@
 """
 
 import json
+import statistics
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-import statistics
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -68,7 +68,9 @@ class RiskManagementAuditor:
             "max_position_usd": max(position_values),
             "avg_position_usd": statistics.mean(position_values),
             "median_position_usd": statistics.median(position_values),
-            "std_position_usd": statistics.stdev(position_values) if len(position_values) > 1 else 0,
+            "std_position_usd": statistics.stdev(position_values)
+            if len(position_values) > 1
+            else 0,
         }
 
         # Группировка по диапазонам
@@ -151,7 +153,9 @@ class RiskManagementAuditor:
             "max_position_size_usd": max_position_size_usd,
             "violations_max_size": {
                 "count": len(violations_max_size),
-                "percentage": (len(violations_max_size) / len(position_values)) * 100 if position_values else 0,
+                "percentage": (len(violations_max_size) / len(position_values)) * 100
+                if position_values
+                else 0,
                 "max_violation": max(violations_max_size) if violations_max_size else 0,
             },
             "max_daily_loss_percent": max_daily_loss_percent,
@@ -188,7 +192,11 @@ class RiskManagementAuditor:
             return {"error": "Нет данных"}
 
         total_margin_used = sum(margin_used_list)
-        margin_usage_percent = (total_margin_used / estimated_balance) * 100 if estimated_balance > 0 else 0
+        margin_usage_percent = (
+            (total_margin_used / estimated_balance) * 100
+            if estimated_balance > 0
+            else 0
+        )
 
         # Проверка max_margin_percent (90% для ranging)
         max_margin_percent = 90.0
@@ -201,7 +209,9 @@ class RiskManagementAuditor:
             "margin_usage_percent": margin_usage_percent,
             "max_margin_percent": max_margin_percent,
             "is_within_limit": is_within_limit,
-            "avg_margin_per_position": statistics.mean(margin_used_list) if margin_used_list else 0,
+            "avg_margin_per_position": statistics.mean(margin_used_list)
+            if margin_used_list
+            else 0,
         }
 
         return analysis
@@ -235,7 +245,9 @@ class RiskManagementAuditor:
                     "avg_position_usd": statistics.mean(position_values),
                     "min_position_usd": min(position_values),
                     "max_position_usd": max(position_values),
-                    "std_position_usd": statistics.stdev(position_values) if len(position_values) > 1 else 0,
+                    "std_position_usd": statistics.stdev(position_values)
+                    if len(position_values) > 1
+                    else 0,
                 }
 
         return analysis
@@ -303,9 +315,9 @@ class RiskManagementAuditor:
 - **Нарушений:** {limits_analysis['violations_daily_loss']['count']}
 """
 
-            if limits_analysis['violations_daily_loss']['dates']:
+            if limits_analysis["violations_daily_loss"]["dates"]:
                 report += "\n**Даты с нарушением:**\n"
-                for date, pnl in limits_analysis['violations_daily_loss']['dates']:
+                for date, pnl in limits_analysis["violations_daily_loss"]["dates"]:
                     report += f"- {date}: ${pnl:.2f}\n"
 
             report += f"""
@@ -341,7 +353,11 @@ class RiskManagementAuditor:
 
         if adaptivity_analysis.get("by_symbol"):
             report += "\n### По символам:\n\n"
-            for symbol, stats in sorted(adaptivity_analysis["by_symbol"].items(), key=lambda x: x[1]["count"], reverse=True):
+            for symbol, stats in sorted(
+                adaptivity_analysis["by_symbol"].items(),
+                key=lambda x: x[1]["count"],
+                reverse=True,
+            ):
                 report += f"""
 #### {symbol}
 - **Позиций:** {stats['count']}
@@ -433,7 +449,9 @@ class RiskManagementAuditor:
 
         return report
 
-    def save_report(self, report: str, output_file: str = "RISK_MANAGEMENT_AUDIT_REPORT.md") -> None:
+    def save_report(
+        self, report: str, output_file: str = "RISK_MANAGEMENT_AUDIT_REPORT.md"
+    ) -> None:
         """Сохранение отчета"""
         logger.info(f"💾 Сохранение отчета в {output_file}")
         try:
@@ -448,25 +466,25 @@ class RiskManagementAuditor:
 async def main():
     """Основная функция"""
     positions_file = "exchange_positions.json"
-    
+
     if not Path(positions_file).exists():
         logger.error(f"❌ Файл {positions_file} не найден!")
         return
 
     auditor = RiskManagementAuditor(positions_file)
-    
+
     try:
         # Загрузка данных
         auditor.load_positions()
-        
+
         # Генерация отчета
         report = auditor.generate_report()
-        
+
         # Сохранение отчета
         auditor.save_report(report)
-        
+
         logger.info("✅ Аудит завершен успешно!")
-        
+
     except Exception as e:
         logger.error(f"❌ Ошибка при проведении аудита: {e}")
         raise
@@ -474,5 +492,5 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
 
+    asyncio.run(main())

@@ -9,11 +9,11 @@
 """
 
 import json
+import statistics
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-import statistics
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -74,7 +74,9 @@ class SignalsAndFiltersAuditor:
 
         # Формируем позиции
         for key, trades in positions_dict.items():
-            if len(trades) < 2:  # Позиция должна иметь минимум 2 сделки (открытие + закрытие)
+            if (
+                len(trades) < 2
+            ):  # Позиция должна иметь минимум 2 сделки (открытие + закрытие)
                 continue
 
             # Первая сделка - открытие, последняя - закрытие
@@ -87,9 +89,7 @@ class SignalsAndFiltersAuditor:
             )
 
             # Считаем общие комиссии
-            total_fees = sum(
-                abs(float(t.get("fee", 0) or 0)) for t in trades
-            )
+            total_fees = sum(abs(float(t.get("fee", 0) or 0)) for t in trades)
 
             position = {
                 "symbol": symbol,
@@ -135,7 +135,9 @@ class SignalsAndFiltersAuditor:
         }
 
         wins = sum(1 for p in self.positions if p["is_win"])
-        analysis["win_rate"] = (wins / len(self.positions) * 100) if self.positions else 0.0
+        analysis["win_rate"] = (
+            (wins / len(self.positions) * 100) if self.positions else 0.0
+        )
 
         if self.positions:
             analysis["avg_pnl"] = statistics.mean([p["pnl"] for p in self.positions])
@@ -145,7 +147,9 @@ class SignalsAndFiltersAuditor:
         for symbol, positions in by_symbol.items():
             symbol_wins = sum(1 for p in positions if p["is_win"])
             symbol_win_rate = (symbol_wins / len(positions) * 100) if positions else 0.0
-            symbol_avg_pnl = statistics.mean([p["pnl"] for p in positions]) if positions else 0.0
+            symbol_avg_pnl = (
+                statistics.mean([p["pnl"] for p in positions]) if positions else 0.0
+            )
 
             analysis["by_symbol"][symbol] = {
                 "count": len(positions),
@@ -169,19 +173,31 @@ class SignalsAndFiltersAuditor:
         durations = []
         for pos in self.positions:
             try:
-                open_time = datetime.fromisoformat(pos["open_time"].replace("Z", "+00:00"))
-                close_time = datetime.fromisoformat(pos["close_time"].replace("Z", "+00:00"))
+                open_time = datetime.fromisoformat(
+                    pos["open_time"].replace("Z", "+00:00")
+                )
+                close_time = datetime.fromisoformat(
+                    pos["close_time"].replace("Z", "+00:00")
+                )
                 duration = (close_time - open_time).total_seconds() / 60  # в минутах
                 durations.append(duration)
                 pos["duration_minutes"] = duration
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка расчета длительности для позиции {pos.get('order_id')}: {e}")
+                logger.debug(
+                    f"⚠️ Ошибка расчета длительности для позиции {pos.get('order_id')}: {e}"
+                )
                 pos["duration_minutes"] = 0
 
         # Группируем по длительности
-        short_positions = [p for p in self.positions if p.get("duration_minutes", 0) < 5]
-        medium_positions = [p for p in self.positions if 5 <= p.get("duration_minutes", 0) < 30]
-        long_positions = [p for p in self.positions if p.get("duration_minutes", 0) >= 30]
+        short_positions = [
+            p for p in self.positions if p.get("duration_minutes", 0) < 5
+        ]
+        medium_positions = [
+            p for p in self.positions if 5 <= p.get("duration_minutes", 0) < 30
+        ]
+        long_positions = [
+            p for p in self.positions if p.get("duration_minutes", 0) >= 30
+        ]
 
         def calc_stats(positions: List[Dict]) -> Dict[str, float]:
             if not positions:
@@ -190,7 +206,9 @@ class SignalsAndFiltersAuditor:
             return {
                 "count": len(positions),
                 "win_rate": (wins / len(positions) * 100) if positions else 0.0,
-                "avg_pnl": statistics.mean([p["pnl"] for p in positions]) if positions else 0.0,
+                "avg_pnl": statistics.mean([p["pnl"] for p in positions])
+                if positions
+                else 0.0,
                 "total_pnl": sum(p["pnl"] for p in positions),
             }
 
@@ -210,8 +228,12 @@ class SignalsAndFiltersAuditor:
         logger.info("🔍 Анализ качества входов...")
 
         # Анализируем по направлению (long/short)
-        long_positions = [p for p in self.positions if p.get("pos_side", "").lower() == "long"]
-        short_positions = [p for p in self.positions if p.get("pos_side", "").lower() == "short"]
+        long_positions = [
+            p for p in self.positions if p.get("pos_side", "").lower() == "long"
+        ]
+        short_positions = [
+            p for p in self.positions if p.get("pos_side", "").lower() == "short"
+        ]
 
         def calc_stats(positions: List[Dict]) -> Dict[str, float]:
             if not positions:
@@ -220,7 +242,9 @@ class SignalsAndFiltersAuditor:
             return {
                 "count": len(positions),
                 "win_rate": (wins / len(positions) * 100) if positions else 0.0,
-                "avg_pnl": statistics.mean([p["pnl"] for p in positions]) if positions else 0.0,
+                "avg_pnl": statistics.mean([p["pnl"] for p in positions])
+                if positions
+                else 0.0,
                 "total_pnl": sum(p["pnl"] for p in positions),
             }
 
@@ -268,7 +292,7 @@ class SignalsAndFiltersAuditor:
         sorted_symbols = sorted(
             signal_analysis["by_symbol"].items(),
             key=lambda x: x[1]["count"],
-            reverse=True
+            reverse=True,
         )
 
         for symbol, stats in sorted_symbols:
@@ -356,7 +380,9 @@ class SignalsAndFiltersAuditor:
 
         return report
 
-    def save_report(self, report: str, output_file: str = "SIGNALS_AND_FILTERS_AUDIT_REPORT.md") -> None:
+    def save_report(
+        self, report: str, output_file: str = "SIGNALS_AND_FILTERS_AUDIT_REPORT.md"
+    ) -> None:
         """Сохранение отчета"""
         logger.info(f"💾 Сохранение отчета в {output_file}")
         try:
@@ -372,28 +398,28 @@ async def main():
     """Основная функция"""
     # Находим файл с данными сделок
     trades_file = "trades_merged_02-03_12_2025_20251204_200821.json"
-    
+
     if not Path(trades_file).exists():
         logger.error(f"❌ Файл {trades_file} не найден!")
         return
 
     auditor = SignalsAndFiltersAuditor(trades_file)
-    
+
     try:
         # Загрузка данных
         auditor.load_trades()
-        
+
         # Группировка в позиции
         auditor.group_trades_into_positions()
-        
+
         # Генерация отчета
         report = auditor.generate_report()
-        
+
         # Сохранение отчета
         auditor.save_report(report)
-        
+
         logger.info("✅ Аудит завершен успешно!")
-        
+
     except Exception as e:
         logger.error(f"❌ Ошибка при проведении аудита: {e}")
         raise
@@ -401,5 +427,5 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
 
+    asyncio.run(main())

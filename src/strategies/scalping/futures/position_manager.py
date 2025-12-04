@@ -464,7 +464,10 @@ class FuturesPositionManager:
                 # Режим может быть добавлен в position_data в entry_manager
                 self.active_positions[symbol] = position.copy()
                 # Если режим не в position, пытаемся получить из position_registry
-                if "regime" not in self.active_positions[symbol] and self.position_registry:
+                if (
+                    "regime" not in self.active_positions[symbol]
+                    and self.position_registry
+                ):
                     try:
                         metadata = await self.position_registry.get_metadata(symbol)
                         if metadata and metadata.regime:
@@ -494,12 +497,14 @@ class FuturesPositionManager:
             # и может принимать решения раньше других механизмов
             if self.exit_analyzer:
                 try:
-                    logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка Exit Analyzer (ПРИОРИТЕТ #0)")
+                    logger.debug(
+                        f"🔄 [MANAGE_POSITION] {symbol}: Проверка Exit Analyzer (ПРИОРИТЕТ #0)"
+                    )
                     exit_decision = await self.exit_analyzer.analyze_position(symbol)
                     if exit_decision:
                         action = exit_decision.get("action")
                         reason = exit_decision.get("reason", "exit_analyzer")
-                        
+
                         if action == "close":
                             logger.info(
                                 f"✅ Exit Analyzer: Закрываем {symbol} (reason={reason})"
@@ -515,20 +520,17 @@ class FuturesPositionManager:
                             if hasattr(self, "close_partial_position"):
                                 try:
                                     await self.close_partial_position(
-                                        symbol=symbol,
-                                        fraction=fraction,
-                                        reason=reason
+                                        symbol=symbol, fraction=fraction, reason=reason
                                     )
                                     # После частичного закрытия продолжаем мониторинг
                                 except Exception as e:
                                     logger.error(
                                         f"❌ Ошибка при частичном закрытии {symbol} через Exit Analyzer: {e}",
-                                        exc_info=True
+                                        exc_info=True,
                                     )
                 except Exception as e:
                     logger.error(
-                        f"❌ Ошибка Exit Analyzer для {symbol}: {e}",
-                        exc_info=True
+                        f"❌ Ошибка Exit Analyzer для {symbol}: {e}", exc_info=True
                     )
                     # Продолжаем работу, если Exit Analyzer выдал ошибку
 
@@ -1681,10 +1683,12 @@ class FuturesPositionManager:
 
             # ✅ УЛУЧШЕНИЕ #2: Добавляем процентный порог для PH
             # Если PnL% >= 0.5% за короткое время → закрыть по PH (для маленьких позиций)
-            pnl_percent = (net_pnl_usd / position_value * 100) if position_value > 0 else 0
+            pnl_percent = (
+                (net_pnl_usd / position_value * 100) if position_value > 0 else 0
+            )
             ph_percent_threshold = 0.5  # 0.5% от размера позиции
             ph_percent_time_limit = 120  # 2 минуты для процентного порога
-            
+
             # ✅ УЛУЧШЕНИЕ: Используем скорректированный порог для всех проверок
             # ✅ ИСПРАВЛЕНО: Определяем порог экстремальной прибыли 2x (на основе скорректированного порога)
             extreme_profit_2x = ph_threshold_adjusted * 2.0
@@ -1729,7 +1733,10 @@ class FuturesPositionManager:
                     )
             else:
                 # ✅ УЛУЧШЕНИЕ #2: Проверка процентного порога PH (для маленьких позиций)
-                if pnl_percent >= ph_percent_threshold and time_since_open <= ph_percent_time_limit:
+                if (
+                    pnl_percent >= ph_percent_threshold
+                    and time_since_open <= ph_percent_time_limit
+                ):
                     should_close = True
                     close_reason = f"PH процентный порог ({pnl_percent:.2f}% >= {ph_percent_threshold:.2f}% за {time_since_open:.1f}с)"
                     logger.debug(
@@ -2066,7 +2073,9 @@ class FuturesPositionManager:
                 if upl_str and str(upl_str).strip() and str(upl_str) != "0":
                     unrealized_pnl = float(upl_str)
             except (ValueError, TypeError) as e:
-                logger.debug(f"⚠️ Ошибка получения margin/upl из position для {symbol}: {e}")
+                logger.debug(
+                    f"⚠️ Ошибка получения margin/upl из position для {symbol}: {e}"
+                )
 
             # Попытка 2: Из margin_info (API запрос)
             if (margin_used is None or margin_used == 0) or (unrealized_pnl is None):
@@ -2078,7 +2087,9 @@ class FuturesPositionManager:
                         if margin_from_info and margin_from_info > 0:
                             margin_used = margin_used or float(margin_from_info)
                         # OKX API использует "upl" для unrealizedPnl
-                        upl_from_info = margin_info.get("upl", margin_info.get("unrealized_pnl", 0))
+                        upl_from_info = margin_info.get(
+                            "upl", margin_info.get("unrealized_pnl", 0)
+                        )
                         if upl_from_info is not None and upl_from_info != 0:
                             unrealized_pnl = unrealized_pnl or float(upl_from_info)
                 except Exception as e:
@@ -2096,7 +2107,9 @@ class FuturesPositionManager:
                         if upl_from_active is not None and upl_from_active != 0:
                             unrealized_pnl = unrealized_pnl or float(upl_from_active)
                     except (ValueError, TypeError) as e:
-                        logger.debug(f"⚠️ Ошибка получения margin/upl из active_positions для {symbol}: {e}")
+                        logger.debug(
+                            f"⚠️ Ошибка получения margin/upl из active_positions для {symbol}: {e}"
+                        )
 
             # ✅ КРИТИЧЕСКОЕ: Если не получили margin - используем fallback
             if margin_used is None or margin_used == 0:
@@ -2110,122 +2123,112 @@ class FuturesPositionManager:
             else:
                 # Преобразуем в float для безопасности
                 margin_used = float(margin_used) if margin_used else 0
-                unrealized_pnl = float(unrealized_pnl) if unrealized_pnl is not None else 0
+                unrealized_pnl = (
+                    float(unrealized_pnl) if unrealized_pnl is not None else 0
+                )
 
             # Если margin_info не дает нужные данные, используем fallback
             if margin_used == 0:
-                    # Пытаемся получить из position или рассчитать
-                    if "margin" in position:
-                        margin_value = position.get("margin", "0")
-                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
-                        if margin_value and str(margin_value).strip():
-                            try:
-                                margin_used = float(margin_value)
-                            except (ValueError, TypeError) as e:
-                                logger.debug(
-                                    f"⚠️ Ошибка конвертации margin для {symbol}: {e}, значение={margin_value}"
-                                )
-                                margin_used = 0
-                    elif "imr" in position:
-                        imr_value = position.get("imr", "0")
-                        if imr_value and str(imr_value).strip():
-                            try:
-                                margin_used = float(imr_value)
-                            except (ValueError, TypeError) as e:
-                                logger.debug(
-                                    f"⚠️ Ошибка конвертации imr для {symbol}: {e}, значение={imr_value}"
-                                )
-                                margin_used = 0
-                        else:
-                            # Fallback: если imr пустой, пытаемся напрямую
-                            try:
-                                margin_used = float(position.get("imr", "0") or 0)
-                            except (ValueError, TypeError):
-                                margin_used = 0
-                    else:
-                        # Рассчитываем маржу из размера позиции
-                        # position_value = size_in_coins * entry_price
-                        # margin = position_value / leverage
-                        # Для этого нужно получить ctVal
+                # Пытаемся получить из position или рассчитать
+                if "margin" in position:
+                    margin_value = position.get("margin", "0")
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
+                    if margin_value and str(margin_value).strip():
                         try:
-                            inst_details = await self.client.get_instrument_details(
-                                symbol
-                            )
-                            ct_val = float(inst_details.get("ctVal", "0.01"))
-                            size_in_coins = abs(size) * ct_val
-                            position_value = size_in_coins * entry_price
-                            margin_used = position_value / leverage
-                        except Exception as e:
+                            margin_used = float(margin_value)
+                        except (ValueError, TypeError) as e:
                             logger.debug(
-                                f"Не удалось рассчитать margin для {symbol}: {e}"
-                            )
-                            # Fallback: используем старый метод (процент от цены)
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Правильное определение направления позиции
-                            # Используем position_side из active_positions, если доступен, иначе определяем по side
-                            position_side = None
-                            if hasattr(self, "orchestrator") and self.orchestrator:
-                                active_positions = getattr(
-                                    self.orchestrator, "active_positions", {}
-                                )
-                                if symbol in active_positions:
-                                    position_side = active_positions[symbol].get(
-                                        "position_side"
-                                    )
-
-                            # Определяем направление позиции
-                            if position_side:
-                                # Используем position_side из active_positions (надежнее)
-                                if position_side.lower() == "long":
-                                    pnl_percent = (
-                                        (current_price - entry_price)
-                                        / entry_price
-                                        * 100
-                                    )
-                                else:  # short
-                                    pnl_percent = (
-                                        (entry_price - current_price)
-                                        / entry_price
-                                        * 100
-                                    )
-                            else:
-                                # Fallback: определяем по side
-                                if side.lower() in ["long", "buy"]:
-                                    pnl_percent = (
-                                        (current_price - entry_price)
-                                        / entry_price
-                                        * 100
-                                    )
-                                else:  # short или sell
-                                    pnl_percent = (
-                                        (entry_price - current_price)
-                                        / entry_price
-                                        * 100
-                                    )
-
-                            logger.warning(
-                                f"⚠️ Используем fallback расчет PnL% для {symbol}: {pnl_percent:.2f}% (от цены, а не от маржи) "
-                                f"(side={side}, position_side={position_side or 'N/A'})"
-                            )
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный TP вместо глобального
-                            regime = position.get(
-                                "regime"
-                            ) or self.active_positions.get(symbol, {}).get("regime")
-                            # ✅ ЭТАП 2.3: Передаем current_price для ATR-based расчета
-                            tp_percent = self._get_adaptive_tp_percent(
-                                symbol, regime, current_price
-                            )
-                            if pnl_percent >= tp_percent:
-                                logger.info(
-                                    f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}%"
-                                )
-                                await self._close_position_by_reason(position, "tp")
-                            return
-                        except Exception as e:
-                            logger.debug(
-                                f"Не удалось рассчитать margin для {symbol}: {e}, используем fallback"
+                                f"⚠️ Ошибка конвертации margin для {symbol}: {e}, значение={margin_value}"
                             )
                             margin_used = 0
-                            unrealized_pnl = 0
+                elif "imr" in position:
+                    imr_value = position.get("imr", "0")
+                    if imr_value and str(imr_value).strip():
+                        try:
+                            margin_used = float(imr_value)
+                        except (ValueError, TypeError) as e:
+                            logger.debug(
+                                f"⚠️ Ошибка конвертации imr для {symbol}: {e}, значение={imr_value}"
+                            )
+                            margin_used = 0
+                    else:
+                        # Fallback: если imr пустой, пытаемся напрямую
+                        try:
+                            margin_used = float(position.get("imr", "0") or 0)
+                        except (ValueError, TypeError):
+                            margin_used = 0
+                else:
+                    # Рассчитываем маржу из размера позиции
+                    # position_value = size_in_coins * entry_price
+                    # margin = position_value / leverage
+                    # Для этого нужно получить ctVal
+                    try:
+                        inst_details = await self.client.get_instrument_details(symbol)
+                        ct_val = float(inst_details.get("ctVal", "0.01"))
+                        size_in_coins = abs(size) * ct_val
+                        position_value = size_in_coins * entry_price
+                        margin_used = position_value / leverage
+                    except Exception as e:
+                        logger.debug(f"Не удалось рассчитать margin для {symbol}: {e}")
+                        # Fallback: используем старый метод (процент от цены)
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Правильное определение направления позиции
+                        # Используем position_side из active_positions, если доступен, иначе определяем по side
+                        position_side = None
+                        if hasattr(self, "orchestrator") and self.orchestrator:
+                            active_positions = getattr(
+                                self.orchestrator, "active_positions", {}
+                            )
+                            if symbol in active_positions:
+                                position_side = active_positions[symbol].get(
+                                    "position_side"
+                                )
+
+                        # Определяем направление позиции
+                        if position_side:
+                            # Используем position_side из active_positions (надежнее)
+                            if position_side.lower() == "long":
+                                pnl_percent = (
+                                    (current_price - entry_price) / entry_price * 100
+                                )
+                            else:  # short
+                                pnl_percent = (
+                                    (entry_price - current_price) / entry_price * 100
+                                )
+                        else:
+                            # Fallback: определяем по side
+                            if side.lower() in ["long", "buy"]:
+                                pnl_percent = (
+                                    (current_price - entry_price) / entry_price * 100
+                                )
+                            else:  # short или sell
+                                pnl_percent = (
+                                    (entry_price - current_price) / entry_price * 100
+                                )
+
+                        logger.warning(
+                            f"⚠️ Используем fallback расчет PnL% для {symbol}: {pnl_percent:.2f}% (от цены, а не от маржи) "
+                            f"(side={side}, position_side={position_side or 'N/A'})"
+                        )
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный TP вместо глобального
+                        regime = position.get("regime") or self.active_positions.get(
+                            symbol, {}
+                        ).get("regime")
+                        # ✅ ЭТАП 2.3: Передаем current_price для ATR-based расчета
+                        tp_percent = self._get_adaptive_tp_percent(
+                            symbol, regime, current_price
+                        )
+                        if pnl_percent >= tp_percent:
+                            logger.info(
+                                f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}%"
+                            )
+                            await self._close_position_by_reason(position, "tp")
+                        return
+                    except Exception as e:
+                        logger.debug(
+                            f"Не удалось рассчитать margin для {symbol}: {e}, используем fallback"
+                        )
+                        margin_used = 0
+                        unrealized_pnl = 0
 
             # Если получили margin, считаем PnL% от маржи
             if margin_used > 0:
@@ -3779,13 +3782,19 @@ class FuturesPositionManager:
                             regime = stored_position.get("regime", "unknown")
                     elif hasattr(self, "orchestrator") and self.orchestrator:
                         if symbol in self.orchestrator.active_positions:
-                            stored_position = self.orchestrator.active_positions.get(symbol, {})
+                            stored_position = self.orchestrator.active_positions.get(
+                                symbol, {}
+                            )
                             if isinstance(stored_position, dict):
                                 regime = stored_position.get("regime", "unknown")
 
                     if margin_used > 0:
                         pnl_percent_from_margin = (net_pnl / margin_used) * 100
-                        pnl_percent_from_price = ((exit_price - entry_price) / entry_price * 100) if side.lower() == "long" else ((entry_price - exit_price) / entry_price * 100)
+                        pnl_percent_from_price = (
+                            ((exit_price - entry_price) / entry_price * 100)
+                            if side.lower() == "long"
+                            else ((entry_price - exit_price) / entry_price * 100)
+                        )
                         logger.info(
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                             f"✅ ПОЗИЦИЯ ЗАКРЫТА: {symbol} {side.upper()}\n"
@@ -3805,7 +3814,11 @@ class FuturesPositionManager:
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                         )
                     else:
-                        pnl_percent_from_price = ((exit_price - entry_price) / entry_price * 100) if side.lower() == "long" else ((entry_price - exit_price) / entry_price * 100)
+                        pnl_percent_from_price = (
+                            ((exit_price - entry_price) / entry_price * 100)
+                            if side.lower() == "long"
+                            else ((entry_price - exit_price) / entry_price * 100)
+                        )
                         # ✅ НОВОЕ: Получаем режим рынка из позиции
                         regime = "unknown"
                         if symbol in self.active_positions:
@@ -3814,7 +3827,9 @@ class FuturesPositionManager:
                                 regime = stored_position.get("regime", "unknown")
                         elif hasattr(self, "orchestrator") and self.orchestrator:
                             if symbol in self.orchestrator.active_positions:
-                                stored_position = self.orchestrator.active_positions.get(symbol, {})
+                                stored_position = (
+                                    self.orchestrator.active_positions.get(symbol, {})
+                                )
                                 if isinstance(stored_position, dict):
                                     regime = stored_position.get("regime", "unknown")
                         logger.info(
@@ -5129,13 +5144,9 @@ class FuturesPositionManager:
                     try:
                         # Пробуем получить funding fee из позиции (используем pos_data вместо actual_position)
                         if "fundingFee" in pos_data:
-                            funding_fee = float(
-                                pos_data.get("fundingFee", 0) or 0
-                            )
+                            funding_fee = float(pos_data.get("fundingFee", 0) or 0)
                         elif "funding_fee" in pos_data:
-                            funding_fee = float(
-                                pos_data.get("funding_fee", 0) or 0
-                            )
+                            funding_fee = float(pos_data.get("funding_fee", 0) or 0)
                         elif "fee" in pos_data:
                             # OKX может возвращать fee, который включает funding
                             fee_value = pos_data.get("fee", 0)
@@ -5169,25 +5180,39 @@ class FuturesPositionManager:
                             regime = stored_position.get("regime", "unknown")
                     elif hasattr(self, "orchestrator") and self.orchestrator:
                         if symbol in self.orchestrator.active_positions:
-                            stored_position = self.orchestrator.active_positions.get(symbol, {})
+                            stored_position = self.orchestrator.active_positions.get(
+                                symbol, {}
+                            )
                             if isinstance(stored_position, dict):
                                 regime = stored_position.get("regime", "unknown")
-                    
+
                     # ✅ НОВОЕ: Получаем margin для расчета PnL% от маржи
                     margin_used = 0.0
                     try:
-                        margin_str = pos_data.get("margin") or pos_data.get("imr") or "0"
-                        if margin_str and str(margin_str).strip() and str(margin_str) != "0":
+                        margin_str = (
+                            pos_data.get("margin") or pos_data.get("imr") or "0"
+                        )
+                        if (
+                            margin_str
+                            and str(margin_str).strip()
+                            and str(margin_str) != "0"
+                        ):
                             margin_used = float(margin_str)
                     except (ValueError, TypeError):
                         pass
-                    
-                    pnl_percent_from_price = ((exit_price - entry_price) / entry_price * 100) if side.lower() == "long" else ((entry_price - exit_price) / entry_price * 100)
+
+                    pnl_percent_from_price = (
+                        ((exit_price - entry_price) / entry_price * 100)
+                        if side.lower() == "long"
+                        else ((entry_price - exit_price) / entry_price * 100)
+                    )
                     pnl_percent_from_margin_str = ""
                     if margin_used > 0:
                         pnl_percent_from_margin = (net_pnl / margin_used) * 100
-                        pnl_percent_from_margin_str = f" ({pnl_percent_from_margin:+.2f}% от маржи)"
-                    
+                        pnl_percent_from_margin_str = (
+                            f" ({pnl_percent_from_margin:+.2f}% от маржи)"
+                        )
+
                     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                     logger.info(f"💰 ПОЗИЦИЯ ЗАКРЫТА (manual): {symbol} {side.upper()}")
                     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -5196,13 +5221,17 @@ class FuturesPositionManager:
                     )
                     logger.info(f"   📊 Режим рынка: {regime}")
                     logger.info(f"   📊 Entry price: ${entry_price:.6f}")
-                    logger.info(f"   📊 Exit price: ${exit_price:.6f} (изменение: {pnl_percent_from_price:+.2f}%)")
+                    logger.info(
+                        f"   📊 Exit price: ${exit_price:.6f} (изменение: {pnl_percent_from_price:+.2f}%)"
+                    )
                     logger.info(
                         f"   📦 Size: {size_in_coins:.8f} монет ({size} контрактов)"
                     )
                     logger.info(f"   ⏱️  Длительность удержания: {duration_str}")
                     logger.info(f"   💵 Gross PnL: ${gross_pnl:+.4f} USDT")
-                    logger.info(f"   💵 Net PnL: ${net_pnl:+.4f} USDT{pnl_percent_from_margin_str}")
+                    logger.info(
+                        f"   💵 Net PnL: ${net_pnl:+.4f} USDT{pnl_percent_from_margin_str}"
+                    )
                     logger.info(
                         f"   💸 Комиссия вход ({entry_order_type_str}): ${commission_entry:.4f} USDT ({entry_commission_rate*100:.2f}%)"
                     )

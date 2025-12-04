@@ -1189,7 +1189,9 @@ class ExitAnalyzer:
             partial_tp_params = self._get_partial_tp_params("trending")
             if partial_tp_params.get("enabled", False):
                 # ✅ УЛУЧШЕНИЕ #6: Используем оптимизированные триггеры из конфига
-                trigger_percent = partial_tp_params.get("trigger_percent", 0.8)  # Обновлено: 0.8% для trending
+                trigger_percent = partial_tp_params.get(
+                    "trigger_percent", 0.8
+                )  # Обновлено: 0.8% для trending
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
                     (
@@ -1467,7 +1469,7 @@ class ExitAnalyzer:
                             fraction = base_fraction * 1.33  # 80% если PnL >= 2.0%
                         else:
                             fraction = base_fraction  # 60% стандарт
-                        
+
                         logger.info(
                             f"📊 ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}: "
                             f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
@@ -1712,7 +1714,9 @@ class ExitAnalyzer:
             # ✅ УЛУЧШЕНИЕ #6: Используем оптимизированные триггеры из конфига
             partial_tp_params = self._get_partial_tp_params("choppy")
             if partial_tp_params.get("enabled", False):
-                trigger_percent = partial_tp_params.get("trigger_percent", 0.6)  # Обновлено: 0.6% для choppy
+                trigger_percent = partial_tp_params.get(
+                    "trigger_percent", 0.6
+                )  # Обновлено: 0.6% для choppy
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
                     (
@@ -1731,7 +1735,7 @@ class ExitAnalyzer:
                             fraction = base_fraction * 1.33  # ~93% если PnL >= 2.0%
                         else:
                             fraction = base_fraction  # 70% стандарт для choppy
-                        
+
                         logger.info(
                             f"📊 ExitAnalyzer CHOPPY: Partial TP триггер достигнут для {symbol}: "
                             f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "

@@ -6,13 +6,13 @@
 - Производительность расчетов
 """
 
-import json
 import asyncio
-from pathlib import Path
-from typing import Dict, List, Optional
+import importlib.util
+import json
 from collections import defaultdict
 from datetime import datetime
-import importlib.util
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from loguru import logger
 
@@ -79,7 +79,7 @@ class IndicatorsAuditor:
                 issues.append("⚠️ Возможна проблема с пустыми данными")
 
             # Проверка на обработку None
-            if "None" in content and "if" not in content[:content.find("None") + 50]:
+            if "None" in content and "if" not in content[: content.find("None") + 50]:
                 issues.append("⚠️ Возможна проблема с None без проверки")
 
         except Exception as e:
@@ -146,7 +146,9 @@ class IndicatorsAuditor:
                 if "macd" in content.lower():
                     usage["MACD"] += content.lower().count("macd")
                 if "bollinger" in content.lower() or "bb" in content.lower():
-                    usage["BollingerBands"] += content.lower().count("bollinger") + content.lower().count("bb")
+                    usage["BollingerBands"] += content.lower().count(
+                        "bollinger"
+                    ) + content.lower().count("bb")
                 if "atr" in content.lower():
                     usage["ATR"] += content.lower().count("atr")
                 if "adx" in content.lower():
@@ -177,7 +179,9 @@ class IndicatorsAuditor:
         if usage:
             report.append("| Индикатор | Использований |\n")
             report.append("|-----------|---------------|\n")
-            for indicator, count in sorted(usage.items(), key=lambda x: x[1], reverse=True):
+            for indicator, count in sorted(
+                usage.items(), key=lambda x: x[1], reverse=True
+            ):
                 report.append(f"| {indicator} | {count} |\n")
         else:
             report.append("⚠️ Нет данных об использовании индикаторов\n\n")
@@ -231,8 +235,7 @@ class IndicatorsAuditor:
 
         # Проверяем обработку NaN
         has_nan_issues = any(
-            "NaN" in str(analysis.get("issues", []))
-            for analysis in code_analysis
+            "NaN" in str(analysis.get("issues", [])) for analysis in code_analysis
         )
         if has_nan_issues:
             recommendations.append(
@@ -290,7 +293,9 @@ class IndicatorsAuditor:
 
         # Вывод краткой статистики
         logger.info("\n📊 КРАТКАЯ СТАТИСТИКА:\n")
-        logger.info(f"  Найдено файлов с индикаторами: {sum(len(files) for files in indicator_files.values())}\n")
+        logger.info(
+            f"  Найдено файлов с индикаторами: {sum(len(files) for files in indicator_files.values())}\n"
+        )
         logger.info(f"  Используемых индикаторов: {len(indicators_usage)}\n")
 
 

@@ -190,11 +190,11 @@ class SlippageGuard:
     ) -> Optional[Dict[str, float]]:
         """
         ✅ ИСПРАВЛЕНО: Получение текущих цен через OKX API
-        
+
         Args:
             client: OKX Futures Client
             symbol: Торговый символ (например, "BTC-USDT")
-            
+
         Returns:
             Dict с bid, ask, last ценами или None при ошибке
         """
@@ -202,23 +202,24 @@ class SlippageGuard:
             # ✅ ИСПРАВЛЕНО: Получаем реальные цены через OKX API
             # Конвертируем symbol в instId (добавляем -SWAP для фьючерсов)
             inst_id = symbol.replace("-USDT", "-USDT-SWAP")
-            
+
             # Используем публичный API для получения ticker
             import aiohttp
+
             base_url = "https://www.okx.com"
             ticker_url = f"{base_url}/api/v5/market/ticker?instId={inst_id}"
-            
+
             async with aiohttp.ClientSession() as session:
                 async with session.get(ticker_url) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get("code") == "0" and data.get("data"):
                             ticker = data["data"][0]
-                            
+
                             bid_price = float(ticker.get("bidPx", "0") or "0")
                             ask_price = float(ticker.get("askPx", "0") or "0")
                             last_price = float(ticker.get("last", "0") or "0")
-                            
+
                             if bid_price > 0 and ask_price > 0:
                                 logger.debug(
                                     f"✅ SlippageGuard: Получены цены для {symbol}: "
@@ -227,7 +228,9 @@ class SlippageGuard:
                                 return {
                                     "bid": bid_price,
                                     "ask": ask_price,
-                                    "last": last_price if last_price > 0 else (bid_price + ask_price) / 2,
+                                    "last": last_price
+                                    if last_price > 0
+                                    else (bid_price + ask_price) / 2,
                                 }
                             else:
                                 logger.warning(
@@ -245,7 +248,7 @@ class SlippageGuard:
                             f"⚠️ SlippageGuard: HTTP {resp.status} для {symbol}"
                         )
                         return None
-                        
+
         except Exception as e:
             logger.error(f"❌ SlippageGuard: Ошибка получения цен для {symbol}: {e}")
             return None

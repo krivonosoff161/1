@@ -135,7 +135,7 @@ class RSI(BaseIndicator):
             # Первое значение - простое среднее за период
             avg_gain = np.mean(gains[-self.period :])
             avg_loss = np.mean(losses[-self.period :])
-            
+
             # Если есть больше данных, применяем экспоненциальное сглаживание
             if len(gains) > self.period:
                 # Для каждого нового значения применяем формулу Wilder
@@ -208,12 +208,14 @@ class ATR(BaseIndicator):
         if len(true_ranges) >= self.period:
             # Первое значение - простое среднее за период
             atr_value = np.mean(true_ranges[-self.period :])
-            
+
             # Если есть больше данных, применяем экспоненциальное сглаживание
             if len(true_ranges) > self.period:
                 # Для каждого нового значения применяем формулу Wilder
                 for i in range(self.period, len(true_ranges)):
-                    atr_value = (atr_value * (self.period - 1) + true_ranges[i]) / self.period
+                    atr_value = (
+                        atr_value * (self.period - 1) + true_ranges[i]
+                    ) / self.period
         else:
             atr_value = 0
 
@@ -302,13 +304,13 @@ class MACD(BaseIndicator):
         self.macd_history.append(macd_line)
         # Ограничиваем размер истории (нужно только для signal_period)
         if len(self.macd_history) > self.signal_period * 2:
-            self.macd_history = self.macd_history[-self.signal_period * 2:]
+            self.macd_history = self.macd_history[-self.signal_period * 2 :]
 
         # ✅ ИСПРАВЛЕНО: Signal line - это EMA от истории MACD
         if len(self.macd_history) >= self.signal_period:
             # Используем последние signal_period значений для расчета EMA
             signal_value = self._calculate_ema(
-                self.macd_history[-self.signal_period:], self.signal_period
+                self.macd_history[-self.signal_period :], self.signal_period
             )
         else:
             # Если недостаточно данных, используем текущий MACD

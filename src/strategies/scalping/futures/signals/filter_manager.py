@@ -166,21 +166,37 @@ class FilterManager:
         try:
             if market_data and hasattr(market_data, "indicators"):
                 indicators = market_data.indicators
-                adx_value = indicators.get("ADX") if isinstance(indicators, dict) else None
-                di_plus = indicators.get("DI_PLUS") if isinstance(indicators, dict) else None
-                di_minus = indicators.get("DI_MINUS") if isinstance(indicators, dict) else None
-                
+                adx_value = (
+                    indicators.get("ADX") if isinstance(indicators, dict) else None
+                )
+                di_plus = (
+                    indicators.get("DI_PLUS") if isinstance(indicators, dict) else None
+                )
+                di_minus = (
+                    indicators.get("DI_MINUS") if isinstance(indicators, dict) else None
+                )
+
                 signal_side = signal.get("side", "").lower()
-                
+
                 # Если ADX > 20 (сильный тренд) и направление против сигнала - блокируем
                 if adx_value and adx_value > 20:
-                    if signal_side == "buy" and di_minus and di_plus and di_minus > di_plus:
+                    if (
+                        signal_side == "buy"
+                        and di_minus
+                        and di_plus
+                        and di_minus > di_plus
+                    ):
                         # LONG сигнал, но тренд вниз (DI- > DI+)
                         logger.debug(
                             f"🔍 Сигнал {symbol} LONG отфильтрован: тренд вниз (ADX={adx_value:.1f}, DI-={di_minus:.1f} > DI+={di_plus:.1f})"
                         )
                         return None
-                    elif signal_side == "sell" and di_plus and di_minus and di_plus > di_minus:
+                    elif (
+                        signal_side == "sell"
+                        and di_plus
+                        and di_minus
+                        and di_plus > di_minus
+                    ):
                         # SHORT сигнал, но тренд вверх (DI+ > DI-)
                         logger.debug(
                             f"🔍 Сигнал {symbol} SHORT отфильтрован: тренд вверх (ADX={adx_value:.1f}, DI+={di_plus:.1f} > DI-={di_minus:.1f})"

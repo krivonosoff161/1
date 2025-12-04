@@ -9,10 +9,10 @@
 """
 
 import json
+import statistics
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-import statistics
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -44,7 +44,7 @@ class SlippageGuardAuditor:
     def analyze_slippage_from_positions(self) -> Dict[str, Any]:
         """
         Анализ проскальзывания из позиций
-        
+
         Примечание: В данных позиций нет информации о проскальзывании напрямую.
         Анализируем косвенно через разницу между entry_price и exit_price.
         """
@@ -52,12 +52,12 @@ class SlippageGuardAuditor:
 
         # Анализируем позиции с одинаковым entry_order_id (частичные исполнения)
         # Если entry_price != exit_price для одной позиции - возможно проскальзывание
-        
+
         price_differences = []
         for pos in self.positions:
             entry_price = float(pos.get("entry_price", 0))
             exit_price = float(pos.get("exit_price", 0))
-            
+
             if entry_price > 0 and exit_price > 0:
                 # Разница в процентах
                 diff_pct = abs(exit_price - entry_price) / entry_price * 100
@@ -72,10 +72,14 @@ class SlippageGuardAuditor:
 
         analysis = {
             "total_positions": len(price_differences),
-            "avg_price_diff_pct": statistics.mean(price_differences) if price_differences else 0,
+            "avg_price_diff_pct": statistics.mean(price_differences)
+            if price_differences
+            else 0,
             "max_price_diff_pct": max(price_differences) if price_differences else 0,
             "slippage_candidates": len(slippage_candidates),
-            "avg_slippage_candidate": statistics.mean(slippage_candidates) if slippage_candidates else 0,
+            "avg_slippage_candidate": statistics.mean(slippage_candidates)
+            if slippage_candidates
+            else 0,
         }
 
         return analysis
@@ -108,28 +112,34 @@ class SlippageGuardAuditor:
         problems = []
 
         # 1. Лимитные ордера не отменяются
-        problems.append({
-            "severity": "info",
-            "issue": "Лимитные ордера не отменяются SlippageGuard",
-            "description": "SlippageGuard пропускает лимитные ордера (правильно, но нужно проверить другие механизмы отмены)",
-            "location": "slippage_guard.py:154",
-        })
+        problems.append(
+            {
+                "severity": "info",
+                "issue": "Лимитные ордера не отменяются SlippageGuard",
+                "description": "SlippageGuard пропускает лимитные ордера (правильно, но нужно проверить другие механизмы отмены)",
+                "location": "slippage_guard.py:154",
+            }
+        )
 
         # 2. _get_current_prices использует заглушку
-        problems.append({
-            "severity": "warning",
-            "issue": "_get_current_prices использует заглушку",
-            "description": "Метод _get_current_prices возвращает фиксированные значения вместо реальных цен",
-            "location": "slippage_guard.py:195",
-        })
+        problems.append(
+            {
+                "severity": "warning",
+                "issue": "_get_current_prices использует заглушку",
+                "description": "Метод _get_current_prices возвращает фиксированные значения вместо реальных цен",
+                "location": "slippage_guard.py:195",
+            }
+        )
 
         # 3. Нет логирования проскальзывания
-        problems.append({
-            "severity": "medium",
-            "issue": "Нет логирования проскальзывания",
-            "description": "SlippageGuard не логирует реальное проскальзывание для анализа",
-            "location": "slippage_guard.py",
-        })
+        problems.append(
+            {
+                "severity": "medium",
+                "issue": "Нет логирования проскальзывания",
+                "description": "SlippageGuard не логирует реальное проскальзывание для анализа",
+                "location": "slippage_guard.py",
+            }
+        )
 
         analysis = {
             "config_params": config_params,
@@ -284,7 +294,9 @@ class SlippageGuardAuditor:
 
         return report
 
-    def save_report(self, report: str, output_file: str = "SLIPPAGE_GUARD_AUDIT_REPORT.md") -> None:
+    def save_report(
+        self, report: str, output_file: str = "SLIPPAGE_GUARD_AUDIT_REPORT.md"
+    ) -> None:
         """Сохранение отчета"""
         logger.info(f"💾 Сохранение отчета в {output_file}")
         try:
@@ -299,25 +311,25 @@ class SlippageGuardAuditor:
 async def main():
     """Основная функция"""
     positions_file = "exchange_positions.json"
-    
+
     if not Path(positions_file).exists():
         logger.error(f"❌ Файл {positions_file} не найден!")
         return
 
     auditor = SlippageGuardAuditor(positions_file)
-    
+
     try:
         # Загрузка данных
         auditor.load_positions()
-        
+
         # Генерация отчета
         report = auditor.generate_report()
-        
+
         # Сохранение отчета
         auditor.save_report(report)
-        
+
         logger.info("✅ Аудит завершен успешно!")
-        
+
     except Exception as e:
         logger.error(f"❌ Ошибка при проведении аудита: {e}")
         raise
@@ -325,5 +337,5 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
 
+    asyncio.run(main())

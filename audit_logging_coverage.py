@@ -9,9 +9,9 @@
 """
 
 import re
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Set
-from collections import defaultdict
 
 from loguru import logger
 
@@ -36,7 +36,14 @@ class LoggingCoverageAuditor:
             "position_closing": ["close_position", "exit", "tp", "sl", "trailing"],
             "risk_management": ["risk", "margin", "size", "limit"],
             "order_execution": ["execute", "order", "market", "limit", "fill"],
-            "exit_mechanisms": ["tp", "sl", "partial", "harvest", "timeout", "emergency"],
+            "exit_mechanisms": [
+                "tp",
+                "sl",
+                "partial",
+                "harvest",
+                "timeout",
+                "emergency",
+            ],
             "regime_detection": ["regime", "trending", "ranging", "choppy"],
             "pnl_calculation": ["pnl", "profit", "loss", "margin"],
             "slippage": ["slippage", "spread", "fill"],
@@ -145,13 +152,13 @@ class LoggingCoverageAuditor:
         }
 
         # Проверяем signal_coordinator для типов сигналов
-        signal_coord_file = (
-            self.futures_dir / "coordinators" / "signal_coordinator.py"
-        )
+        signal_coord_file = self.futures_dir / "coordinators" / "signal_coordinator.py"
         if signal_coord_file.exists():
             with open(signal_coord_file, "r", encoding="utf-8") as f:
                 content = f.read()
-                checks["signal_types"] = "signal_type" in content and "logger.info" in content
+                checks["signal_types"] = (
+                    "signal_type" in content and "logger.info" in content
+                )
 
         # Проверяем filter_manager для filters_passed
         filter_mgr_file = self.futures_dir / "signals" / "filter_manager.py"
@@ -228,7 +235,9 @@ class LoggingCoverageAuditor:
         specific = stats.get("specific_logging", {})
         for check_name, has_logging in specific.items():
             status = "✅" if has_logging else "❌"
-            report.append(f"{status} **{check_name}**: {'Есть' if has_logging else 'НЕТ'}\n")
+            report.append(
+                f"{status} **{check_name}**: {'Есть' if has_logging else 'НЕТ'}\n"
+            )
 
         # Покрытие по типам операций
         report.append("\n## 📊 ПОКРЫТИЕ ПО ТИПАМ ОПЕРАЦИЙ\n\n")
@@ -237,7 +246,9 @@ class LoggingCoverageAuditor:
             report.append(f"### {op_type.replace('_', ' ').title()}\n\n")
             total = len(files)
             covered = sum(1 for has_logging in files.values() if has_logging)
-            report.append(f"**Покрытие:** {covered}/{total} ({covered/total*100:.0f}%)\n\n")
+            report.append(
+                f"**Покрытие:** {covered}/{total} ({covered/total*100:.0f}%)\n\n"
+            )
             for file_rel, has_logging in files.items():
                 status = "✅" if has_logging else "❌"
                 report.append(f"{status} `{file_rel}`\n")
@@ -323,4 +334,3 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(main())
-

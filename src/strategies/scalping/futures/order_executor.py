@@ -622,7 +622,7 @@ class FuturesOrderExecutor:
                             f"best_ask={best_ask:.2f}, current={current_price:.2f}, spread={spread_pct:.3%} "
                             f"(используем current_price)"
                         )
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для BUY используем best_ask (лучшая цена продажи)
                 # Для скальпинга нужно быстрое исполнение, поэтому используем best_ask или немного выше
                 # НЕ используем best_bid - это ставит ордер далеко от рынка!
@@ -754,7 +754,9 @@ class FuturesOrderExecutor:
                 if current_price > 0
                 else 0
             )
-            if price_diff_pct > 0.2:  # ✅ ИСПРАВЛЕНО: Если разница > 0.2% - это проблема для скальпинга!
+            if (
+                price_diff_pct > 0.2
+            ):  # ✅ ИСПРАВЛЕНО: Если разница > 0.2% - это проблема для скальпинга!
                 logger.error(
                     f"❌ КРИТИЧЕСКАЯ ОШИБКА: Лимитная цена для {symbol} {side} слишком далеко от текущей! "
                     f"limit_price={limit_price:.2f}, current_price={current_price:.2f}, "

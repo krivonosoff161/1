@@ -7,12 +7,12 @@
 - Адаптивность по режимам
 """
 
-import json
 import asyncio
-from pathlib import Path
-from typing import Dict, List, Optional
+import json
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from loguru import logger
 
@@ -79,20 +79,26 @@ class PartialTPAuditor:
             positions = self._group_trades_into_positions(trades)
 
             for pos in positions:
-                if len(pos["trades"]) > 2:  # Открытие + частичное закрытие + финальное закрытие
+                if (
+                    len(pos["trades"]) > 2
+                ):  # Открытие + частичное закрытие + финальное закрытие
                     # Проверяем, было ли частичное закрытие
                     open_trade = pos["trades"][0]
                     close_trades = pos["trades"][1:]
 
                     # Если есть несколько закрытий - это частичное закрытие
                     if len(close_trades) > 1:
-                        partial_closes.append({
-                            "symbol": symbol,
-                            "open_time": open_trade.get("timestamp"),
-                            "close_times": [t.get("timestamp") for t in close_trades],
-                            "num_closes": len(close_trades),
-                            "total_pnl": pos.get("total_pnl", 0),
-                        })
+                        partial_closes.append(
+                            {
+                                "symbol": symbol,
+                                "open_time": open_trade.get("timestamp"),
+                                "close_times": [
+                                    t.get("timestamp") for t in close_trades
+                                ],
+                                "num_closes": len(close_trades),
+                                "total_pnl": pos.get("total_pnl", 0),
+                            }
+                        )
 
         return {
             "total_partial_closes": len(partial_closes),
@@ -165,9 +171,7 @@ class PartialTPAuditor:
 
         # Проверяем позиции на наличие флага partial_tp_done
         positions_with_partial_tp = sum(
-            1
-            for pos in self.positions_data
-            if pos.get("partial_tp_done", False)
+            1 for pos in self.positions_data if pos.get("partial_tp_done", False)
         )
         positions_without_partial_tp = (
             len(self.positions_data) - positions_with_partial_tp
@@ -241,9 +245,7 @@ class PartialTPAuditor:
         recommendations = []
 
         # Проверка 1: Есть ли метод close_partial_position
-        issues.append(
-            "✅ Метод close_partial_position реализован в PositionManager"
-        )
+        issues.append("✅ Метод close_partial_position реализован в PositionManager")
 
         # Проверка 2: Есть ли логика в ExitAnalyzer
         issues.append("✅ ExitAnalyzer поддерживает partial_close action")
@@ -255,9 +257,7 @@ class PartialTPAuditor:
         issues.append("✅ Адаптивный min_holding для Partial TP реализован")
 
         # Рекомендации
-        if not any(
-            pos.get("partial_tp_done", False) for pos in self.positions_data
-        ):
+        if not any(pos.get("partial_tp_done", False) for pos in self.positions_data):
             recommendations.append(
                 "⚠️ Partial TP не используется - проверить пороги trigger_percent"
             )
@@ -421,4 +421,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

@@ -7,12 +7,12 @@
 - Эффективность адаптивных параметров
 """
 
-import json
 import asyncio
-from pathlib import Path
-from typing import Dict, List, Optional
+import json
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from loguru import logger
 
@@ -61,14 +61,16 @@ class AdaptivityAuditor:
         """Анализ использования режимов"""
         logger.info("🔍 Анализ использования режимов...\n")
 
-        regime_stats = defaultdict(lambda: {
-            "count": 0,
-            "total_pnl": 0.0,
-            "win_count": 0,
-            "loss_count": 0,
-            "avg_pnl": 0.0,
-            "symbols": defaultdict(int),
-        })
+        regime_stats = defaultdict(
+            lambda: {
+                "count": 0,
+                "total_pnl": 0.0,
+                "win_count": 0,
+                "loss_count": 0,
+                "avg_pnl": 0.0,
+                "symbols": defaultdict(int),
+            }
+        )
 
         for pos in self.positions_data:
             regime = pos.get("regime", "unknown")
@@ -117,12 +119,14 @@ class AdaptivityAuditor:
             for pos in positions:
                 current_regime = pos.get("regime", "unknown")
                 if prev_regime and prev_regime != current_regime:
-                    switches.append({
-                        "symbol": symbol,
-                        "from": prev_regime,
-                        "to": current_regime,
-                        "time": pos.get("entry_time"),
-                    })
+                    switches.append(
+                        {
+                            "symbol": symbol,
+                            "from": prev_regime,
+                            "to": current_regime,
+                            "time": pos.get("entry_time"),
+                        }
+                    )
                 prev_regime = current_regime
 
         return {
@@ -141,11 +145,13 @@ class AdaptivityAuditor:
         positions_without_regime = len(self.positions_data) - positions_with_regime
 
         # Анализируем параметры по режимам
-        regime_params = defaultdict(lambda: {
-            "tp_percent": [],
-            "sl_percent": [],
-            "holding_time": [],
-        })
+        regime_params = defaultdict(
+            lambda: {
+                "tp_percent": [],
+                "sl_percent": [],
+                "holding_time": [],
+            }
+        )
 
         for pos in self.positions_data:
             regime = pos.get("regime")
@@ -249,7 +255,9 @@ class AdaptivityAuditor:
         # Переключения режимов
         report.append("## 🔄 ПЕРЕКЛЮЧЕНИЯ МЕЖДУ РЕЖИМАМИ\n\n")
         switches = stats.get("regime_switches", {})
-        report.append(f"**Всего переключений:** {switches.get('total_switches', 0)}\n\n")
+        report.append(
+            f"**Всего переключений:** {switches.get('total_switches', 0)}\n\n"
+        )
         if switches.get("switches"):
             report.append("**Примеры переключений:**\n")
             for switch in switches["switches"][:10]:
@@ -286,9 +294,7 @@ class AdaptivityAuditor:
 
         if params.get("positions_without_regime", 0) > 0:
             pct = (
-                params["positions_without_regime"]
-                / len(self.positions_data)
-                * 100
+                params["positions_without_regime"] / len(self.positions_data) * 100
                 if self.positions_data
                 else 0
             )
@@ -382,4 +388,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

@@ -387,15 +387,15 @@ class TrailingStopLoss:
             return stop_loss
 
     def get_profit_pct(
-        self, 
-        current_price: float, 
+        self,
+        current_price: float,
         include_fees: bool = True,
         margin_used: Optional[float] = None,
-        unrealized_pnl: Optional[float] = None
+        unrealized_pnl: Optional[float] = None,
     ) -> float:
         """
         ✅ ИСПРАВЛЕНО: Получение текущей прибыли в процентах с учетом комиссии.
-        
+
         ПРИОРИТЕТ 1: Если есть margin и unrealizedPnl - считаем от МАРЖИ (как на бирже)
         FALLBACK: Если нет margin - считаем от цены и конвертируем в % от маржи
 
@@ -413,11 +413,15 @@ class TrailingStopLoss:
 
         # ✅ ПРИОРИТЕТ 1: Если есть margin и unrealizedPnl - считаем от МАРЖИ (как на бирже)
         if margin_used and margin_used > 0 and unrealized_pnl is not None:
-            gross_pnl_pct_from_margin = (unrealized_pnl / margin_used) * 100  # От маржи!
-            
+            gross_pnl_pct_from_margin = (
+                unrealized_pnl / margin_used
+            ) * 100  # От маржи!
+
             if include_fees:
                 seconds_since_open = (
-                    (time.time() - self.entry_timestamp) if self.entry_timestamp > 0 else 0
+                    (time.time() - self.entry_timestamp)
+                    if self.entry_timestamp > 0
+                    else 0
                 )
                 if seconds_since_open < 10.0:
                     # В первые 10 секунд не учитываем комиссию
@@ -430,16 +434,22 @@ class TrailingStopLoss:
                     # После 10 секунд учитываем комиссию
                     trading_fee_rate = self.trading_fee_rate
                     # Комиссия в процентах от маржи (0.1% на круг = 0.1% от маржи)
-                    net_pnl_pct_from_margin = gross_pnl_pct_from_margin - (trading_fee_rate * 100)
+                    net_pnl_pct_from_margin = gross_pnl_pct_from_margin - (
+                        trading_fee_rate * 100
+                    )
                     return net_pnl_pct_from_margin
             else:
                 return gross_pnl_pct_from_margin
 
         # ✅ FALLBACK: Если нет margin - считаем от цены и конвертируем в % от маржи
         if self.side == "long":
-            gross_profit_pct_from_price = (current_price - self.entry_price) / self.entry_price
+            gross_profit_pct_from_price = (
+                current_price - self.entry_price
+            ) / self.entry_price
         else:
-            gross_profit_pct_from_price = (self.entry_price - current_price) / self.entry_price
+            gross_profit_pct_from_price = (
+                self.entry_price - current_price
+            ) / self.entry_price
 
         # ✅ КРИТИЧЕСКОЕ: Конвертируем процент от цены в процент от маржи
         # При leverage 3x: 1% от цены = 3% от маржи
@@ -460,7 +470,9 @@ class TrailingStopLoss:
             else:
                 # После 10 секунд учитываем комиссию
                 trading_fee_rate = self.trading_fee_rate
-                net_pnl_pct_from_margin = gross_profit_pct_from_margin - (trading_fee_rate * 100)
+                net_pnl_pct_from_margin = gross_profit_pct_from_margin - (
+                    trading_fee_rate * 100
+                )
                 return net_pnl_pct_from_margin
         else:
             return gross_profit_pct_from_margin

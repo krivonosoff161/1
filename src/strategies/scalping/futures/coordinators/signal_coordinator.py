@@ -1996,16 +1996,18 @@ class SignalCoordinator:
                     return False
 
                 # ✅ НОВОЕ: Логирование типа сигнала и примененных фильтров
-                signal_type = signal.get("type") or signal.get("signal_type") or "unknown"
+                signal_type = (
+                    signal.get("type") or signal.get("signal_type") or "unknown"
+                )
                 filters_passed = signal.get("filters_passed", [])
                 regime = signal.get("regime") or "unknown"
-                
+
                 logger.info(
                     f"✅ Позиция открыта: {symbol} {position_size:.6f} | "
                     f"signal_type={signal_type} | regime={regime} | "
                     f"filters_passed={len(filters_passed)} ({', '.join(filters_passed[:3]) if filters_passed else 'none'})"
                 )
-                
+
                 # ✅ НОВОЕ: Сохраняем в structured logs (если есть)
                 if hasattr(self, "structured_logger") and self.structured_logger:
                     try:
@@ -2018,7 +2020,9 @@ class SignalCoordinator:
                             filters_passed=filters_passed,
                         )
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка логирования сигнала в structured logs: {e}")
+                        logger.debug(
+                            f"⚠️ Ошибка логирования сигнала в structured logs: {e}"
+                        )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем кэш последних ордеров СРАЗУ после размещения (с нормализованным символом)
                 if order_id:
