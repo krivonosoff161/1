@@ -386,28 +386,66 @@ class TrailingStopLoss:
 
             return stop_loss
 
-    def get_profit_pct(self, current_price: float, include_fees: bool = True) -> float:
+    def get_profit_pct(
+        self, 
+        current_price: float, 
+        include_fees: bool = True,
+        margin_used: Optional[float] = None,
+        unrealized_pnl: Optional[float] = None
+    ) -> float:
         """
-        Получение текущей прибыли в процентах с учетом комиссии.
+        ✅ ИСПРАВЛЕНО: Получение текущей прибыли в процентах с учетом комиссии.
+        
+        ПРИОРИТЕТ 1: Если есть margin и unrealizedPnl - считаем от МАРЖИ (как на бирже)
+        FALLBACK: Если нет margin - считаем от цены и конвертируем в % от маржи
 
         Args:
             current_price: Текущая цена
             include_fees: Учитывать ли комиссию при расчете прибыли (по умолчанию True)
+            margin_used: Использованная маржа (опционально, для расчета от маржи)
+            unrealized_pnl: Нереализованный PnL (опционально, для расчета от маржи)
 
         Returns:
-            Прибыль в процентах (с учетом комиссии, если include_fees=True)
+            Прибыль в процентах ОТ МАРЖИ (с учетом комиссии, если include_fees=True)
         """
         if self.entry_price == 0:
             return 0.0
 
-        # Базовая прибыль без комиссии
+        # ✅ ПРИОРИТЕТ 1: Если есть margin и unrealizedPnl - считаем от МАРЖИ (как на бирже)
+        if margin_used and margin_used > 0 and unrealized_pnl is not None:
+            gross_pnl_pct_from_margin = (unrealized_pnl / margin_used) * 100  # От маржи!
+            
+            if include_fees:
+                seconds_since_open = (
+                    (time.time() - self.entry_timestamp) if self.entry_timestamp > 0 else 0
+                )
+                if seconds_since_open < 10.0:
+                    # В первые 10 секунд не учитываем комиссию
+                    logger.debug(
+                        f"⏱️ Позиция открыта {seconds_since_open:.1f} сек назад, "
+                        f"комиссия не учитывается (PnL% от маржи={gross_pnl_pct_from_margin:.4f}%)"
+                    )
+                    return gross_pnl_pct_from_margin
+                else:
+                    # После 10 секунд учитываем комиссию
+                    trading_fee_rate = self.trading_fee_rate
+                    # Комиссия в процентах от маржи (0.1% на круг = 0.1% от маржи)
+                    net_pnl_pct_from_margin = gross_pnl_pct_from_margin - (trading_fee_rate * 100)
+                    return net_pnl_pct_from_margin
+            else:
+                return gross_pnl_pct_from_margin
+
+        # ✅ FALLBACK: Если нет margin - считаем от цены и конвертируем в % от маржи
         if self.side == "long":
-            gross_profit_pct = (current_price - self.entry_price) / self.entry_price
+            gross_profit_pct_from_price = (current_price - self.entry_price) / self.entry_price
         else:
-            gross_profit_pct = (self.entry_price - current_price) / self.entry_price
+            gross_profit_pct_from_price = (self.entry_price - current_price) / self.entry_price
+
+        # ✅ КРИТИЧЕСКОЕ: Конвертируем процент от цены в процент от маржи
+        # При leverage 3x: 1% от цены = 3% от маржи
+        gross_profit_pct_from_margin = gross_profit_pct_from_price * self.leverage
 
         # ✅ ИСПРАВЛЕНИЕ: Не учитываем комиссию в первые 10 секунд после открытия
-        # (это время для установления реальной цены, учитывая спред и проскальзывание)
         if include_fees:
             seconds_since_open = (
                 (time.time() - self.entry_timestamp) if self.entry_timestamp > 0 else 0
@@ -416,15 +454,16 @@ class TrailingStopLoss:
                 # В первые 10 секунд не учитываем комиссию (учитываем только спред)
                 logger.debug(
                     f"⏱️ Позиция открыта {seconds_since_open:.1f} сек назад, "
-                    f"комиссия не учитывается в profit_pct (учитываем только спред)"
+                    f"комиссия не учитывается (PnL% от маржи={gross_profit_pct_from_margin:.4f}%, fallback от цены)"
                 )
-                return gross_profit_pct
+                return gross_profit_pct_from_margin
             else:
                 # После 10 секунд учитываем комиссию
-                net_profit_pct = gross_profit_pct - self.trading_fee_rate
-                return net_profit_pct
+                trading_fee_rate = self.trading_fee_rate
+                net_pnl_pct_from_margin = gross_profit_pct_from_margin - (trading_fee_rate * 100)
+                return net_pnl_pct_from_margin
         else:
-            return gross_profit_pct
+            return gross_profit_pct_from_margin
 
     def get_distance_to_stop_pct(self, current_price: float) -> float:
         """

@@ -10,6 +10,7 @@ Risk Manager для Futures торговли.
 """
 
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from loguru import logger
@@ -82,6 +83,14 @@ class FuturesRiskManager:
         self._block_duration_minutes = (
             getattr(self.risk_config, "pair_block_duration_min", None) or 30
         )
+
+        # ✅ НОВОЕ: Отслеживание дневного PnL для max_daily_loss
+        self.daily_pnl: float = 0.0  # Текущий дневной PnL
+        self.daily_pnl_date: Optional[str] = None  # Дата текущего дня (YYYY-MM-DD)
+        self.max_daily_loss_percent: float = (
+            getattr(self.risk_config, "max_daily_loss_percent", None) or 5.0
+        )  # Максимальная дневная потеря в % от баланса
+        self.daily_trading_stopped: bool = False  # Флаг остановки торговли
 
         logger.info(
             f"ADAPT_LOAD consecutive_losses_limit={self._max_consecutive_losses}"
@@ -226,6 +235,103 @@ class FuturesRiskManager:
         logger.debug(f"PAIR_BLOCKED {symbol}: {remaining:.1f} min remaining")
         return True
 
+    async def _check_max_daily_loss(self, balance: float) -> bool:
+        """
+        Проверка максимальной дневной потери.
+
+        Args:
+            balance: Текущий баланс
+
+        Returns:
+            True если торговля разрешена, False если превышен лимит
+        """
+        try:
+            # Получаем текущую дату
+            current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+            # Если дата изменилась, сбрасываем дневной PnL
+            if self.daily_pnl_date != current_date:
+                logger.info(
+                    f"📅 Новый торговый день: {current_date}. "
+                    f"Сбрасываем дневной PnL (было: ${self.daily_pnl:.2f})"
+                )
+                self.daily_pnl = 0.0
+                self.daily_pnl_date = current_date
+                self.daily_trading_stopped = False
+
+            # Если торговля уже остановлена, проверяем не нужно ли разблокировать
+            if self.daily_trading_stopped:
+                # Проверяем, не восстановился ли баланс
+                max_daily_loss_usd = balance * (self.max_daily_loss_percent / 100.0)
+                if self.daily_pnl >= -max_daily_loss_usd:
+                    logger.info(
+                        f"✅ Дневной PnL восстановился: ${self.daily_pnl:.2f} >= "
+                        f"-${max_daily_loss_usd:.2f}. Возобновляем торговлю"
+                    )
+                    self.daily_trading_stopped = False
+                else:
+                    logger.warning(
+                        f"⛔ Торговля остановлена из-за превышения max_daily_loss: "
+                        f"PnL=${self.daily_pnl:.2f}, лимит=-${max_daily_loss_usd:.2f} "
+                        f"({self.max_daily_loss_percent}% от баланса ${balance:.2f})"
+                    )
+                    return False
+
+            # Проверяем текущий дневной PnL
+            max_daily_loss_usd = balance * (self.max_daily_loss_percent / 100.0)
+            if self.daily_pnl <= -max_daily_loss_usd:
+                logger.error(
+                    f"❌ ПРЕВЫШЕН MAX_DAILY_LOSS: PnL=${self.daily_pnl:.2f} <= "
+                    f"-${max_daily_loss_usd:.2f} ({self.max_daily_loss_percent}% от баланса ${balance:.2f})"
+                )
+                self.daily_trading_stopped = True
+                return False
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка проверки max_daily_loss: {e}",
+                exc_info=True,
+            )
+            # При ошибке разрешаем торговлю (безопаснее)
+            return True
+
+    def record_daily_pnl(self, pnl: float):
+        """
+        Записывает PnL сделки в дневной PnL.
+
+        Args:
+            pnl: PnL сделки (может быть отрицательным)
+        """
+        try:
+            # Получаем текущую дату
+            current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+            # Если дата изменилась, сбрасываем дневной PnL
+            if self.daily_pnl_date != current_date:
+                logger.info(
+                    f"📅 Новый торговый день: {current_date}. "
+                    f"Сбрасываем дневной PnL (было: ${self.daily_pnl:.2f})"
+                )
+                self.daily_pnl = 0.0
+                self.daily_pnl_date = current_date
+                self.daily_trading_stopped = False
+
+            # Добавляем PnL сделки
+            self.daily_pnl += pnl
+
+            logger.debug(
+                f"📊 Дневной PnL обновлен: ${self.daily_pnl:.2f} "
+                f"(добавлено: ${pnl:.2f})"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка записи дневного PnL: {e}",
+                exc_info=True,
+            )
+
     async def calculate_position_size(
         self,
         balance: Optional[
@@ -250,6 +356,25 @@ class FuturesRiskManager:
             float: Размер позиции в монетах (не USD!)
         """
         try:
+            # ✅ КРИТИЧЕСКОЕ: Проверка max_daily_loss перед расчетом размера
+            # Получаем баланс для проверки (если не передан, получим позже)
+            check_balance = balance
+            if check_balance is None and self.data_registry:
+                try:
+                    balance_data = await self.data_registry.get_balance()
+                    if balance_data:
+                        check_balance = balance_data.get("balance")
+                except Exception:
+                    pass
+
+            if check_balance and check_balance > 0:
+                if not await self._check_max_daily_loss(check_balance):
+                    logger.warning(
+                        f"⛔ Торговля остановлена из-за превышения max_daily_loss. "
+                        f"Размер позиции не рассчитывается."
+                    )
+                    return 0.0
+
             # ✅ НОВОЕ: Получаем баланс из DataRegistry, если не передан
             if balance is None:
                 if self.data_registry:
@@ -607,7 +732,14 @@ class FuturesRiskManager:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем multiplier, но ограничиваем max_usd_size!
             base_usd_size *= strength_multiplier
-            base_usd_size = min(base_usd_size, max_usd_size)
+            # ✅ ИСПРАВЛЕНО: Строгая проверка max_position_size
+            if base_usd_size > max_usd_size:
+                logger.error(
+                    f"❌ КРИТИЧЕСКАЯ ОШИБКА: Размер позиции ${base_usd_size:.2f} превышает "
+                    f"max_position_size ${max_usd_size:.2f} для {symbol}! "
+                    f"Ограничиваем до ${max_usd_size:.2f}"
+                )
+                base_usd_size = max_usd_size
             logger.debug(
                 f"💰 После multiplier: base_usd_size=${base_usd_size:.2f} (max=${max_usd_size:.2f}, "
                 f"progressive={is_progressive}, multiplier={strength_multiplier:.2f})"
@@ -700,7 +832,14 @@ class FuturesRiskManager:
 
                         base_usd_size_before_vol = base_usd_size
                         base_usd_size *= volatility_multiplier
-                        base_usd_size = min(base_usd_size, max_usd_size)
+                        # ✅ ИСПРАВЛЕНО: Строгая проверка max_position_size после волатильности
+                        if base_usd_size > max_usd_size:
+                            logger.error(
+                                f"❌ КРИТИЧЕСКАЯ ОШИБКА: Размер позиции после волатильности ${base_usd_size:.2f} "
+                                f"превышает max_position_size ${max_usd_size:.2f} для {symbol}! "
+                                f"Ограничиваем до ${max_usd_size:.2f}"
+                            )
+                            base_usd_size = max_usd_size
 
                         if abs(volatility_multiplier - 1.0) > 0.01:
                             logger.info(

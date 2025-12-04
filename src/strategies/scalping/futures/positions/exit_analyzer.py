@@ -1188,7 +1188,8 @@ class ExitAnalyzer:
             # 5. Проверка partial_tp с учетом adaptive_min_holding
             partial_tp_params = self._get_partial_tp_params("trending")
             if partial_tp_params.get("enabled", False):
-                trigger_percent = partial_tp_params.get("trigger_percent", 0.4)
+                # ✅ УЛУЧШЕНИЕ #6: Используем оптимизированные триггеры из конфига
+                trigger_percent = partial_tp_params.get("trigger_percent", 0.8)  # Обновлено: 0.8% для trending
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
                     (
@@ -1458,7 +1459,15 @@ class ExitAnalyzer:
                     )
 
                     if can_partial_close:
-                        fraction = partial_tp_params.get("fraction", 0.6)
+                        # ✅ УЛУЧШЕНИЕ #5.2: Адаптивная fraction для Partial TP в зависимости от PnL
+                        base_fraction = partial_tp_params.get("fraction", 0.6)
+                        if pnl_percent < 1.0:
+                            fraction = base_fraction * 0.67  # 40% если PnL < 1.0%
+                        elif pnl_percent >= 2.0:
+                            fraction = base_fraction * 1.33  # 80% если PnL >= 2.0%
+                        else:
+                            fraction = base_fraction  # 60% стандарт
+                        
                         logger.info(
                             f"📊 ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}: "
                             f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
@@ -1700,9 +1709,10 @@ class ExitAnalyzer:
                 }
 
             # 5. Проверка partial_tp - в choppy режиме более агрессивно (с учетом adaptive_min_holding)
+            # ✅ УЛУЧШЕНИЕ #6: Используем оптимизированные триггеры из конфига
             partial_tp_params = self._get_partial_tp_params("choppy")
             if partial_tp_params.get("enabled", False):
-                trigger_percent = partial_tp_params.get("trigger_percent", 0.3)
+                trigger_percent = partial_tp_params.get("trigger_percent", 0.6)  # Обновлено: 0.6% для choppy
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
                     (
@@ -1713,9 +1723,15 @@ class ExitAnalyzer:
                     )
 
                     if can_partial_close:
-                        fraction = partial_tp_params.get(
-                            "fraction", 0.7
-                        )  # Закрываем больше позиции
+                        # ✅ УЛУЧШЕНИЕ #5.2: Адаптивная fraction для Partial TP в зависимости от PnL
+                        base_fraction = partial_tp_params.get("fraction", 0.7)
+                        if pnl_percent < 1.0:
+                            fraction = base_fraction * 0.67  # ~47% если PnL < 1.0%
+                        elif pnl_percent >= 2.0:
+                            fraction = base_fraction * 1.33  # ~93% если PnL >= 2.0%
+                        else:
+                            fraction = base_fraction  # 70% стандарт для choppy
+                        
                         logger.info(
                             f"📊 ExitAnalyzer CHOPPY: Partial TP триггер достигнут для {symbol}: "
                             f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "

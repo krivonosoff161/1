@@ -147,9 +147,47 @@ class FilterManager:
             try:
                 signal = await self._apply_adx_filter(symbol, signal, market_data)
                 if signal is None:
+                    # ✅ НОВОЕ: Логируем причину отфильтровывания
+                    signal_type = signal.get("type") if signal else "unknown"
+                    logger.debug(
+                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: ADX Filter"
+                    )
                     return None  # Сигнал отфильтрован
+                else:
+                    # ✅ НОВОЕ: Добавляем в список пройденных фильтров
+                    if "filters_passed" not in signal:
+                        signal["filters_passed"] = []
+                    signal["filters_passed"].append("ADX")
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка ADX фильтра для {symbol}: {e}")
+
+        # ✅ УЛУЧШЕНИЕ #3: Дополнительная проверка направления тренда
+        # Не входить против тренда (если ADX показывает сильный тренд в противоположном направлении)
+        try:
+            if market_data and hasattr(market_data, "indicators"):
+                indicators = market_data.indicators
+                adx_value = indicators.get("ADX") if isinstance(indicators, dict) else None
+                di_plus = indicators.get("DI_PLUS") if isinstance(indicators, dict) else None
+                di_minus = indicators.get("DI_MINUS") if isinstance(indicators, dict) else None
+                
+                signal_side = signal.get("side", "").lower()
+                
+                # Если ADX > 20 (сильный тренд) и направление против сигнала - блокируем
+                if adx_value and adx_value > 20:
+                    if signal_side == "buy" and di_minus and di_plus and di_minus > di_plus:
+                        # LONG сигнал, но тренд вниз (DI- > DI+)
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} LONG отфильтрован: тренд вниз (ADX={adx_value:.1f}, DI-={di_minus:.1f} > DI+={di_plus:.1f})"
+                        )
+                        return None
+                    elif signal_side == "sell" and di_plus and di_minus and di_plus > di_minus:
+                        # SHORT сигнал, но тренд вверх (DI+ > DI-)
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} SHORT отфильтрован: тренд вверх (ADX={adx_value:.1f}, DI+={di_plus:.1f} > DI-={di_minus:.1f})"
+                        )
+                        return None
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка проверки направления тренда для {symbol}: {e}")
 
         # 2. Volatility Filter (проверка волатильности)
         if (
@@ -175,8 +213,16 @@ class FilterManager:
                 if not await self._apply_mtf_filter(
                     symbol, signal, market_data, mtf_params
                 ):
-                    logger.debug(f"🔍 Сигнал {symbol} отфильтрован MTF фильтром")
+                    signal_type = signal.get("type", "unknown")
+                    logger.debug(
+                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: MTF Filter"
+                    )
                     return None
+                else:
+                    # ✅ НОВОЕ: Добавляем в список пройденных фильтров
+                    if "filters_passed" not in signal:
+                        signal["filters_passed"] = []
+                    signal["filters_passed"].append("MTF")
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка MTF фильтра для {symbol}: {e}")
 
@@ -187,8 +233,16 @@ class FilterManager:
         if self.correlation_filter and not bypass_correlation:
             try:
                 if not await self._apply_correlation_filter(symbol, signal):
-                    logger.debug(f"🔍 Сигнал {symbol} отфильтрован Correlation фильтром")
+                    signal_type = signal.get("type", "unknown")
+                    logger.debug(
+                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Correlation Filter"
+                    )
                     return None
+                else:
+                    # ✅ НОВОЕ: Добавляем в список пройденных фильтров
+                    if "filters_passed" not in signal:
+                        signal["filters_passed"] = []
+                    signal["filters_passed"].append("Correlation")
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Correlation фильтра для {symbol}: {e}")
 
@@ -201,10 +255,16 @@ class FilterManager:
                 if not await self._apply_pivot_points_filter(
                     symbol, signal, market_data, pivot_params
                 ):
+                    signal_type = signal.get("type", "unknown")
                     logger.debug(
-                        f"🔍 Сигнал {symbol} отфильтрован Pivot Points фильтром"
+                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Pivot Points Filter"
                     )
                     return None
+                else:
+                    # ✅ НОВОЕ: Добавляем в список пройденных фильтров
+                    if "filters_passed" not in signal:
+                        signal["filters_passed"] = []
+                    signal["filters_passed"].append("PivotPoints")
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Pivot Points фильтра для {symbol}: {e}")
 
@@ -215,10 +275,16 @@ class FilterManager:
                 if not await self._apply_volume_profile_filter(
                     symbol, signal, market_data, vp_params
                 ):
+                    signal_type = signal.get("type", "unknown")
                     logger.debug(
-                        f"🔍 Сигнал {symbol} отфильтрован Volume Profile фильтром"
+                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Volume Profile Filter"
                     )
                     return None
+                else:
+                    # ✅ НОВОЕ: Добавляем в список пройденных фильтров
+                    if "filters_passed" not in signal:
+                        signal["filters_passed"] = []
+                    signal["filters_passed"].append("VolumeProfile")
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Volume Profile фильтра для {symbol}: {e}")
 
@@ -232,8 +298,16 @@ class FilterManager:
                 if not await self._apply_liquidity_filter(
                     symbol, signal, market_data, liquidity_params, liquidity_relax
                 ):
-                    logger.debug(f"🔍 Сигнал {symbol} отфильтрован Liquidity фильтром")
+                    signal_type = signal.get("type", "unknown")
+                    logger.debug(
+                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Liquidity Filter"
+                    )
                     return None
+                else:
+                    # ✅ НОВОЕ: Добавляем в список пройденных фильтров
+                    if "filters_passed" not in signal:
+                        signal["filters_passed"] = []
+                    signal["filters_passed"].append("Liquidity")
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Liquidity фильтра для {symbol}: {e}")
 
@@ -249,8 +323,16 @@ class FilterManager:
                 if not await self._apply_order_flow_filter(
                     symbol, signal, market_data, order_flow_params, order_flow_relax
                 ):
-                    logger.debug(f"🔍 Сигнал {symbol} отфильтрован Order Flow фильтром")
+                    signal_type = signal.get("type", "unknown")
+                    logger.debug(
+                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Order Flow Filter"
+                    )
                     return None
+                else:
+                    # ✅ НОВОЕ: Добавляем в список пройденных фильтров
+                    if "filters_passed" not in signal:
+                        signal["filters_passed"] = []
+                    signal["filters_passed"].append("OrderFlow")
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Order Flow фильтра для {symbol}: {e}")
 
@@ -261,10 +343,16 @@ class FilterManager:
                 if not await self._apply_funding_rate_filter(
                     symbol, signal, funding_params
                 ):
+                    signal_type = signal.get("type", "unknown")
                     logger.debug(
-                        f"🔍 Сигнал {symbol} отфильтрован Funding Rate фильтром"
+                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Funding Rate Filter"
                     )
                     return None
+                else:
+                    # ✅ НОВОЕ: Добавляем в список пройденных фильтров
+                    if "filters_passed" not in signal:
+                        signal["filters_passed"] = []
+                    signal["filters_passed"].append("FundingRate")
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Funding Rate фильтра для {symbol}: {e}")
 

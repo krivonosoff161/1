@@ -452,10 +452,17 @@ class EntryManager:
                 metadata=metadata,
             )
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем режим в position_data для active_positions
+            if final_regime:
+                position_data["regime"] = final_regime
+                logger.debug(
+                    f"✅ EntryManager: Режим {final_regime} сохранен в position_data для {symbol}"
+                )
+
             logger.info(
                 f"✅ EntryManager: Позиция {symbol} открыта и зарегистрирована в PositionRegistry "
                 f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.6f}, "
-                f"side={position_data.get('position_side')}, regime={regime})"
+                f"side={position_data.get('position_side')}, regime={final_regime})"
             )
 
             # 5. Возвращаем результат, как от order_executor.execute_signal()

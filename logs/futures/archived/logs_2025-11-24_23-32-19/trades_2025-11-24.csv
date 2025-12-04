@@ -1,3 +1,0 @@
-timestamp,symbol,side,entry_price,exit_price,size,gross_pnl,commission,net_pnl,duration_sec,reason,win_rate
-2025-11-24T23:14:18.113143,DOGE-USDT,short,0.1543,0.1555,1140.00000000,-1.3794,0.1766,-1.5560,1199.338652,max_holding_time,0.00
-2025-11-24T23:14:35.719586,XRP-USDT,long,2.2280,2.2325,94.00000000,0.4230,0.2096,0.2134,1202.147816,max_holding_time,50.00

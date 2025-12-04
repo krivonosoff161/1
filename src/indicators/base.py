@@ -129,8 +129,22 @@ class RSI(BaseIndicator):
         losses = np.where(deltas < 0, -deltas, 0)  # Только отрицательные (по модулю)
 
         # Шаг 3: Вычисляем средние значения за период
-        avg_gain = np.mean(gains[-self.period :]) if len(gains) >= self.period else 0
-        avg_loss = np.mean(losses[-self.period :]) if len(losses) >= self.period else 0
+        # ✅ ИСПРАВЛЕНО: Используем экспоненциальное сглаживание Wilder вместо простого среднего
+        # Стандарт RSI использует формулу Wilder: EMA = (prev_EMA * (period - 1) + current) / period
+        if len(gains) >= self.period:
+            # Первое значение - простое среднее за период
+            avg_gain = np.mean(gains[-self.period :])
+            avg_loss = np.mean(losses[-self.period :])
+            
+            # Если есть больше данных, применяем экспоненциальное сглаживание
+            if len(gains) > self.period:
+                # Для каждого нового значения применяем формулу Wilder
+                for i in range(self.period, len(gains)):
+                    avg_gain = (avg_gain * (self.period - 1) + gains[i]) / self.period
+                    avg_loss = (avg_loss * (self.period - 1) + losses[i]) / self.period
+        else:
+            avg_gain = 0
+            avg_loss = 0
 
         # Шаг 4: Вычисляем RSI по формуле
         # RSI = 100 - (100 / (1 + RS)), где RS = средний прирост / средний убыток
@@ -188,12 +202,20 @@ class ATR(BaseIndicator):
             true_range = max(high_low, high_close, low_close)
             true_ranges.append(true_range)
 
-        # ATR = среднее значение True Range за период
-        atr_value = (
-            np.mean(true_ranges[-self.period :])
-            if len(true_ranges) >= self.period
-            else 0
-        )
+        # ATR = экспоненциальное среднее значение True Range за период
+        # ✅ ИСПРАВЛЕНО: Используем экспоненциальное сглаживание Wilder вместо простого среднего
+        # Стандарт ATR использует формулу Wilder: EMA = (prev_EMA * (period - 1) + current) / period
+        if len(true_ranges) >= self.period:
+            # Первое значение - простое среднее за период
+            atr_value = np.mean(true_ranges[-self.period :])
+            
+            # Если есть больше данных, применяем экспоненциальное сглаживание
+            if len(true_ranges) > self.period:
+                # Для каждого нового значения применяем формулу Wilder
+                for i in range(self.period, len(true_ranges)):
+                    atr_value = (atr_value * (self.period - 1) + true_ranges[i]) / self.period
+        else:
+            atr_value = 0
 
         return IndicatorResult(
             name=f"ATR_{self.period}",
@@ -262,6 +284,8 @@ class MACD(BaseIndicator):
         self.fast_period = fast_period
         self.slow_period = slow_period
         self.signal_period = signal_period
+        # ✅ ИСПРАВЛЕНО: Сохраняем историю MACD для правильного расчета signal line
+        self.macd_history: List[float] = []
 
     def calculate(self, data: List[float]) -> IndicatorResult:
         if not self.validate_data(data):
@@ -274,9 +298,21 @@ class MACD(BaseIndicator):
         # Calculate MACD line
         macd_line = ema_fast - ema_slow
 
-        # For signal line, we would need historical MACD values
-        # Simplified version: using current MACD as signal
-        signal_value = macd_line
+        # ✅ ИСПРАВЛЕНО: Сохраняем историю MACD для правильного расчета signal line
+        self.macd_history.append(macd_line)
+        # Ограничиваем размер истории (нужно только для signal_period)
+        if len(self.macd_history) > self.signal_period * 2:
+            self.macd_history = self.macd_history[-self.signal_period * 2:]
+
+        # ✅ ИСПРАВЛЕНО: Signal line - это EMA от истории MACD
+        if len(self.macd_history) >= self.signal_period:
+            # Используем последние signal_period значений для расчета EMA
+            signal_value = self._calculate_ema(
+                self.macd_history[-self.signal_period:], self.signal_period
+            )
+        else:
+            # Если недостаточно данных, используем текущий MACD
+            signal_value = macd_line
 
         # Generate trading signal
         signal = "NEUTRAL"

@@ -578,8 +578,32 @@ class TrailingSLCoordinator:
             tsl.update(current_price)
 
             stop_loss = tsl.get_stop_loss()
-            profit_pct = tsl.get_profit_pct(current_price, include_fees=True)
-            profit_pct_gross = tsl.get_profit_pct(current_price, include_fees=False)
+            
+            # ✅ ИСПРАВЛЕНО: Передаем margin и unrealizedPnl для правильного расчета от маржи
+            margin_used = None
+            unrealized_pnl = None
+            try:
+                margin_str = position.get("margin") or position.get("imr") or "0"
+                if margin_str and str(margin_str).strip() and str(margin_str) != "0":
+                    margin_used = float(margin_str)
+                upl_str = position.get("upl") or position.get("unrealizedPnl") or "0"
+                if upl_str and str(upl_str).strip() and str(upl_str) != "0":
+                    unrealized_pnl = float(upl_str)
+            except (ValueError, TypeError) as e:
+                logger.debug(f"⚠️ TrailingSLCoordinator: Ошибка получения margin/upl для {symbol}: {e}")
+            
+            profit_pct = tsl.get_profit_pct(
+                current_price, 
+                include_fees=True,
+                margin_used=margin_used if margin_used and margin_used > 0 else None,
+                unrealized_pnl=unrealized_pnl if unrealized_pnl is not None else None
+            )
+            profit_pct_gross = tsl.get_profit_pct(
+                current_price, 
+                include_fees=False,
+                margin_used=margin_used if margin_used and margin_used > 0 else None,
+                unrealized_pnl=unrealized_pnl if unrealized_pnl is not None else None
+            )
 
             # ✅ FIX: TRAIL_DISTANCE_NARROW warning — слишком узкая дистанция
             if stop_loss and current_price > 0:
