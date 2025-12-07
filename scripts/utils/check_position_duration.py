@@ -27,4 +27,3 @@ print()
 print(f"Длительность: {int(hours)}ч {int(minutes)}м {int(seconds)}с")
 print(f"Всего часов: {hours:.2f}")
 print("=" * 60)
-

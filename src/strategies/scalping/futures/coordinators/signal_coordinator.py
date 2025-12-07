@@ -612,7 +612,9 @@ class SignalCoordinator:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный risk_per_trade_percent из конфига по режиму
             # margin_calculator сам выберет правильный риск из конфига (risk_per_trade_percent из режима -> risk секции -> base_risk_percentage)
-            risk_percentage = None  # None - margin_calculator читает из конфига по режиму
+            risk_percentage = (
+                None  # None - margin_calculator читает из конфига по режиму
+            )
 
             position_size = self.margin_calculator.calculate_optimal_position_size(
                 balance,

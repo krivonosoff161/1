@@ -560,9 +560,13 @@ class MarginCalculator:
                         if regime and by_regime:
                             regime_config = by_regime.get(regime.lower(), {})
                             if isinstance(regime_config, dict):
-                                risk_per_trade = regime_config.get("risk_per_trade_percent")
+                                risk_per_trade = regime_config.get(
+                                    "risk_per_trade_percent"
+                                )
                                 if risk_per_trade is not None:
-                                    risk_percentage = risk_per_trade / 100.0  # Конвертируем % в долю
+                                    risk_percentage = (
+                                        risk_per_trade / 100.0
+                                    )  # Конвертируем % в долю
                                     logger.debug(
                                         f"✅ Загружен risk_per_trade_percent={risk_per_trade}% из режима {regime} "
                                         f"(risk_percentage={risk_percentage:.3f})"
@@ -576,18 +580,22 @@ class MarginCalculator:
                                     regime_config, "risk_per_trade_percent", None
                                 )
                                 if risk_per_trade is not None:
-                                    risk_percentage = risk_per_trade / 100.0  # Конвертируем % в долю
+                                    risk_percentage = (
+                                        risk_per_trade / 100.0
+                                    )  # Конвертируем % в долю
                                     logger.debug(
                                         f"✅ Загружен risk_per_trade_percent={risk_per_trade}% из режима {regime} "
                                         f"(risk_percentage={risk_percentage:.3f})"
                                     )
-                    
+
                     # ✅ ПРИОРИТЕТ 2: risk_per_trade_percent из risk секции (если не нашли в режиме)
                     if risk_percentage is None:
                         if isinstance(self.margin_config, dict):
                             risk_config = self.margin_config.get("risk", {})
                             if isinstance(risk_config, dict):
-                                risk_per_trade = risk_config.get("risk_per_trade_percent")
+                                risk_per_trade = risk_config.get(
+                                    "risk_per_trade_percent"
+                                )
                                 if risk_per_trade is not None:
                                     risk_percentage = risk_per_trade / 100.0
                                     logger.debug(
@@ -597,28 +605,36 @@ class MarginCalculator:
                         else:
                             risk_config = getattr(self.margin_config, "risk", None)
                             if risk_config:
-                                risk_per_trade = getattr(risk_config, "risk_per_trade_percent", None)
+                                risk_per_trade = getattr(
+                                    risk_config, "risk_per_trade_percent", None
+                                )
                                 if risk_per_trade is not None:
                                     risk_percentage = risk_per_trade / 100.0
                                     logger.debug(
                                         f"✅ Загружен risk_per_trade_percent={risk_per_trade}% из risk секции "
                                         f"(risk_percentage={risk_percentage:.3f})"
                                     )
-                    
+
                     # ✅ ПРИОРИТЕТ 3: base_risk_percentage из scalping секции (fallback)
                     if risk_percentage is None:
                         if isinstance(self.margin_config, dict):
                             scalping_config = self.margin_config.get("scalping", {})
                             if isinstance(scalping_config, dict):
-                                risk_percentage = scalping_config.get("base_risk_percentage")
+                                risk_percentage = scalping_config.get(
+                                    "base_risk_percentage"
+                                )
                                 if risk_percentage is not None:
                                     logger.debug(
                                         f"✅ Загружен base_risk_percentage={risk_percentage} из scalping секции"
                                     )
                         else:
-                            scalping_config = getattr(self.margin_config, "scalping", None)
+                            scalping_config = getattr(
+                                self.margin_config, "scalping", None
+                            )
                             if scalping_config:
-                                risk_percentage = getattr(scalping_config, "base_risk_percentage", None)
+                                risk_percentage = getattr(
+                                    scalping_config, "base_risk_percentage", None
+                                )
                                 if risk_percentage is not None:
                                     logger.debug(
                                         f"✅ Загружен base_risk_percentage={risk_percentage} из scalping секции"

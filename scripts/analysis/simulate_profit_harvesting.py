@@ -4,37 +4,46 @@
 Симуляция работы Profit Harvesting для анализа проблем
 """
 
+
 def simulate_ph_scenario(
     net_pnl_usd: float,
     ph_threshold: float,
     ph_time_limit: int,
     min_holding_minutes: float,
-    time_since_open_seconds: float
+    time_since_open_seconds: float,
 ):
     """Симулирует проверку Profit Harvesting"""
-    
+
     min_holding_seconds = min_holding_minutes * 60.0
-    
+
     # Проверка 1: Экстремальная прибыль
     ignore_min_holding = False
     if net_pnl_usd >= ph_threshold * 2.0:
         ignore_min_holding = True
-        print(f"✅ ЭКСТРЕМАЛЬНАЯ ПРИБЫЛЬ: ${net_pnl_usd:.4f} >= ${ph_threshold * 2.0:.2f} (2x порога)")
+        print(
+            f"✅ ЭКСТРЕМАЛЬНАЯ ПРИБЫЛЬ: ${net_pnl_usd:.4f} >= ${ph_threshold * 2.0:.2f} (2x порога)"
+        )
         print(f"   → Игнорируем MIN_HOLDING")
     else:
-        print(f"❌ НЕ экстремальная прибыль: ${net_pnl_usd:.4f} < ${ph_threshold * 2.0:.2f} (2x порога)")
-    
+        print(
+            f"❌ НЕ экстремальная прибыль: ${net_pnl_usd:.4f} < ${ph_threshold * 2.0:.2f} (2x порога)"
+        )
+
     # Проверка 2: MIN_HOLDING
     if not ignore_min_holding and time_since_open_seconds < min_holding_seconds:
-        print(f"❌ MIN_HOLDING блокирует: {time_since_open_seconds:.1f}с < {min_holding_seconds:.1f}с")
+        print(
+            f"❌ MIN_HOLDING блокирует: {time_since_open_seconds:.1f}с < {min_holding_seconds:.1f}с"
+        )
         return False, "BLOCKED_BY_MIN_HOLDING"
     else:
-        print(f"✅ MIN_HOLDING пройден: {time_since_open_seconds:.1f}с >= {min_holding_seconds:.1f}с")
-    
+        print(
+            f"✅ MIN_HOLDING пройден: {time_since_open_seconds:.1f}с >= {min_holding_seconds:.1f}с"
+        )
+
     # Проверка 3: Условия закрытия
     should_close = False
     close_reason = ""
-    
+
     if ignore_min_holding:
         # Экстремальная прибыль: игнорируем ph_time_limit
         if net_pnl_usd >= ph_threshold:
@@ -42,7 +51,9 @@ def simulate_ph_scenario(
             close_reason = "EXTREME_PROFIT"
             print(f"✅ ЗАКРЫТИЕ по экстремальной прибыли (игнорируем time_limit)")
         else:
-            print(f"❌ Прибыль недостаточна для экстремального закрытия: ${net_pnl_usd:.4f} < ${ph_threshold:.2f}")
+            print(
+                f"❌ Прибыль недостаточна для экстремального закрытия: ${net_pnl_usd:.4f} < ${ph_threshold:.2f}"
+            )
     else:
         # Обычная прибыль: проверяем ph_time_limit
         if net_pnl_usd >= ph_threshold and time_since_open_seconds < ph_time_limit:
@@ -51,29 +62,34 @@ def simulate_ph_scenario(
             print(f"✅ ЗАКРЫТИЕ по обычной прибыли (в пределах time_limit)")
         else:
             if net_pnl_usd < ph_threshold:
-                print(f"❌ Прибыль недостаточна: ${net_pnl_usd:.4f} < ${ph_threshold:.2f}")
+                print(
+                    f"❌ Прибыль недостаточна: ${net_pnl_usd:.4f} < ${ph_threshold:.2f}"
+                )
             if time_since_open_seconds >= ph_time_limit:
-                print(f"❌ Превышен time_limit: {time_since_open_seconds:.1f}с >= {ph_time_limit}с")
-    
+                print(
+                    f"❌ Превышен time_limit: {time_since_open_seconds:.1f}с >= {ph_time_limit}с"
+                )
+
     return should_close, close_reason
+
 
 def main():
     print("=" * 80)
     print("📊 СИМУЛЯЦИЯ PROFIT HARVESTING")
     print("=" * 80)
     print()
-    
+
     # Параметры из конфига (ranging режим)
     ph_threshold = 0.15  # 0.15 USD
     ph_time_limit = 120  # 120 секунд (2 минуты)
     min_holding_minutes = 1.0  # 1 минута
-    
+
     print(f"📋 Параметры конфигурации (ranging):")
     print(f"   ph_threshold: ${ph_threshold:.2f}")
     print(f"   ph_time_limit: {ph_time_limit}с ({ph_time_limit/60:.1f} мин)")
     print(f"   min_holding_minutes: {min_holding_minutes:.1f} мин")
     print()
-    
+
     # Сценарии из реальных данных
     scenarios = [
         {
@@ -107,30 +123,32 @@ def main():
             "time_since_open_seconds": 90,
         },
     ]
-    
+
     for i, scenario in enumerate(scenarios, 1):
         print(f"\n{'='*80}")
         print(f"Сценарий {i}: {scenario['name']}")
         print(f"{'='*80}")
         print(f"Прибыль: ${scenario['net_pnl_usd']:.4f}")
-        print(f"Время в позиции: {scenario['time_since_open_seconds']:.1f}с ({scenario['time_since_open_seconds']/60:.1f} мин)")
+        print(
+            f"Время в позиции: {scenario['time_since_open_seconds']:.1f}с ({scenario['time_since_open_seconds']/60:.1f} мин)"
+        )
         print()
-        
+
         should_close, reason = simulate_ph_scenario(
-            net_pnl_usd=scenario['net_pnl_usd'],
+            net_pnl_usd=scenario["net_pnl_usd"],
             ph_threshold=ph_threshold,
             ph_time_limit=ph_time_limit,
             min_holding_minutes=min_holding_minutes,
-            time_since_open_seconds=scenario['time_since_open_seconds']
+            time_since_open_seconds=scenario["time_since_open_seconds"],
         )
-        
+
         print()
         if should_close:
             print(f"✅ РЕЗУЛЬТАТ: ЗАКРЫТИЕ ({reason})")
         else:
             print(f"❌ РЕЗУЛЬТАТ: НЕ ЗАКРЫТО ({reason})")
         print()
-    
+
     print("\n" + "=" * 80)
     print("📊 ВЫВОДЫ И РЕКОМЕНДАЦИИ")
     print("=" * 80)
@@ -144,9 +162,11 @@ def main():
     print("Рекомендации:")
     print("1. Увеличить ph_time_limit для ranging до 300-600 сек (5-10 мин)")
     print("2. Или уменьшить порог экстремальной прибыли с 2x до 1.5x")
-    print("3. Или добавить проверку: если прибыль > 1.5x порога, игнорировать time_limit")
+    print(
+        "3. Или добавить проверку: если прибыль > 1.5x порога, игнорировать time_limit"
+    )
     print("4. Добавить логирование всех попыток PH для отладки")
 
-if __name__ == '__main__':
-    main()
 
+if __name__ == "__main__":
+    main()

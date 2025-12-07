@@ -2182,15 +2182,15 @@ class FuturesSignalGenerator:
                             {
                                 "symbol": symbol,
                                 "side": "sell",
-                            "type": "rsi_overbought",
-                            "strength": strength,
-                            "price": current_price,
-                            "timestamp": datetime.now(),
-                            "indicator_value": rsi,
-                            "confidence": confidence,
-                            "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
-                        }
-                    )
+                                "type": "rsi_overbought",
+                                "strength": strength,
+                                "price": current_price,
+                                "timestamp": datetime.now(),
+                                "indicator_value": rsi,
+                                "confidence": confidence,
+                                "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
+                            }
+                        )
 
         except Exception as e:
             logger.error(f"Ошибка генерации RSI сигналов: {e}")
