@@ -610,14 +610,9 @@ class SignalCoordinator:
                             f"⚠️ Не удалось получить режим для расчета размера позиции: {e}"
                         )
 
-            # ✅ ИСПРАВЛЕНО: Используем адаптивный risk_percentage из конфига по режиму
-            # Если режим не определен, используем base_risk_percentage
-            risk_percentage = None  # None - читает из конфига по режиму
-            # Но если нужно использовать strength, умножаем base_risk_percentage
-            base_risk = getattr(self.scalping_config, "base_risk_percentage", 0.03)
-            if strength < 1.0:
-                # Уменьшаем риск для слабых сигналов
-                risk_percentage = base_risk * strength
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный risk_per_trade_percent из конфига по режиму
+            # margin_calculator сам выберет правильный риск из конфига (risk_per_trade_percent из режима -> risk секции -> base_risk_percentage)
+            risk_percentage = None  # None - margin_calculator читает из конфига по режиму
 
             position_size = self.margin_calculator.calculate_optimal_position_size(
                 balance,

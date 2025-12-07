@@ -549,102 +549,94 @@ class MarginCalculator:
         if leverage is None:
             leverage = self.default_leverage
 
-        # ✅ АДАПТИВНО: Получаем risk_percentage из конфига по режиму
-        # ПРИОРИТЕТ: конфиг -> fallback (сначала пытаемся из конфига, только если нет - fallback)
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем risk_per_trade_percent из конфига по режиму
+        # ПРИОРИТЕТ: risk_per_trade_percent из режима -> risk_per_trade_percent из risk секции -> base_risk_percentage -> fallback
         if risk_percentage is None:
             try:
                 if hasattr(self, "margin_config") and self.margin_config:
+                    # ✅ ПРИОРИТЕТ 1: risk_per_trade_percent из режима
                     if isinstance(self.margin_config, dict):
                         by_regime = self.margin_config.get("by_regime", {})
                         if regime and by_regime:
                             regime_config = by_regime.get(regime.lower(), {})
                             if isinstance(regime_config, dict):
-                                risk_percentage = regime_config.get("risk_percentage")
-                                if risk_percentage is not None:
+                                risk_per_trade = regime_config.get("risk_per_trade_percent")
+                                if risk_per_trade is not None:
+                                    risk_percentage = risk_per_trade / 100.0  # Конвертируем % в долю
                                     logger.debug(
-                                        f"✅ Загружен risk_percentage={risk_percentage} из конфига (regime={regime})"
+                                        f"✅ Загружен risk_per_trade_percent={risk_per_trade}% из режима {regime} "
+                                        f"(risk_percentage={risk_percentage:.3f})"
                                     )
                     else:
                         by_regime = getattr(self.margin_config, "by_regime", None)
                         if by_regime and regime:
                             regime_config = getattr(by_regime, regime.lower(), None)
                             if regime_config:
-                                risk_percentage = getattr(
-                                    regime_config, "risk_percentage", None
+                                risk_per_trade = getattr(
+                                    regime_config, "risk_per_trade_percent", None
                                 )
+                                if risk_per_trade is not None:
+                                    risk_percentage = risk_per_trade / 100.0  # Конвертируем % в долю
+                                    logger.debug(
+                                        f"✅ Загружен risk_per_trade_percent={risk_per_trade}% из режима {regime} "
+                                        f"(risk_percentage={risk_percentage:.3f})"
+                                    )
+                    
+                    # ✅ ПРИОРИТЕТ 2: risk_per_trade_percent из risk секции (если не нашли в режиме)
+                    if risk_percentage is None:
+                        if isinstance(self.margin_config, dict):
+                            risk_config = self.margin_config.get("risk", {})
+                            if isinstance(risk_config, dict):
+                                risk_per_trade = risk_config.get("risk_per_trade_percent")
+                                if risk_per_trade is not None:
+                                    risk_percentage = risk_per_trade / 100.0
+                                    logger.debug(
+                                        f"✅ Загружен risk_per_trade_percent={risk_per_trade}% из risk секции "
+                                        f"(risk_percentage={risk_percentage:.3f})"
+                                    )
+                        else:
+                            risk_config = getattr(self.margin_config, "risk", None)
+                            if risk_config:
+                                risk_per_trade = getattr(risk_config, "risk_per_trade_percent", None)
+                                if risk_per_trade is not None:
+                                    risk_percentage = risk_per_trade / 100.0
+                                    logger.debug(
+                                        f"✅ Загружен risk_per_trade_percent={risk_per_trade}% из risk секции "
+                                        f"(risk_percentage={risk_percentage:.3f})"
+                                    )
+                    
+                    # ✅ ПРИОРИТЕТ 3: base_risk_percentage из scalping секции (fallback)
+                    if risk_percentage is None:
+                        if isinstance(self.margin_config, dict):
+                            scalping_config = self.margin_config.get("scalping", {})
+                            if isinstance(scalping_config, dict):
+                                risk_percentage = scalping_config.get("base_risk_percentage")
                                 if risk_percentage is not None:
                                     logger.debug(
-                                        f"✅ Загружен risk_percentage={risk_percentage} из конфига (regime={regime})"
+                                        f"✅ Загружен base_risk_percentage={risk_percentage} из scalping секции"
+                                    )
+                        else:
+                            scalping_config = getattr(self.margin_config, "scalping", None)
+                            if scalping_config:
+                                risk_percentage = getattr(scalping_config, "base_risk_percentage", None)
+                                if risk_percentage is not None:
+                                    logger.debug(
+                                        f"✅ Загружен base_risk_percentage={risk_percentage} из scalping секции"
                                     )
             except Exception as e:
                 logger.debug(f"⚠️ Не удалось получить адаптивный risk_percentage: {e}")
 
-            # Fallback только если не удалось загрузить из конфига
+            # ✅ ПРИОРИТЕТ 4: Fallback только если не удалось загрузить из конфига
             if risk_percentage is None:
-                risk_percentage = 0.02  # Fallback 2%
+                risk_percentage = 0.01  # ✅ ИСПРАВЛЕНО: Fallback 1% (было 2%)
                 logger.debug(
-                    f"⚠️ Используется fallback risk_percentage={risk_percentage}"
+                    f"⚠️ Используется fallback risk_percentage={risk_percentage} (1%)"
                 )
 
-        # ✅ НОВОЕ: Kelly Criterion для оптимизации размера позиции
-        kelly_multiplier = 1.0
-        if trading_statistics and regime:
-            try:
-                # ✅ ИСПРАВЛЕНО: Получаем статистику по режиму (символ не передается, используем общую статистику по режиму)
-                # Это нормально, так как Kelly Criterion работает на уровне режима, а не символа
-                win_rate = trading_statistics.get_win_rate(regime)
-                avg_win, avg_loss = trading_statistics.get_avg_pnl(regime)
-
-                # Kelly Criterion: f = (p * b - q) / b
-                # где:
-                #   p = win_rate (вероятность выигрыша)
-                #   q = 1 - p (вероятность проигрыша)
-                #   b = avg_win / abs(avg_loss) (risk/reward ratio)
-                if avg_loss != 0 and abs(avg_loss) > 0.01:  # Избегаем деления на ноль
-                    risk_reward_ratio = (
-                        abs(avg_win / avg_loss) if avg_loss != 0 else 1.0
-                    )
-                    q = 1.0 - win_rate
-
-                    # Kelly fraction
-                    if risk_reward_ratio > 0:
-                        kelly_fraction = (
-                            win_rate * risk_reward_ratio - q
-                        ) / risk_reward_ratio
-                    else:
-                        kelly_fraction = 0.0
-
-                    # Ограничиваем Kelly (используем 25% от Kelly для безопасности)
-                    # Если Kelly отрицательный - не торгуем (или очень маленький размер)
-                    if kelly_fraction > 0:
-                        kelly_fraction_safe = min(
-                            kelly_fraction * 0.25, 0.1
-                        )  # Максимум 10% от баланса
-                        # Применяем множитель к risk_percentage
-                        kelly_multiplier = max(
-                            0.5, min(2.0, kelly_fraction_safe / risk_percentage)
-                        )
-                        logger.debug(
-                            f"📊 Kelly Criterion для {regime}: "
-                            f"win_rate={win_rate:.2%}, avg_win={avg_win:.2f}, avg_loss={avg_loss:.2f}, "
-                            f"R/R={risk_reward_ratio:.2f}, kelly={kelly_fraction:.3f}, "
-                            f"multiplier={kelly_multiplier:.2f}x"
-                        )
-                    else:
-                        # Отрицательный Kelly - снижаем размер позиции
-                        kelly_multiplier = 0.5
-                        logger.debug(
-                            f"⚠️ Kelly Criterion отрицательный для {regime} "
-                            f"(win_rate={win_rate:.2%}, R/R={risk_reward_ratio:.2f}), "
-                            f"снижаем размер позиции (multiplier={kelly_multiplier:.2f}x)"
-                        )
-            except Exception as e:
-                logger.debug(
-                    f"⚠️ Ошибка расчета Kelly Criterion: {e}, используем базовый risk_percentage"
-                )
-
-        # Максимальный риск в USDT (с учетом Kelly)
-        adjusted_risk_percentage = risk_percentage * kelly_multiplier
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Kelly Criterion удален
+        # Причина: Статистика для скальпинга слишком шумная → Kelly вводит ложное ощущение "оптимальности"
+        # Используем прямой расчет без Kelly multiplier
+        adjusted_risk_percentage = risk_percentage
         max_risk_usdt = equity * adjusted_risk_percentage
 
         # Максимальная позиция с учетом риска
@@ -653,9 +645,8 @@ class MarginCalculator:
 
         logger.info(
             f"Расчет оптимальной позиции: equity={equity:.2f}, "
-            f"risk={risk_percentage:.1%}, kelly_mult={kelly_multiplier:.2f}x, "
-            f"adjusted_risk={adjusted_risk_percentage:.1%}, leverage={leverage}x, "
-            f"optimal_size={optimal_position_size:.6f}"
+            f"risk={risk_percentage:.1%}, adjusted_risk={adjusted_risk_percentage:.1%}, "
+            f"leverage={leverage}x, optimal_size={optimal_position_size:.6f}"
         )
 
         return optimal_position_size

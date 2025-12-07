@@ -1952,192 +1952,236 @@ class FuturesSignalGenerator:
                 # Проверяем тренд через EMA - если конфликт, снижаем confidence
                 is_downtrend = ema_fast < ema_slow and current_price < ema_fast
 
-                # Нормализованная сила: от 0 до 1
-                strength = min(1.0, (rsi_oversold - rsi) / rsi_oversold)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем текущий режим для проверки блокировки
+                current_regime = "ranging"  # Fallback
+                try:
+                    if hasattr(self, "regime_manager") and self.regime_manager:
+                        regime_obj = self.regime_manager.get_current_regime()
+                        if regime_obj:
+                            current_regime = (
+                                regime_obj.lower()
+                                if isinstance(regime_obj, str)
+                                else str(regime_obj).lower()
+                            )
+                except Exception as e:
+                    logger.debug(f"⚠️ Не удалось получить режим для блокировки: {e}")
 
-                # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим
-                if is_downtrend:
-                    # Конфликт: RSI oversold (LONG) vs EMA bearish (DOWN)
-                    # Получаем strength_multiplier для конфликта из конфига
-                    conflict_multiplier = 0.5  # Fallback
-                    try:
-                        # Получаем режим
-                        regime_name_rsi = "ranging"  # Fallback
-                        if hasattr(self, "regime_manager") and self.regime_manager:
-                            regime_obj = self.regime_manager.get_current_regime()
-                            if regime_obj:
-                                regime_name_rsi = (
-                                    regime_obj.lower()
-                                    if isinstance(regime_obj, str)
-                                    else str(regime_obj).lower()
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: В trending режиме - полная блокировка противотрендовых сигналов
+                should_block = current_regime == "trending" and is_downtrend
+                if should_block:
+                    logger.debug(
+                        f"🚫 RSI OVERSOLD сигнал ПОЛНОСТЬЮ ЗАБЛОКИРОВАН для {symbol}: "
+                        f"trending режим + EMA bearish (конфликт с трендом)"
+                    )
+                else:
+                    # Нормализованная сила: от 0 до 1
+                    strength = min(1.0, (rsi_oversold - rsi) / rsi_oversold)
+
+                    # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим (только для ranging/choppy)
+                    if is_downtrend:
+                        # Конфликт: RSI oversold (LONG) vs EMA bearish (DOWN)
+                        # Получаем strength_multiplier для конфликта из конфига
+                        conflict_multiplier = 0.5  # Fallback
+                        try:
+                            # Получаем режим
+                            regime_name_rsi = "ranging"  # Fallback
+                            if hasattr(self, "regime_manager") and self.regime_manager:
+                                regime_obj = self.regime_manager.get_current_regime()
+                                if regime_obj:
+                                    regime_name_rsi = (
+                                        regime_obj.lower()
+                                        if isinstance(regime_obj, str)
+                                        else str(regime_obj).lower()
+                                    )
+
+                            adaptive_regime = getattr(
+                                self.scalping_config, "adaptive_regime", {}
+                            )
+                            if isinstance(adaptive_regime, dict):
+                                regime_config = adaptive_regime.get(regime_name_rsi, {})
+                            else:
+                                regime_config = getattr(
+                                    adaptive_regime, regime_name_rsi, {}
                                 )
 
-                        adaptive_regime = getattr(
-                            self.scalping_config, "adaptive_regime", {}
-                        )
-                        if isinstance(adaptive_regime, dict):
-                            regime_config = adaptive_regime.get(regime_name_rsi, {})
-                        else:
-                            regime_config = getattr(
-                                adaptive_regime, regime_name_rsi, {}
+                            if isinstance(regime_config, dict):
+                                strength_multipliers = regime_config.get(
+                                    "strength_multipliers", {}
+                                )
+                                conflict_multiplier = strength_multipliers.get(
+                                    "conflict", 0.5
+                                )
+                            else:
+                                strength_multipliers = getattr(
+                                    regime_config, "strength_multipliers", None
+                                )
+                                if strength_multipliers:
+                                    conflict_multiplier = getattr(
+                                        strength_multipliers, "conflict", 0.5
+                                    )
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Не удалось получить conflict_multiplier для {regime_name_rsi}: {e}"
                             )
 
-                        if isinstance(regime_config, dict):
-                            strength_multipliers = regime_config.get(
-                                "strength_multipliers", {}
-                            )
-                            conflict_multiplier = strength_multipliers.get(
-                                "conflict", 0.5
-                            )
-                        else:
-                            strength_multipliers = getattr(
-                                regime_config, "strength_multipliers", None
-                            )
-                            if strength_multipliers:
-                                conflict_multiplier = getattr(
-                                    strength_multipliers, "conflict", 0.5
-                                )
-                    except Exception as e:
+                        # ✅ ЗАДАЧА #7: Снижаем strength при конфликте
+                        strength *= conflict_multiplier
+
+                        # ✅ АДАПТИВНО: Сниженная уверенность из конфига (50% от нормальной)
+                        normal_conf = confidence_config_rsi.get("rsi_signal", 0.6)
+                        confidence = (
+                            normal_conf * 0.5
+                        )  # Конфликт = 50% от нормальной уверенности
+                        has_conflict = True
                         logger.debug(
-                            f"⚠️ Не удалось получить conflict_multiplier для {regime_name_rsi}: {e}"
+                            f"⚡ RSI OVERSOLD с конфликтом для {symbol}: "
+                            f"RSI oversold, но EMA/цена не bullish, "
+                            f"strength снижен на {conflict_multiplier:.1%} (стало {strength:.3f})"
                         )
+                    else:
+                        confidence = confidence_config_rsi.get(
+                            "rsi_signal", 0.6
+                        )  # ✅ АДАПТИВНО: Из конфига
+                        has_conflict = False
+                        # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
+                        # logger.debug(f"✅ RSI OVERSOLD сигнал для {symbol}: RSI={rsi:.2f}")
 
-                    # ✅ ЗАДАЧА #7: Снижаем strength при конфликте
-                    strength *= conflict_multiplier
-
-                    # ✅ АДАПТИВНО: Сниженная уверенность из конфига (50% от нормальной)
-                    normal_conf = confidence_config_rsi.get("rsi_signal", 0.6)
-                    confidence = (
-                        normal_conf * 0.5
-                    )  # Конфликт = 50% от нормальной уверенности
-                    has_conflict = True
-                    logger.debug(
-                        f"⚡ RSI OVERSOLD с конфликтом для {symbol}: "
-                        f"RSI oversold, но EMA/цена не bullish, "
-                        f"strength снижен на {conflict_multiplier:.1%} (стало {strength:.3f})"
-                    )
-                else:
-                    confidence = confidence_config_rsi.get(
-                        "rsi_signal", 0.6
-                    )  # ✅ АДАПТИВНО: Из конфига
-                    has_conflict = False
-                    # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
-                    # logger.debug(f"✅ RSI OVERSOLD сигнал для {symbol}: RSI={rsi:.2f}")
-
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
-                if adx_trend == "bearish" and adx_value >= adx_threshold:
-                    # Сильный нисходящий тренд - не генерируем BUY сигнал
-                    logger.debug(
-                        f"🚫 RSI OVERSOLD сигнал ОТМЕНЕН для {symbol}: "
-                        f"ADX показывает нисходящий тренд (ADX={adx_value:.1f}, -DI доминирует)"
-                    )
-                else:
-                    signals.append(
-                        {
-                            "symbol": symbol,
-                            "side": "buy",
-                            "type": "rsi_oversold",
-                            "strength": strength,
-                            "price": current_price,
-                            "timestamp": datetime.now(),
-                            "indicator_value": rsi,
-                            "confidence": confidence,
-                            "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
-                        }
-                    )
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                    if adx_trend == "bearish" and adx_value >= adx_threshold:
+                        # Сильный нисходящий тренд - не генерируем BUY сигнал
+                        logger.debug(
+                            f"🚫 RSI OVERSOLD сигнал ОТМЕНЕН для {symbol}: "
+                            f"ADX показывает нисходящий тренд (ADX={adx_value:.1f}, -DI доминирует)"
+                        )
+                    else:
+                        signals.append(
+                            {
+                                "symbol": symbol,
+                                "side": "buy",
+                                "type": "rsi_oversold",
+                                "strength": strength,
+                                "price": current_price,
+                                "timestamp": datetime.now(),
+                                "indicator_value": rsi,
+                                "confidence": confidence,
+                                "has_conflict": has_conflict,  # ✅ Флаг конфликта для order_executor
+                            }
+                        )
 
             # Перекупленность (продажа) - используем адаптивный порог
             elif rsi > rsi_overbought:
                 # Проверяем тренд через EMA - если конфликт, снижаем confidence
                 is_uptrend = ema_fast > ema_slow and current_price > ema_fast
 
-                # Нормализованная сила: от 0 до 1
-                strength = min(1.0, (rsi - rsi_overbought) / (100 - rsi_overbought))
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем текущий режим для проверки блокировки
+                current_regime = "ranging"  # Fallback
+                try:
+                    if hasattr(self, "regime_manager") and self.regime_manager:
+                        regime_obj = self.regime_manager.get_current_regime()
+                        if regime_obj:
+                            current_regime = (
+                                regime_obj.lower()
+                                if isinstance(regime_obj, str)
+                                else str(regime_obj).lower()
+                            )
+                except Exception as e:
+                    logger.debug(f"⚠️ Не удалось получить режим для блокировки: {e}")
 
-                # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим
-                # ✅ АДАПТИВНО: Используем confidence_config_rsi, полученный выше
-                if is_uptrend:
-                    # Конфликт: RSI overbought (SHORT) vs EMA bullish (UP)
-                    # Получаем strength_multiplier для конфликта из конфига
-                    conflict_multiplier = 0.5  # Fallback
-                    try:
-                        # Получаем режим
-                        regime_name_rsi = "ranging"  # Fallback
-                        if hasattr(self, "regime_manager") and self.regime_manager:
-                            regime_obj = self.regime_manager.get_current_regime()
-                            if regime_obj:
-                                regime_name_rsi = (
-                                    regime_obj.lower()
-                                    if isinstance(regime_obj, str)
-                                    else str(regime_obj).lower()
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: В trending режиме - полная блокировка противотрендовых сигналов
+                should_block = current_regime == "trending" and is_uptrend
+                if should_block:
+                    logger.debug(
+                        f"🚫 RSI OVERBOUGHT сигнал ПОЛНОСТЬЮ ЗАБЛОКИРОВАН для {symbol}: "
+                        f"trending режим + EMA bullish (конфликт с трендом)"
+                    )
+                else:
+                    # Нормализованная сила: от 0 до 1
+                    strength = min(1.0, (rsi - rsi_overbought) / (100 - rsi_overbought))
+
+                    # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим (только для ranging/choppy)
+                    # ✅ АДАПТИВНО: Используем confidence_config_rsi, полученный выше
+                    if is_uptrend:
+                        # Конфликт: RSI overbought (SHORT) vs EMA bullish (UP)
+                        # Получаем strength_multiplier для конфликта из конфига
+                        conflict_multiplier = 0.5  # Fallback
+                        try:
+                            # Получаем режим
+                            regime_name_rsi = "ranging"  # Fallback
+                            if hasattr(self, "regime_manager") and self.regime_manager:
+                                regime_obj = self.regime_manager.get_current_regime()
+                                if regime_obj:
+                                    regime_name_rsi = (
+                                        regime_obj.lower()
+                                        if isinstance(regime_obj, str)
+                                        else str(regime_obj).lower()
+                                    )
+
+                            adaptive_regime = getattr(
+                                self.scalping_config, "adaptive_regime", {}
+                            )
+                            if isinstance(adaptive_regime, dict):
+                                regime_config = adaptive_regime.get(regime_name_rsi, {})
+                            else:
+                                regime_config = getattr(
+                                    adaptive_regime, regime_name_rsi, {}
                                 )
 
-                        adaptive_regime = getattr(
-                            self.scalping_config, "adaptive_regime", {}
-                        )
-                        if isinstance(adaptive_regime, dict):
-                            regime_config = adaptive_regime.get(regime_name_rsi, {})
-                        else:
-                            regime_config = getattr(
-                                adaptive_regime, regime_name_rsi, {}
+                            if isinstance(regime_config, dict):
+                                strength_multipliers = regime_config.get(
+                                    "strength_multipliers", {}
+                                )
+                                conflict_multiplier = strength_multipliers.get(
+                                    "conflict", 0.5
+                                )
+                            else:
+                                strength_multipliers = getattr(
+                                    regime_config, "strength_multipliers", None
+                                )
+                                if strength_multipliers:
+                                    conflict_multiplier = getattr(
+                                        strength_multipliers, "conflict", 0.5
+                                    )
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Не удалось получить conflict_multiplier для {regime_name_rsi}: {e}"
                             )
 
-                        if isinstance(regime_config, dict):
-                            strength_multipliers = regime_config.get(
-                                "strength_multipliers", {}
-                            )
-                            conflict_multiplier = strength_multipliers.get(
-                                "conflict", 0.5
-                            )
-                        else:
-                            strength_multipliers = getattr(
-                                regime_config, "strength_multipliers", None
-                            )
-                            if strength_multipliers:
-                                conflict_multiplier = getattr(
-                                    strength_multipliers, "conflict", 0.5
-                                )
-                    except Exception as e:
+                        # ✅ ЗАДАЧА #7: Снижаем strength при конфликте
+                        strength *= conflict_multiplier
+
+                        # ✅ АДАПТИВНО: Сниженная уверенность из конфига (50% от нормальной)
+                        normal_conf = confidence_config_rsi.get("rsi_signal", 0.6)
+                        confidence = (
+                            normal_conf * 0.5
+                        )  # Конфликт = 50% от нормальной уверенности
+                        has_conflict = True
                         logger.debug(
-                            f"⚠️ Не удалось получить conflict_multiplier для {regime_name_rsi}: {e}"
+                            f"⚡ RSI OVERBOUGHT с конфликтом для {symbol}: "
+                            f"RSI({rsi:.2f}) > overbought({rsi_overbought}), "
+                            f"но EMA показывает восходящий тренд → быстрый скальп на коррекции, "
+                            f"strength снижен на {conflict_multiplier:.1%} (стало {strength:.3f}), "
+                            f"confidence={confidence:.1f}"
                         )
+                    else:
+                        confidence = confidence_config_rsi.get(
+                            "rsi_signal", 0.6
+                        )  # ✅ АДАПТИВНО: Из конфига
+                        has_conflict = False
+                        # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
+                        # logger.debug(f"✅ RSI OVERBOUGHT сигнал для {symbol}: RSI={rsi:.2f}")
 
-                    # ✅ ЗАДАЧА #7: Снижаем strength при конфликте
-                    strength *= conflict_multiplier
-
-                    # ✅ АДАПТИВНО: Сниженная уверенность из конфига (50% от нормальной)
-                    normal_conf = confidence_config_rsi.get("rsi_signal", 0.6)
-                    confidence = (
-                        normal_conf * 0.5
-                    )  # Конфликт = 50% от нормальной уверенности
-                    has_conflict = True
-                    logger.debug(
-                        f"⚡ RSI OVERBOUGHT с конфликтом для {symbol}: "
-                        f"RSI({rsi:.2f}) > overbought({rsi_overbought}), "
-                        f"но EMA показывает восходящий тренд → быстрый скальп на коррекции, "
-                        f"strength снижен на {conflict_multiplier:.1%} (стало {strength:.3f}), "
-                        f"confidence={confidence:.1f}"
-                    )
-                else:
-                    confidence = confidence_config_rsi.get(
-                        "rsi_signal", 0.6
-                    )  # ✅ АДАПТИВНО: Из конфига
-                    has_conflict = False
-                    # ✅ ОПТИМИЗАЦИЯ: Логируем только через INFO/ERROR, не DEBUG
-                    # logger.debug(f"✅ RSI OVERBOUGHT сигнал для {symbol}: RSI={rsi:.2f}")
-
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
-                if adx_trend == "bullish" and adx_value >= adx_threshold:
-                    # Сильный восходящий тренд - не генерируем SELL сигнал
-                    logger.debug(
-                        f"🚫 RSI OVERBOUGHT сигнал ОТМЕНЕН для {symbol}: "
-                        f"ADX показывает восходящий тренд (ADX={adx_value:.1f}, +DI доминирует)"
-                    )
-                else:
-                    signals.append(
-                        {
-                            "symbol": symbol,
-                            "side": "sell",
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ADX тренд ПРИ генерации сигнала
+                    if adx_trend == "bullish" and adx_value >= adx_threshold:
+                        # Сильный восходящий тренд - не генерируем SELL сигнал
+                        logger.debug(
+                            f"🚫 RSI OVERBOUGHT сигнал ОТМЕНЕН для {symbol}: "
+                            f"ADX показывает восходящий тренд (ADX={adx_value:.1f}, +DI доминирует)"
+                        )
+                    else:
+                        signals.append(
+                            {
+                                "symbol": symbol,
+                                "side": "sell",
                             "type": "rsi_overbought",
                             "strength": strength,
                             "price": current_price,
