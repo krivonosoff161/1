@@ -301,6 +301,14 @@ class FuturesScalpingOrchestrator:
         # ✅ НОВОЕ: Передаем symbol_profiles в position_manager для per-symbol TP
         # (инициализируем после создания symbol_profiles)
         self.performance_tracker = PerformanceTracker()
+        
+        # ✅ НОВОЕ: Передаем performance_tracker в entry_manager, order_executor и signal_generator для CSV логирования
+        if hasattr(self.entry_manager, "set_performance_tracker"):
+            self.entry_manager.set_performance_tracker(self.performance_tracker)
+        if hasattr(self.order_executor, "set_performance_tracker"):
+            self.order_executor.set_performance_tracker(self.performance_tracker)
+        if hasattr(self.signal_generator, "set_performance_tracker"):
+            self.signal_generator.set_performance_tracker(self.performance_tracker)
 
         # ✅ ЭТАП 1: Используем symbol_profiles из ConfigManager
         self.symbol_profiles: Dict[
@@ -692,6 +700,7 @@ class FuturesScalpingOrchestrator:
             data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
             structured_logger=self.structured_logger,  # ✅ НОВОЕ: StructuredLogger для логирования свечей
             smart_exit_coordinator=self.smart_exit_coordinator,  # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
+            performance_tracker=self.performance_tracker,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
         )
 
         logger.info("FuturesScalpingOrchestrator инициализирован")
@@ -1346,7 +1355,9 @@ class FuturesScalpingOrchestrator:
 
                     # Получаем данные позиции
                     entry_price = float(pos.get("avgPx", "0"))
-                    side = "buy" if position_side == "long" else "sell"
+                    # ✅ ИСПРАВЛЕНО: Нормализуем position_side перед сравнением
+                    position_side_normalized = position_side.lower() if isinstance(position_side, str) else "long"
+                    side = "buy" if position_side_normalized == "long" else "sell"
 
                     if entry_price == 0:
                         logger.warning(f"⚠️ Entry price = 0 для {symbol}, пропускаем")
@@ -1390,7 +1401,8 @@ class FuturesScalpingOrchestrator:
                             # OKX возвращает время в миллисекундах
                             entry_timestamp_ms = int(entry_time_str)
                             entry_timestamp_sec = entry_timestamp_ms / 1000.0
-                            entry_time_dt = datetime.fromtimestamp(entry_timestamp_sec)
+                            # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc
+                            entry_time_dt = datetime.fromtimestamp(entry_timestamp_sec, tz=timezone.utc)
                             logger.debug(
                                 f"✅ Реальное время открытия для {symbol} получено из API: {entry_time_dt} "
                                 f"(из {'cTime' if c_time else 'uTime'})"
@@ -1663,6 +1675,7 @@ class FuturesScalpingOrchestrator:
             pos_side_raw = pos.get("posSide", "").lower()
             if pos_side_raw in ["long", "short"]:
                 position_side = pos_side_raw  # "long" или "short"
+                # ✅ ИСПРАВЛЕНО: position_side уже нормализован выше, но для безопасности проверяем
                 side = (
                     "buy" if position_side == "long" else "sell"
                 )  # Для внутреннего использования
@@ -2111,8 +2124,9 @@ class FuturesScalpingOrchestrator:
                         try:
                             entry_timestamp_ms = int(entry_time_str)
                             entry_timestamp_sec = entry_timestamp_ms / 1000.0
+                            # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc
                             entry_time_from_api = datetime.fromtimestamp(
-                                entry_timestamp_sec
+                                entry_timestamp_sec, tz=timezone.utc
                             )
                         except (ValueError, TypeError):
                             pass

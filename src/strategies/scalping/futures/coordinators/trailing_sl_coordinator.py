@@ -507,8 +507,10 @@ class TrailingSLCoordinator:
                             if entry_time_str:
                                 try:
                                     entry_timestamp = int(entry_time_str) / 1000
+                                    # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc
+                                    from datetime import timezone
                                     position["entry_time"] = datetime.fromtimestamp(
-                                        entry_timestamp
+                                        entry_timestamp, tz=timezone.utc
                                     )
                                     position["timestamp"] = position["entry_time"]
                                     logger.debug(

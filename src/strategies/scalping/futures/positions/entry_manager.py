@@ -45,6 +45,7 @@ class EntryManager:
         self.position_registry = position_registry
         self.order_executor = order_executor
         self.position_sizer = position_sizer
+        self.performance_tracker = None  # Будет установлен из orchestrator
 
         logger.info("✅ EntryManager инициализирован")
 
@@ -52,6 +53,11 @@ class EntryManager:
         """Установить PositionSizer"""
         self.position_sizer = position_sizer
         logger.debug("✅ EntryManager: PositionSizer установлен")
+
+    def set_performance_tracker(self, performance_tracker):
+        """Установить PerformanceTracker для логирования"""
+        self.performance_tracker = performance_tracker
+        logger.debug("✅ EntryManager: PerformanceTracker установлен")
 
     async def open_position(
         self,
@@ -279,8 +285,10 @@ class EntryManager:
                             try:
                                 entry_timestamp_ms = int(entry_time_str)
                                 entry_timestamp_sec = entry_timestamp_ms / 1000.0
+                                # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc для правильного timestamp
+                                from datetime import timezone
                                 entry_time_from_api = datetime.fromtimestamp(
-                                    entry_timestamp_sec
+                                    entry_timestamp_sec, tz=timezone.utc
                                 )
                             except (ValueError, TypeError):
                                 pass
@@ -464,6 +472,22 @@ class EntryManager:
                 f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.6f}, "
                 f"side={position_data.get('position_side')}, regime={final_regime})"
             )
+
+            # ✅ НОВОЕ: Логирование открытия позиции в CSV
+            if self.performance_tracker:
+                try:
+                    self.performance_tracker.record_position_open(
+                        symbol=symbol,
+                        side=position_data.get("position_side", "long"),
+                        entry_price=position_data.get("entry_price", 0.0),
+                        size=position_size,
+                        regime=final_regime or "unknown",
+                        order_id=order_result.get("order_id"),
+                        order_type=order_result.get("order_type", "limit"),
+                    )
+                    logger.debug(f"✅ EntryManager: Открытие позиции {symbol} записано в CSV")
+                except Exception as e:
+                    logger.warning(f"⚠️ EntryManager: Ошибка записи открытия позиции в CSV: {e}")
 
             # 5. Возвращаем результат, как от order_executor.execute_signal()
             return order_result

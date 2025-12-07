@@ -46,6 +46,7 @@ class FuturesOrderExecutor:
         self.scalping_config = config.scalping
         self.client = client
         self.slippage_guard = slippage_guard
+        self.performance_tracker = None  # Будет установлен из orchestrator
 
         # Состояние
         self.is_initialized = False
@@ -81,6 +82,11 @@ class FuturesOrderExecutor:
         except Exception as e:
             logger.error(f"Ошибка инициализации FuturesOrderExecutor: {e}")
             raise
+
+    def set_performance_tracker(self, performance_tracker):
+        """Установить PerformanceTracker для логирования"""
+        self.performance_tracker = performance_tracker
+        logger.debug("✅ FuturesOrderExecutor: PerformanceTracker установлен")
 
     async def execute_signal(
         self, signal: Dict[str, Any], position_size: float
@@ -207,6 +213,22 @@ class FuturesOrderExecutor:
                     "timestamp": datetime.now(),
                     "signal": signal,
                 }
+                
+                # ✅ НОВОЕ: Логирование размещения ордера в CSV
+                if self.performance_tracker:
+                    try:
+                        self.performance_tracker.record_order(
+                            symbol=symbol,
+                            side=side,
+                            order_type=order_type,
+                            order_id=order_id or "",
+                            size=position_size,
+                            price=price,
+                            status="placed",
+                        )
+                        logger.debug(f"✅ OrderExecutor: Размещение ордера {order_id} записано в CSV")
+                    except Exception as e:
+                        logger.warning(f"⚠️ OrderExecutor: Ошибка записи размещения ордера в CSV: {e}")
 
             return result
 
@@ -885,6 +907,26 @@ class FuturesOrderExecutor:
                         )
                         if latency_ms > 300:
                             logger.warning(f"FILL_LATENCY_HIGH {symbol} {latency_ms}ms")
+                        
+                        # ✅ НОВОЕ: Логирование исполнения ордера (fill) в CSV
+                        if self.performance_tracker:
+                            try:
+                                self.performance_tracker.record_order(
+                                    symbol=symbol,
+                                    side=side,
+                                    order_type="market",
+                                    order_id=order_id or "",
+                                    size=size,
+                                    price=None,
+                                    status="filled",
+                                    fill_price=fill_px,
+                                    fill_size=size,
+                                    execution_time_ms=latency_ms,
+                                    slippage=slippage_bps / 100.0 if slippage_bps else None,  # bps to percent
+                                )
+                                logger.debug(f"✅ OrderExecutor: Исполнение ордера {order_id} записано в CSV")
+                            except Exception as e:
+                                logger.warning(f"⚠️ OrderExecutor: Ошибка записи исполнения ордера в CSV: {e}")
                 except Exception as e:
                     logger.debug(
                         f"⚠️ Не удалось обновить метрики slippage для {symbol}: {e}"
@@ -1101,6 +1143,21 @@ class FuturesOrderExecutor:
                                 order_id = retry_result.get("data", [{}])[0].get(
                                     "ordId"
                                 )
+                                # ✅ НОВОЕ: Логирование размещения лимитного ордера (retry) в CSV
+                                if self.performance_tracker:
+                                    try:
+                                        self.performance_tracker.record_order(
+                                            symbol=symbol,
+                                            side=side,
+                                            order_type="limit",
+                                            order_id=order_id or "",
+                                            size=size,
+                                            price=corrected_price,
+                                            status="placed",
+                                        )
+                                        logger.debug(f"✅ OrderExecutor: Размещение лимитного ордера (retry) {order_id} записано в CSV")
+                                    except Exception as e:
+                                        logger.warning(f"⚠️ OrderExecutor: Ошибка записи размещения лимитного ордера (retry) в CSV: {e}")
                                 logger.info(
                                     f"✅ Лимитный ордер размещен с исправленной ценой: {order_id}"
                                 )

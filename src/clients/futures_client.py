@@ -935,6 +935,61 @@ class OKXFuturesClient:
         )
         return data.get("data", [])
 
+    async def get_funding_payment_history(
+        self,
+        symbol: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        limit: int = 100,
+    ) -> list:
+        """
+        Получение истории funding payments (платежей за финансирование).
+        
+        OKX API endpoint: /api/v5/account/bills
+        Тип: funding (платежи за финансирование)
+        
+        Args:
+            symbol: Торговый символ (опционально)
+            start_time: Начальное время (опционально)
+            end_time: Конечное время (опционально)
+            limit: Максимальное количество записей (по умолчанию 100)
+        
+        Returns:
+            Список funding payments
+        """
+        params = {
+            "instType": "SWAP",
+            "type": "funding",  # Тип: funding (платежи за финансирование)
+            "limit": str(limit),
+        }
+        
+        if symbol:
+            params["instId"] = f"{symbol}-SWAP"
+        
+        if start_time:
+            # OKX использует timestamp в миллисекундах
+            params["before"] = str(int(start_time.timestamp() * 1000))
+        
+        if end_time:
+            params["after"] = str(int(end_time.timestamp() * 1000))
+        
+        try:
+            data = await self._make_request(
+                "GET", "/api/v5/account/bills", params=params
+            )
+            if data.get("code") == "0":
+                return data.get("data", [])
+            else:
+                logger.warning(
+                    f"⚠️ Ошибка получения истории funding payments: {data.get('msg', 'Unknown error')}"
+                )
+                return []
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка запроса истории funding payments: {e}", exc_info=True
+            )
+            return []
+
     # ---------- Batch ----------
     async def batch_amend_orders(self, amend_list: list) -> dict:
         """До 20 ордеров за 1 запрос (аналогично spot)"""

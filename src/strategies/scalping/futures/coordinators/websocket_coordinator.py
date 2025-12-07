@@ -56,6 +56,7 @@ class WebSocketCoordinator:
         data_registry=None,  # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
         structured_logger=None,  # ✅ НОВОЕ: StructuredLogger для логирования свечей
         smart_exit_coordinator=None,  # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
+        performance_tracker=None,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
     ):
         """
         Инициализация WebSocketCoordinator.
@@ -100,6 +101,8 @@ class WebSocketCoordinator:
         self.structured_logger = structured_logger
         # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
         self.smart_exit_coordinator = smart_exit_coordinator
+        # ✅ НОВОЕ: PerformanceTracker для записи в CSV
+        self.performance_tracker = performance_tracker
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Отслеживание последнего timestamp для каждого символа и таймфрейма
         # Формат: "symbol_timeframe" -> timestamp последней обработанной свечи (в секундах)
@@ -742,12 +745,125 @@ class WebSocketCoordinator:
                         reason=f"ws_{reason}",
                     )
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем закрытие позиции в CSV
+                if self.performance_tracker:
+                    try:
+                        # Получаем данные с биржи для точного расчета
+                        exit_price = 0.0
+                        gross_pnl = 0.0
+                        commission = 0.0
+                        funding_fee = 0.0
+                        size_in_coins = 0.0
+                        duration_sec = minutes_in_position * 60.0
+
+                        # Пытаемся получить последнюю цену
+                        try:
+                            current_price = await self.get_current_price_fallback(symbol)
+                            if current_price and current_price > 0:
+                                exit_price = current_price
+                        except:
+                            pass
+
+                        # Пытаемся получить данные позиции с биржи через position_manager
+                        if self.position_manager and self.client:
+                            try:
+                                # Получаем закрытую позицию с биржи (может быть в истории)
+                                positions = await self.client.get_positions(symbol=symbol)
+                                if positions and len(positions) > 0:
+                                    # Ищем закрытую позицию (size = 0)
+                                    for pos in positions:
+                                        pos_size = abs(float(pos.get("pos", "0") or 0))
+                                        if pos_size < 0.000001:  # Позиция закрыта
+                                            # Получаем данные
+                                            exit_price_raw = pos.get("avgPx") or pos.get("last") or exit_price
+                                            if exit_price_raw:
+                                                exit_price = float(exit_price_raw)
+                                            
+                                            # Получаем funding fee
+                                            if "fundingFee" in pos:
+                                                funding_fee = float(pos.get("fundingFee", 0) or 0)
+                                            elif "funding_fee" in pos:
+                                                funding_fee = float(pos.get("funding_fee", 0) or 0)
+                                            
+                                            # Получаем realized PnL
+                                            realized_pnl = pos.get("realizedPnl") or pos.get("realized_pnl")
+                                            if realized_pnl:
+                                                gross_pnl = float(realized_pnl)
+                                            
+                                            break
+                            except Exception as e:
+                                logger.debug(f"⚠️ Не удалось получить данные позиции с биржи для {symbol}: {e}")
+
+                        # Если exit_price не получен, используем текущую цену
+                        if exit_price == 0.0:
+                            try:
+                                exit_price = await self.get_current_price_fallback(symbol)
+                            except:
+                                exit_price = entry_price  # Fallback
+
+                        # Рассчитываем size_in_coins если нужно
+                        if size > 0 and self.client:
+                            try:
+                                details = await self.client.get_instrument_details(symbol)
+                                ct_val = float(details.get("ctVal", "0.01"))
+                                size_in_coins = abs(size) * ct_val
+                            except:
+                                size_in_coins = abs(size)  # Fallback
+
+                        # Рассчитываем gross PnL если не получен с биржи
+                        if gross_pnl == 0.0 and entry_price > 0 and exit_price > 0 and size_in_coins > 0:
+                            if side.lower() == "long":
+                                gross_pnl = (exit_price - entry_price) * size_in_coins
+                            else:  # short
+                                gross_pnl = (entry_price - exit_price) * size_in_coins
+
+                        # Рассчитываем комиссию (примерно, если не получена с биржи)
+                        if commission == 0.0 and size_in_coins > 0:
+                            trading_fee_rate = 0.0010  # 0.1% по умолчанию
+                            if self.scalping_config:
+                                commission_config = getattr(self.scalping_config, "commission", {})
+                                if isinstance(commission_config, dict):
+                                    trading_fee_rate = commission_config.get("trading_fee_rate", 0.0010)
+                                elif hasattr(commission_config, "trading_fee_rate"):
+                                    trading_fee_rate = getattr(commission_config, "trading_fee_rate", 0.0010)
+                            
+                            notional_entry = size_in_coins * entry_price
+                            notional_exit = size_in_coins * exit_price
+                            commission = (notional_entry + notional_exit) * trading_fee_rate
+
+                        # Рассчитываем net PnL
+                        net_pnl = gross_pnl - commission - funding_fee
+
+                        # Создаем TradeResult
+                        from ..spot.position_manager import TradeResult
+                        trade_result = TradeResult(
+                            symbol=symbol,
+                            side=side.lower(),
+                            entry_price=entry_price,
+                            exit_price=exit_price,
+                            size=size_in_coins if size_in_coins > 0 else abs(size),
+                            gross_pnl=gross_pnl,
+                            commission=commission,
+                            net_pnl=net_pnl,
+                            duration_sec=duration_sec,
+                            reason=f"ws_{reason}",
+                            timestamp=datetime.now(timezone.utc),
+                            funding_fee=funding_fee,
+                        )
+
+                        # Записываем в CSV
+                        self.performance_tracker.record_trade_result(trade_result)
+                        logger.info(f"✅ Закрытие позиции {symbol} через WebSocket записано в CSV")
+
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка записи закрытия позиции {symbol} в CSV: {e}", exc_info=True)
+
                 # Вызываем callback для обработки закрытия позиции
                 if self.handle_position_closed_callback:
                     await self.handle_position_closed_callback(symbol)
 
         except Exception as e:
-            logger.error(f"❌ Ошибка обработки закрытия позиции через Private WS: {e}")
+            logger.error(f"❌ Ошибка обработки закрытия позиции через Private WS: {e}", exc_info=True)
 
     async def get_current_price_fallback(self, symbol: str) -> Optional[float]:
         """

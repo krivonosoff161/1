@@ -53,6 +53,7 @@ class FuturesSignalGenerator:
         self.scalping_config = config.scalping
         self.client = client  # ✅ Сохраняем клиент для фильтров
         self.data_registry = None  # ✅ НОВОЕ: DataRegistry для сохранения индикаторов (будет установлен позже)
+        self.performance_tracker = None  # Будет установлен из orchestrator
 
         # Менеджер индикаторов
         from src.indicators import (ATR, MACD, RSI, BollingerBands,
@@ -264,6 +265,11 @@ class FuturesSignalGenerator:
         # ✅ НОВОЕ: Передаем StructuredLogger в фильтры, если они уже инициализированы
         if hasattr(self, "mtf_filter") and self.mtf_filter:
             self.mtf_filter.structured_logger = structured_logger
+
+    def set_performance_tracker(self, performance_tracker):
+        """Установить PerformanceTracker для CSV логирования"""
+        self.performance_tracker = performance_tracker
+        logger.debug("✅ FuturesSignalGenerator: PerformanceTracker установлен")
 
     def set_trading_statistics(self, trading_statistics):
         """
@@ -1313,6 +1319,29 @@ class FuturesSignalGenerator:
 
             # Обновление истории сигналов
             self._update_signal_history(filtered_signals)
+
+            # ✅ НОВОЕ: Логирование сигналов в CSV
+            if self.performance_tracker:
+                for signal in filtered_signals:
+                    try:
+                        filters_passed = signal.get("filters_passed", [])
+                        if isinstance(filters_passed, str):
+                            filters_passed = filters_passed.split(",") if filters_passed else []
+                        elif not isinstance(filters_passed, list):
+                            filters_passed = []
+                        
+                        self.performance_tracker.record_signal(
+                            symbol=signal.get("symbol", ""),
+                            side=signal.get("side", ""),
+                            price=signal.get("price", 0.0),
+                            strength=signal.get("strength", 0.0),
+                            regime=signal.get("regime"),
+                            filters_passed=filters_passed,
+                            executed=False,  # Будет обновлено при исполнении
+                            order_id=None,  # Будет обновлено при исполнении
+                        )
+                    except Exception as e:
+                        logger.warning(f"⚠️ SignalGenerator: Ошибка записи сигнала в CSV: {e}")
 
             return filtered_signals
 

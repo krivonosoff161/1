@@ -905,6 +905,9 @@ class ExitAnalyzer:
                     position_side = pos_side_raw
                 else:
                     position_side = position.get("position_side", "long")
+                    # ✅ ИСПРАВЛЕНО: Нормализуем position_side перед сравнением
+                    if isinstance(position_side, str):
+                        position_side = position_side.lower()
                     if position_side == "long":
                         logger.warning(
                             f"⚠️ FALLBACK position_side: Используется 'long' для {symbol} "
@@ -1288,7 +1291,22 @@ class ExitAnalyzer:
                         "minutes_in_position": minutes_in_position,
                     }
                 else:
-                    # Нет сильных сигналов - закрываем по времени
+                    # ✅ ИСПРАВЛЕНО: Не закрываем убыточные позиции по max_holding
+                    # Позволяем им дойти до SL или восстановиться
+                    if pnl_percent < 0:
+                        logger.info(
+                            f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                            f"но позиция в убытке ({pnl_percent:.2f}%) - НЕ закрываем, ждем SL или восстановления"
+                        )
+                        return {
+                            "action": "hold",
+                            "reason": "max_holding_exceeded_but_loss_trending",
+                            "pnl_pct": pnl_percent,
+                            "trend_strength": trend_strength,
+                            "minutes_in_position": minutes_in_position,
+                        }
+                    
+                    # Нет сильных сигналов, но позиция в прибыли - закрываем по времени
                     logger.info(
                         f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
                         f"нет сильных сигналов держать (trend_strength={trend_strength:.2f}, pnl={pnl_percent:.2f}%) - закрываем"
@@ -1571,10 +1589,25 @@ class ExitAnalyzer:
                 minutes_in_position is not None
                 and minutes_in_position >= actual_max_holding
             ):
-                # Время превышено - закрываем (в ranging режиме более консервативно)
+                # ✅ ИСПРАВЛЕНО: Не закрываем убыточные позиции по max_holding
+                # Позволяем им дойти до SL или восстановиться
+                if pnl_percent < 0:
+                    logger.info(
+                        f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                        f"но позиция в убытке ({pnl_percent:.2f}%) - НЕ закрываем, ждем SL или восстановления"
+                    )
+                    return {
+                        "action": "hold",
+                        "reason": "max_holding_exceeded_but_loss",
+                        "pnl_pct": pnl_percent,
+                        "minutes_in_position": minutes_in_position,
+                        "max_holding_minutes": actual_max_holding,
+                    }
+                
+                # Время превышено и позиция в прибыли - закрываем
                 logger.info(
                     f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
-                    f"(базовое: {max_holding_minutes:.1f} мин) - закрываем по времени"
+                    f"(базовое: {max_holding_minutes:.1f} мин), прибыль={pnl_percent:.2f}% - закрываем по времени"
                 )
                 return {
                     "action": "close",
@@ -1785,10 +1818,25 @@ class ExitAnalyzer:
                 minutes_in_position is not None
                 and minutes_in_position >= max_holding_minutes
             ):
-                # В choppy режиме закрываем строго по времени (быстрые закрытия)
+                # ✅ ИСПРАВЛЕНО: Не закрываем убыточные позиции по max_holding даже в choppy
+                # Позволяем им дойти до SL или восстановиться
+                if pnl_percent < 0:
+                    logger.info(
+                        f"⏰ ExitAnalyzer CHOPPY: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                        f"но позиция в убытке ({pnl_percent:.2f}%) - НЕ закрываем, ждем SL или восстановления"
+                    )
+                    return {
+                        "action": "hold",
+                        "reason": "max_holding_exceeded_but_loss_choppy",
+                        "pnl_pct": pnl_percent,
+                        "minutes_in_position": minutes_in_position,
+                        "max_holding_minutes": max_holding_minutes,
+                    }
+                
+                # В choppy режиме закрываем строго по времени, но только если в прибыли
                 logger.info(
-                    f"⏰ ExitAnalyzer CHOPPY: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин - "
-                    f"закрываем по времени (choppy режим - быстрые закрытия)"
+                    f"⏰ ExitAnalyzer CHOPPY: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                    f"прибыль={pnl_percent:.2f}% - закрываем по времени"
                 )
                 return {
                     "action": "close",

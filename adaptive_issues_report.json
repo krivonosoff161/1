@@ -1,0 +1,2551 @@
+{
+  "analysis_date": "2025-12-07T08:04:34.939001+00:00",
+  "total_trades": 141,
+  "total_issues": 159,
+  "issues_by_type": {
+    "negative_duration": [
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -10569.773497,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-04T20:53:03.261310+00:00",
+        "issue": "Отрицательный duration: -10569.77s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": -10578.87097,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-04T20:56:06.443213+00:00",
+        "issue": "Отрицательный duration: -10578.87s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10405.439863,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-04T20:59:50.328497+00:00",
+        "issue": "Отрицательный duration: -10405.44s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -8737.437712,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-04T21:28:59.414795+00:00",
+        "issue": "Отрицательный duration: -8737.44s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10311.390582,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T01:00:33.020269",
+        "issue": "Отрицательный duration: -10311.39s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9559.034637,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T01:13:05.376061",
+        "issue": "Отрицательный duration: -9559.03s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10472.052063,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-04T22:24:50.774403+00:00",
+        "issue": "Отрицательный duration: -10472.05s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -5544.902874,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-04T23:16:40.512565+00:00",
+        "issue": "Отрицательный duration: -5544.90s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -6559.607788,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T02:35:48.142898",
+        "issue": "Отрицательный duration: -6559.61s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10781.776115,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-04T23:36:25.698315+00:00",
+        "issue": "Отрицательный duration: -10781.78s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": -3151.244293,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-04T23:55:50.570268+00:00",
+        "issue": "Отрицательный duration: -3151.24s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -8388.385152,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-04T23:56:57.753938+00:00",
+        "issue": "Отрицательный duration: -8388.39s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10519.83062,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T00:24:47.537782+00:00",
+        "issue": "Отрицательный duration: -10519.83s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9324.429242,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T00:49:30.305485+00:00",
+        "issue": "Отрицательный duration: -9324.43s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -10597.355761,
+        "reason": "tp_reached",
+        "timestamp": "2025-12-05T03:50:48.037886",
+        "issue": "Отрицательный duration: -10597.36s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -8851.736656,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T01:25:10.738901+00:00",
+        "issue": "Отрицательный duration: -8851.74s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -5018.273954,
+        "reason": "profit_harvest",
+        "timestamp": "2025-12-05T01:28:26.888962+00:00",
+        "issue": "Отрицательный duration: -5018.27s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10457.172657,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T01:34:13.358562+00:00",
+        "issue": "Отрицательный duration: -10457.17s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10574.74214,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T04:53:37.156972",
+        "issue": "Отрицательный duration: -10574.74s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9714.112753,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T02:15:14.624839+00:00",
+        "issue": "Отрицательный duration: -9714.11s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -4664.428614,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T02:40:35.565551+00:00",
+        "issue": "Отрицательный duration: -4664.43s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10717.695273,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T02:41:51.488790+00:00",
+        "issue": "Отрицательный duration: -10717.70s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -9784.71931,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T02:59:19.436640+00:00",
+        "issue": "Отрицательный duration: -9784.72s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -9113.879266,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T03:27:33.853753+00:00",
+        "issue": "Отрицательный duration: -9113.88s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -8734.978228,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T06:39:33.461577",
+        "issue": "Отрицательный duration: -8734.98s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10743.270341,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T04:02:32.624159+00:00",
+        "issue": "Отрицательный duration: -10743.27s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -8797.319561,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T04:13:05.701643+00:00",
+        "issue": "Отрицательный duration: -8797.32s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -7673.579164,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T04:56:59.498451+00:00",
+        "issue": "Отрицательный duration: -7673.58s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10793.588879,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T08:00:34.370128",
+        "issue": "Отрицательный duration: -10793.59s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10696.740595,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T05:04:54.313734+00:00",
+        "issue": "Отрицательный duration: -10696.74s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -9481.699166,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T05:26:59.749835+00:00",
+        "issue": "Отрицательный duration: -9481.70s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10777.233244,
+        "reason": "profit_harvest",
+        "timestamp": "2025-12-05T05:27:50.638593+00:00",
+        "issue": "Отрицательный duration: -10777.23s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10482.185907,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T05:33:53.990399+00:00",
+        "issue": "Отрицательный duration: -10482.19s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10741.564225,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T05:36:44.720014+00:00",
+        "issue": "Отрицательный duration: -10741.56s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10637.661186,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T05:43:01.649889+00:00",
+        "issue": "Отрицательный duration: -10637.66s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -9889.568957,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T08:58:24.597561",
+        "issue": "Отрицательный duration: -9889.57s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9929.748062,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T10:11:35.346555",
+        "issue": "Отрицательный duration: -9929.75s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -7247.428227,
+        "reason": "tp_reached",
+        "timestamp": "2025-12-05T10:56:17.665380",
+        "issue": "Отрицательный duration: -7247.43s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": -10689.953693,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T10:58:19.240590",
+        "issue": "Отрицательный duration: -10689.95s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": -10738.484849,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T10:59:35.624918",
+        "issue": "Отрицательный duration: -10738.48s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9360.96028,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T11:46:52.274231",
+        "issue": "Отрицательный duration: -9360.96s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10339.414158,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T08:56:48.247017+00:00",
+        "issue": "Отрицательный duration: -10339.41s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -9860.244123,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T09:03:45.383906+00:00",
+        "issue": "Отрицательный duration: -9860.24s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10571.347776,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T09:05:01.809178+00:00",
+        "issue": "Отрицательный duration: -10571.35s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -9151.050956,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T09:10:19.384784+00:00",
+        "issue": "Отрицательный duration: -9151.05s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10210.590932,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T09:15:05.704551+00:00",
+        "issue": "Отрицательный duration: -10210.59s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -10102.024731,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T12:16:27.541168",
+        "issue": "Отрицательный duration: -10102.02s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -9623.925398,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T09:30:38.637589+00:00",
+        "issue": "Отрицательный duration: -9623.93s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -8829.062335,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T12:37:40.502360",
+        "issue": "Отрицательный duration: -8829.06s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9476.252581,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T12:42:12.307262",
+        "issue": "Отрицательный duration: -9476.25s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10200.283203,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T12:52:21.233855",
+        "issue": "Отрицательный duration: -10200.28s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10000.221787,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T12:55:41.294917",
+        "issue": "Отрицательный duration: -10000.22s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10608.811,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T13:17:35.758607",
+        "issue": "Отрицательный duration: -10608.81s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -6370.685345,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T11:37:15.310113+00:00",
+        "issue": "Отрицательный duration: -6370.69s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -4206.88875,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T11:37:23.846409+00:00",
+        "issue": "Отрицательный duration: -4206.89s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -8521.894059,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T15:23:18.772741",
+        "issue": "Отрицательный duration: -8521.89s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": -3377.851526,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T15:23:50.021261",
+        "issue": "Отрицательный duration: -3377.85s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -6325.998167,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T15:59:54.668710",
+        "issue": "Отрицательный duration: -6326.00s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10732.850145,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T13:41:39.518752+00:00",
+        "issue": "Отрицательный duration: -10732.85s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -6231.640596,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T13:42:18.202298+00:00",
+        "issue": "Отрицательный duration: -6231.64s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10542.794537,
+        "reason": "profit_harvest",
+        "timestamp": "2025-12-05T13:44:25.338522+00:00",
+        "issue": "Отрицательный duration: -10542.79s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10622.495922,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T13:47:33.811287+00:00",
+        "issue": "Отрицательный duration: -10622.50s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10764.895896,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T16:51:13.629170",
+        "issue": "Отрицательный duration: -10764.90s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": -4425.437934,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:10:15.169891",
+        "issue": "Отрицательный duration: -4425.44s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -9993.702391,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T14:10:42.737357+00:00",
+        "issue": "Отрицательный duration: -9993.70s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10744.930493,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:15:03.823032",
+        "issue": "Отрицательный duration: -10744.93s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -10688.033361,
+        "reason": "tp_reached",
+        "timestamp": "2025-12-05T17:16:00.720868",
+        "issue": "Отрицательный duration: -10688.03s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -8220.337863,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:24:47.081546",
+        "issue": "Отрицательный duration: -8220.34s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -9851.802943,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:25:04.128370",
+        "issue": "Отрицательный duration: -9851.80s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -10633.894814,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:30:44.196562",
+        "issue": "Отрицательный duration: -10633.89s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -10636.878444,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:49:10.109567",
+        "issue": "Отрицательный duration: -10636.88s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": -10760.676856,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:49:26.606140",
+        "issue": "Отрицательный duration: -10760.68s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": -10758.588035,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:50:18.046962",
+        "issue": "Отрицательный duration: -10758.59s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": -10689.677937,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:51:26.960667",
+        "issue": "Отрицательный duration: -10689.68s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9662.071089,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T18:08:22.014251",
+        "issue": "Отрицательный duration: -9662.07s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -8243.894812,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T18:32:00.184722",
+        "issue": "Отрицательный duration: -8243.89s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9097.055246,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T18:55:48.473432",
+        "issue": "Отрицательный duration: -9097.06s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10793.391853,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T18:57:25.578592",
+        "issue": "Отрицательный duration: -10793.39s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -4770.1913,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T19:08:27.906671",
+        "issue": "Отрицательный duration: -4770.19s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -9684.054558,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T16:17:40.816046+00:00",
+        "issue": "Отрицательный duration: -9684.05s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -9457.996789,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T19:31:22.311177",
+        "issue": "Отрицательный duration: -9458.00s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -10499.803992,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T19:39:13.497545",
+        "issue": "Отрицательный duration: -10499.80s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -8217.78054,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T19:52:02.528843",
+        "issue": "Отрицательный duration: -8217.78s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -8676.868205,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T17:11:25.782462+00:00",
+        "issue": "Отрицательный duration: -8676.87s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -9938.431795,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T17:31:20.345456+00:00",
+        "issue": "Отрицательный duration: -9938.43s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -10734.600118,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T17:32:31.743099+00:00",
+        "issue": "Отрицательный duration: -10734.60s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -10772.010174,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T20:33:09.102784",
+        "issue": "Отрицательный duration: -10772.01s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -6670.618736,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T21:03:56.564801",
+        "issue": "Отрицательный duration: -6670.62s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -10669.513981,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T18:08:02.504154+00:00",
+        "issue": "Отрицательный duration: -10669.51s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": -9601.4994,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T18:28:40.455858+00:00",
+        "issue": "Отрицательный duration: -9601.50s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "DOGE-USDT",
+        "duration_sec": -9429.547014,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T21:31:19.424452",
+        "issue": "Отрицательный duration: -9429.55s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9052.002632,
+        "reason": "profit_drawdown",
+        "timestamp": "2025-12-05T18:33:18.371457+00:00",
+        "issue": "Отрицательный duration: -9052.00s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": -9196.98021,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T22:12:21.005988",
+        "issue": "Отрицательный duration: -9196.98s"
+      },
+      {
+        "type": "negative_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": -861.915286,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-06T00:08:37.514023",
+        "issue": "Отрицательный duration: -861.92s"
+      }
+    ],
+    "zero_duration": [
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T00:33:20.671012",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T00:49:55.695549",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T01:19:13.478840",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T04:09:50.920978",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T04:31:55.740905",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T04:52:21.353730",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T05:17:59.981873",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T05:34:50.823201",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T05:36:27.315833",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T05:39:17.092797",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T06:03:38.157190",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T08:01:15.619044",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T12:57:13.758422",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T12:58:30.956202",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T12:59:33.366592",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T13:04:07.960242",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T13:05:40.506238",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T13:06:21.863877",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T13:11:51.803444",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "XRP-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T16:21:04.917383",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T16:44:25.352144",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T17:16:52.489462",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T17:48:43.961192",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T18:58:02.423743",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T18:58:39.320989",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "ETH-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T19:34:08.488025",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "big_profit_exit",
+        "timestamp": "2025-12-05T20:50:40.122915",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "BTC-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T20:58:34.944388",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "tp_reached",
+        "timestamp": "2025-12-05T21:00:42.924976",
+        "issue": "Нулевой duration: 0.0s"
+      },
+      {
+        "type": "zero_duration",
+        "symbol": "SOL-USDT",
+        "duration_sec": 0.0,
+        "reason": "max_holding_exceeded",
+        "timestamp": "2025-12-05T21:22:47.023166",
+        "issue": "Нулевой duration: 0.0s"
+      }
+    ],
+    "max_holding_loss": [
+      {
+        "type": "max_holding_loss",
+        "symbol": "ETH-USDT",
+        "net_pnl": -0.3308,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T00:49:55.695549",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3308"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "SOL-USDT",
+        "net_pnl": -0.245,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T01:19:13.478840",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.245"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "DOGE-USDT",
+        "net_pnl": -0.3821,
+        "duration_sec": 1201.774629,
+        "timestamp": "2025-12-05T03:20:02.879123",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3821"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "SOL-USDT",
+        "net_pnl": -1.1437,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T04:31:55.740905",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.1437"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "XRP-USDT",
+        "net_pnl": -1.0207,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T04:52:21.353730",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.0207"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "XRP-USDT",
+        "net_pnl": -0.531,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T05:17:59.981873",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.531"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "ETH-USDT",
+        "net_pnl": -0.01,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T05:36:27.315833",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.01"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "SOL-USDT",
+        "net_pnl": -1.0618,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T06:03:38.157190",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.0618"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "BTC-USDT",
+        "net_pnl": -0.3204,
+        "duration_sec": 1205.151095,
+        "timestamp": "2025-12-05T06:16:03.949123",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3204"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "XRP-USDT",
+        "net_pnl": -1.2493,
+        "duration_sec": 1200.75786,
+        "timestamp": "2025-12-05T08:40:41.051485",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.2493"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "ETH-USDT",
+        "net_pnl": -0.4521,
+        "duration_sec": 1203.410393,
+        "timestamp": "2025-12-05T09:24:01.481304",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.4521"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "BTC-USDT",
+        "net_pnl": -0.4191,
+        "duration_sec": 1201.668658,
+        "timestamp": "2025-12-05T09:47:41.109671",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.4191"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "DOGE-USDT",
+        "net_pnl": -0.1509,
+        "duration_sec": 1204.664235,
+        "timestamp": "2025-12-05T11:47:58.710921",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.1509"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "DOGE-USDT",
+        "net_pnl": -0.3687,
+        "duration_sec": -8829.062335,
+        "timestamp": "2025-12-05T12:37:40.502360",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3687"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "BTC-USDT",
+        "net_pnl": -0.5937,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T12:59:33.366592",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.5937"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "XRP-USDT",
+        "net_pnl": -0.0931,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T13:11:51.803444",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.0931"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "XRP-USDT",
+        "net_pnl": -0.3255,
+        "duration_sec": -6325.998167,
+        "timestamp": "2025-12-05T15:59:54.668710",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3255"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "ETH-USDT",
+        "net_pnl": -0.5669,
+        "duration_sec": 0.000602,
+        "timestamp": "2025-12-05T16:17:37.594430",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.5669"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "XRP-USDT",
+        "net_pnl": -0.0974,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T16:21:04.917383",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.0974"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "SOL-USDT",
+        "net_pnl": -0.1869,
+        "duration_sec": 1201.766077,
+        "timestamp": "2025-12-05T16:37:54.841004",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.1869"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "XRP-USDT",
+        "net_pnl": -0.8212,
+        "duration_sec": 0.001,
+        "timestamp": "2025-12-05T17:46:16.861178",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.8212"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "ETH-USDT",
+        "net_pnl": -0.4202,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T17:48:43.961192",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.4202"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "ETH-USDT",
+        "net_pnl": -0.2518,
+        "duration_sec": -9097.055246,
+        "timestamp": "2025-12-05T18:55:48.473432",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.2518"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "ETH-USDT",
+        "net_pnl": -0.6176,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T19:34:08.488025",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.6176"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "BTC-USDT",
+        "net_pnl": -0.3181,
+        "duration_sec": 0.000615,
+        "timestamp": "2025-12-05T20:11:06.957253",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3181"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "BTC-USDT",
+        "net_pnl": -1.2804,
+        "duration_sec": 0.000578,
+        "timestamp": "2025-12-05T20:37:32.078359",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.2804"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "SOL-USDT",
+        "net_pnl": -3.5442,
+        "duration_sec": 1202.020568,
+        "timestamp": "2025-12-05T20:45:11.547303",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-3.5442"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "BTC-USDT",
+        "net_pnl": -0.2239,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T20:58:34.944388",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.2239"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "XRP-USDT",
+        "net_pnl": -0.2431,
+        "duration_sec": 0.000573,
+        "timestamp": "2025-12-05T21:05:43.585294",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.2431"
+      },
+      {
+        "type": "max_holding_loss",
+        "symbol": "SOL-USDT",
+        "net_pnl": -8.6511,
+        "duration_sec": 0.0,
+        "timestamp": "2025-12-05T21:22:47.023166",
+        "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-8.6511"
+      }
+    ],
+    "entry_time_issue": [
+      {
+        "type": "entry_time_issue",
+        "symbol": "XRP-USDT",
+        "timestamp": "2025-12-04T20:53:03.261310+00:00",
+        "duration_sec": -10569.773497,
+        "issue": "Отрицательный duration указывает на проблему с entry_time"
+      },
+      {
+        "type": "entry_time_issue",
+        "symbol": "BTC-USDT",
+        "timestamp": "2025-12-04T20:56:06.443213+00:00",
+        "duration_sec": -10578.87097,
+        "issue": "Отрицательный duration указывает на проблему с entry_time"
+      },
+      {
+        "type": "entry_time_issue",
+        "symbol": "ETH-USDT",
+        "timestamp": "2025-12-04T20:59:50.328497+00:00",
+        "duration_sec": -10405.439863,
+        "issue": "Отрицательный duration указывает на проблему с entry_time"
+      },
+      {
+        "type": "entry_time_issue",
+        "symbol": "XRP-USDT",
+        "timestamp": "2025-12-04T21:28:59.414795+00:00",
+        "duration_sec": -8737.437712,
+        "issue": "Отрицательный duration указывает на проблему с entry_time"
+      },
+      {
+        "type": "entry_time_issue",
+        "symbol": "ETH-USDT",
+        "timestamp": "2025-12-05T01:00:33.020269",
+        "duration_sec": -10311.390582,
+        "issue": "Отрицательный duration указывает на проблему с entry_time"
+      }
+    ]
+  },
+  "all_issues": [
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -10569.773497,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-04T20:53:03.261310+00:00",
+      "issue": "Отрицательный duration: -10569.77s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": -10578.87097,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-04T20:56:06.443213+00:00",
+      "issue": "Отрицательный duration: -10578.87s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10405.439863,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-04T20:59:50.328497+00:00",
+      "issue": "Отрицательный duration: -10405.44s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -8737.437712,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-04T21:28:59.414795+00:00",
+      "issue": "Отрицательный duration: -8737.44s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T00:33:20.671012",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T00:49:55.695549",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10311.390582,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T01:00:33.020269",
+      "issue": "Отрицательный duration: -10311.39s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9559.034637,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T01:13:05.376061",
+      "issue": "Отрицательный duration: -9559.03s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T01:19:13.478840",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10472.052063,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-04T22:24:50.774403+00:00",
+      "issue": "Отрицательный duration: -10472.05s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -5544.902874,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-04T23:16:40.512565+00:00",
+      "issue": "Отрицательный duration: -5544.90s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -6559.607788,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T02:35:48.142898",
+      "issue": "Отрицательный duration: -6559.61s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10781.776115,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-04T23:36:25.698315+00:00",
+      "issue": "Отрицательный duration: -10781.78s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": -3151.244293,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-04T23:55:50.570268+00:00",
+      "issue": "Отрицательный duration: -3151.24s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -8388.385152,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-04T23:56:57.753938+00:00",
+      "issue": "Отрицательный duration: -8388.39s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10519.83062,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T00:24:47.537782+00:00",
+      "issue": "Отрицательный duration: -10519.83s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9324.429242,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T00:49:30.305485+00:00",
+      "issue": "Отрицательный duration: -9324.43s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -10597.355761,
+      "reason": "tp_reached",
+      "timestamp": "2025-12-05T03:50:48.037886",
+      "issue": "Отрицательный duration: -10597.36s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T04:09:50.920978",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -8851.736656,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T01:25:10.738901+00:00",
+      "issue": "Отрицательный duration: -8851.74s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -5018.273954,
+      "reason": "profit_harvest",
+      "timestamp": "2025-12-05T01:28:26.888962+00:00",
+      "issue": "Отрицательный duration: -5018.27s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T04:31:55.740905",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10457.172657,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T01:34:13.358562+00:00",
+      "issue": "Отрицательный duration: -10457.17s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T04:52:21.353730",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10574.74214,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T04:53:37.156972",
+      "issue": "Отрицательный duration: -10574.74s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9714.112753,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T02:15:14.624839+00:00",
+      "issue": "Отрицательный duration: -9714.11s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T05:17:59.981873",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T05:34:50.823201",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T05:36:27.315833",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T05:39:17.092797",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -4664.428614,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T02:40:35.565551+00:00",
+      "issue": "Отрицательный duration: -4664.43s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10717.695273,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T02:41:51.488790+00:00",
+      "issue": "Отрицательный duration: -10717.70s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -9784.71931,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T02:59:19.436640+00:00",
+      "issue": "Отрицательный duration: -9784.72s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T06:03:38.157190",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -9113.879266,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T03:27:33.853753+00:00",
+      "issue": "Отрицательный duration: -9113.88s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -8734.978228,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T06:39:33.461577",
+      "issue": "Отрицательный duration: -8734.98s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10743.270341,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T04:02:32.624159+00:00",
+      "issue": "Отрицательный duration: -10743.27s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -8797.319561,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T04:13:05.701643+00:00",
+      "issue": "Отрицательный duration: -8797.32s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -7673.579164,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T04:56:59.498451+00:00",
+      "issue": "Отрицательный duration: -7673.58s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10793.588879,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T08:00:34.370128",
+      "issue": "Отрицательный duration: -10793.59s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T08:01:15.619044",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10696.740595,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T05:04:54.313734+00:00",
+      "issue": "Отрицательный duration: -10696.74s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -9481.699166,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T05:26:59.749835+00:00",
+      "issue": "Отрицательный duration: -9481.70s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10777.233244,
+      "reason": "profit_harvest",
+      "timestamp": "2025-12-05T05:27:50.638593+00:00",
+      "issue": "Отрицательный duration: -10777.23s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10482.185907,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T05:33:53.990399+00:00",
+      "issue": "Отрицательный duration: -10482.19s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10741.564225,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T05:36:44.720014+00:00",
+      "issue": "Отрицательный duration: -10741.56s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10637.661186,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T05:43:01.649889+00:00",
+      "issue": "Отрицательный duration: -10637.66s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -9889.568957,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T08:58:24.597561",
+      "issue": "Отрицательный duration: -9889.57s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9929.748062,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T10:11:35.346555",
+      "issue": "Отрицательный duration: -9929.75s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -7247.428227,
+      "reason": "tp_reached",
+      "timestamp": "2025-12-05T10:56:17.665380",
+      "issue": "Отрицательный duration: -7247.43s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": -10689.953693,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T10:58:19.240590",
+      "issue": "Отрицательный duration: -10689.95s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": -10738.484849,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T10:59:35.624918",
+      "issue": "Отрицательный duration: -10738.48s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9360.96028,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T11:46:52.274231",
+      "issue": "Отрицательный duration: -9360.96s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10339.414158,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T08:56:48.247017+00:00",
+      "issue": "Отрицательный duration: -10339.41s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -9860.244123,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T09:03:45.383906+00:00",
+      "issue": "Отрицательный duration: -9860.24s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10571.347776,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T09:05:01.809178+00:00",
+      "issue": "Отрицательный duration: -10571.35s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -9151.050956,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T09:10:19.384784+00:00",
+      "issue": "Отрицательный duration: -9151.05s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10210.590932,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T09:15:05.704551+00:00",
+      "issue": "Отрицательный duration: -10210.59s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -10102.024731,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T12:16:27.541168",
+      "issue": "Отрицательный duration: -10102.02s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -9623.925398,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T09:30:38.637589+00:00",
+      "issue": "Отрицательный duration: -9623.93s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -8829.062335,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T12:37:40.502360",
+      "issue": "Отрицательный duration: -8829.06s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9476.252581,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T12:42:12.307262",
+      "issue": "Отрицательный duration: -9476.25s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10200.283203,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T12:52:21.233855",
+      "issue": "Отрицательный duration: -10200.28s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10000.221787,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T12:55:41.294917",
+      "issue": "Отрицательный duration: -10000.22s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T12:57:13.758422",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T12:58:30.956202",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T12:59:33.366592",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T13:04:07.960242",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T13:05:40.506238",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T13:06:21.863877",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T13:11:51.803444",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10608.811,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T13:17:35.758607",
+      "issue": "Отрицательный duration: -10608.81s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -6370.685345,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T11:37:15.310113+00:00",
+      "issue": "Отрицательный duration: -6370.69s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -4206.88875,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T11:37:23.846409+00:00",
+      "issue": "Отрицательный duration: -4206.89s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -8521.894059,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T15:23:18.772741",
+      "issue": "Отрицательный duration: -8521.89s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": -3377.851526,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T15:23:50.021261",
+      "issue": "Отрицательный duration: -3377.85s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -6325.998167,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T15:59:54.668710",
+      "issue": "Отрицательный duration: -6326.00s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T16:21:04.917383",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10732.850145,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T13:41:39.518752+00:00",
+      "issue": "Отрицательный duration: -10732.85s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -6231.640596,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T13:42:18.202298+00:00",
+      "issue": "Отрицательный duration: -6231.64s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T16:44:25.352144",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10542.794537,
+      "reason": "profit_harvest",
+      "timestamp": "2025-12-05T13:44:25.338522+00:00",
+      "issue": "Отрицательный duration: -10542.79s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10622.495922,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T13:47:33.811287+00:00",
+      "issue": "Отрицательный duration: -10622.50s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10764.895896,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T16:51:13.629170",
+      "issue": "Отрицательный duration: -10764.90s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": -4425.437934,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:10:15.169891",
+      "issue": "Отрицательный duration: -4425.44s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -9993.702391,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T14:10:42.737357+00:00",
+      "issue": "Отрицательный duration: -9993.70s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10744.930493,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:15:03.823032",
+      "issue": "Отрицательный duration: -10744.93s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -10688.033361,
+      "reason": "tp_reached",
+      "timestamp": "2025-12-05T17:16:00.720868",
+      "issue": "Отрицательный duration: -10688.03s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:16:52.489462",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -8220.337863,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:24:47.081546",
+      "issue": "Отрицательный duration: -8220.34s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -9851.802943,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:25:04.128370",
+      "issue": "Отрицательный duration: -9851.80s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -10633.894814,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:30:44.196562",
+      "issue": "Отрицательный duration: -10633.89s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T17:48:43.961192",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -10636.878444,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:49:10.109567",
+      "issue": "Отрицательный duration: -10636.88s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": -10760.676856,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:49:26.606140",
+      "issue": "Отрицательный duration: -10760.68s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": -10758.588035,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:50:18.046962",
+      "issue": "Отрицательный duration: -10758.59s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": -10689.677937,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T17:51:26.960667",
+      "issue": "Отрицательный duration: -10689.68s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9662.071089,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T18:08:22.014251",
+      "issue": "Отрицательный duration: -9662.07s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -8243.894812,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T18:32:00.184722",
+      "issue": "Отрицательный duration: -8243.89s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9097.055246,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T18:55:48.473432",
+      "issue": "Отрицательный duration: -9097.06s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10793.391853,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T18:57:25.578592",
+      "issue": "Отрицательный duration: -10793.39s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T18:58:02.423743",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T18:58:39.320989",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -4770.1913,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T19:08:27.906671",
+      "issue": "Отрицательный duration: -4770.19s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -9684.054558,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T16:17:40.816046+00:00",
+      "issue": "Отрицательный duration: -9684.05s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -9457.996789,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T19:31:22.311177",
+      "issue": "Отрицательный duration: -9458.00s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T19:34:08.488025",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -10499.803992,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T19:39:13.497545",
+      "issue": "Отрицательный duration: -10499.80s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -8217.78054,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T19:52:02.528843",
+      "issue": "Отрицательный duration: -8217.78s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -8676.868205,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T17:11:25.782462+00:00",
+      "issue": "Отрицательный duration: -8676.87s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -9938.431795,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T17:31:20.345456+00:00",
+      "issue": "Отрицательный duration: -9938.43s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -10734.600118,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T17:32:31.743099+00:00",
+      "issue": "Отрицательный duration: -10734.60s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -10772.010174,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T20:33:09.102784",
+      "issue": "Отрицательный duration: -10772.01s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T20:50:40.122915",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "BTC-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T20:58:34.944388",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "tp_reached",
+      "timestamp": "2025-12-05T21:00:42.924976",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -6670.618736,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T21:03:56.564801",
+      "issue": "Отрицательный duration: -6670.62s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -10669.513981,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T18:08:02.504154+00:00",
+      "issue": "Отрицательный duration: -10669.51s"
+    },
+    {
+      "type": "zero_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": 0.0,
+      "reason": "max_holding_exceeded",
+      "timestamp": "2025-12-05T21:22:47.023166",
+      "issue": "Нулевой duration: 0.0s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "XRP-USDT",
+      "duration_sec": -9601.4994,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T18:28:40.455858+00:00",
+      "issue": "Отрицательный duration: -9601.50s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "DOGE-USDT",
+      "duration_sec": -9429.547014,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T21:31:19.424452",
+      "issue": "Отрицательный duration: -9429.55s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9052.002632,
+      "reason": "profit_drawdown",
+      "timestamp": "2025-12-05T18:33:18.371457+00:00",
+      "issue": "Отрицательный duration: -9052.00s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "ETH-USDT",
+      "duration_sec": -9196.98021,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-05T22:12:21.005988",
+      "issue": "Отрицательный duration: -9196.98s"
+    },
+    {
+      "type": "negative_duration",
+      "symbol": "SOL-USDT",
+      "duration_sec": -861.915286,
+      "reason": "big_profit_exit",
+      "timestamp": "2025-12-06T00:08:37.514023",
+      "issue": "Отрицательный duration: -861.92s"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "ETH-USDT",
+      "net_pnl": -0.3308,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T00:49:55.695549",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3308"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "SOL-USDT",
+      "net_pnl": -0.245,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T01:19:13.478840",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.245"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "DOGE-USDT",
+      "net_pnl": -0.3821,
+      "duration_sec": 1201.774629,
+      "timestamp": "2025-12-05T03:20:02.879123",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3821"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "SOL-USDT",
+      "net_pnl": -1.1437,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T04:31:55.740905",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.1437"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "XRP-USDT",
+      "net_pnl": -1.0207,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T04:52:21.353730",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.0207"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "XRP-USDT",
+      "net_pnl": -0.531,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T05:17:59.981873",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.531"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "ETH-USDT",
+      "net_pnl": -0.01,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T05:36:27.315833",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.01"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "SOL-USDT",
+      "net_pnl": -1.0618,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T06:03:38.157190",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.0618"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "BTC-USDT",
+      "net_pnl": -0.3204,
+      "duration_sec": 1205.151095,
+      "timestamp": "2025-12-05T06:16:03.949123",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3204"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "XRP-USDT",
+      "net_pnl": -1.2493,
+      "duration_sec": 1200.75786,
+      "timestamp": "2025-12-05T08:40:41.051485",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.2493"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "ETH-USDT",
+      "net_pnl": -0.4521,
+      "duration_sec": 1203.410393,
+      "timestamp": "2025-12-05T09:24:01.481304",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.4521"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "BTC-USDT",
+      "net_pnl": -0.4191,
+      "duration_sec": 1201.668658,
+      "timestamp": "2025-12-05T09:47:41.109671",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.4191"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "DOGE-USDT",
+      "net_pnl": -0.1509,
+      "duration_sec": 1204.664235,
+      "timestamp": "2025-12-05T11:47:58.710921",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.1509"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "DOGE-USDT",
+      "net_pnl": -0.3687,
+      "duration_sec": -8829.062335,
+      "timestamp": "2025-12-05T12:37:40.502360",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3687"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "BTC-USDT",
+      "net_pnl": -0.5937,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T12:59:33.366592",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.5937"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "XRP-USDT",
+      "net_pnl": -0.0931,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T13:11:51.803444",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.0931"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "XRP-USDT",
+      "net_pnl": -0.3255,
+      "duration_sec": -6325.998167,
+      "timestamp": "2025-12-05T15:59:54.668710",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3255"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "ETH-USDT",
+      "net_pnl": -0.5669,
+      "duration_sec": 0.000602,
+      "timestamp": "2025-12-05T16:17:37.594430",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.5669"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "XRP-USDT",
+      "net_pnl": -0.0974,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T16:21:04.917383",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.0974"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "SOL-USDT",
+      "net_pnl": -0.1869,
+      "duration_sec": 1201.766077,
+      "timestamp": "2025-12-05T16:37:54.841004",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.1869"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "XRP-USDT",
+      "net_pnl": -0.8212,
+      "duration_sec": 0.001,
+      "timestamp": "2025-12-05T17:46:16.861178",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.8212"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "ETH-USDT",
+      "net_pnl": -0.4202,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T17:48:43.961192",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.4202"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "ETH-USDT",
+      "net_pnl": -0.2518,
+      "duration_sec": -9097.055246,
+      "timestamp": "2025-12-05T18:55:48.473432",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.2518"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "ETH-USDT",
+      "net_pnl": -0.6176,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T19:34:08.488025",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.6176"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "BTC-USDT",
+      "net_pnl": -0.3181,
+      "duration_sec": 0.000615,
+      "timestamp": "2025-12-05T20:11:06.957253",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.3181"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "BTC-USDT",
+      "net_pnl": -1.2804,
+      "duration_sec": 0.000578,
+      "timestamp": "2025-12-05T20:37:32.078359",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-1.2804"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "SOL-USDT",
+      "net_pnl": -3.5442,
+      "duration_sec": 1202.020568,
+      "timestamp": "2025-12-05T20:45:11.547303",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-3.5442"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "BTC-USDT",
+      "net_pnl": -0.2239,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T20:58:34.944388",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.2239"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "XRP-USDT",
+      "net_pnl": -0.2431,
+      "duration_sec": 0.000573,
+      "timestamp": "2025-12-05T21:05:43.585294",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-0.2431"
+    },
+    {
+      "type": "max_holding_loss",
+      "symbol": "SOL-USDT",
+      "net_pnl": -8.6511,
+      "duration_sec": 0.0,
+      "timestamp": "2025-12-05T21:22:47.023166",
+      "issue": "max_holding_exceeded закрыл убыточную позицию: PnL=$-8.6511"
+    },
+    {
+      "type": "entry_time_issue",
+      "symbol": "XRP-USDT",
+      "timestamp": "2025-12-04T20:53:03.261310+00:00",
+      "duration_sec": -10569.773497,
+      "issue": "Отрицательный duration указывает на проблему с entry_time"
+    },
+    {
+      "type": "entry_time_issue",
+      "symbol": "BTC-USDT",
+      "timestamp": "2025-12-04T20:56:06.443213+00:00",
+      "duration_sec": -10578.87097,
+      "issue": "Отрицательный duration указывает на проблему с entry_time"
+    },
+    {
+      "type": "entry_time_issue",
+      "symbol": "ETH-USDT",
+      "timestamp": "2025-12-04T20:59:50.328497+00:00",
+      "duration_sec": -10405.439863,
+      "issue": "Отрицательный duration указывает на проблему с entry_time"
+    },
+    {
+      "type": "entry_time_issue",
+      "symbol": "XRP-USDT",
+      "timestamp": "2025-12-04T21:28:59.414795+00:00",
+      "duration_sec": -8737.437712,
+      "issue": "Отрицательный duration указывает на проблему с entry_time"
+    },
+    {
+      "type": "entry_time_issue",
+      "symbol": "ETH-USDT",
+      "timestamp": "2025-12-05T01:00:33.020269",
+      "duration_sec": -10311.390582,
+      "issue": "Отрицательный duration указывает на проблему с entry_time"
+    }
+  ]
+}
