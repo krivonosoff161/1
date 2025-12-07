@@ -105,6 +105,12 @@ set debugcsvcount=0
 set faileddebugcsv=0
 set tradescount=0
 set failedtrades=0
+set orderscount=0
+set failedorders=0
+set positionsopencount=0
+set failedpositionsopen=0
+set signalscount=0
+set failedsignals=0
 set jsoncount=0
 set failedjson=0
 set structuredcount=0
@@ -153,13 +159,49 @@ if exist "logs\futures\debug" (
 )
 
 echo Moving TRADE CSV files...
-for %%f in ("logs\trades_*.csv") do (
+for %%f in ("logs\futures\trades_*.csv") do (
     if exist "%%f" (
         move /Y "%%f" "!archivefolder!\" >nul 2>&1
         if !errorlevel! equ 0 (
             set /a tradescount+=1
         ) else (
             set /a failedtrades+=1
+        )
+    )
+)
+
+echo Moving ORDERS CSV files...
+for %%f in ("logs\futures\orders_*.csv") do (
+    if exist "%%f" (
+        move /Y "%%f" "!archivefolder!\" >nul 2>&1
+        if !errorlevel! equ 0 (
+            set /a orderscount+=1
+        ) else (
+            set /a failedorders+=1
+        )
+    )
+)
+
+echo Moving POSITIONS_OPEN CSV files...
+for %%f in ("logs\futures\positions_open_*.csv") do (
+    if exist "%%f" (
+        move /Y "%%f" "!archivefolder!\" >nul 2>&1
+        if !errorlevel! equ 0 (
+            set /a positionsopencount+=1
+        ) else (
+            set /a failedpositionsopen+=1
+        )
+    )
+)
+
+echo Moving SIGNALS CSV files...
+for %%f in ("logs\futures\signals_*.csv") do (
+    if exist "%%f" (
+        move /Y "%%f" "!archivefolder!\" >nul 2>&1
+        if !errorlevel! equ 0 (
+            set /a signalscount+=1
+        ) else (
+            set /a failedsignals+=1
         )
     )
 )
@@ -229,16 +271,19 @@ echo Moved LOG files: !logcount!
 echo Moved ZIP archives: !zipcount!
 echo Moved DEBUG CSV files: !debugcsvcount!
 echo Moved TRADE CSV files: !tradescount!
+echo Moved ORDERS CSV files: !orderscount!
+echo Moved POSITIONS_OPEN CSV files: !positionsopencount!
+echo Moved SIGNALS CSV files: !signalscount!
 echo Moved JSON files: !jsoncount!
 echo Moved STRUCTURED JSON files: !structuredcount!
 echo Moved EXTRACTED files: !extractedcount!
 echo Moved TEMP_EXTRACTED files: !tempextractedcount!
 echo.
-echo Failed to move: !failedcount! LOG, !failedzip! ZIP, !faileddebugcsv! DEBUG_CSV, !failedtrades! TRADE_CSV, !failedjson! JSON, !failedstructured! STRUCTURED, !failedextracted! EXTRACTED, !failedtempextracted! TEMP_EXTRACTED
+echo Failed to move: !failedcount! LOG, !failedzip! ZIP, !faileddebugcsv! DEBUG_CSV, !failedtrades! TRADE_CSV, !failedorders! ORDERS_CSV, !failedpositionsopen! POSITIONS_OPEN_CSV, !failedsignals! SIGNALS_CSV, !failedjson! JSON, !failedstructured! STRUCTURED, !failedextracted! EXTRACTED, !failedtempextracted! TEMP_EXTRACTED
 echo.
 
 set totalmoved=0
-set /a totalmoved=!logcount!+!zipcount!+!debugcsvcount!+!tradescount!+!jsoncount!+!structuredcount!+!extractedcount!+!tempextractedcount!
+set /a totalmoved=!logcount!+!zipcount!+!debugcsvcount!+!tradescount!+!orderscount!+!positionsopencount!+!signalscount!+!jsoncount!+!structuredcount!+!extractedcount!+!tempextractedcount!
 
 if !totalmoved! equ 0 (
     echo [WARNING] No files were moved!

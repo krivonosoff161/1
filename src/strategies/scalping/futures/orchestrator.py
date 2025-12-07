@@ -623,6 +623,7 @@ class FuturesScalpingOrchestrator:
             funding_monitor=self.funding_monitor,
             config=self.config,
             trailing_sl_coordinator=self.trailing_sl_coordinator,
+            performance_tracker=self.performance_tracker,  # ✅ НОВОЕ: Передаем performance_tracker для обновления executed
             total_margin_used_ref=total_margin_used_ref,
             get_used_margin_callback=self._get_used_margin,
             get_position_callback=_get_position_for_tsl_callback,
@@ -3746,7 +3747,11 @@ class FuturesScalpingOrchestrator:
                     logger.debug(f"📦 Обновлен статус ордера для {symbol} на 'closed'")
 
                 # 🛡️ Обновляем маржу и лимит позиций
-                position_margin = position.get("margin", 0)
+                position_margin_raw = position.get("margin", 0) or 0
+                try:
+                    position_margin = float(position_margin_raw) if position_margin_raw else 0.0
+                except (ValueError, TypeError):
+                    position_margin = 0.0
                 if position_margin > 0:
                     # ✅ МОДЕРНИЗАЦИЯ: Обновляем total_margin_used (будет пересчитано при следующей синхронизации)
                     # Временно обновляем локально для быстрого доступа

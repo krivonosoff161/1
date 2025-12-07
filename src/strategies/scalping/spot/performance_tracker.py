@@ -503,3 +503,119 @@ class PerformanceTracker:
                 )
         except Exception as e:
             logger.error(f"❌ Failed to export signal to CSV: {e}")
+
+    def update_signal_execution(
+        self,
+        symbol: str,
+        side: str,
+        price: float,
+        order_id: str,
+        executed: bool = True,
+        timestamp_tolerance_seconds: int = 60,
+    ) -> bool:
+        """
+        Обновить статус исполнения сигнала в CSV.
+
+        Находит последний сигнал по symbol, side, price (в пределах tolerance)
+        и обновляет executed и order_id.
+
+        Args:
+            symbol: Торговый символ
+            side: Направление (buy/sell)
+            price: Цена сигнала
+            order_id: ID ордера
+            executed: Был ли сигнал исполнен (по умолчанию True)
+            timestamp_tolerance_seconds: Допустимая разница во времени для поиска сигнала (по умолчанию 60 сек)
+
+        Returns:
+            True если сигнал найден и обновлен, False иначе
+        """
+        try:
+            import os
+            import csv
+            from datetime import datetime, timedelta
+
+            if not os.path.exists(self.signals_csv_path):
+                logger.warning(
+                    f"⚠️ Signals CSV файл не найден: {self.signals_csv_path}"
+                )
+                return False
+
+            # Читаем все строки
+            rows = []
+            updated = False
+            with open(
+                self.signals_csv_path, "r", newline="", encoding="utf-8"
+            ) as f:
+                reader = csv.DictReader(f)
+                fieldnames = reader.fieldnames
+                if not fieldnames:
+                    logger.warning("⚠️ Signals CSV не содержит заголовков")
+                    return False
+
+                for row in reader:
+                    # Проверяем, соответствует ли строка нашему сигналу
+                    row_symbol = row.get("symbol", "")
+                    row_side = row.get("side", "").lower()
+                    row_price = row.get("price", "")
+                    row_executed = row.get("executed", "0")
+                    row_timestamp = row.get("timestamp", "")
+
+                    # Проверяем совпадение symbol и side
+                    if row_symbol == symbol and row_side == side.lower():
+                        # Проверяем цену (с допуском ±0.1%)
+                        try:
+                            row_price_float = float(row_price)
+                            price_diff_percent = abs(row_price_float - price) / price
+                            if price_diff_percent <= 0.001:  # 0.1% допуск
+                                # Проверяем timestamp (в пределах tolerance)
+                                try:
+                                    row_time = datetime.fromisoformat(
+                                        row_timestamp.replace("Z", "+00:00")
+                                    )
+                                    time_diff = abs(
+                                        (datetime.utcnow() - row_time).total_seconds()
+                                    )
+                                    if (
+                                        time_diff <= timestamp_tolerance_seconds
+                                        and row_executed == "0"
+                                    ):
+                                        # Обновляем строку
+                                        row["executed"] = "1" if executed else "0"
+                                        row["order_id"] = order_id or ""
+                                        updated = True
+                                        logger.debug(
+                                            f"✅ Обновлен сигнал в CSV: {symbol} {side} @ {price:.8f} → executed={executed}, order_id={order_id}"
+                                        )
+                                except (ValueError, TypeError) as e:
+                                    logger.debug(
+                                        f"⚠️ Ошибка парсинга timestamp для {symbol}: {e}"
+                                    )
+                        except (ValueError, TypeError):
+                            pass
+
+                    rows.append(row)
+
+            # Записываем обратно
+            if updated:
+                with open(
+                    self.signals_csv_path, "w", newline="", encoding="utf-8"
+                ) as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(rows)
+                logger.info(
+                    f"✅ Сигнал {symbol} {side} @ {price:.8f} обновлен в CSV: executed={executed}, order_id={order_id}"
+                )
+                return True
+            else:
+                logger.debug(
+                    f"⚠️ Сигнал {symbol} {side} @ {price:.8f} не найден в CSV для обновления (возможно, уже обновлен или не был записан)"
+                )
+                return False
+
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка обновления сигнала в CSV: {e}", exc_info=True
+            )
+            return False

@@ -2956,12 +2956,19 @@ class FuturesPositionManager:
                             f"триггер={ptp_trigger:.2f}% ({ptp_progress:.0f}%, done={partial_done})"
                         )
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Partial TP только если прибыль >= 50% от TP
+                # Это гарантирует, что частичное закрытие происходит ближе к полному TP
+                # Получаем адаптивный TP для проверки (используем тот же метод, что и для основного TP)
+                tp_percent_for_check = self._get_adaptive_tp_percent(symbol, current_regime, current_price)
+                min_profit_for_partial_tp = tp_percent_for_check * 0.5  # 50% от TP
+                
                 if (
                     ptp_enabled
                     and not partial_done
                     and size > 0
                     and pnl_percent > 0
                     and pnl_percent >= ptp_trigger
+                    and pnl_percent >= min_profit_for_partial_tp  # ✅ НОВОЕ: Проверка 50% от TP
                 ):
                     # ✅ ПРАВКА #1: Проверка min_holding ПЕРЕД Partial TP
                     min_holding_blocked = False
@@ -4948,6 +4955,16 @@ class FuturesPositionManager:
 
                         if margin_used > 0:
                             pnl_percent_from_margin = (net_pnl / margin_used) * 100
+                            
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Не закрываем убыточные позиции по max_holding
+                            # Убыточные позиции должны закрываться только по trailing stop, loss cut или другим механизмам
+                            if pnl_percent_from_margin < 0:
+                                logger.info(
+                                    f"⏰ [MAX_HOLDING] {symbol}: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                                    f"но позиция в убытке ({pnl_percent_from_margin:.2f}%) - НЕ закрываем, ждем SL или восстановления"
+                                )
+                                return False  # Не закрываем убыточную позицию
+                            
                             extension_info = ""
                             if actual_max_holding > max_holding_minutes:
                                 extension_info = f" (продлено до {actual_max_holding:.1f} мин, но время истекло)"
@@ -4959,22 +4976,21 @@ class FuturesPositionManager:
                                 f"Комиссия: ${commission:.4f}"
                             )
                         else:
-                            extension_info = ""
-                            if actual_max_holding > max_holding_minutes:
-                                extension_info = f" (продлено до {actual_max_holding:.1f} мин, но время истекло)"
+                            # Если margin_used = 0, не можем проверить PnL - не закрываем
                             logger.warning(
-                                f"⏰ [MAX_HOLDING] Позиция {symbol} {side.upper()} закрыта: "
-                                f"время в позиции {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин (базовое: {max_holding_minutes:.1f} мин, regime={regime}){extension_info} | "
-                                f"Entry: ${entry_price:.2f}, Exit: ${current_price:.2f}, "
-                                f"Gross PnL: ${gross_pnl:.4f}, Net Pnl: ${net_pnl:.4f}, "
-                                f"Комиссия: ${commission:.4f}"
+                                f"⏰ [MAX_HOLDING] {symbol}: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                                f"но margin_used=0, не можем проверить PnL - НЕ закрываем"
                             )
+                            return False  # Не закрываем если не можем проверить PnL
                     except Exception as e:
                         logger.warning(
-                            f"⏰ [MAX_HOLDING] Позиция {symbol} закрыта: "
-                            f"время в позиции {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин (regime={regime}) "
-                            f"(ошибка расчета PnL: {e})"
+                            f"⏰ [MAX_HOLDING] {symbol}: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                            f"но ошибка расчета PnL ({e}) - НЕ закрываем"
                         )
+                        return False  # Не закрываем при ошибке расчета PnL
+                    
+                    # ✅ Закрываем только прибыльные позиции
+                    await self._close_position_by_reason(position, "max_holding_exceeded")
                     return True
                 else:
                     logger.debug(
