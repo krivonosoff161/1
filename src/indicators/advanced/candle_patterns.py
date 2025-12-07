@@ -272,4 +272,3 @@ class CandlePatternDetector:
         except Exception as e:
             logger.debug(f"⚠️ Ошибка определения Bullish Engulfing: {e}")
             return False
-

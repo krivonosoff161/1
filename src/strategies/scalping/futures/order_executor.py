@@ -631,20 +631,22 @@ class FuturesOrderExecutor:
             # ✅ НОВОЕ: Адаптивный offset на основе спреда (если включен)
             # Для BUY: покупаем по цене best ask + offset (для быстрого исполнения в скальпинге)
             # Для SELL: продаем по цене best bid - offset (для быстрого исполнения в скальпинге)
-            
+
             # ✅ НОВОЕ: Проверяем, включен ли адаптивный offset на основе спреда
-            adaptive_spread_offset = limit_order_config.get("adaptive_spread_offset", False)
-            
+            adaptive_spread_offset = limit_order_config.get(
+                "adaptive_spread_offset", False
+            )
+
             # ✅ НОВОЕ: Рассчитываем спред для адаптивного offset
             spread = 0.0
             spread_pct = 0.0
             adaptive_offset_pct = None
-            
+
             if adaptive_spread_offset and best_ask > 0 and best_bid > 0:
                 spread = best_ask - best_bid
                 if best_ask > 0:
                     spread_pct = (spread / best_ask) * 100.0
-                
+
                 # ✅ НОВОЕ: Адаптивный offset с учетом ширины спреда
                 # < 0.001% → offset = 0 (ровно по best_ask/best_bid)
                 # 0.001-0.01% → offset = 10% спреда
@@ -663,7 +665,9 @@ class FuturesOrderExecutor:
                             f"узкий спред, offset=10% спреда = {adaptive_offset_pct:.4f}%"
                         )
                     else:  # ≥ 0.01% - нормальный спред
-                        adaptive_offset_pct = max(spread_pct * 0.2, min(0.05, spread_pct * 2.0))
+                        adaptive_offset_pct = max(
+                            spread_pct * 0.2, min(0.05, spread_pct * 2.0)
+                        )
                         logger.debug(
                             f"💰 Адаптивный offset для {symbol}: spread={spread:.6f} ({spread_pct:.4f}%) - "
                             f"нормальный спред, offset=20% спреда = {adaptive_offset_pct:.4f}%"
@@ -674,7 +678,7 @@ class FuturesOrderExecutor:
                         f"💰 Спред для {symbol} слишком большой ({spread_pct:.4f}%) или нулевой, "
                         f"используем offset из конфига: {offset_percent:.3f}%"
                     )
-            
+
             if side.lower() == "buy":
                 # ✅ ИСПРАВЛЕНО: Проверяем актуальность best_ask (аналогично SELL)
                 use_best_ask = False
@@ -870,7 +874,11 @@ class FuturesOrderExecutor:
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем все детали расчета лимитной цены
             # ✅ НОВОЕ: Добавляем информацию о спреде и адаптивном offset
-            offset_used = adaptive_offset_pct if adaptive_offset_pct is not None else offset_percent
+            offset_used = (
+                adaptive_offset_pct
+                if adaptive_offset_pct is not None
+                else offset_percent
+            )
             offset_type = "adaptive" if adaptive_offset_pct is not None else "config"
             logger.info(
                 f"💰 Лимитная цена для {symbol} {side}: {limit_price:.2f} "

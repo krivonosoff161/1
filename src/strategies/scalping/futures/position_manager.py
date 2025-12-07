@@ -5611,7 +5611,7 @@ class FuturesPositionManager:
                 new_peak_profit_usd = 0.0
                 new_peak_profit_time = None
                 new_peak_profit_price = None
-                
+
                 try:
                     # Получаем актуальную позицию после partial_close
                     positions_after = await self.client.get_positions(symbol)
@@ -5623,29 +5623,46 @@ class FuturesPositionManager:
                                 if remaining_size != 0:
                                     # Рассчитываем текущий PnL для оставшейся позиции
                                     remaining_entry_price = float(pos.get("avgPx", "0"))
-                                    remaining_current_price = float(pos.get("markPx", "0"))
+                                    remaining_current_price = float(
+                                        pos.get("markPx", "0")
+                                    )
                                     remaining_side = pos.get("posSide", "long").lower()
-                                    
+
                                     # Размер оставшейся позиции в монетах
                                     remaining_size_coins = abs(remaining_size) * ct_val
-                                    
+
                                     # Расчет PnL для оставшейся позиции
                                     if remaining_side == "long":
-                                        remaining_gross_pnl = (remaining_current_price - remaining_entry_price) * remaining_size_coins
+                                        remaining_gross_pnl = (
+                                            remaining_current_price
+                                            - remaining_entry_price
+                                        ) * remaining_size_coins
                                     else:  # short
-                                        remaining_gross_pnl = (remaining_entry_price - remaining_current_price) * remaining_size_coins
-                                    
+                                        remaining_gross_pnl = (
+                                            remaining_entry_price
+                                            - remaining_current_price
+                                        ) * remaining_size_coins
+
                                     # Комиссия для оставшейся позиции (вход уже был, будет только выход)
-                                    remaining_position_value = remaining_size_coins * remaining_entry_price
-                                    remaining_commission = remaining_position_value * taker_fee_rate  # Только выход
-                                    remaining_net_pnl = remaining_gross_pnl - remaining_commission
-                                    
+                                    remaining_position_value = (
+                                        remaining_size_coins * remaining_entry_price
+                                    )
+                                    remaining_commission = (
+                                        remaining_position_value * taker_fee_rate
+                                    )  # Только выход
+                                    remaining_net_pnl = (
+                                        remaining_gross_pnl - remaining_commission
+                                    )
+
                                     # Если текущий PnL > 0, устанавливаем его как новый peak
                                     # Если <= 0, сбрасываем peak в 0 (начнем отслеживать заново)
                                     if remaining_net_pnl > 0:
                                         new_peak_profit_usd = remaining_net_pnl
                                         from datetime import datetime, timezone
-                                        new_peak_profit_time = datetime.now(timezone.utc)
+
+                                        new_peak_profit_time = datetime.now(
+                                            timezone.utc
+                                        )
                                         new_peak_profit_price = remaining_current_price
                                         logger.info(
                                             f"✅ [PARTIAL_CLOSE] {symbol}: Пересчет peak_profit_usd после partial_close: "
@@ -5679,15 +5696,17 @@ class FuturesPositionManager:
                             "partial_tp_executed": True,  # Используем правильное имя поля из PositionMetadata
                             "partial_tp_fraction": fraction,
                         }
-                        
+
                         # ✅ НОВОЕ: Обновляем peak_profit_usd после partial_close
                         if new_peak_profit_usd is not None:
                             metadata_updates["peak_profit_usd"] = new_peak_profit_usd
                         if new_peak_profit_time is not None:
                             metadata_updates["peak_profit_time"] = new_peak_profit_time
                         if new_peak_profit_price is not None:
-                            metadata_updates["peak_profit_price"] = new_peak_profit_price
-                        
+                            metadata_updates[
+                                "peak_profit_price"
+                            ] = new_peak_profit_price
+
                         await self.position_registry.update_position(
                             symbol,
                             metadata_updates=metadata_updates,

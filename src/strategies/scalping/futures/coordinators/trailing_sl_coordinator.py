@@ -200,10 +200,9 @@ class TrailingSLCoordinator:
         try:
             # Получаем режим если не указан
             if not regime:
-                if (
-                    hasattr(self.signal_generator, "regime_managers")
-                    and symbol in getattr(self.signal_generator, "regime_managers", {})
-                ):
+                if hasattr(
+                    self.signal_generator, "regime_managers"
+                ) and symbol in getattr(self.signal_generator, "regime_managers", {}):
                     manager = self.signal_generator.regime_managers.get(symbol)
                     if manager:
                         regime = manager.get_current_regime()

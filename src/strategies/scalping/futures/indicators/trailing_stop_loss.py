@@ -523,7 +523,9 @@ class TrailingStopLoss:
         # ✅ ИСПРАВЛЕНО: max(0.0, ...) для защиты от отрицательных значений (часы слетели)
         minutes_in_position = max(
             0.0,
-            (time.time() - self.entry_timestamp) / 60.0 if self.entry_timestamp else 0.0
+            (time.time() - self.entry_timestamp) / 60.0
+            if self.entry_timestamp
+            else 0.0,
         )
         entry_iso = (
             datetime.fromtimestamp(self.entry_timestamp).isoformat()

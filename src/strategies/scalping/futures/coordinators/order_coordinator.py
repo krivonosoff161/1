@@ -70,8 +70,13 @@ class OrderCoordinator:
                         # Для каждого символа может быть свой режим, но для order_coordinator используем глобальный
                         pass
                     # Получаем глобальный режим
-                    if hasattr(self.signal_generator, "regime_manager") and self.signal_generator.regime_manager:
-                        regime_obj = self.signal_generator.regime_manager.get_current_regime()
+                    if (
+                        hasattr(self.signal_generator, "regime_manager")
+                        and self.signal_generator.regime_manager
+                    ):
+                        regime_obj = (
+                            self.signal_generator.regime_manager.get_current_regime()
+                        )
                         if regime_obj:
                             current_regime = (
                                 regime_obj.lower()
@@ -80,11 +85,13 @@ class OrderCoordinator:
                             )
             except Exception as e:
                 logger.debug(f"⚠️ Не удалось получить режим для OrderCoordinator: {e}")
-            
+
             # Fallback на 'ranging' только если режим не найден
             if not current_regime:
                 current_regime = "ranging"
-                logger.debug(f"⚠️ OrderCoordinator: режим не найден, используется fallback 'ranging'")
+                logger.debug(
+                    f"⚠️ OrderCoordinator: режим не найден, используется fallback 'ranging'"
+                )
 
             # Получаем параметры по режиму
             regime_limit_config = limit_order_config.get("by_regime", {}).get(
@@ -113,7 +120,7 @@ class OrderCoordinator:
                         ]:
                             # ✅ НОВОЕ: Получаем side из ордера для проверки отклонения цены
                             side = order.get("side", "").lower()
-                            
+
                             # Получаем время создания ордера
                             c_time = order.get("cTime")
                             if c_time:
@@ -131,25 +138,41 @@ class OrderCoordinator:
                                     should_cancel_early = False
                                     try:
                                         # Получаем текущую цену
-                                        price_limits = await self.client.get_price_limits(symbol)
+                                        price_limits = (
+                                            await self.client.get_price_limits(symbol)
+                                        )
                                         if price_limits:
-                                            current_price = price_limits.get("current_price", 0)
+                                            current_price = price_limits.get(
+                                                "current_price", 0
+                                            )
                                             order_price = float(order.get("px", "0"))
-                                            
+
                                             if current_price > 0 and order_price > 0:
                                                 # Проверяем отклонение цены от ордера
                                                 if side == "buy":
                                                     # Для BUY: если текущая цена ушла вниз > 0.1% от ордера
-                                                    price_drift_pct = ((order_price - current_price) / order_price) * 100.0
-                                                    if price_drift_pct > 0.1:  # Цена ушла вниз > 0.1%
+                                                    price_drift_pct = (
+                                                        (order_price - current_price)
+                                                        / order_price
+                                                    ) * 100.0
+                                                    if (
+                                                        price_drift_pct > 0.1
+                                                    ):  # Цена ушла вниз > 0.1%
                                                         should_cancel_early = True
                                                 else:  # sell
                                                     # Для SELL: если текущая цена ушла вверх > 0.1% от ордера
-                                                    price_drift_pct = ((current_price - order_price) / order_price) * 100.0
-                                                    if price_drift_pct > 0.1:  # Цена ушла вверх > 0.1%
+                                                    price_drift_pct = (
+                                                        (current_price - order_price)
+                                                        / order_price
+                                                    ) * 100.0
+                                                    if (
+                                                        price_drift_pct > 0.1
+                                                    ):  # Цена ушла вверх > 0.1%
                                                         should_cancel_early = True
                                     except Exception as e:
-                                        logger.debug(f"⚠️ Ошибка проверки отклонения цены для {symbol}: {e}")
+                                        logger.debug(
+                                            f"⚠️ Ошибка проверки отклонения цены для {symbol}: {e}"
+                                        )
 
                                     # ✅ НОВОЕ: Быстрая отмена при отклонении цены > 0.1%
                                     if should_cancel_early:
@@ -165,7 +188,6 @@ class OrderCoordinator:
 
                                     # Отменяем ордер если нужно (быстрая отмена или таймаут)
                                     if should_cancel_early or wait_time > max_wait:
-
                                         # Отменяем ордер
                                         if auto_cancel:
                                             cancel_result = (
@@ -418,4 +440,3 @@ class OrderCoordinator:
         """
         if normalized_symbol in self.last_orders_cache:
             self.last_orders_cache[normalized_symbol]["status"] = "closed"
-

@@ -15,9 +15,10 @@ from loguru import logger
 from src.indicators.advanced.candle_patterns import CandlePatternDetector
 from src.indicators.advanced.pivot_calculator import PivotCalculator
 from src.indicators.advanced.volume_profile import VolumeProfileCalculator
-from ..indicators.liquidity_levels import LiquidityLevelsDetector
+
 from ..core.data_registry import DataRegistry
 from ..core.position_registry import PositionMetadata, PositionRegistry
+from ..indicators.liquidity_levels import LiquidityLevelsDetector
 
 
 class ExitAnalyzer:
@@ -603,13 +604,13 @@ class ExitAnalyzer:
     def _get_spread_buffer(self, symbol: str, current_price: float) -> float:
         """
         Возвращает буфер спреда в процентах для учёта проскальзывания.
-        
+
         Если данных нет — возвращаем 0.05% по умолчанию.
-        
+
         Args:
             symbol: Торговый символ
             current_price: Текущая цена (для fallback)
-            
+
         Returns:
             Буфер спреда в процентах (например, 0.05 для 0.05%)
         """
@@ -618,18 +619,20 @@ class ExitAnalyzer:
             if self.data_registry:
                 # Используем прямой доступ к _market_data (синхронный метод)
                 # ⚠️ ВНИМАНИЕ: Это безопасно, так как мы в синхронном контексте
-                market_data = getattr(self.data_registry, "_market_data", {}).get(symbol, {})
+                market_data = getattr(self.data_registry, "_market_data", {}).get(
+                    symbol, {}
+                )
                 if market_data:
                     best_bid = market_data.get("best_bid") or market_data.get("bid")
                     best_ask = market_data.get("best_ask") or market_data.get("ask")
-                    
+
                     if best_bid and best_ask and best_ask > 0:
                         spread = best_ask - best_bid
                         spread_pct = (spread / best_ask) * 100.0  # в процентах
                         return spread_pct
         except Exception as e:
             logger.debug(f"⚠️ Не удалось получить спред для {symbol}: {e}")
-        
+
         # Fallback: 0.05% по умолчанию
         return 0.05
 
@@ -1427,8 +1430,10 @@ class ExitAnalyzer:
                         sl_percent = self._get_sl_percent(symbol, "trending")
                         spread_buffer = self._get_spread_buffer(symbol, current_price)
                         if pnl_percent <= -sl_percent * 1.5 - spread_buffer:
-                            smart_close = await self._should_force_close_by_smart_analysis(
-                                symbol, position_side, pnl_percent, sl_percent
+                            smart_close = (
+                                await self._should_force_close_by_smart_analysis(
+                                    symbol, position_side, pnl_percent, sl_percent
+                                )
                             )
                             if smart_close:
                                 logger.warning(
@@ -1653,7 +1658,11 @@ class ExitAnalyzer:
                 )
                 if pnl_percent >= trigger_percent:
                     # ✅ ИСПРАВЛЕНО: Проверяем, не выполнялся ли уже partial_tp
-                    if metadata and hasattr(metadata, "partial_tp_executed") and metadata.partial_tp_executed:
+                    if (
+                        metadata
+                        and hasattr(metadata, "partial_tp_executed")
+                        and metadata.partial_tp_executed
+                    ):
                         logger.debug(
                             f"⏱️ ExitAnalyzer RANGING: Partial TP уже был выполнен для {symbol}, пропускаем"
                         )
@@ -2160,7 +2169,9 @@ class ExitAnalyzer:
                     symbol, current_price
                 )
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка получения уровней ликвидности для {symbol}: {e}")
+                logger.debug(
+                    f"⚠️ Ошибка получения уровней ликвидности для {symbol}: {e}"
+                )
         return None
 
     async def _get_atr(self, symbol: str, period: int = 14) -> Optional[float]:
@@ -2209,7 +2220,9 @@ class ExitAnalyzer:
             logger.debug(f"⚠️ Ошибка получения Volume Profile для {symbol}: {e}")
         return None
 
-    async def _get_pivot_levels(self, symbol: str, timeframe: str = "1h") -> Optional[Any]:
+    async def _get_pivot_levels(
+        self, symbol: str, timeframe: str = "1h"
+    ) -> Optional[Any]:
         """Получить Pivot Levels для символа"""
         try:
             candles = await self.data_registry.get_candles(symbol, timeframe)
@@ -2224,9 +2237,7 @@ class ExitAnalyzer:
 
     # ==================== УМНОЕ ЗАКРЫТИЕ: МЕТОДЫ ПРОВЕРКИ ИНДИКАТОРОВ ====================
 
-    async def _check_reversal_signals_score(
-        self, symbol: str, side: str
-    ) -> int:
+    async def _check_reversal_signals_score(self, symbol: str, side: str) -> int:
         """Обертка для получения score (0 или 1) из _check_reversal_signals"""
         result = await self._check_reversal_signals(symbol, side)
         return 1 if result else 0
@@ -2448,7 +2459,9 @@ class ExitAnalyzer:
         """
         # Проверяем все индикаторы параллельно
         tasks = [
-            self._check_reversal_signals_score(symbol, position_side),  # Order Flow + MTF
+            self._check_reversal_signals_score(
+                symbol, position_side
+            ),  # Order Flow + MTF
             self._check_funding_bias(symbol, position_side),  # фандинг
             self._check_correlation_bias(symbol, position_side),  # корреляция
             self._check_liquidity_sweep(symbol, position_side),  # ликвидность

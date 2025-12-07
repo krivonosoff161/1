@@ -156,13 +156,13 @@ class FuturesRiskManager:
     ) -> float:
         """
         Динамический расчет максимальной маржи на сделку.
-        
+
         Учитывает:
         - max_margin_per_trade из конфига
         - Волатильность (ATR)
         - Просадку портфеля
         - Режим рынка
-        
+
         Args:
             balance: Текущий баланс
             symbol: Торговый символ
@@ -170,7 +170,7 @@ class FuturesRiskManager:
             volatility: Волатильность (ATR % от цены, опционально)
             daily_pnl: Дневной PnL (для расчета просадки)
             open_positions_margin: Использованная маржа открытых позиций
-            
+
         Returns:
             Максимальная маржа на сделку в USD
         """
@@ -178,37 +178,61 @@ class FuturesRiskManager:
             # Получаем параметры из конфига
             risk_config = getattr(self.scalping_config, "risk_config", {})
             if isinstance(risk_config, dict):
-                max_margin_per_trade_pct = risk_config.get("max_margin_per_trade", 15.0) / 100.0
-                volatility_factor_enabled = risk_config.get("volatility_factor_enabled", True)
-                drawdown_factor_enabled = risk_config.get("drawdown_factor_enabled", True)
+                max_margin_per_trade_pct = (
+                    risk_config.get("max_margin_per_trade", 15.0) / 100.0
+                )
+                volatility_factor_enabled = risk_config.get(
+                    "volatility_factor_enabled", True
+                )
+                drawdown_factor_enabled = risk_config.get(
+                    "drawdown_factor_enabled", True
+                )
                 min_margin_cap = risk_config.get("min_margin_cap", 8.0)
-                max_margin_cap_multiplier = risk_config.get("max_margin_cap_multiplier", 2.0)
+                max_margin_cap_multiplier = risk_config.get(
+                    "max_margin_cap_multiplier", 2.0
+                )
             else:
-                max_margin_per_trade_pct = getattr(risk_config, "max_margin_per_trade", 15.0) / 100.0
-                volatility_factor_enabled = getattr(risk_config, "volatility_factor_enabled", True)
-                drawdown_factor_enabled = getattr(risk_config, "drawdown_factor_enabled", True)
+                max_margin_per_trade_pct = (
+                    getattr(risk_config, "max_margin_per_trade", 15.0) / 100.0
+                )
+                volatility_factor_enabled = getattr(
+                    risk_config, "volatility_factor_enabled", True
+                )
+                drawdown_factor_enabled = getattr(
+                    risk_config, "drawdown_factor_enabled", True
+                )
                 min_margin_cap = getattr(risk_config, "min_margin_cap", 8.0)
-                max_margin_cap_multiplier = getattr(risk_config, "max_margin_cap_multiplier", 2.0)
-            
+                max_margin_cap_multiplier = getattr(
+                    risk_config, "max_margin_cap_multiplier", 2.0
+                )
+
             # Базовый кап = баланс * процент
             base_cap = balance * max_margin_per_trade_pct
-            
+
             # Фактор волатильности (чем выше волатильность, тем меньше кап)
             volatility_factor = 1.0
             if volatility_factor_enabled and volatility is not None and volatility > 0:
                 # Нормализуем волатильность: 1% = 1.0, 2% = 0.5, 3% = 0.33
                 # Используем обратную зависимость: factor = 1 / (1 + volatility)
-                volatility_factor = 1.0 / (1.0 + volatility * 10)  # Умножаем на 10 для усиления эффекта
-                volatility_factor = max(0.5, min(1.5, volatility_factor))  # Ограничиваем 0.5-1.5
-            
+                volatility_factor = 1.0 / (
+                    1.0 + volatility * 10
+                )  # Умножаем на 10 для усиления эффекта
+                volatility_factor = max(
+                    0.5, min(1.5, volatility_factor)
+                )  # Ограничиваем 0.5-1.5
+
             # Фактор просадки (чем больше просадка, тем меньше кап)
             drawdown_factor = 1.0
             if drawdown_factor_enabled and daily_pnl < 0:
                 # Просадка уменьшает кап: -5% = 0.5, -10% = 0.0
                 drawdown_pct = abs(daily_pnl) / balance if balance > 0 else 0.0
-                drawdown_factor = max(0.0, 1.0 - drawdown_pct * 2)  # Усиливаем эффект просадки
-                drawdown_factor = max(0.3, min(1.0, drawdown_factor))  # Минимум 30% от базового капа
-            
+                drawdown_factor = max(
+                    0.0, 1.0 - drawdown_pct * 2
+                )  # Усиливаем эффект просадки
+                drawdown_factor = max(
+                    0.3, min(1.0, drawdown_factor)
+                )  # Минимум 30% от базового капа
+
             # Режимный множитель (trending = больше, choppy = меньше)
             regime_multiplier = 1.0
             if regime:
@@ -219,33 +243,39 @@ class FuturesRiskManager:
                     regime_multiplier = 1.0  # Стандарт
                 elif regime_lower == "choppy":
                     regime_multiplier = 0.8  # -20% в хаосе
-            
+
             # Рассчитываем динамический кап
-            dynamic_cap = base_cap * volatility_factor * drawdown_factor * regime_multiplier
-            
+            dynamic_cap = (
+                base_cap * volatility_factor * drawdown_factor * regime_multiplier
+            )
+
             # Применяем ограничения
             min_cap = min_margin_cap
             max_cap = base_cap * max_margin_cap_multiplier
-            
+
             final_cap = max(min_cap, min(dynamic_cap, max_cap))
-            
+
             logger.debug(
                 f"📊 Dynamic Margin Cap для {symbol} ({regime}): "
                 f"base=${base_cap:.2f}, vol_factor={volatility_factor:.2f}, "
                 f"drawdown_factor={drawdown_factor:.2f}, regime_mult={regime_multiplier:.2f}, "
                 f"final=${final_cap:.2f}"
             )
-            
+
             return final_cap
-            
+
         except Exception as e:
             logger.warning(f"⚠️ Ошибка расчета dynamic_margin_cap: {e}")
             # Fallback: возвращаем базовый кап
             risk_config = getattr(self.scalping_config, "risk_config", {})
             if isinstance(risk_config, dict):
-                max_margin_per_trade_pct = risk_config.get("max_margin_per_trade", 15.0) / 100.0
+                max_margin_per_trade_pct = (
+                    risk_config.get("max_margin_per_trade", 15.0) / 100.0
+                )
             else:
-                max_margin_per_trade_pct = getattr(risk_config, "max_margin_per_trade", 15.0) / 100.0
+                max_margin_per_trade_pct = (
+                    getattr(risk_config, "max_margin_per_trade", 15.0) / 100.0
+                )
             return balance * max_margin_per_trade_pct
 
     def _calculate_risk_based_margin(
@@ -258,19 +288,19 @@ class FuturesRiskManager:
     ) -> float:
         """
         Расчет маржи через risk_usd / sl_distance (Уровень 3: Margin Budget).
-        
+
         Формула:
         risk_usd = balance * risk_per_trade
         size_coins = risk_usd / sl_distance_pct
         margin_usd = (size_coins * price) / leverage
-        
+
         Args:
             balance: Текущий баланс
             risk_per_trade: Риск на сделку в процентах (например, 0.012 = 1.2%)
             sl_distance_pct: Расстояние до SL в процентах (например, 0.02 = 2%)
             leverage: Плечо
             price: Текущая цена
-            
+
         Returns:
             Маржа в USD
         """
@@ -281,30 +311,30 @@ class FuturesRiskManager:
                     f"(sl_distance={sl_distance_pct}, leverage={leverage}, price={price})"
                 )
                 return 0.0
-            
+
             # Рассчитываем риск в USD
             risk_usd = balance * risk_per_trade
-            
+
             # Рассчитываем размер позиции в монетах через риск
             # Если SL = 2%, то при убытке 2% мы потеряем risk_usd
             # Значит: size_coins * price * sl_distance_pct = risk_usd
             # size_coins = risk_usd / (price * sl_distance_pct)
             size_coins = risk_usd / (price * sl_distance_pct)
-            
+
             # Рассчитываем номинальную стоимость
             notional_usd = size_coins * price
-            
+
             # Рассчитываем маржу
             margin_usd = notional_usd / leverage
-            
+
             logger.debug(
                 f"📊 Risk-based Margin: risk_usd=${risk_usd:.2f}, "
                 f"sl_distance={sl_distance_pct*100:.2f}%, size_coins={size_coins:.6f}, "
                 f"notional=${notional_usd:.2f}, margin=${margin_usd:.2f}"
             )
-            
+
             return margin_usd
-            
+
         except Exception as e:
             logger.warning(f"⚠️ Ошибка расчета risk_based_margin: {e}")
             return 0.0
@@ -1123,26 +1153,34 @@ class FuturesRiskManager:
             try:
                 risk_config = getattr(self.scalping_config, "risk_config", {})
                 if isinstance(risk_config, dict):
-                    use_dynamic_cap = risk_config.get("max_margin_per_trade") is not None
+                    use_dynamic_cap = (
+                        risk_config.get("max_margin_per_trade") is not None
+                    )
                 else:
                     use_dynamic_cap = hasattr(risk_config, "max_margin_per_trade")
-                
+
                 if use_dynamic_cap:
                     # Получаем волатильность для расчета
                     volatility_atr = None
                     try:
-                        if signal_generator and hasattr(signal_generator, "data_registry"):
+                        if signal_generator and hasattr(
+                            signal_generator, "data_registry"
+                        ):
                             data_registry = signal_generator.data_registry
                             if data_registry:
                                 atr_data = data_registry.get_indicator(symbol, "atr")
                                 if atr_data and price > 0:
-                                    volatility_atr = float(atr_data) / price  # ATR % от цены
+                                    volatility_atr = (
+                                        float(atr_data) / price
+                                    )  # ATR % от цены
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить волатильность для dynamic_cap: {e}")
-                    
+                        logger.debug(
+                            f"⚠️ Не удалось получить волатильность для dynamic_cap: {e}"
+                        )
+
                     # Получаем дневной PnL
                     daily_pnl = getattr(self, "daily_pnl", 0.0)
-                    
+
                     # Рассчитываем динамический кап
                     dynamic_margin_cap = self._calculate_dynamic_margin_cap(
                         balance=balance,
@@ -1152,13 +1190,17 @@ class FuturesRiskManager:
                         daily_pnl=daily_pnl,
                         open_positions_margin=used_margin,
                     )
-                    
-                    volatility_str = f"{volatility_atr*100:.2f}%" if volatility_atr is not None else "N/A"
+
+                    volatility_str = (
+                        f"{volatility_atr*100:.2f}%"
+                        if volatility_atr is not None
+                        else "N/A"
+                    )
                     logger.info(
                         f"  8a. Dynamic margin cap: ${dynamic_margin_cap:.2f} "
                         f"(volatility={volatility_str}, daily_pnl=${daily_pnl:.2f})"
                     )
-                    
+
                     if margin_required > dynamic_margin_cap:
                         margin_required_before = margin_required
                         margin_required = dynamic_margin_cap
@@ -1176,19 +1218,23 @@ class FuturesRiskManager:
                 if isinstance(risk_config, dict):
                     use_risk_based = risk_config.get("use_risk_based_sizing", False)
                 else:
-                    use_risk_based = getattr(risk_config, "use_risk_based_sizing", False)
-                
+                    use_risk_based = getattr(
+                        risk_config, "use_risk_based_sizing", False
+                    )
+
                 if use_risk_based and price > 0:
                     # Получаем risk_per_trade из конфига
-                    risk_per_trade = max_loss_per_trade_percent  # Используем тот же параметр
-                    
+                    risk_per_trade = (
+                        max_loss_per_trade_percent  # Используем тот же параметр
+                    )
+
                     # Получаем sl_percent
                     sl_percent = getattr(self.scalping_config, "sl_percent", 0.2)
                     if sl_percent > 1:
                         sl_percent_decimal = sl_percent / 100
                     else:
                         sl_percent_decimal = sl_percent
-                    
+
                     # Рассчитываем risk-based margin
                     risk_based_margin = self._calculate_risk_based_margin(
                         balance=balance,
@@ -1197,12 +1243,12 @@ class FuturesRiskManager:
                         leverage=leverage,
                         price=price,
                     )
-                    
+
                     logger.info(
                         f"  8b. Risk-based margin: ${risk_based_margin:.2f} "
                         f"(risk={risk_per_trade*100:.2f}%, sl={sl_percent_decimal*100:.2f}%)"
                     )
-                    
+
                     if risk_based_margin > 0 and margin_required > risk_based_margin:
                         margin_required_before = margin_required
                         margin_required = risk_based_margin

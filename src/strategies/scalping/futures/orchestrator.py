@@ -1674,10 +1674,10 @@ class FuturesScalpingOrchestrator:
                 # ✅ ИСПРАВЛЕНО: Добавляем LOCK_DRIFT для предотвращения гонок
                 if not hasattr(self, "_drift_locks"):
                     self._drift_locks: Dict[str, asyncio.Lock] = {}
-                
+
                 if symbol not in self._drift_locks:
                     self._drift_locks[symbol] = asyncio.Lock()
-                
+
                 async with self._drift_locks[symbol]:
                     # Повторная проверка после получения lock (double-check pattern)
                     if symbol not in self.active_positions:
@@ -2126,9 +2126,14 @@ class FuturesScalpingOrchestrator:
                 if symbol not in exchange_symbols:
                     await self.position_registry.unregister_position(symbol)
                     # ✅ ИСПРАВЛЕНО: Очистка locks после закрытия позиции
-                    if hasattr(self.exit_analyzer, "_signal_locks_ref") and symbol in self.exit_analyzer._signal_locks_ref:
+                    if (
+                        hasattr(self.exit_analyzer, "_signal_locks_ref")
+                        and symbol in self.exit_analyzer._signal_locks_ref
+                    ):
                         self.exit_analyzer._signal_locks_ref.pop(symbol, None)
-                        logger.debug(f"✅ Очищен lock для {symbol} после закрытия позиции")
+                        logger.debug(
+                            f"✅ Очищен lock для {symbol} после закрытия позиции"
+                        )
 
             # Обновляем/регистрируем позиции с сохранением метаданных
             for position in positions:
@@ -3825,14 +3830,21 @@ class FuturesScalpingOrchestrator:
 
                 # ✅ ИСПРАВЛЕНО: Очистка locks после закрытия позиции
                 if hasattr(self, "exit_analyzer") and self.exit_analyzer:
-                    if hasattr(self.exit_analyzer, "_signal_locks_ref") and symbol in self.exit_analyzer._signal_locks_ref:
+                    if (
+                        hasattr(self.exit_analyzer, "_signal_locks_ref")
+                        and symbol in self.exit_analyzer._signal_locks_ref
+                    ):
                         self.exit_analyzer._signal_locks_ref.pop(symbol, None)
-                        logger.debug(f"✅ Очищен lock для {symbol} после закрытия позиции")
-                
+                        logger.debug(
+                            f"✅ Очищен lock для {symbol} после закрытия позиции"
+                        )
+
                 # ✅ ИСПРАВЛЕНО: Очистка drift_locks после закрытия позиции
                 if hasattr(self, "_drift_locks") and symbol in self._drift_locks:
                     self._drift_locks.pop(symbol, None)
-                    logger.debug(f"✅ Очищен drift_lock для {symbol} после закрытия позиции")
+                    logger.debug(
+                        f"✅ Очищен drift_lock для {symbol} после закрытия позиции"
+                    )
 
                 # ✅ РЕФАКТОРИНГ: Используем trailing_sl_coordinator для удаления TSL
                 tsl = self.trailing_sl_coordinator.remove_tsl(symbol)
@@ -4051,7 +4063,7 @@ class FuturesScalpingOrchestrator:
     async def _log_archive_task(self):
         """
         ✅ НОВОЕ: Фоновая задача для архивации вчерашних логов в 00:05 UTC.
-        
+
         Логика:
         1. В течение дня логи пишутся в обычные файлы с ротацией по размеру (5 MB)
            - futures_main_YYYY-MM-DD.log
@@ -4065,68 +4077,88 @@ class FuturesScalpingOrchestrator:
         log_dir = Path("logs/futures")
         archive_dir = log_dir / "archived"
         archive_dir.mkdir(exist_ok=True)
-        
+
         # Папка для сделок (CSV/JSON)
         trades_dir = Path("logs")
-        
+
         last_archive_date = None
-        
+
         while self.is_running:
             try:
                 now_utc = datetime.now(timezone.utc)
                 current_hour = now_utc.hour
                 current_minute = now_utc.minute
-                
+
                 # Проверяем, наступило ли 00:05 UTC
                 if current_hour == 0 and current_minute >= 5:
                     # Вычисляем дату вчерашнего дня
                     yesterday = now_utc - timedelta(days=1)
                     yesterday_str = yesterday.strftime("%Y-%m-%d")
-                    
+
                     # Проверяем, не архивировали ли мы уже вчерашние файлы
                     if last_archive_date != yesterday_str:
                         # Ищем ВСЕ файлы за вчерашний день (с ротацией могут быть _1, _2, _3 и т.д.)
                         pattern = f"futures_main_{yesterday_str}*.log"
                         log_files = sorted(log_dir.glob(pattern))
-                        
+
                         if log_files:
                             zip_name = f"futures_main_{yesterday_str}.zip"
                             zip_path = archive_dir / zip_name
-                            
+
                             # Архивируем только если архив еще не существует
                             if not zip_path.exists():
                                 try:
-                                    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                                    with zipfile.ZipFile(
+                                        zip_path, "w", zipfile.ZIP_DEFLATED
+                                    ) as zipf:
                                         # Добавляем все лог файлы за вчерашний день
                                         for log_file in log_files:
                                             zipf.write(log_file, log_file.name)
-                                            logger.debug(f"   📄 Добавлен в архив: {log_file.name}")
-                                        
-                                        logger.info(f"✅ Архивировано {len(log_files)} лог файлов за {yesterday_str}")
-                                        
+                                            logger.debug(
+                                                f"   📄 Добавлен в архив: {log_file.name}"
+                                            )
+
+                                        logger.info(
+                                            f"✅ Архивировано {len(log_files)} лог файлов за {yesterday_str}"
+                                        )
+
                                         # Ищем соответствующие файлы сделок
-                                        trades_json = trades_dir / f"trades_{yesterday_str}.json"
-                                        trades_csv = trades_dir / f"trades_{yesterday_str}.csv"
-                                        
+                                        trades_json = (
+                                            trades_dir / f"trades_{yesterday_str}.json"
+                                        )
+                                        trades_csv = (
+                                            trades_dir / f"trades_{yesterday_str}.csv"
+                                        )
+
                                         if trades_json.exists():
                                             zipf.write(trades_json, trades_json.name)
-                                            logger.debug(f"   📄 Добавлен в архив: {trades_json.name}")
-                                        
+                                            logger.debug(
+                                                f"   📄 Добавлен в архив: {trades_json.name}"
+                                            )
+
                                         if trades_csv.exists():
                                             zipf.write(trades_csv, trades_csv.name)
-                                            logger.debug(f"   📄 Добавлен в архив: {trades_csv.name}")
-                                    
+                                            logger.debug(
+                                                f"   📄 Добавлен в архив: {trades_csv.name}"
+                                            )
+
                                     # Удаляем все оригинальные файлы после успешной архивации
                                     for log_file in log_files:
                                         try:
                                             log_file.unlink()
                                         except Exception as e:
-                                            logger.warning(f"⚠️ Ошибка удаления {log_file.name}: {e}")
-                                    
+                                            logger.warning(
+                                                f"⚠️ Ошибка удаления {log_file.name}: {e}"
+                                            )
+
                                     last_archive_date = yesterday_str
-                                    logger.info(f"✅ Все логи за {yesterday_str} заархивированы в {zip_name} и удалены ({len(log_files)} файлов)")
+                                    logger.info(
+                                        f"✅ Все логи за {yesterday_str} заархивированы в {zip_name} и удалены ({len(log_files)} файлов)"
+                                    )
                                 except Exception as e:
-                                    logger.error(f"❌ Ошибка архивации логов за {yesterday_str}: {e}")
+                                    logger.error(
+                                        f"❌ Ошибка архивации логов за {yesterday_str}: {e}"
+                                    )
                             else:
                                 # Архив уже существует, просто удаляем все оригинальные файлы
                                 deleted_count = 0
@@ -4135,17 +4167,21 @@ class FuturesScalpingOrchestrator:
                                         log_file.unlink()
                                         deleted_count += 1
                                     except Exception as e:
-                                        logger.warning(f"⚠️ Ошибка удаления {log_file.name}: {e}")
-                                
+                                        logger.warning(
+                                            f"⚠️ Ошибка удаления {log_file.name}: {e}"
+                                        )
+
                                 if deleted_count > 0:
                                     last_archive_date = yesterday_str
-                                    logger.debug(f"✅ Вчерашние логи уже заархивированы, удалены оригиналы ({deleted_count} файлов)")
+                                    logger.debug(
+                                        f"✅ Вчерашние логи уже заархивированы, удалены оригиналы ({deleted_count} файлов)"
+                                    )
                         else:
                             logger.debug(f"📋 Логи за {yesterday_str} не найдены")
-                
+
                 # Проверяем каждую минуту
                 await asyncio.sleep(60)
-                
+
             except asyncio.CancelledError:
                 logger.debug("🛑 Задача архивации логов отменена")
                 break

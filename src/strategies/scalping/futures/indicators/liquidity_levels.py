@@ -60,9 +60,7 @@ class LiquidityLevelsDetector:
             Или None если не удалось получить данные
         """
         if not self.client:
-            logger.debug(
-                "LiquidityLevelsDetector: клиент не указан, возвращаем None"
-            )
+            logger.debug("LiquidityLevelsDetector: клиент не указан, возвращаем None")
             return None
 
         # Проверяем кеш
@@ -240,9 +238,6 @@ class LiquidityLevelsDetector:
             )
 
         except Exception as e:
-            logger.warning(
-                f"⚠️ Ошибка анализа уровней ликвидности: {e}", exc_info=True
-            )
+            logger.warning(f"⚠️ Ошибка анализа уровней ликвидности: {e}", exc_info=True)
 
         return {"below": below_liquidity, "above": above_liquidity}
-
