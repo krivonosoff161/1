@@ -84,13 +84,11 @@ class FundingRateMonitor:
         """
         # Если funding слишком высокий по модулю
         if abs(self.current_funding) > self.max_funding_rate:
-            # ✅ ИСПРАВЛЕНО: Нормализуем side перед сравнением
-            side_normalized = side.lower() if isinstance(side, str) else "long"
-            if side_normalized == "long" and self.current_funding > 0:
+            if side == "long" and self.current_funding > 0:
                 # Для лонга при положительном funding - неблагоприятно
                 logger.warning(f"Высокий funding для лонга: {self.current_funding:.4%}")
                 return False
-            elif side_normalized == "short" and self.current_funding < 0:
+            elif side == "short" and self.current_funding < 0:
                 # Для шорта при отрицательном funding - неблагоприятно
                 logger.warning(f"Высокий funding для шорта: {self.current_funding:.4%}")
                 return False
@@ -146,9 +144,7 @@ class FundingRateMonitor:
         notional = position_size * price
         funding_amount = notional * self.current_funding
 
-        # ✅ ИСПРАВЛЕНО: Нормализуем side перед сравнением
-        side_normalized = side.lower() if isinstance(side, str) else "long"
-        if side_normalized == "long":
+        if side == "long":
             # Позитивный funding = получение, отрицательный = выплата
             return funding_amount
         else:

@@ -184,6 +184,37 @@ class TrailingSLCoordinator:
         position = self.get_position_callback(symbol)
         return position is not None and len(position) > 0
 
+    def _get_trailing_sl_params(
+        self, symbol: str, regime: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Получает параметры Trailing SL для символа и режима.
+
+        Args:
+            symbol: Торговый символ
+            regime: Режим рынка (trending/ranging/choppy)
+
+        Returns:
+            Словарь с параметрами TSL или None
+        """
+        try:
+            # Получаем режим если не указан
+            if not regime:
+                if (
+                    hasattr(self.signal_generator, "regime_managers")
+                    and symbol in getattr(self.signal_generator, "regime_managers", {})
+                ):
+                    manager = self.signal_generator.regime_managers.get(symbol)
+                    if manager:
+                        regime = manager.get_current_regime()
+
+            # Получаем параметры из config_manager
+            params = self.config_manager.get_trailing_sl_params(regime=regime)
+            return params
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка получения TSL параметров для {symbol}: {e}")
+            return None
+
     def initialize_trailing_stop(
         self,
         symbol: str,

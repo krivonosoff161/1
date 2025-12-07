@@ -123,9 +123,7 @@ class SmartExitCoordinator:
             # 1. Проверка RSI - перекупленность/перепроданность
             rsi = indicators.get("RSI") or indicators.get("rsi")
             if rsi and isinstance(rsi, (int, float)):
-                # ✅ ИСПРАВЛЕНО: Нормализуем side перед сравнением
-                side_normalized = side.lower() if isinstance(side, str) else "long"
-                if side_normalized == "long":
+                if side == "long":
                     if rsi > 70:
                         # LONG позиция, RSI перекуплен - разрешаем закрытие
                         logger.debug(

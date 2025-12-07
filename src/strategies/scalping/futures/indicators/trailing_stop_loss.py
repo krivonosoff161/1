@@ -520,7 +520,9 @@ class TrailingStopLoss:
         stop_loss = self.get_stop_loss()
         # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ!
         profit_pct = self.get_profit_pct(current_price, include_fees=True)
-        minutes_in_position = (
+        # ✅ ИСПРАВЛЕНО: max(0.0, ...) для защиты от отрицательных значений (часы слетели)
+        minutes_in_position = max(
+            0.0,
             (time.time() - self.entry_timestamp) / 60.0 if self.entry_timestamp else 0.0
         )
         entry_iso = (
@@ -674,7 +676,8 @@ class TrailingStopLoss:
             and self.timeout_minutes > 0
             and self.entry_timestamp > 0
         ):
-            minutes_in_position = (time.time() - self.entry_timestamp) / 60.0
+            # ✅ ИСПРАВЛЕНО: max(0.0, ...) для защиты от отрицательных значений (часы слетели)
+            minutes_in_position = max(0.0, (time.time() - self.entry_timestamp) / 60.0)
 
             if minutes_in_position >= self.timeout_minutes:
                 # ✅ НОВОЕ: Для прибыльных позиций - закрываем если прибыль < минимальной

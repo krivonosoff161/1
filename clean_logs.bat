@@ -35,6 +35,9 @@ if exist "logs\futures\extracted" set filefound=1
 if exist "logs\futures\temp_extracted" set filefound=1
 if exist "logs\trades_*.csv" set filefound=1
 if exist "logs\trades_*.json" set filefound=1
+if exist "logs\orders_*.csv" set filefound=1
+if exist "logs\positions_open_*.csv" set filefound=1
+if exist "logs\signals_*.csv" set filefound=1
 
 echo File found flag: !filefound!
 echo.
@@ -158,7 +161,7 @@ if exist "logs\futures\debug" (
     )
 )
 
-echo Moving TRADE CSV files...
+echo Moving TRADE CSV files from futures...
 for %%f in ("logs\futures\trades_*.csv") do (
     if exist "%%f" (
         move /Y "%%f" "!archivefolder!\" >nul 2>&1
@@ -170,7 +173,19 @@ for %%f in ("logs\futures\trades_*.csv") do (
     )
 )
 
-echo Moving ORDERS CSV files...
+echo Moving TRADE CSV files from logs root...
+for %%f in ("logs\trades_*.csv") do (
+    if exist "%%f" (
+        move /Y "%%f" "!archivefolder!\" >nul 2>&1
+        if !errorlevel! equ 0 (
+            set /a tradescount+=1
+        ) else (
+            set /a failedtrades+=1
+        )
+    )
+)
+
+echo Moving ORDERS CSV files from futures...
 for %%f in ("logs\futures\orders_*.csv") do (
     if exist "%%f" (
         move /Y "%%f" "!archivefolder!\" >nul 2>&1
@@ -182,7 +197,19 @@ for %%f in ("logs\futures\orders_*.csv") do (
     )
 )
 
-echo Moving POSITIONS_OPEN CSV files...
+echo Moving ORDERS CSV files from logs root...
+for %%f in ("logs\orders_*.csv") do (
+    if exist "%%f" (
+        move /Y "%%f" "!archivefolder!\" >nul 2>&1
+        if !errorlevel! equ 0 (
+            set /a orderscount+=1
+        ) else (
+            set /a failedorders+=1
+        )
+    )
+)
+
+echo Moving POSITIONS_OPEN CSV files from futures...
 for %%f in ("logs\futures\positions_open_*.csv") do (
     if exist "%%f" (
         move /Y "%%f" "!archivefolder!\" >nul 2>&1
@@ -194,8 +221,32 @@ for %%f in ("logs\futures\positions_open_*.csv") do (
     )
 )
 
-echo Moving SIGNALS CSV files...
+echo Moving POSITIONS_OPEN CSV files from logs root...
+for %%f in ("logs\positions_open_*.csv") do (
+    if exist "%%f" (
+        move /Y "%%f" "!archivefolder!\" >nul 2>&1
+        if !errorlevel! equ 0 (
+            set /a positionsopencount+=1
+        ) else (
+            set /a failedpositionsopen+=1
+        )
+    )
+)
+
+echo Moving SIGNALS CSV files from futures...
 for %%f in ("logs\futures\signals_*.csv") do (
+    if exist "%%f" (
+        move /Y "%%f" "!archivefolder!\" >nul 2>&1
+        if !errorlevel! equ 0 (
+            set /a signalscount+=1
+        ) else (
+            set /a failedsignals+=1
+        )
+    )
+)
+
+echo Moving SIGNALS CSV files from logs root...
+for %%f in ("logs\signals_*.csv") do (
     if exist "%%f" (
         move /Y "%%f" "!archivefolder!\" >nul 2>&1
         if !errorlevel! equ 0 (
@@ -262,6 +313,28 @@ if exist "logs\futures\temp_extracted" (
     rmdir "logs\futures\temp_extracted" >nul 2>&1
 )
 
+echo Moving other JSON files from logs root...
+set otherjsoncount=0
+set failedotherjson=0
+for %%f in ("logs\*.json") do (
+    if exist "%%f" (
+        REM Пропускаем trades_*.json (уже обработаны выше)
+        echo %%f | findstr /R /C:"trades_" >nul
+        if !errorlevel! neq 0 (
+            REM Пропускаем log_analyzer_config.json (конфиг анализатора, не лог)
+            echo %%f | findstr /R /C:"log_analyzer_config" >nul
+            if !errorlevel! neq 0 (
+                move /Y "%%f" "!archivefolder!\" >nul 2>&1
+                if !errorlevel! equ 0 (
+                    set /a otherjsoncount+=1
+                ) else (
+                    set /a failedotherjson+=1
+                )
+            )
+        )
+    )
+)
+
 echo.
 
 echo ====================================
@@ -278,12 +351,13 @@ echo Moved JSON files: !jsoncount!
 echo Moved STRUCTURED JSON files: !structuredcount!
 echo Moved EXTRACTED files: !extractedcount!
 echo Moved TEMP_EXTRACTED files: !tempextractedcount!
+echo Moved other JSON files: !otherjsoncount!
 echo.
-echo Failed to move: !failedcount! LOG, !failedzip! ZIP, !faileddebugcsv! DEBUG_CSV, !failedtrades! TRADE_CSV, !failedorders! ORDERS_CSV, !failedpositionsopen! POSITIONS_OPEN_CSV, !failedsignals! SIGNALS_CSV, !failedjson! JSON, !failedstructured! STRUCTURED, !failedextracted! EXTRACTED, !failedtempextracted! TEMP_EXTRACTED
+echo Failed to move: !failedcount! LOG, !failedzip! ZIP, !faileddebugcsv! DEBUG_CSV, !failedtrades! TRADE_CSV, !failedorders! ORDERS_CSV, !failedpositionsopen! POSITIONS_OPEN_CSV, !failedsignals! SIGNALS_CSV, !failedjson! JSON, !failedstructured! STRUCTURED, !failedextracted! EXTRACTED, !failedtempextracted! TEMP_EXTRACTED, !failedotherjson! OTHER_JSON
 echo.
 
 set totalmoved=0
-set /a totalmoved=!logcount!+!zipcount!+!debugcsvcount!+!tradescount!+!orderscount!+!positionsopencount!+!signalscount!+!jsoncount!+!structuredcount!+!extractedcount!+!tempextractedcount!
+set /a totalmoved=!logcount!+!zipcount!+!debugcsvcount!+!tradescount!+!orderscount!+!positionsopencount!+!signalscount!+!jsoncount!+!structuredcount!+!extractedcount!+!tempextractedcount!+!otherjsoncount!
 
 if !totalmoved! equ 0 (
     echo [WARNING] No files were moved!
@@ -319,34 +393,14 @@ if !totalmoved! equ 0 (
                 echo Archive size: !zipsize_mb! MB
             )
             
-            REM Опция: автоматически удалять исходную папку после создания ZIP
-            REM Если нужно всегда удалять - раскомментируйте следующие строки:
-            REM echo Removing archive folder (automatic)...
-            REM rmdir /S /Q "!archivefolder!" >nul 2>&1
-            REM if !errorlevel! equ 0 (
-            REM     echo [SUCCESS] Archive folder removed.
-            REM ) else (
-            REM     echo [WARNING] Failed to remove archive folder. You can remove it manually.
-            REM )
-            
-            REM Если нужно всегда оставлять - раскомментируйте:
-            REM echo Keeping archive folder: !archivefolder!
-            
-            REM По умолчанию: спрашиваем пользователя
+            REM ✅ ИСПРАВЛЕНО: Автоматически удаляем папку после создания ZIP
             echo.
-            echo Do you want to remove the original archive folder?
-            echo Press Y to remove, any other key to keep:
-            set /p removefolder="[Y/N]: "
-            if /i "!removefolder!"=="Y" (
-                echo Removing archive folder...
-                rmdir /S /Q "!archivefolder!" >nul 2>&1
-                if !errorlevel! equ 0 (
-                    echo [SUCCESS] Archive folder removed.
-                ) else (
-                    echo [WARNING] Failed to remove archive folder. You can remove it manually.
-                )
+            echo Removing archive folder (automatic after ZIP creation)...
+            rmdir /S /Q "!archivefolder!" >nul 2>&1
+            if !errorlevel! equ 0 (
+                echo [SUCCESS] Archive folder removed.
             ) else (
-                echo Keeping archive folder: !archivefolder!
+                echo [WARNING] Failed to remove archive folder. You can remove it manually: !archivefolder!
             )
         ) else (
             echo [WARNING] Failed to create ZIP archive. Keeping archive folder.

@@ -9,8 +9,13 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+import numpy as np
 from loguru import logger
 
+from src.indicators.advanced.candle_patterns import CandlePatternDetector
+from src.indicators.advanced.pivot_calculator import PivotCalculator
+from src.indicators.advanced.volume_profile import VolumeProfileCalculator
+from ..indicators.liquidity_levels import LiquidityLevelsDetector
 from ..core.data_registry import DataRegistry
 from ..core.position_registry import PositionMetadata, PositionRegistry
 
@@ -64,10 +69,14 @@ class ExitAnalyzer:
         self.order_flow = None
         self.mtf_filter = None
         self.scalping_config = None
+        self.funding_monitor = None
+        self.client = None
 
         if orchestrator:
             self.fast_adx = getattr(orchestrator, "fast_adx", None)
             self.order_flow = getattr(orchestrator, "order_flow", None)
+            self.funding_monitor = getattr(orchestrator, "funding_monitor", None)
+            self.client = getattr(orchestrator, "client", None)
             if signal_generator:
                 # MTF фильтр может быть в signal_generator
                 if hasattr(signal_generator, "mtf_filter"):
@@ -83,6 +92,35 @@ class ExitAnalyzer:
             # Получаем scalping_config из orchestrator
             if hasattr(orchestrator, "scalping_config"):
                 self.scalping_config = orchestrator.scalping_config
+
+        # ✅ НОВОЕ: Инициализация модулей для умного закрытия
+        try:
+            self.candle_pattern_detector = CandlePatternDetector()
+            logger.info("✅ CandlePatternDetector инициализирован")
+        except Exception as e:
+            logger.exception(f"❌ Ошибка инициализации CandlePatternDetector: {e}")
+            self.candle_pattern_detector = None
+
+        try:
+            self.volume_profile_calculator = VolumeProfileCalculator()
+            logger.info("✅ VolumeProfileCalculator инициализирован")
+        except Exception as e:
+            logger.exception(f"❌ Ошибка инициализации VolumeProfileCalculator: {e}")
+            self.volume_profile_calculator = None
+
+        try:
+            self.pivot_calculator = PivotCalculator()
+            logger.info("✅ PivotCalculator инициализирован")
+        except Exception as e:
+            logger.exception(f"❌ Ошибка инициализации PivotCalculator: {e}")
+            self.pivot_calculator = None
+
+        try:
+            self.liquidity_levels_detector = LiquidityLevelsDetector(client=self.client)
+            logger.info("✅ LiquidityLevelsDetector инициализирован")
+        except Exception as e:
+            logger.exception(f"❌ Ошибка инициализации LiquidityLevelsDetector: {e}")
+            self.liquidity_levels_detector = None
 
         logger.info("✅ ExitAnalyzer инициализирован")
 
@@ -210,10 +248,18 @@ class ExitAnalyzer:
             market_data = await self.data_registry.get_market_data(symbol)
             current_price = await self.data_registry.get_price(symbol)
 
-            if not current_price:
+            # ✅ ИСПРАВЛЕНО: Проверка current_price на None и <= 0
+            if current_price is None:
                 analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
                 logger.warning(
-                    f"⚠️ ExitAnalyzer: Нет цены для {symbol} (за {analysis_time:.2f}ms)"
+                    f"⚠️ ExitAnalyzer: current_price is None для {symbol} (за {analysis_time:.2f}ms)"
+                )
+                return None
+
+            if current_price <= 0:
+                analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
+                logger.error(
+                    f"❌ ExitAnalyzer: current_price <= 0 ({current_price}) для {symbol} (за {analysis_time:.2f}ms)"
                 )
                 return None
 
@@ -504,6 +550,88 @@ class ExitAnalyzer:
                 logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения TP% для {symbol}: {e}")
 
         return tp_percent
+
+    def _get_sl_percent(self, symbol: str, regime: str) -> float:
+        """
+        Получение SL% из конфига по символу и режиму.
+
+        Args:
+            symbol: Торговый символ
+            regime: Режим рынка (trending, ranging, choppy)
+
+        Returns:
+            SL% для использования
+        """
+        sl_percent = 2.0  # Fallback значение
+
+        if self.config_manager:
+            try:
+                # Пробуем получить SL из symbol_profiles
+                symbol_profiles = getattr(self.config_manager, "symbol_profiles", {})
+                if symbol in symbol_profiles:
+                    symbol_config = symbol_profiles[symbol]
+                    if isinstance(symbol_config, dict) and regime in symbol_config:
+                        regime_config = symbol_config[regime]
+                        if (
+                            isinstance(regime_config, dict)
+                            and "sl_percent" in regime_config
+                        ):
+                            return float(regime_config["sl_percent"])
+
+                # Fallback на by_regime
+                by_regime = self.config_manager.to_dict(
+                    getattr(self.scalping_config, "by_regime", {})
+                    if self.scalping_config
+                    else {}
+                )
+                if regime in by_regime:
+                    regime_config = by_regime[regime]
+                    if (
+                        isinstance(regime_config, dict)
+                        and "sl_percent" in regime_config
+                    ):
+                        return float(regime_config["sl_percent"])
+
+                # Fallback на глобальный SL
+                if self.scalping_config:
+                    sl_percent = getattr(self.scalping_config, "sl_percent", 2.0)
+            except Exception as e:
+                logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения SL% для {symbol}: {e}")
+
+        return sl_percent
+
+    def _get_spread_buffer(self, symbol: str, current_price: float) -> float:
+        """
+        Возвращает буфер спреда в процентах для учёта проскальзывания.
+        
+        Если данных нет — возвращаем 0.05% по умолчанию.
+        
+        Args:
+            symbol: Торговый символ
+            current_price: Текущая цена (для fallback)
+            
+        Returns:
+            Буфер спреда в процентах (например, 0.05 для 0.05%)
+        """
+        try:
+            # Пробуем получить best_bid и best_ask из data_registry
+            if self.data_registry:
+                # Используем прямой доступ к _market_data (синхронный метод)
+                # ⚠️ ВНИМАНИЕ: Это безопасно, так как мы в синхронном контексте
+                market_data = getattr(self.data_registry, "_market_data", {}).get(symbol, {})
+                if market_data:
+                    best_bid = market_data.get("best_bid") or market_data.get("bid")
+                    best_ask = market_data.get("best_ask") or market_data.get("ask")
+                    
+                    if best_bid and best_ask and best_ask > 0:
+                        spread = best_ask - best_bid
+                        spread_pct = (spread / best_ask) * 100.0  # в процентах
+                        return spread_pct
+        except Exception as e:
+            logger.debug(f"⚠️ Не удалось получить спред для {symbol}: {e}")
+        
+        # Fallback: 0.05% по умолчанию
+        return 0.05
 
     def _get_big_profit_exit_percent(self, symbol: str) -> float:
         """
@@ -1294,6 +1422,29 @@ class ExitAnalyzer:
                     # ✅ ИСПРАВЛЕНО: Не закрываем убыточные позиции по max_holding
                     # Позволяем им дойти до SL или восстановиться
                     if pnl_percent < 0:
+                        # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
+                        # Вызывается только если pnl_percent < 0 и |убыток| >= 1.5 * SL
+                        sl_percent = self._get_sl_percent(symbol, "trending")
+                        spread_buffer = self._get_spread_buffer(symbol, current_price)
+                        if pnl_percent <= -sl_percent * 1.5 - spread_buffer:
+                            smart_close = await self._should_force_close_by_smart_analysis(
+                                symbol, position_side, pnl_percent, sl_percent
+                            )
+                            if smart_close:
+                                logger.warning(
+                                    f"🚨 ExitAnalyzer TRENDING: Умное закрытие {symbol} "
+                                    f"(убыток {pnl_percent:.2f}% >= {sl_percent * 1.5:.2f}%, нет признаков отката)"
+                                )
+                                return {
+                                    "action": "close",
+                                    "reason": "smart_forced_close_trending",
+                                    "pnl_pct": pnl_percent,
+                                    "note": "Нет признаков отката — закрываем до SL",
+                                    "trend_strength": trend_strength,
+                                    "minutes_in_position": minutes_in_position,
+                                }
+                        # ---------- КОНЕЦ УМНОГО ЗАКРЫТИЯ ----------
+
                         logger.info(
                             f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
                             f"но позиция в убытке ({pnl_percent:.2f}%) - НЕ закрываем, ждем SL или восстановления"
@@ -1410,6 +1561,37 @@ class ExitAnalyzer:
                 f"Gross PnL%={gross_format}%, Net PnL%={pnl_format}% (с комиссией), entry_time={entry_time}"
             )
 
+            # 2.5. ✅ НОВОЕ: Проверка SL (Stop Loss) - должна быть ДО проверки TP
+            sl_percent = self._get_sl_percent(symbol, "ranging")
+            spread_buffer = self._get_spread_buffer(symbol, current_price)
+            sl_threshold = -sl_percent - spread_buffer
+            pnl_format_sl = (
+                f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            )
+            # ➞ ОТЛАДОЧНОЕ ЛОГИРОВАНИЕ: всегда показываем проверку SL
+            logger.debug(
+                f"🔍 ExitAnalyzer RANGING: SL проверка {symbol} | "
+                f"PnL={pnl_percent:.2f}% | SL={sl_percent:.2f}% | "
+                f"threshold={sl_threshold:.2f}% | action={'PASS' if pnl_percent > sl_threshold else 'TRIGGER'}"
+            )
+            logger.info(
+                f"🔍 ExitAnalyzer RANGING {symbol}: SL={sl_percent:.2f}%, "
+                f"PnL%={pnl_format_sl}%, spread_buffer={spread_buffer:.4f}%, "
+                f"SL threshold={sl_threshold:.2f}%, достигнут={pnl_percent <= sl_threshold}"
+            )
+            if pnl_percent <= sl_threshold:
+                logger.warning(
+                    f"🛑 ExitAnalyzer RANGING: SL достигнут для {symbol}: "
+                    f"{pnl_percent:.2f}% <= {sl_threshold:.2f}% (SL={sl_percent:.2f}% + spread_buffer={spread_buffer:.4f}%)"
+                )
+                return {
+                    "action": "close",
+                    "reason": "sl_reached",
+                    "pnl_pct": pnl_percent,
+                    "sl_percent": sl_percent,
+                    "spread_buffer": spread_buffer,
+                }
+
             # 3. Проверка TP (Take Profit) - в ranging режиме закрываем сразу
             tp_percent = self._get_tp_percent(symbol, "ranging")
             pnl_format = (
@@ -1470,48 +1652,57 @@ class ExitAnalyzer:
                     f"PnL%={pnl_format}%, достигнут={pnl_percent >= trigger_percent}"
                 )
                 if pnl_percent >= trigger_percent:
-                    # ✅ Проверяем adaptive_min_holding перед partial_tp
-                    (
-                        can_partial_close,
-                        min_holding_info,
-                    ) = await self._check_adaptive_min_holding_for_partial_tp(
-                        symbol, metadata, pnl_percent, "ranging"
-                    )
-
-                    if can_partial_close:
-                        # ✅ УЛУЧШЕНИЕ #5.2: Адаптивная fraction для Partial TP в зависимости от PnL
-                        base_fraction = partial_tp_params.get("fraction", 0.6)
-                        if pnl_percent < 1.0:
-                            fraction = base_fraction * 0.67  # 40% если PnL < 1.0%
-                        elif pnl_percent >= 2.0:
-                            fraction = base_fraction * 1.33  # 80% если PnL >= 2.0%
-                        else:
-                            fraction = base_fraction  # 60% стандарт
-
-                        logger.info(
-                            f"📊 ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}: "
-                            f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
-                            f"({min_holding_info})"
-                        )
-                        return {
-                            "action": "partial_close",
-                            "reason": "partial_tp",
-                            "pnl_pct": pnl_percent,
-                            "trigger_percent": trigger_percent,
-                            "fraction": fraction,
-                            "min_holding_info": min_holding_info,
-                        }
-                    else:
+                    # ✅ ИСПРАВЛЕНО: Проверяем, не выполнялся ли уже partial_tp
+                    if metadata and hasattr(metadata, "partial_tp_executed") and metadata.partial_tp_executed:
                         logger.debug(
-                            f"⏱️ ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}, "
-                            f"но min_holding не пройден ({min_holding_info}), ждем..."
+                            f"⏱️ ExitAnalyzer RANGING: Partial TP уже был выполнен для {symbol}, пропускаем"
                         )
-                        return {
-                            "action": "hold",
-                            "reason": "partial_tp_min_holding_wait",
-                            "pnl_pct": pnl_percent,
-                            "min_holding_info": min_holding_info,
-                        }
+                    else:
+                        # ✅ Проверяем adaptive_min_holding перед partial_tp
+                        (
+                            can_partial_close,
+                            min_holding_info,
+                        ) = await self._check_adaptive_min_holding_for_partial_tp(
+                            symbol, metadata, pnl_percent, "ranging"
+                        )
+
+                        if can_partial_close:
+                            # ✅ УЛУЧШЕНИЕ #5.2: Адаптивная fraction для Partial TP в зависимости от PnL
+                            base_fraction = partial_tp_params.get("fraction", 0.6)
+                            if pnl_percent < 1.0:
+                                fraction = base_fraction * 0.67  # 40% если PnL < 1.0%
+                            elif pnl_percent >= 2.0:
+                                fraction = base_fraction * 1.33  # 80% если PnL >= 2.0%
+                            else:
+                                fraction = base_fraction  # 60% стандарт
+
+                            logger.info(
+                                f"📊 ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}: "
+                                f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
+                                f"({min_holding_info})"
+                            )
+                            # ✅ ИСПРАВЛЕНО: Устанавливаем флаг partial_tp_executed в metadata
+                            if metadata and hasattr(metadata, "partial_tp_executed"):
+                                metadata.partial_tp_executed = True
+                            return {
+                                "action": "partial_close",
+                                "reason": "partial_tp",
+                                "pnl_pct": pnl_percent,
+                                "trigger_percent": trigger_percent,
+                                "fraction": fraction,
+                                "min_holding_info": min_holding_info,
+                            }
+                        else:
+                            logger.debug(
+                                f"⏱️ ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}, "
+                                f"но min_holding не пройден ({min_holding_info}), ждем..."
+                            )
+                            return {
+                                "action": "hold",
+                                "reason": "partial_tp_min_holding_wait",
+                                "pnl_pct": pnl_percent,
+                                "min_holding_info": min_holding_info,
+                            }
 
             # 6. Проверка разворота (Order Flow, MTF) - в ranging режиме более строго
             reversal_detected = await self._check_reversal_signals(
@@ -1592,6 +1783,31 @@ class ExitAnalyzer:
                 # ✅ ИСПРАВЛЕНО: Не закрываем убыточные позиции по max_holding
                 # Позволяем им дойти до SL или восстановиться
                 if pnl_percent < 0:
+                    # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
+                    # Вызывается только если pnl_percent < 0 и |убыток| >= 1.5 * SL
+                    # ✅ ИСПРАВЛЕНО: Учитываем спред для предотвращения дергания
+                    sl_percent = self._get_sl_percent(symbol, "ranging")
+                    spread_buffer = self._get_spread_buffer(symbol, current_price)
+                    smart_close_threshold = -sl_percent * 1.5 - spread_buffer
+                    if pnl_percent <= smart_close_threshold:
+                        smart_close = await self._should_force_close_by_smart_analysis(
+                            symbol, position_side, pnl_percent, sl_percent
+                        )
+                        if smart_close:
+                            logger.warning(
+                                f"🚨 ExitAnalyzer RANGING: Умное закрытие {symbol} "
+                                f"(убыток {pnl_percent:.2f}% >= {sl_percent * 1.5:.2f}%, нет признаков отката)"
+                            )
+                            return {
+                                "action": "close",
+                                "reason": "smart_forced_close_ranging",
+                                "pnl_pct": pnl_percent,
+                                "note": "Нет признаков отката — закрываем до SL",
+                                "minutes_in_position": minutes_in_position,
+                                "max_holding_minutes": actual_max_holding,
+                            }
+                    # ---------- КОНЕЦ УМНОГО ЗАКРЫТИЯ ----------
+
                     logger.info(
                         f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
                         f"но позиция в убытке ({pnl_percent:.2f}%) - НЕ закрываем, ждем SL или восстановления"
@@ -1821,6 +2037,31 @@ class ExitAnalyzer:
                 # ✅ ИСПРАВЛЕНО: Не закрываем убыточные позиции по max_holding даже в choppy
                 # Позволяем им дойти до SL или восстановиться
                 if pnl_percent < 0:
+                    # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
+                    # Вызывается только если pnl_percent < 0 и |убыток| >= 1.5 * SL
+                    # ✅ ИСПРАВЛЕНО: Учитываем спред для предотвращения дергания
+                    sl_percent = self._get_sl_percent(symbol, "choppy")
+                    spread_buffer = self._get_spread_buffer(symbol, current_price)
+                    smart_close_threshold = -sl_percent * 1.5 - spread_buffer
+                    if pnl_percent <= smart_close_threshold:
+                        smart_close = await self._should_force_close_by_smart_analysis(
+                            symbol, position_side, pnl_percent, sl_percent
+                        )
+                        if smart_close:
+                            logger.warning(
+                                f"🚨 ExitAnalyzer CHOPPY: Умное закрытие {symbol} "
+                                f"(убыток {pnl_percent:.2f}% >= {sl_percent * 1.5:.2f}%, нет признаков отката)"
+                            )
+                            return {
+                                "action": "close",
+                                "reason": "smart_forced_close_choppy",
+                                "pnl_pct": pnl_percent,
+                                "note": "Нет признаков отката — закрываем до SL",
+                                "minutes_in_position": minutes_in_position,
+                                "max_holding_minutes": max_holding_minutes,
+                            }
+                    # ---------- КОНЕЦ УМНОГО ЗАКРЫТИЯ ----------
+
                     logger.info(
                         f"⏰ ExitAnalyzer CHOPPY: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
                         f"но позиция в убытке ({pnl_percent:.2f}%) - НЕ закрываем, ждем SL или восстановления"
@@ -1879,3 +2120,404 @@ class ExitAnalyzer:
         except Exception as e:
             logger.error(f"❌ ExitAnalyzer: Ошибка закрытия позиции {symbol}: {e}")
             return False
+
+    # ==================== УМНОЕ ЗАКРЫТИЕ: МЕТОДЫ ПОЛУЧЕНИЯ ДАННЫХ ====================
+
+    async def _get_funding_rate(self, symbol: str) -> Optional[float]:
+        """Получить текущий funding rate через funding_monitor"""
+        if self.funding_monitor:
+            try:
+                return self.funding_monitor.get_current_funding()
+            except Exception as e:
+                logger.debug(f"⚠️ Ошибка получения funding rate для {symbol}: {e}")
+        return None
+
+    async def _get_correlation(
+        self, symbol: str, basket: list, period: int = 20
+    ) -> Optional[float]:
+        """
+        Получить корреляцию между символом и корзиной.
+
+        Args:
+            symbol: Торговый символ
+            basket: Список символов для сравнения (например, ["BTC-USDT", "ETH-USDT"])
+            period: Период для расчета (количество свечей)
+
+        Returns:
+            Средняя корреляция или None
+        """
+        # TODO: Реализовать через CorrelationManager если доступен
+        # Пока возвращаем None (будет обработано в _check_correlation_bias)
+        return None
+
+    async def _get_nearest_liquidity(
+        self, symbol: str, current_price: float
+    ) -> Optional[Dict[str, Dict]]:
+        """Получить ближайшие уровни ликвидности"""
+        if self.liquidity_levels_detector:
+            try:
+                return await self.liquidity_levels_detector.get_nearest_liquidity(
+                    symbol, current_price
+                )
+            except Exception as e:
+                logger.debug(f"⚠️ Ошибка получения уровней ликвидности для {symbol}: {e}")
+        return None
+
+    async def _get_atr(self, symbol: str, period: int = 14) -> Optional[float]:
+        """Получить ATR для символа"""
+        try:
+            candles = await self.data_registry.get_candles(symbol, "1m")
+            if not candles or len(candles) < period + 1:
+                return None
+
+            # Вычисляем ATR
+            highs = [float(c.high) for c in candles[-period - 1 :]]
+            lows = [float(c.low) for c in candles[-period - 1 :]]
+            closes = [float(c.close) for c in candles[-period - 1 :]]
+
+            true_ranges = []
+            for i in range(1, len(closes)):
+                tr = max(
+                    highs[i] - lows[i],
+                    abs(highs[i] - closes[i - 1]),
+                    abs(lows[i] - closes[i - 1]),
+                )
+                true_ranges.append(tr)
+
+            if len(true_ranges) >= period:
+                atr = np.mean(true_ranges[-period:])
+                return atr
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка расчета ATR для {symbol}: {e}")
+        return None
+
+    async def _get_volume_profile(
+        self, symbol: str, lookback: int = 48
+    ) -> Optional[Any]:
+        """Получить Volume Profile для символа"""
+        try:
+            candles = await self.data_registry.get_candles(symbol, "1h")
+            if not candles or len(candles) < lookback:
+                # Fallback на меньший таймфрейм
+                candles = await self.data_registry.get_candles(symbol, "15m")
+                if not candles or len(candles) < lookback * 4:
+                    return None
+
+            profile = self.volume_profile_calculator.calculate(candles[-lookback:])
+            return profile
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка получения Volume Profile для {symbol}: {e}")
+        return None
+
+    async def _get_pivot_levels(self, symbol: str, timeframe: str = "1h") -> Optional[Any]:
+        """Получить Pivot Levels для символа"""
+        try:
+            candles = await self.data_registry.get_candles(symbol, timeframe)
+            if not candles or len(candles) < 1:
+                return None
+
+            pivots = self.pivot_calculator.calculate_pivots(candles)
+            return pivots
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка получения Pivot Levels для {symbol}: {e}")
+        return None
+
+    # ==================== УМНОЕ ЗАКРЫТИЕ: МЕТОДЫ ПРОВЕРКИ ИНДИКАТОРОВ ====================
+
+    async def _check_reversal_signals_score(
+        self, symbol: str, side: str
+    ) -> int:
+        """Обертка для получения score (0 или 1) из _check_reversal_signals"""
+        result = await self._check_reversal_signals(symbol, side)
+        return 1 if result else 0
+
+    async def _check_funding_bias(self, symbol: str, side: str) -> int:
+        """
+        Проверка funding bias (z-score > 2.0 → перегрев, против нас = шанс на откат).
+
+        Returns:
+            1 если funding указывает на откат, 0 иначе
+        """
+        funding = await self._get_funding_rate(symbol)
+        if funding is None:
+            return 0
+
+        # Вычисляем z-score (нужна история funding для std-dev)
+        # Упрощенная версия: если funding против нас и значимый (> 0.02 или < -0.02)
+        if side == "long" and funding < -0.02:
+            # Отрицательный funding для лонга = продавцы платят покупателям = шанс на откат вверх
+            return 1
+        if side == "short" and funding > 0.02:
+            # Положительный funding для шорта = покупатели платят продавцам = шанс на откат вниз
+            return 1
+
+        return 0
+
+    async def _check_correlation_bias(self, symbol: str, side: str) -> int:
+        """
+        Проверка корреляции (rolling 20 свечей, Pearson r, |r| > 0.85 → сильная корреляция).
+
+        Returns:
+            1 если корреляция слабая (не в нашу пользу), 0 иначе
+        """
+        basket = ["BTC-USDT", "ETH-USDT", "BNB-USDT"]
+        corr = await self._get_correlation(symbol, basket, period=20)
+        if corr is None:
+            return 0  # Нет данных = не учитываем
+
+        # Если корреляция < 0.85, считаем что не в нашу пользу
+        if abs(corr) < 0.85:
+            return 1
+        return 0
+
+    async def _check_liquidity_sweep(self, symbol: str, side: str) -> int:
+        """
+        Проверка ликвидности (если ниже/выше нас еще ликвидность 90% → шанс на отскок).
+
+        Returns:
+            1 если есть ликвидность для отскока, 0 иначе
+        """
+        current_price = await self.data_registry.get_price(symbol)
+        if not current_price:
+            return 0
+
+        liq = await self._get_nearest_liquidity(symbol, current_price)
+        if not liq:
+            return 0
+
+        # Получаем данные о ликвидности ниже и выше
+        below_data = liq.get("below", {})
+        above_data = liq.get("above", {})
+
+        if side == "long":
+            # Для лонга: если ниже нас еще ликвидность (volume > 0 и distance_pct разумная)
+            below_volume = below_data.get("volume", 0)
+            below_depth = below_data.get("depth_usd", 0)
+            # Если есть значимая ликвидность ниже (объем > 0.1% от текущей цены * типичный размер)
+            if below_volume > 0 and below_depth > current_price * 0.001:
+                return 1
+        else:  # short
+            # Для шорта: если выше нас еще ликвидность
+            above_volume = above_data.get("volume", 0)
+            above_depth = above_data.get("depth_usd", 0)
+            if above_volume > 0 and above_depth > current_price * 0.001:
+                return 1
+
+        return 0
+
+    async def _check_reversal_candles(self, symbol: str, side: str) -> int:
+        """
+        Проверка разворотных свечей (Hammer, Engulfing).
+
+        Returns:
+            1 если обнаружен разворотный паттерн, 0 иначе
+        """
+        try:
+            candles = await self.data_registry.get_candles(symbol, "1m")
+            if not candles or len(candles) < 3:
+                return 0
+
+            last_3 = candles[-3:]
+            atr = await self._get_atr(symbol)
+
+            # Проверяем Hammer для лонга
+            if side == "long":
+                current_candle = last_3[-1]
+                prev_candle = last_3[-2] if len(last_3) >= 2 else None
+                if await self.candle_pattern_detector.is_hammer(
+                    current_candle, prev_candle, atr
+                ):
+                    return 1
+
+            # Проверяем Bearish Engulfing для шорта
+            if side == "short" and len(last_3) >= 2:
+                current_candle = last_3[-1]
+                prev_candle = last_3[-2]
+                if await self.candle_pattern_detector.is_engulfing_bearish(
+                    current_candle, prev_candle, atr
+                ):
+                    return 1
+
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка проверки разворотных свечей для {symbol}: {e}")
+
+        return 0
+
+    async def _check_volume_profile_support(self, symbol: str, side: str) -> int:
+        """
+        Проверка Volume Profile (цена в зоне высокого объема = поддержка).
+
+        Returns:
+            1 если цена в зоне высокого объема, 0 иначе
+        """
+        try:
+            current_price = await self.data_registry.get_price(symbol)
+            if not current_price:
+                return 0
+
+            vp = await self._get_volume_profile(symbol)
+            if not vp:
+                return 0
+
+            # Проверяем, находится ли цена в Value Area
+            if vp.is_in_value_area(current_price):
+                return 1
+
+            # Проверяем расстояние от POC (если близко к POC = зона высокого объема)
+            distance_pct = vp.get_distance_from_poc(current_price)
+            if distance_pct < 0.005:  # В пределах 0.5% от POC
+                return 1
+
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка проверки Volume Profile для {symbol}: {e}")
+
+        return 0
+
+    async def _check_pivot_support(self, symbol: str, side: str) -> int:
+        """
+        Проверка Pivot Levels (цена близко к уровню поддержки/сопротивления).
+
+        Returns:
+            1 если цена близко к уровню, 0 иначе
+        """
+        try:
+            current_price = await self.data_registry.get_price(symbol)
+            if not current_price:
+                return 0
+
+            pivots = await self._get_pivot_levels(symbol, "1h")
+            if not pivots:
+                return 0
+
+            atr = await self._get_atr(symbol)
+            if not atr:
+                return 0
+
+            # Проверяем расстояние до уровней (в пределах 0.3 * ATR)
+            tolerance = atr * 0.3
+
+            if side == "long":
+                # Для лонга проверяем поддержку (S1, S2, S3)
+                for level_name, level_value in [
+                    ("S1", pivots.support_1),
+                    ("S2", pivots.support_2),
+                    ("S3", pivots.support_3),
+                ]:
+                    if abs(current_price - level_value) < tolerance:
+                        return 1
+            else:  # short
+                # Для шорта проверяем сопротивление (R1, R2, R3)
+                for level_name, level_value in [
+                    ("R1", pivots.resistance_1),
+                    ("R2", pivots.resistance_2),
+                    ("R3", pivots.resistance_3),
+                ]:
+                    if abs(current_price - level_value) < tolerance:
+                        return 1
+
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка проверки Pivot Levels для {symbol}: {e}")
+
+        return 0
+
+    # ==================== УМНОЕ ЗАКРЫТИЕ: ОСНОВНОЙ МЕТОД ====================
+
+    async def _should_force_close_by_smart_analysis(
+        self,
+        symbol: str,
+        position_side: str,
+        pnl_pct: float,
+        sl_pct: float,
+    ) -> bool:
+        """
+        Возвращает True, если нужно принудительно закрыть убыточную позицию.
+
+        Условия закрытия:
+        - убыток уже значительный (>= 1.5 * SL)
+        - ни один индикатор не показывает разворот в нашу пользу
+        - тренд усиливается против нас
+
+        Args:
+            symbol: Торговый символ
+            position_side: Направление позиции ("long" или "short")
+            pnl_pct: Текущий PnL в процентах
+            sl_pct: Stop Loss в процентах
+
+        Returns:
+            True если нужно закрыть, False если держать
+        """
+        # Проверяем все индикаторы параллельно
+        tasks = [
+            self._check_reversal_signals_score(symbol, position_side),  # Order Flow + MTF
+            self._check_funding_bias(symbol, position_side),  # фандинг
+            self._check_correlation_bias(symbol, position_side),  # корреляция
+            self._check_liquidity_sweep(symbol, position_side),  # ликвидность
+            self._check_reversal_candles(symbol, position_side),  # свечи
+            self._check_volume_profile_support(symbol, position_side),  # VP
+            self._check_pivot_support(symbol, position_side),  # пивоты
+        ]
+
+        # ✅ ИСПРАВЛЕНО: Логируем названия задач для отладки
+        task_names = [
+            "reversal_signals",
+            "funding_bias",
+            "correlation_bias",
+            "liquidity_sweep",
+            "reversal_candles",
+            "volume_profile",
+            "pivot_support",
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # ✅ ИСПРАВЛЕНО: Обрабатываем исключения с логированием стека трейса
+        valid_results = []
+        scores = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    f"⚠️ Ошибка проверки индикатора '{task_names[i]}' для {symbol}: {result}",
+                    exc_info=result,
+                )
+                scores.append(0)
+            else:
+                valid_results.append(result)
+                scores.append(result)
+
+        # ✅ ИСПРАВЛЕНО: Если все индикаторы вернули Exception, не закрываем
+        if not valid_results:
+            logger.warning(
+                f"⚠️ Smart Close: Все индикаторы вернули ошибки для {symbol}, "
+                f"не закрываем позицию (безопасный fallback)"
+            )
+            return False
+
+        reversal_score = sum(scores)  # 0-7 (чем больше, тем больше признаков отката)
+
+        # ✅ ИСПРАВЛЕНО: Явная проверка trend_data is None
+        trend_data = await self._analyze_trend_strength(symbol)
+        trend_against = 0.0
+        if trend_data is None:
+            logger.debug(
+                f"⚠️ Smart Close: trend_data is None для {symbol}, используем trend_against=0.0"
+            )
+        else:
+            ts = trend_data.get("trend_strength", 0.0)
+            direction = trend_data.get("trend_direction", "neutral")
+            if (position_side == "long" and direction == "bearish") or (
+                position_side == "short" and direction == "bullish"
+            ):
+                trend_against = ts
+
+        # Принудительное закрытие:
+        # 1. нет признаков разворота (score ≤ 2)
+        # 2. тренд против нас усиливается (≥ 0.7)
+        should_close = reversal_score <= 2 and trend_against >= 0.7
+
+        logger.info(
+            f"🧠 Smart Close Analysis {symbol} ({position_side}): "
+            f"reversal_score={reversal_score}/7, trend_against={trend_against:.2f}, "
+            f"should_close={should_close}, pnl={pnl_pct:.2f}%"
+        )
+
+        return should_close

@@ -468,33 +468,6 @@ class EntryManager:
                     f"✅ EntryManager: Режим {final_regime} сохранен в position_data для {symbol}"
                 )
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем executed=True в CSV после успешного открытия позиции
-            order_id_from_result = order_result.get("order_id")
-            if order_id_from_result and self.performance_tracker:
-                try:
-                    signal_price = signal.get("price", position_data.get("entry_price", 0.0))
-                    signal_side = signal.get("side", "buy")
-                    updated = self.performance_tracker.update_signal_execution(
-                        symbol=symbol,
-                        side=signal_side,
-                        price=signal_price,
-                        order_id=order_id_from_result,
-                        executed=True,
-                        timestamp_tolerance_seconds=120,  # 2 минуты допуск для поиска сигнала
-                    )
-                    if updated:
-                        logger.debug(
-                            f"✅ EntryManager: Сигнал {symbol} {signal_side} @ {signal_price:.8f} обновлен в CSV: executed=True, order_id={order_id_from_result}"
-                        )
-                    else:
-                        logger.debug(
-                            f"⚠️ EntryManager: Сигнал {symbol} {signal_side} @ {signal_price:.8f} не найден в CSV для обновления"
-                        )
-                except Exception as e:
-                    logger.warning(
-                        f"⚠️ EntryManager: Ошибка обновления executed для сигнала {symbol}: {e}"
-                    )
-
             logger.info(
                 f"✅ EntryManager: Позиция {symbol} открыта и зарегистрирована в PositionRegistry "
                 f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.6f}, "

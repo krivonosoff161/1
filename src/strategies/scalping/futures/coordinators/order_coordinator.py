@@ -111,6 +111,9 @@ class OrderCoordinator:
                             "live",
                             "partially_filled",
                         ]:
+                            # ✅ НОВОЕ: Получаем side из ордера для проверки отклонения цены
+                            side = order.get("side", "").lower()
+                            
                             # Получаем время создания ордера
                             c_time = order.get("cTime")
                             if c_time:
@@ -123,11 +126,45 @@ class OrderCoordinator:
                                         datetime.now() - order_time
                                     ).total_seconds()
 
-                                    if wait_time > max_wait:
+                                    # ✅ НОВОЕ: Быстрая отмена если цена ушла > 0.1% от ордера
+                                    price_drift_pct = 0.0
+                                    should_cancel_early = False
+                                    try:
+                                        # Получаем текущую цену
+                                        price_limits = await self.client.get_price_limits(symbol)
+                                        if price_limits:
+                                            current_price = price_limits.get("current_price", 0)
+                                            order_price = float(order.get("px", "0"))
+                                            
+                                            if current_price > 0 and order_price > 0:
+                                                # Проверяем отклонение цены от ордера
+                                                if side == "buy":
+                                                    # Для BUY: если текущая цена ушла вниз > 0.1% от ордера
+                                                    price_drift_pct = ((order_price - current_price) / order_price) * 100.0
+                                                    if price_drift_pct > 0.1:  # Цена ушла вниз > 0.1%
+                                                        should_cancel_early = True
+                                                else:  # sell
+                                                    # Для SELL: если текущая цена ушла вверх > 0.1% от ордера
+                                                    price_drift_pct = ((current_price - order_price) / order_price) * 100.0
+                                                    if price_drift_pct > 0.1:  # Цена ушла вверх > 0.1%
+                                                        should_cancel_early = True
+                                    except Exception as e:
+                                        logger.debug(f"⚠️ Ошибка проверки отклонения цены для {symbol}: {e}")
+
+                                    # ✅ НОВОЕ: Быстрая отмена при отклонении цены > 0.1%
+                                    if should_cancel_early:
+                                        logger.info(
+                                            f"💨 Быстрая отмена: цена ушла {price_drift_pct:.2f}% от ордера {order_id} "
+                                            f"для {symbol} (order_price={order.get('px', 'N/A')}, current_price={price_limits.get('current_price', 'N/A') if price_limits else 'N/A'})"
+                                        )
+                                    elif wait_time > max_wait:
                                         logger.warning(
                                             f"⚠️ Лимитный ордер {order_id} для {symbol} висит {wait_time:.0f} сек "
                                             f"(лимит: {max_wait} сек), отменяем..."
                                         )
+
+                                    # Отменяем ордер если нужно (быстрая отмена или таймаут)
+                                    if should_cancel_early or wait_time > max_wait:
 
                                         # Отменяем ордер
                                         if auto_cancel:
@@ -143,7 +180,7 @@ class OrderCoordinator:
 
                                         # Заменяем на рыночный ордер, если включено
                                         if replace_with_market:
-                                            side = order.get("side", "").lower()
+                                            # side уже получен выше
                                             size_str = order.get("sz", "0")
                                             try:
                                                 # Размер из ордера в контрактах (sz),

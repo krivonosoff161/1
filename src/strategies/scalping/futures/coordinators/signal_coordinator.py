@@ -55,7 +55,6 @@ class SignalCoordinator:
         ] = None,
         entry_manager=None,  # ✅ НОВОЕ: EntryManager для централизованного открытия позиций
         data_registry=None,  # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
-        performance_tracker=None,  # ✅ НОВОЕ: PerformanceTracker для обновления executed в CSV
     ):
         """
         Инициализация SignalCoordinator.
@@ -112,8 +111,6 @@ class SignalCoordinator:
         self.entry_manager = entry_manager
         # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
         self.data_registry = data_registry
-        # ✅ НОВОЕ: PerformanceTracker для обновления executed в CSV
-        self.performance_tracker = performance_tracker
 
         # Время последнего сигнала по символу: {symbol: timestamp}
         self._last_signal_time: Dict[str, float] = {}
@@ -891,8 +888,8 @@ class SignalCoordinator:
                         ] = current_time
 
                         if len(open_position_orders) > 0:
-                            logger.info(
-                                f"🚫 [SIGNAL_BLOCK] {symbol}: Уже есть {len(open_position_orders)} активных ордеров на открытие позиции, "
+                            logger.warning(
+                                f"⚠️ Уже есть {len(open_position_orders)} активных ордеров на открытие позиции {symbol}, "
                                 f"пропускаем генерацию нового сигнала"
                             )
                             return
@@ -1003,7 +1000,7 @@ class SignalCoordinator:
                             if has_long and has_short:
                                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #1: Найдены противоположные позиции - АВТОМАТИЧЕСКИ ЗАКРЫВАЕМ одну из них
                                 logger.warning(
-                                    f"🚨 [SIGNAL_BLOCK] {symbol}: Найдены противоположные позиции: "
+                                    f"🚨 Найдены противоположные позиции для {symbol}: "
                                     f"{positions_info}. allow_concurrent=false, АВТОМАТИЧЕСКИ ЗАКРЫВАЕМ одну из позиций."
                                 )
                                 # Закрываем одну из противоположных позиций
@@ -1034,8 +1031,8 @@ class SignalCoordinator:
                                     current_time - last_warning_time
                                     >= self._warning_throttle_seconds
                                 ):
-                                    logger.info(
-                                        f"🚫 [SIGNAL_BLOCK] {symbol}: Позиция {pos_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
+                                    logger.warning(
+                                        f"⚠️ Позиция {symbol} {pos_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
                                         f"БЛОКИРУЕМ новые сигналы (allow_concurrent=false). "
                                         f"Позиции: {positions_info}"
                                     )
@@ -1072,9 +1069,9 @@ class SignalCoordinator:
                     )  # ✅ Увеличено до 6 (3 на BTC + 3 на ETH)
 
                     if active_positions_count >= max_open:
-                        logger.info(
-                            f"🚫 [SIGNAL_BLOCK] {symbol}: Достигнут лимит открытых позиций на бирже: {active_positions_count}/{max_open}. "
-                            f"Пропускаем открытие"
+                        logger.debug(
+                            f"⚠️ Достигнут лимит открытых позиций на бирже: {active_positions_count}/{max_open}. "
+                            f"Пропускаем открытие {symbol}"
                         )
                         return
 
@@ -1108,9 +1105,9 @@ class SignalCoordinator:
                     min_balance_usd = adaptive_risk_params.get("min_balance_usd", 20.0)
 
                     if balance < min_balance_usd:
-                        logger.info(
-                            f"🚫 [SIGNAL_BLOCK] {symbol}: Недостаточно баланса на бирже: ${balance:.2f} < ${min_balance_usd:.2f}. "
-                            f"Пропускаем открытие"
+                        logger.debug(
+                            f"⚠️ Недостаточно баланса на бирже: ${balance:.2f} < ${min_balance_usd:.2f}. "
+                            f"Пропускаем открытие {symbol}"
                         )
                         return
 
@@ -1204,9 +1201,8 @@ class SignalCoordinator:
                             total_cost = maker_fee + taker_fee + slippage_buffer
 
                             if expected_move < total_cost:
-                                logger.info(
-                                    f"🚫 [SIGNAL_BLOCK] {symbol}: EV_NEGATIVE (expected_move={expected_move:.4f} < cost={total_cost:.4f}), "
-                                    f"отменяем сигнал"
+                                logger.debug(
+                                    f"SIGNAL_SKIP {symbol} EV_NEGATIVE move={expected_move:.4f} cost={total_cost:.4f}"
                                 )
                                 symbol_signal = None  # Отменяем сигнал
 
@@ -1229,8 +1225,8 @@ class SignalCoordinator:
                             last_order = self.last_orders_cache_ref[normalized_symbol]
                             order_time = last_order.get("timestamp", 0)
                             if (current_time - order_time) < 2:
-                                logger.info(
-                                    f"🚫 [SIGNAL_BLOCK] {symbol}: Ордер был размещен {current_time - order_time:.1f}s назад, "
+                                logger.warning(
+                                    f"⚠️ Ордер для {symbol} был размещен {current_time - order_time:.1f}s назад, "
                                     f"пропускаем выполнение сигнала (блокировка внутри lock)"
                                 )
                                 return
@@ -1339,8 +1335,8 @@ class SignalCoordinator:
                                 return False
                             elif not allow_concurrent:
                                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #2: Позиция в другом направлении, allow_concurrent=false - БЛОКИРУЕМ открытие новой
-                                logger.info(
-                                    f"🚫 [SIGNAL_BLOCK] {symbol}: Позиция {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
+                                logger.warning(
+                                    f"🚨 Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
                                     f"БЛОКИРУЕМ открытие {signal_side.upper()} (allow_concurrent=false). "
                                     f"Позиция будет закрыта по TP/SL или вручную."
                                 )
@@ -1368,8 +1364,8 @@ class SignalCoordinator:
                             order.get("reduceOnly", "false").lower() == "true"
                         )
                         if not is_reduce_only:
-                            logger.info(
-                                f"🚫 [SIGNAL_BLOCK] {symbol}: Уже есть активный ордер на открытие позиции (ordId={order.get('ordId', 'N/A')}, instId={order_inst_id}), "
+                            logger.warning(
+                                f"⚠️ Уже есть активный ордер на открытие позиции {symbol} (ordId={order.get('ordId', 'N/A')}, instId={order_inst_id}), "
                                 f"пропускаем открытие дубликата"
                             )
                             return False
@@ -1559,8 +1555,8 @@ class SignalCoordinator:
                         and has_short
                         and not allow_concurrent
                     ):
-                        logger.info(
-                            f"🚫 [SIGNAL_BLOCK] {symbol}: БЛОКИРУЕМ LONG - уже есть SHORT позиция на бирже. "
+                        logger.warning(
+                            f"⛔ БЛОКИРУЕМ LONG для {symbol}: уже есть SHORT позиция на бирже. "
                             f"Противоположные позиции не разрешены (allow_concurrent=false)"
                         )
                         return False
@@ -1569,8 +1565,8 @@ class SignalCoordinator:
                         and has_long
                         and not allow_concurrent
                     ):
-                        logger.info(
-                            f"🚫 [SIGNAL_BLOCK] {symbol}: БЛОКИРУЕМ SHORT - уже есть LONG позиция на бирже. "
+                        logger.warning(
+                            f"⛔ БЛОКИРУЕМ SHORT для {symbol}: уже есть LONG позиция на бирже. "
                             f"Противоположные позиции не разрешены (allow_concurrent=false)"
                         )
                         return False
@@ -1597,15 +1593,15 @@ class SignalCoordinator:
                             original_position_side = (
                                 "long" if original_side.lower() == "buy" else "short"
                             )
-                            logger.info(
-                                f"🚫 [SIGNAL_BLOCK] {symbol}: Позиция {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
+                            logger.warning(
+                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
                                 f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
                                 f"(ADX переключил направление с {original_position_side.upper()} → {signal_position_side.upper()}, "
                                 f"но позиция уже открыта. На OKX Futures ордера объединяются, увеличивая комиссию)"
                             )
                         else:
-                            logger.info(
-                                f"🚫 [SIGNAL_BLOCK] {symbol}: Позиция {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
+                            logger.warning(
+                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
                                 f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
                                 f"(на OKX Futures ордера в одном направлении объединяются, что увеличивает комиссию)"
                             )
@@ -1638,7 +1634,7 @@ class SignalCoordinator:
             can_open, reason = self.max_size_limiter.can_open_position(symbol, size_usd)
 
             if not can_open:
-                logger.info(f"🚫 [SIGNAL_BLOCK] {symbol}: Нельзя открыть позицию: {reason}")
+                logger.warning(f"Нельзя открыть позицию: {reason}")
                 return False
 
             # Проверка через FundingRateMonitor
@@ -2008,32 +2004,6 @@ class SignalCoordinator:
                     f"signal_type={signal_type} | regime={regime} | "
                     f"filters_passed={len(filters_passed)} ({', '.join(filters_passed[:3]) if filters_passed else 'none'})"
                 )
-
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем executed=True в CSV после успешного открытия позиции
-                if order_id and hasattr(self, "performance_tracker") and self.performance_tracker:
-                    try:
-                        signal_price = signal.get("price", price)
-                        signal_side = signal.get("side", "buy")
-                        updated = self.performance_tracker.update_signal_execution(
-                            symbol=symbol,
-                            side=signal_side,
-                            price=signal_price,
-                            order_id=order_id,
-                            executed=True,
-                            timestamp_tolerance_seconds=120,  # 2 минуты допуск для поиска сигнала
-                        )
-                        if updated:
-                            logger.debug(
-                                f"✅ Сигнал {symbol} {signal_side} @ {signal_price:.8f} обновлен в CSV: executed=True, order_id={order_id}"
-                            )
-                        else:
-                            logger.debug(
-                                f"⚠️ Сигнал {symbol} {signal_side} @ {signal_price:.8f} не найден в CSV для обновления (возможно, не был записан или уже обновлен)"
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            f"⚠️ Ошибка обновления executed для сигнала {symbol}: {e}"
-                        )
 
                 # ✅ НОВОЕ: Сохраняем в structured logs (если есть)
                 if hasattr(self, "structured_logger") and self.structured_logger:

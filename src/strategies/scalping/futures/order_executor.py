@@ -628,24 +628,69 @@ class FuturesOrderExecutor:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем правильную логику для SELL и BUY
             # ✅ НОВОЕ: Используем настраиваемый offset из конфига
+            # ✅ НОВОЕ: Адаптивный offset на основе спреда (если включен)
             # Для BUY: покупаем по цене best ask + offset (для быстрого исполнения в скальпинге)
             # Для SELL: продаем по цене best bid - offset (для быстрого исполнения в скальпинге)
+            
+            # ✅ НОВОЕ: Проверяем, включен ли адаптивный offset на основе спреда
+            adaptive_spread_offset = limit_order_config.get("adaptive_spread_offset", False)
+            
+            # ✅ НОВОЕ: Рассчитываем спред для адаптивного offset
+            spread = 0.0
+            spread_pct = 0.0
+            adaptive_offset_pct = None
+            
+            if adaptive_spread_offset and best_ask > 0 and best_bid > 0:
+                spread = best_ask - best_bid
+                if best_ask > 0:
+                    spread_pct = (spread / best_ask) * 100.0
+                
+                # ✅ НОВОЕ: Адаптивный offset с учетом ширины спреда
+                # < 0.001% → offset = 0 (ровно по best_ask/best_bid)
+                # 0.001-0.01% → offset = 10% спреда
+                # ≥ 0.01% → offset = 20% спреда, макс 0.05%
+                if spread_pct > 0 and spread_pct <= 1.0:  # Только если спред <= 1%
+                    if spread_pct < 0.001:  # < 0.001% - сверхузкий спред
+                        adaptive_offset_pct = 0.0  # Ровно по best_ask/best_bid
+                        logger.debug(
+                            f"💰 Адаптивный offset для {symbol}: spread={spread:.6f} ({spread_pct:.4f}%) - "
+                            f"сверхузкий спред, offset=0 (ровно по best_ask/best_bid)"
+                        )
+                    elif spread_pct < 0.01:  # 0.001-0.01% - узкий спред
+                        adaptive_offset_pct = spread_pct * 0.1  # 10% спреда
+                        logger.debug(
+                            f"💰 Адаптивный offset для {symbol}: spread={spread:.6f} ({spread_pct:.4f}%) - "
+                            f"узкий спред, offset=10% спреда = {adaptive_offset_pct:.4f}%"
+                        )
+                    else:  # ≥ 0.01% - нормальный спред
+                        adaptive_offset_pct = max(spread_pct * 0.2, min(0.05, spread_pct * 2.0))
+                        logger.debug(
+                            f"💰 Адаптивный offset для {symbol}: spread={spread:.6f} ({spread_pct:.4f}%) - "
+                            f"нормальный спред, offset=20% спреда = {adaptive_offset_pct:.4f}%"
+                        )
+                else:
+                    # Спред слишком большой (>1%) или нулевой - используем offset из конфига
+                    logger.debug(
+                        f"💰 Спред для {symbol} слишком большой ({spread_pct:.4f}%) или нулевой, "
+                        f"используем offset из конфига: {offset_percent:.3f}%"
+                    )
+            
             if side.lower() == "buy":
                 # ✅ ИСПРАВЛЕНО: Проверяем актуальность best_ask (аналогично SELL)
                 use_best_ask = False
                 if best_ask > 0 and current_price > 0:
-                    spread_pct = abs(best_ask - current_price) / current_price
+                    ask_price_diff_pct = abs(best_ask - current_price) / current_price
                     # Используем best_ask только если разница < 0.5% (актуальные данные)
-                    if spread_pct < 0.005:
+                    if ask_price_diff_pct < 0.005:
                         use_best_ask = True
                         logger.debug(
                             f"✅ best_ask актуален для {symbol} BUY: "
-                            f"best_ask={best_ask:.2f}, current={current_price:.2f}, spread={spread_pct:.3%}"
+                            f"best_ask={best_ask:.2f}, current={current_price:.2f}, diff={ask_price_diff_pct:.3%}"
                         )
                     else:
                         logger.warning(
                             f"⚠️ best_ask устарел для {symbol} BUY: "
-                            f"best_ask={best_ask:.2f}, current={current_price:.2f}, spread={spread_pct:.3%} "
+                            f"best_ask={best_ask:.2f}, current={current_price:.2f}, diff={ask_price_diff_pct:.3%} "
                             f"(используем current_price)"
                         )
 
@@ -653,9 +698,16 @@ class FuturesOrderExecutor:
                 # Для скальпинга нужно быстрое исполнение, поэтому используем best_ask или немного выше
                 # НЕ используем best_bid - это ставит ордер далеко от рынка!
                 if use_best_ask and best_ask > 0:
-                    # ✅ ИСПРАВЛЕНО: Если offset=0, используем минимальный offset 0.01% для гарантии исполнения
-                    if offset_percent == 0.0:
-                        # Для скальпинга нужна гарантия исполнения, используем минимальный offset
+                    # ✅ НОВОЕ: Используем адаптивный offset на основе спреда, если доступен
+                    if adaptive_offset_pct is not None:
+                        limit_price = best_ask * (1 + adaptive_offset_pct / 100.0)
+                        logger.debug(
+                            f"💰 Для {symbol} BUY: используем адаптивный offset {adaptive_offset_pct:.4f}% "
+                            f"(spread={spread_pct:.4f}%) для гарантии исполнения "
+                            f"(best_ask={best_ask:.2f} → limit_price={limit_price:.2f})"
+                        )
+                    elif offset_percent == 0.0:
+                        # ✅ ИСПРАВЛЕНО: Если offset=0, используем минимальный offset 0.01% для гарантии исполнения
                         min_offset = (
                             0.01  # Минимальный offset 0.01% для гарантии исполнения
                         )
@@ -665,8 +717,12 @@ class FuturesOrderExecutor:
                             f"для гарантии исполнения (best_ask={best_ask:.2f} → limit_price={limit_price:.2f})"
                         )
                     else:
-                        # Используем offset из конфига
+                        # Используем offset из конфига (fallback)
                         limit_price = best_ask * (1 + offset_percent / 100.0)
+                        logger.debug(
+                            f"💰 Для {symbol} BUY: используем offset из конфига {offset_percent:.3f}% "
+                            f"(best_ask={best_ask:.2f} → limit_price={limit_price:.2f})"
+                        )
                 elif current_price > 0:
                     # best_ask устарел или недоступен, используем current_price
                     min_offset = max(offset_percent, 0.01)  # Минимальный offset 0.01%
@@ -712,24 +768,38 @@ class FuturesOrderExecutor:
                 # ✅ НОВОЕ: Проверяем актуальность best_bid
                 use_best_bid = False
                 if best_bid > 0 and current_price > 0:
-                    spread_pct = abs(best_bid - current_price) / current_price
+                    bid_price_diff_pct = abs(best_bid - current_price) / current_price
                     # Используем best_bid только если разница < 0.5% (актуальные данные)
-                    if spread_pct < 0.005:
+                    if bid_price_diff_pct < 0.005:
                         use_best_bid = True
                         logger.debug(
                             f"✅ best_bid актуален для {symbol} SELL: "
-                            f"best_bid={best_bid:.2f}, current={current_price:.2f}, spread={spread_pct:.3%}"
+                            f"best_bid={best_bid:.2f}, current={current_price:.2f}, diff={bid_price_diff_pct:.3%}"
                         )
                     else:
                         logger.warning(
                             f"⚠️ best_bid устарел для {symbol} SELL: "
-                            f"best_bid={best_bid:.2f}, current={current_price:.2f}, spread={spread_pct:.3%} "
+                            f"best_bid={best_bid:.2f}, current={current_price:.2f}, diff={bid_price_diff_pct:.3%} "
                             f"(используем current_price)"
                         )
 
                 # ✅ ИСПРАВЛЕНО: Для SELL используем best_bid только если он актуален, иначе current_price
                 if use_best_bid:
-                    limit_price = best_bid * (1 - offset_percent / 100.0)
+                    # ✅ НОВОЕ: Используем адаптивный offset на основе спреда, если доступен
+                    if adaptive_offset_pct is not None:
+                        limit_price = best_bid * (1 - adaptive_offset_pct / 100.0)
+                        logger.debug(
+                            f"💰 Для {symbol} SELL: используем адаптивный offset {adaptive_offset_pct:.4f}% "
+                            f"(spread={spread_pct:.4f}%) для гарантии исполнения "
+                            f"(best_bid={best_bid:.2f} → limit_price={limit_price:.2f})"
+                        )
+                    else:
+                        # Используем offset из конфига (fallback)
+                        limit_price = best_bid * (1 - offset_percent / 100.0)
+                        logger.debug(
+                            f"💰 Для {symbol} SELL: используем offset из конфига {offset_percent:.3f}% "
+                            f"(best_bid={best_bid:.2f} → limit_price={limit_price:.2f})"
+                        )
                 elif current_price > 0:
                     # best_bid устарел, используем current_price
                     limit_price = current_price * (1 - offset_percent / 100.0)
@@ -799,16 +869,21 @@ class FuturesOrderExecutor:
                 )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем все детали расчета лимитной цены
+            # ✅ НОВОЕ: Добавляем информацию о спреде и адаптивном offset
+            offset_used = adaptive_offset_pct if adaptive_offset_pct is not None else offset_percent
+            offset_type = "adaptive" if adaptive_offset_pct is not None else "config"
             logger.info(
                 f"💰 Лимитная цена для {symbol} {side}: {limit_price:.2f} "
                 f"(best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, current_price={current_price:.2f}, "
-                f"offset={offset_percent:.3f}%, режим={regime or 'default'}, разница={price_diff_pct:.2f}%, "
+                f"spread={spread:.6f} ({spread_pct:.4f}%), offset={offset_used:.4f}% ({offset_type}), "
+                f"режим={regime or 'default'}, разница={price_diff_pct:.2f}%, "
                 f"лимиты: max_buy={max_buy_price:.2f}, min_sell={min_sell_price:.2f})"
             )
             logger.debug(
                 f"🔍 [CALCULATE_LIMIT_PRICE] {symbol} {side}: "
                 f"limit_price={limit_price:.2f}, best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, "
-                f"current_price={current_price:.2f}, offset={offset_percent:.3f}%, "
+                f"current_price={current_price:.2f}, spread={spread:.6f} ({spread_pct:.4f}%), "
+                f"offset={offset_used:.4f}% ({offset_type}), config_offset={offset_percent:.3f}%, "
                 f"spread_bid={abs(best_bid - current_price) / current_price * 100 if best_bid > 0 and current_price > 0 else 0:.3f}%, "
                 f"spread_ask={abs(best_ask - current_price) / current_price * 100 if best_ask > 0 and current_price > 0 else 0:.3f}%"
             )

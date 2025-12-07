@@ -1,0 +1,23 @@
+[33m3c6cbe1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m  Исправления: увеличены пороги Partial TP, Profit Harvesting и Profit Drawdown
+ ANALYSIS_DATA_FOR_KIMI.md                          | 315 [32m+++++++++++++++[m
+ ANALYSIS_SMALL_PROFIT_EARLY_EXIT.md                | 440 [32m+++++++++++++++++++++[m
+ ANALYSIS_STAGE2_FOR_KIMI.md                        | 248 [32m++++++++++++[m
+ AUDIT_BUNDLE_ANALYSIS_2025-12-07.py                | 238 [32m+++++++++++[m
+ AUDIT_BUNDLE_FULL_ANALYSIS_2025-12-07.py           | 305 [32m++++++++++++++[m
+ AUDIT_BUNDLE_REPORT_2025-12-07.md                  | 226 [32m+++++++++++[m
+ FINAL_AUDIT_DATA_FOR_KIMI.md                       | 337 [32m++++++++++++++++[m
+ FIXES_SMALL_PROFIT_EARLY_EXIT.md                   | 187 [32m+++++++++[m
+ FIX_TRADES_SIGNS_AND_UPDATE_BUNDLE.py              |  94 [32m+++++[m
+ GENERATE_MARKET_DATA_AND_PERFORMANCE.py            | 231 [32m+++++++++++[m
+ SIGNAL_EXECUTION_BLOCKING_ANALYSIS.md              | 142 [32m+++++++[m
+ UPDATE_AUDIT_BUNDLE.py                             |  68 [32m++++[m
+ audit_bundle_20251207_futures_scalping.json        | 138 [32m+++++++[m
+ clean_logs.bat                                     |  51 [32m++[m[31m-[m
+ config/config_futures.yaml                         |  29 [32m+[m[31m-[m
+ signals_sample_50.csv                              |  50 [32m+++[m
+ .../futures/coordinators/signal_coordinator.py     |  86 [32m++[m[31m--[m
+ src/strategies/scalping/futures/orchestrator.py    |   7 [32m+[m[31m-[m
+ .../scalping/futures/position_manager.py           |  38 [32m+[m[31m-[m
+ .../scalping/futures/positions/entry_manager.py    |  27 [32m++[m
+ .../scalping/spot/performance_tracker.py           | 116 [32m++++++[m
+ 21 files changed, 3316 insertions(+), 57 deletions(-)

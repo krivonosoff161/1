@@ -182,9 +182,7 @@ class MicroPivotCalculator:
         """Получение дефолтного TP."""
         max_distance = entry_price * max_distance_pct
 
-        # ✅ ИСПРАВЛЕНО: Нормализуем side перед сравнением
-        side_normalized = side.lower() if isinstance(side, str) else "long"
-        if side_normalized == "long":
+        if side == "long":
             return entry_price + max_distance
         else:
             return entry_price - max_distance

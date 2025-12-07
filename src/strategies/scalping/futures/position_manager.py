@@ -2942,8 +2942,10 @@ class FuturesPositionManager:
                 partial_done = False
                 if symbol in self.active_positions:
                     partial_done = self.active_positions[symbol].get(
+                        "partial_tp_executed", False
+                    ) or self.active_positions[symbol].get(
                         "partial_tp_done", False
-                    )
+                    )  # Поддержка старого поля для совместимости
 
                 # ✅ ИСПРАВЛЕНО: Добавлено детальное логирование Partial TP
                 if ptp_enabled and not partial_done and size > 0 and pnl_percent > 0:
@@ -2956,19 +2958,12 @@ class FuturesPositionManager:
                             f"триггер={ptp_trigger:.2f}% ({ptp_progress:.0f}%, done={partial_done})"
                         )
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Partial TP только если прибыль >= 50% от TP
-                # Это гарантирует, что частичное закрытие происходит ближе к полному TP
-                # Получаем адаптивный TP для проверки (используем тот же метод, что и для основного TP)
-                tp_percent_for_check = self._get_adaptive_tp_percent(symbol, current_regime, current_price)
-                min_profit_for_partial_tp = tp_percent_for_check * 0.5  # 50% от TP
-                
                 if (
                     ptp_enabled
                     and not partial_done
                     and size > 0
                     and pnl_percent > 0
                     and pnl_percent >= ptp_trigger
-                    and pnl_percent >= min_profit_for_partial_tp  # ✅ НОВОЕ: Проверка 50% от TP
                 ):
                     # ✅ ПРАВКА #1: Проверка min_holding ПЕРЕД Partial TP
                     min_holding_blocked = False
@@ -4955,16 +4950,6 @@ class FuturesPositionManager:
 
                         if margin_used > 0:
                             pnl_percent_from_margin = (net_pnl / margin_used) * 100
-                            
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Не закрываем убыточные позиции по max_holding
-                            # Убыточные позиции должны закрываться только по trailing stop, loss cut или другим механизмам
-                            if pnl_percent_from_margin < 0:
-                                logger.info(
-                                    f"⏰ [MAX_HOLDING] {symbol}: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
-                                    f"но позиция в убытке ({pnl_percent_from_margin:.2f}%) - НЕ закрываем, ждем SL или восстановления"
-                                )
-                                return False  # Не закрываем убыточную позицию
-                            
                             extension_info = ""
                             if actual_max_holding > max_holding_minutes:
                                 extension_info = f" (продлено до {actual_max_holding:.1f} мин, но время истекло)"
@@ -4976,21 +4961,22 @@ class FuturesPositionManager:
                                 f"Комиссия: ${commission:.4f}"
                             )
                         else:
-                            # Если margin_used = 0, не можем проверить PnL - не закрываем
+                            extension_info = ""
+                            if actual_max_holding > max_holding_minutes:
+                                extension_info = f" (продлено до {actual_max_holding:.1f} мин, но время истекло)"
                             logger.warning(
-                                f"⏰ [MAX_HOLDING] {symbol}: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
-                                f"но margin_used=0, не можем проверить PnL - НЕ закрываем"
+                                f"⏰ [MAX_HOLDING] Позиция {symbol} {side.upper()} закрыта: "
+                                f"время в позиции {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин (базовое: {max_holding_minutes:.1f} мин, regime={regime}){extension_info} | "
+                                f"Entry: ${entry_price:.2f}, Exit: ${current_price:.2f}, "
+                                f"Gross PnL: ${gross_pnl:.4f}, Net Pnl: ${net_pnl:.4f}, "
+                                f"Комиссия: ${commission:.4f}"
                             )
-                            return False  # Не закрываем если не можем проверить PnL
                     except Exception as e:
                         logger.warning(
-                            f"⏰ [MAX_HOLDING] {symbol}: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
-                            f"но ошибка расчета PnL ({e}) - НЕ закрываем"
+                            f"⏰ [MAX_HOLDING] Позиция {symbol} закрыта: "
+                            f"время в позиции {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин (regime={regime}) "
+                            f"(ошибка расчета PnL: {e})"
                         )
-                        return False  # Не закрываем при ошибке расчета PnL
-                    
-                    # ✅ Закрываем только прибыльные позиции
-                    await self._close_position_by_reason(position, "max_holding_exceeded")
                     return True
                 else:
                     logger.debug(
@@ -5619,23 +5605,95 @@ class FuturesPositionManager:
                 commission = close_size_coins * current_price * taker_fee_rate
                 net_partial_pnl = partial_pnl - commission
 
-                # Обновляем метаданные позиции (partial_tp_done = True)
+                # ✅ НОВОЕ: Пересчет peak_profit_usd после partial_close
+                # После частичного закрытия нужно пересчитать peak_profit для оставшейся позиции
+                # Вариант: сбросить и начать отслеживать заново для оставшейся позиции
+                new_peak_profit_usd = 0.0
+                new_peak_profit_time = None
+                new_peak_profit_price = None
+                
+                try:
+                    # Получаем актуальную позицию после partial_close
+                    positions_after = await self.client.get_positions(symbol)
+                    if positions_after and isinstance(positions_after, list):
+                        for pos in positions_after:
+                            inst_id = pos.get("instId", "").replace("-SWAP", "")
+                            if inst_id == symbol:
+                                remaining_size = float(pos.get("pos", "0"))
+                                if remaining_size != 0:
+                                    # Рассчитываем текущий PnL для оставшейся позиции
+                                    remaining_entry_price = float(pos.get("avgPx", "0"))
+                                    remaining_current_price = float(pos.get("markPx", "0"))
+                                    remaining_side = pos.get("posSide", "long").lower()
+                                    
+                                    # Размер оставшейся позиции в монетах
+                                    remaining_size_coins = abs(remaining_size) * ct_val
+                                    
+                                    # Расчет PnL для оставшейся позиции
+                                    if remaining_side == "long":
+                                        remaining_gross_pnl = (remaining_current_price - remaining_entry_price) * remaining_size_coins
+                                    else:  # short
+                                        remaining_gross_pnl = (remaining_entry_price - remaining_current_price) * remaining_size_coins
+                                    
+                                    # Комиссия для оставшейся позиции (вход уже был, будет только выход)
+                                    remaining_position_value = remaining_size_coins * remaining_entry_price
+                                    remaining_commission = remaining_position_value * taker_fee_rate  # Только выход
+                                    remaining_net_pnl = remaining_gross_pnl - remaining_commission
+                                    
+                                    # Если текущий PnL > 0, устанавливаем его как новый peak
+                                    # Если <= 0, сбрасываем peak в 0 (начнем отслеживать заново)
+                                    if remaining_net_pnl > 0:
+                                        new_peak_profit_usd = remaining_net_pnl
+                                        from datetime import datetime, timezone
+                                        new_peak_profit_time = datetime.now(timezone.utc)
+                                        new_peak_profit_price = remaining_current_price
+                                        logger.info(
+                                            f"✅ [PARTIAL_CLOSE] {symbol}: Пересчет peak_profit_usd после partial_close: "
+                                            f"старый peak сброшен, новый peak={new_peak_profit_usd:.4f} USDT "
+                                            f"(текущий PnL оставшейся позиции, размер={remaining_size:.6f})"
+                                        )
+                                    else:
+                                        logger.info(
+                                            f"✅ [PARTIAL_CLOSE] {symbol}: Пересчет peak_profit_usd после partial_close: "
+                                            f"peak сброшен в 0 (текущий PnL={remaining_net_pnl:.4f} USDT <= 0, "
+                                            f"начнем отслеживать заново для оставшейся позиции)"
+                                        )
+                                    break
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ [PARTIAL_CLOSE] {symbol}: Не удалось пересчитать peak_profit_usd после partial_close: {e}"
+                    )
+
+                # Обновляем метаданные позиции (partial_tp_executed = True)
                 if symbol in self.active_positions:
-                    self.active_positions[symbol]["partial_tp_done"] = True
+                    self.active_positions[symbol]["partial_tp_executed"] = True
                     self.active_positions[symbol]["partial_tp_fraction"] = fraction
                     logger.debug(
-                        f"✅ Метаданные обновлены: partial_tp_done=True для {symbol}"
+                        f"✅ Метаданные обновлены: partial_tp_executed=True для {symbol}"
                     )
 
                 # Обновляем PositionRegistry если используется
                 if self.position_registry:
                     try:
+                        metadata_updates = {
+                            "partial_tp_executed": True,  # Используем правильное имя поля из PositionMetadata
+                            "partial_tp_fraction": fraction,
+                        }
+                        
+                        # ✅ НОВОЕ: Обновляем peak_profit_usd после partial_close
+                        if new_peak_profit_usd is not None:
+                            metadata_updates["peak_profit_usd"] = new_peak_profit_usd
+                        if new_peak_profit_time is not None:
+                            metadata_updates["peak_profit_time"] = new_peak_profit_time
+                        if new_peak_profit_price is not None:
+                            metadata_updates["peak_profit_price"] = new_peak_profit_price
+                        
                         await self.position_registry.update_position(
                             symbol,
-                            metadata_updates={
-                                "partial_tp_done": True,
-                                "partial_tp_fraction": fraction,
-                            },
+                            metadata_updates=metadata_updates,
+                        )
+                        logger.debug(
+                            f"✅ [PARTIAL_CLOSE] {symbol}: PositionRegistry обновлен с новым peak_profit_usd={new_peak_profit_usd:.4f}"
                         )
                     except Exception as e:
                         logger.debug(

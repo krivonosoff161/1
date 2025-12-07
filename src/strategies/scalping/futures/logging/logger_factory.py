@@ -65,9 +65,9 @@ class LoggerFactory:
                 "{name}:{function}:{line} | "
                 "{message}"
             ),
-            rotation="5 MB",
+            rotation="5 MB",  # ✅ Ротация при достижении 5 MB - создает новый файл (futures_main_YYYY-MM-DD_1.log, _2.log и т.д.)
             retention="7 days",
-            compression="zip",
+            # ✅ УБРАНО compression="zip" - при ротации создаются обычные файлы, архивация в ZIP происходит один раз в сутки в 00:05 UTC
             enqueue=True,  # Асинхронная запись
             encoding="utf-8",
             backtrace=True,

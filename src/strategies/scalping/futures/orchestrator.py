@@ -13,7 +13,9 @@ Futures Orchestrator для скальпинг стратегии.
 
 import asyncio
 import time
-from datetime import datetime, timezone
+import zipfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -362,7 +364,29 @@ class FuturesScalpingOrchestrator:
         # ✅ FIX: Создаём signal_locks раньше для ExitAnalyzer (предотвращение race condition)
         self.signal_locks = {}  # Будет создаваться по требованию
 
-        # ✅ НОВОЕ: Инициализация ExitAnalyzer после создания fast_adx и order_flow
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаём funding_monitor ПЕРЕД ExitAnalyzer
+        # (ExitAnalyzer нужен доступ к funding_monitor для умного закрытия)
+        # ✅ АДАПТИВНО: FundingRateMonitor параметры из конфига
+        funding_config = getattr(config, "futures_modules", {})
+        if funding_config:
+            funding_monitor_config = getattr(funding_config, "funding_monitor", None)
+            if funding_monitor_config:
+                if isinstance(funding_monitor_config, dict):
+                    max_funding_rate = funding_monitor_config.get(
+                        "max_funding_rate", 0.05
+                    )
+                else:
+                    max_funding_rate = getattr(
+                        funding_monitor_config, "max_funding_rate", 0.05
+                    )
+            else:
+                max_funding_rate = 0.05  # Fallback
+        else:
+            max_funding_rate = 0.05  # Fallback
+        self.funding_monitor = FundingRateMonitor(max_funding_rate=max_funding_rate)
+        logger.info("✅ FundingRateMonitor инициализирован в orchestrator")
+
+        # ✅ НОВОЕ: Инициализация ExitAnalyzer после создания fast_adx, order_flow и funding_monitor
         # (position_registry и data_registry уже созданы выше)
         # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия позиций
         self.exit_analyzer = ExitAnalyzer(
@@ -387,25 +411,6 @@ class FuturesScalpingOrchestrator:
             position_manager=self.position_manager,  # ✅ НОВОЕ: PositionManager для частичного закрытия
         )
         logger.info("✅ PositionMonitor инициализирован в orchestrator")
-
-        # ✅ АДАПТИВНО: FundingRateMonitor параметры из конфига
-        funding_config = getattr(config, "futures_modules", {})
-        if funding_config:
-            funding_monitor_config = getattr(funding_config, "funding_monitor", None)
-            if funding_monitor_config:
-                if isinstance(funding_monitor_config, dict):
-                    max_funding_rate = funding_monitor_config.get(
-                        "max_funding_rate", 0.05
-                    )
-                else:
-                    max_funding_rate = getattr(
-                        funding_monitor_config, "max_funding_rate", 0.05
-                    )
-            else:
-                max_funding_rate = 0.05  # Fallback
-        else:
-            max_funding_rate = 0.05  # Fallback
-        self.funding_monitor = FundingRateMonitor(max_funding_rate=max_funding_rate)
 
         # MaxSizeLimiter для защиты от больших позиций
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Загружаем параметры из конфига
@@ -623,7 +628,6 @@ class FuturesScalpingOrchestrator:
             funding_monitor=self.funding_monitor,
             config=self.config,
             trailing_sl_coordinator=self.trailing_sl_coordinator,
-            performance_tracker=self.performance_tracker,  # ✅ НОВОЕ: Передаем performance_tracker для обновления executed
             total_margin_used_ref=total_margin_used_ref,
             get_used_margin_callback=self._get_used_margin,
             get_position_callback=_get_position_for_tsl_callback,
@@ -741,6 +745,10 @@ class FuturesScalpingOrchestrator:
             # ✅ НОВОЕ: Запуск PositionMonitor как фоновой задачи для периодического мониторинга
             await self.position_monitor.start()
             logger.info("✅ PositionMonitor запущен (фоновая задача)")
+
+            # ✅ НОВОЕ: Запуск фоновой задачи для архивации логов в 00:05 UTC
+            asyncio.create_task(self._log_archive_task())
+            logger.info("✅ Задача архивации логов запущена (фоновая задача)")
 
             # ✅ РЕФАКТОРИНГ: Основной торговый цикл делегирован в TradingControlCenter
             self.is_running = True
@@ -1406,7 +1414,7 @@ class FuturesScalpingOrchestrator:
                             # OKX возвращает время в миллисекундах
                             entry_timestamp_ms = int(entry_time_str)
                             entry_timestamp_sec = entry_timestamp_ms / 1000.0
-                            # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc
+                            # ✅ ИСПРАВЛЕНО: Используем timezone.utc из глобального импорта
                             entry_time_dt = datetime.fromtimestamp(
                                 entry_timestamp_sec, tz=timezone.utc
                             )
@@ -1419,14 +1427,14 @@ class FuturesScalpingOrchestrator:
                                 f"⚠️ Не удалось распарсить cTime/uTime для {symbol}: {e}, "
                                 f"используем текущее время (fallback)"
                             )
-                            from datetime import timezone
-
+                            # ✅ ИСПРАВЛЕНО: Используем timezone.utc из глобального импорта
                             entry_time_dt = datetime.now(timezone.utc)
                     else:
                         logger.warning(
                             f"⚠️ cTime/uTime не найдены для {symbol} в данных позиции, "
                             f"используем текущее время (fallback)"
                         )
+                        # ✅ ИСПРАВЛЕНО: Используем timezone.utc из глобального импорта
                         entry_time_dt = datetime.now(timezone.utc)
 
                     self.active_positions[symbol] = {
@@ -1663,9 +1671,19 @@ class FuturesScalpingOrchestrator:
             # ✅ FIX: DRIFT_ADD log — позиция на бирже, но нет в реестре
             is_drift_add = symbol not in self.active_positions
             if is_drift_add:
-                logger.critical(
-                    f"DRIFT_ADD {symbol} found on exchange but not in registry"
-                )
+                # ✅ ИСПРАВЛЕНО: Добавляем LOCK_DRIFT для предотвращения гонок
+                if not hasattr(self, "_drift_locks"):
+                    self._drift_locks: Dict[str, asyncio.Lock] = {}
+                
+                if symbol not in self._drift_locks:
+                    self._drift_locks[symbol] = asyncio.Lock()
+                
+                async with self._drift_locks[symbol]:
+                    # Повторная проверка после получения lock (double-check pattern)
+                    if symbol not in self.active_positions:
+                        logger.critical(
+                            f"DRIFT_ADD {symbol} found on exchange but not in registry"
+                        )
 
             try:
                 entry_price = float(pos.get("avgPx", 0) or 0)
@@ -2107,6 +2125,10 @@ class FuturesScalpingOrchestrator:
             for symbol in list(all_registered.keys()):
                 if symbol not in exchange_symbols:
                     await self.position_registry.unregister_position(symbol)
+                    # ✅ ИСПРАВЛЕНО: Очистка locks после закрытия позиции
+                    if hasattr(self.exit_analyzer, "_signal_locks_ref") and symbol in self.exit_analyzer._signal_locks_ref:
+                        self.exit_analyzer._signal_locks_ref.pop(symbol, None)
+                        logger.debug(f"✅ Очищен lock для {symbol} после закрытия позиции")
 
             # Обновляем/регистрируем позиции с сохранением метаданных
             for position in positions:
@@ -3747,11 +3769,7 @@ class FuturesScalpingOrchestrator:
                     logger.debug(f"📦 Обновлен статус ордера для {symbol} на 'closed'")
 
                 # 🛡️ Обновляем маржу и лимит позиций
-                position_margin_raw = position.get("margin", 0) or 0
-                try:
-                    position_margin = float(position_margin_raw) if position_margin_raw else 0.0
-                except (ValueError, TypeError):
-                    position_margin = 0.0
+                position_margin = position.get("margin", 0)
                 if position_margin > 0:
                     # ✅ МОДЕРНИЗАЦИЯ: Обновляем total_margin_used (будет пересчитано при следующей синхронизации)
                     # Временно обновляем локально для быстрого доступа
@@ -3804,6 +3822,17 @@ class FuturesScalpingOrchestrator:
                 # Удаляем локальное состояние вне зависимости от маржи
                 if symbol in self.active_positions:
                     del self.active_positions[symbol]
+
+                # ✅ ИСПРАВЛЕНО: Очистка locks после закрытия позиции
+                if hasattr(self, "exit_analyzer") and self.exit_analyzer:
+                    if hasattr(self.exit_analyzer, "_signal_locks_ref") and symbol in self.exit_analyzer._signal_locks_ref:
+                        self.exit_analyzer._signal_locks_ref.pop(symbol, None)
+                        logger.debug(f"✅ Очищен lock для {symbol} после закрытия позиции")
+                
+                # ✅ ИСПРАВЛЕНО: Очистка drift_locks после закрытия позиции
+                if hasattr(self, "_drift_locks") and symbol in self._drift_locks:
+                    self._drift_locks.pop(symbol, None)
+                    logger.debug(f"✅ Очищен drift_lock для {symbol} после закрытия позиции")
 
                 # ✅ РЕФАКТОРИНГ: Используем trailing_sl_coordinator для удаления TSL
                 tsl = self.trailing_sl_coordinator.remove_tsl(symbol)
@@ -4018,3 +4047,108 @@ class FuturesScalpingOrchestrator:
         if regime:
             return self._to_dict(profile.get(regime.lower(), {}))
         return {}
+
+    async def _log_archive_task(self):
+        """
+        ✅ НОВОЕ: Фоновая задача для архивации вчерашних логов в 00:05 UTC.
+        
+        Логика:
+        1. В течение дня логи пишутся в обычные файлы с ротацией по размеру (5 MB)
+           - futures_main_YYYY-MM-DD.log
+           - futures_main_YYYY-MM-DD_1.log (если превысил 5 MB)
+           - futures_main_YYYY-MM-DD_2.log (если следующий превысил 5 MB)
+           - и т.д.
+        2. В 00:05 UTC эта задача находит ВСЕ файлы за вчерашний день и архивирует их в один ZIP
+        3. После архивации удаляет все оригинальные файлы
+        4. Для аудита используются только текущие файлы (не ZIP)
+        """
+        log_dir = Path("logs/futures")
+        archive_dir = log_dir / "archived"
+        archive_dir.mkdir(exist_ok=True)
+        
+        # Папка для сделок (CSV/JSON)
+        trades_dir = Path("logs")
+        
+        last_archive_date = None
+        
+        while self.is_running:
+            try:
+                now_utc = datetime.now(timezone.utc)
+                current_hour = now_utc.hour
+                current_minute = now_utc.minute
+                
+                # Проверяем, наступило ли 00:05 UTC
+                if current_hour == 0 and current_minute >= 5:
+                    # Вычисляем дату вчерашнего дня
+                    yesterday = now_utc - timedelta(days=1)
+                    yesterday_str = yesterday.strftime("%Y-%m-%d")
+                    
+                    # Проверяем, не архивировали ли мы уже вчерашние файлы
+                    if last_archive_date != yesterday_str:
+                        # Ищем ВСЕ файлы за вчерашний день (с ротацией могут быть _1, _2, _3 и т.д.)
+                        pattern = f"futures_main_{yesterday_str}*.log"
+                        log_files = sorted(log_dir.glob(pattern))
+                        
+                        if log_files:
+                            zip_name = f"futures_main_{yesterday_str}.zip"
+                            zip_path = archive_dir / zip_name
+                            
+                            # Архивируем только если архив еще не существует
+                            if not zip_path.exists():
+                                try:
+                                    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                                        # Добавляем все лог файлы за вчерашний день
+                                        for log_file in log_files:
+                                            zipf.write(log_file, log_file.name)
+                                            logger.debug(f"   📄 Добавлен в архив: {log_file.name}")
+                                        
+                                        logger.info(f"✅ Архивировано {len(log_files)} лог файлов за {yesterday_str}")
+                                        
+                                        # Ищем соответствующие файлы сделок
+                                        trades_json = trades_dir / f"trades_{yesterday_str}.json"
+                                        trades_csv = trades_dir / f"trades_{yesterday_str}.csv"
+                                        
+                                        if trades_json.exists():
+                                            zipf.write(trades_json, trades_json.name)
+                                            logger.debug(f"   📄 Добавлен в архив: {trades_json.name}")
+                                        
+                                        if trades_csv.exists():
+                                            zipf.write(trades_csv, trades_csv.name)
+                                            logger.debug(f"   📄 Добавлен в архив: {trades_csv.name}")
+                                    
+                                    # Удаляем все оригинальные файлы после успешной архивации
+                                    for log_file in log_files:
+                                        try:
+                                            log_file.unlink()
+                                        except Exception as e:
+                                            logger.warning(f"⚠️ Ошибка удаления {log_file.name}: {e}")
+                                    
+                                    last_archive_date = yesterday_str
+                                    logger.info(f"✅ Все логи за {yesterday_str} заархивированы в {zip_name} и удалены ({len(log_files)} файлов)")
+                                except Exception as e:
+                                    logger.error(f"❌ Ошибка архивации логов за {yesterday_str}: {e}")
+                            else:
+                                # Архив уже существует, просто удаляем все оригинальные файлы
+                                deleted_count = 0
+                                for log_file in log_files:
+                                    try:
+                                        log_file.unlink()
+                                        deleted_count += 1
+                                    except Exception as e:
+                                        logger.warning(f"⚠️ Ошибка удаления {log_file.name}: {e}")
+                                
+                                if deleted_count > 0:
+                                    last_archive_date = yesterday_str
+                                    logger.debug(f"✅ Вчерашние логи уже заархивированы, удалены оригиналы ({deleted_count} файлов)")
+                        else:
+                            logger.debug(f"📋 Логи за {yesterday_str} не найдены")
+                
+                # Проверяем каждую минуту
+                await asyncio.sleep(60)
+                
+            except asyncio.CancelledError:
+                logger.debug("🛑 Задача архивации логов отменена")
+                break
+            except Exception as e:
+                logger.error(f"❌ Ошибка в задаче архивации логов: {e}")
+                await asyncio.sleep(60)  # Ждем минуту перед повтором при ошибке

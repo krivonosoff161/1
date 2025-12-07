@@ -694,14 +694,28 @@ class ConfigManager:
                         f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
                     )
 
-                return {
+                # ✅ ИСПРАВЛЕНО: Возвращаем параметры progressive для risk_manager
+                result = {
                     "name": profile_name,
                     "base_position_usd": base_pos_usd,
                     "min_position_usd": min_pos_usd,
                     "max_position_usd": max_pos_usd,
                     "max_open_positions": max_open_positions,
                     "max_position_percent": max_position_percent,
+                    "progressive": progressive,
                 }
+                
+                # Добавляем параметры progressive, если они есть
+                if progressive:
+                    result["size_at_min"] = size_at_min
+                    result["size_at_max"] = size_at_max
+                    result["min_balance"] = min_balance
+                    if profile_name == "large":
+                        result["max_balance"] = getattr(profile_config, "max_balance", threshold)
+                    else:
+                        result["threshold"] = threshold
+                
+                return result
 
         # Если баланс больше всех порогов - используем последний (самый большой) профиль
         last_profile = profile_list[-1]
@@ -810,14 +824,29 @@ class ConfigManager:
                 f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
             )
 
-        return {
+        # ✅ ИСПРАВЛЕНО: Возвращаем параметры progressive для risk_manager
+        result = {
             "name": profile_name,
             "base_position_usd": base_pos_usd,
             "min_position_usd": min_pos_usd,
             "max_position_usd": max_pos_usd,
             "max_open_positions": max_open_positions,
             "max_position_percent": max_position_percent,
+            "progressive": progressive,
         }
+        
+        # Добавляем параметры progressive, если они есть
+        if progressive:
+            if min_balance is not None and size_at_min is not None and size_at_max is not None:
+                result["size_at_min"] = size_at_min
+                result["size_at_max"] = size_at_max
+                result["min_balance"] = min_balance
+                if profile_name == "large":
+                    result["max_balance"] = getattr(profile_config, "max_balance", 999999.0)
+                else:
+                    result["threshold"] = getattr(profile_config, "threshold", None)
+        
+        return result
 
     def get_regime_params(
         self, regime_name: str, symbol: Optional[str] = None

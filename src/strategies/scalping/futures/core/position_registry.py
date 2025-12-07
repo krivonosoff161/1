@@ -35,6 +35,7 @@ class PositionMetadata:
     peak_profit_time: Optional[datetime] = None  # Время достижения максимума
     peak_profit_price: Optional[float] = None  # Цена при максимуме прибыли
     tp_extension_count: int = 0  # Количество продлений TP
+    partial_tp_executed: bool = False  # ✅ ИСПРАВЛЕНО: Флаг выполнения partial_tp
 
     def to_dict(self) -> Dict[str, Any]:
         """Конвертация в словарь для сериализации"""
@@ -58,6 +59,7 @@ class PositionMetadata:
             else None,
             "peak_profit_price": self.peak_profit_price,
             "tp_extension_count": self.tp_extension_count,
+            "partial_tp_executed": self.partial_tp_executed,  # ✅ ИСПРАВЛЕНО
         }
 
     @classmethod
@@ -130,6 +132,9 @@ class PositionMetadata:
             tp_extension_count=data.get(
                 "tp_extension_count", 0
             ),  # int - не нужен deepcopy
+            partial_tp_executed=data.get(
+                "partial_tp_executed", False
+            ),  # ✅ ИСПРАВЛЕНО: bool - не нужен deepcopy
         )
 
 
