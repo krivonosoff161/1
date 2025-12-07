@@ -287,6 +287,7 @@ class EntryManager:
                                 entry_timestamp_sec = entry_timestamp_ms / 1000.0
                                 # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc для правильного timestamp
                                 from datetime import timezone
+
                                 entry_time_from_api = datetime.fromtimestamp(
                                     entry_timestamp_sec, tz=timezone.utc
                                 )
@@ -485,9 +486,13 @@ class EntryManager:
                         order_id=order_result.get("order_id"),
                         order_type=order_result.get("order_type", "limit"),
                     )
-                    logger.debug(f"✅ EntryManager: Открытие позиции {symbol} записано в CSV")
+                    logger.debug(
+                        f"✅ EntryManager: Открытие позиции {symbol} записано в CSV"
+                    )
                 except Exception as e:
-                    logger.warning(f"⚠️ EntryManager: Ошибка записи открытия позиции в CSV: {e}")
+                    logger.warning(
+                        f"⚠️ EntryManager: Ошибка записи открытия позиции в CSV: {e}"
+                    )
 
             # 5. Возвращаем результат, как от order_executor.execute_signal()
             return order_result

@@ -51,7 +51,7 @@ class PerformanceTracker:
     def _init_csv(self):
         """Инициализация CSV файлов для сделок, позиций, ордеров и сигналов"""
         today = datetime.utcnow().strftime("%Y-%m-%d")
-        
+
         # CSV для закрытых сделок
         self.csv_path = f"logs/trades_{today}.csv"
         self._init_csv_file(
@@ -72,7 +72,7 @@ class PerformanceTracker:
             ],
             "trades",
         )
-        
+
         # CSV для открытия позиций
         self.positions_open_csv_path = f"logs/positions_open_{today}.csv"
         self._init_csv_file(
@@ -89,7 +89,7 @@ class PerformanceTracker:
             ],
             "positions_open",
         )
-        
+
         # CSV для ордеров
         self.orders_csv_path = f"logs/orders_{today}.csv"
         self._init_csv_file(
@@ -110,7 +110,7 @@ class PerformanceTracker:
             ],
             "orders",
         )
-        
+
         # CSV для сигналов
         self.signals_csv_path = f"logs/signals_{today}.csv"
         self._init_csv_file(
@@ -345,7 +345,9 @@ class PerformanceTracker:
             order_type: Тип ордера (limit/market)
         """
         try:
-            with open(self.positions_open_csv_path, "a", newline="", encoding="utf-8") as f:
+            with open(
+                self.positions_open_csv_path, "a", newline="", encoding="utf-8"
+            ) as f:
                 writer = csv.DictWriter(
                     f,
                     fieldnames=[
@@ -435,7 +437,9 @@ class PerformanceTracker:
                         "status": status,
                         "fill_price": f"{fill_price:.8f}" if fill_price else "",
                         "fill_size": f"{fill_size:.8f}" if fill_size else "",
-                        "execution_time_ms": f"{execution_time_ms:.2f}" if execution_time_ms else "",
+                        "execution_time_ms": f"{execution_time_ms:.2f}"
+                        if execution_time_ms
+                        else "",
                         "slippage": f"{slippage:.4f}" if slippage else "",
                     }
                 )
@@ -490,7 +494,9 @@ class PerformanceTracker:
                         "price": f"{price:.8f}",
                         "strength": f"{strength:.4f}",
                         "regime": regime or "",
-                        "filters_passed": ",".join(filters_passed) if filters_passed else "",
+                        "filters_passed": ",".join(filters_passed)
+                        if filters_passed
+                        else "",
                         "executed": "1" if executed else "0",
                         "order_id": order_id or "",
                     }

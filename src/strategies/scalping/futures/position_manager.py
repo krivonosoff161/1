@@ -970,7 +970,9 @@ class FuturesPositionManager:
                             ):
                                 entry_timestamp = int(entry_time_str) / 1000.0
                                 # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc
-                                entry_time = datetime.fromtimestamp(entry_timestamp, tz=timezone.utc)
+                                entry_time = datetime.fromtimestamp(
+                                    entry_timestamp, tz=timezone.utc
+                                )
                             elif isinstance(entry_time_str, (int, float)):
                                 entry_timestamp = (
                                     float(entry_time_str) / 1000.0
@@ -978,7 +980,9 @@ class FuturesPositionManager:
                                     else float(entry_time_str)
                                 )
                                 # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc
-                                entry_time = datetime.fromtimestamp(entry_timestamp, tz=timezone.utc)
+                                entry_time = datetime.fromtimestamp(
+                                    entry_timestamp, tz=timezone.utc
+                                )
                         except (ValueError, TypeError):
                             pass
 
@@ -1130,7 +1134,9 @@ class FuturesPositionManager:
                                 # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc
                                 time_since_open = (
                                     datetime.now(timezone.utc)
-                                    - datetime.fromtimestamp(float(position_open_time), tz=timezone.utc)
+                                    - datetime.fromtimestamp(
+                                        float(position_open_time), tz=timezone.utc
+                                    )
                                 ).total_seconds()
                             except (ValueError, TypeError):
                                 pass
@@ -3606,15 +3612,25 @@ class FuturesPositionManager:
             # 4. Последний fallback: пробуем получить из timestamp позиции
             if entry_time is None:
                 # Пробуем получить из cTime/uTime позиции
-                c_time = position.get("cTime") or position.get("uTime") or position.get("openTime")
+                c_time = (
+                    position.get("cTime")
+                    or position.get("uTime")
+                    or position.get("openTime")
+                )
                 if c_time:
                     try:
                         if isinstance(c_time, (int, float)):
-                            entry_time = datetime.fromtimestamp(float(c_time) / 1000.0, tz=timezone.utc)
+                            entry_time = datetime.fromtimestamp(
+                                float(c_time) / 1000.0, tz=timezone.utc
+                            )
                         elif isinstance(c_time, str) and c_time.isdigit():
-                            entry_time = datetime.fromtimestamp(float(c_time) / 1000.0, tz=timezone.utc)
+                            entry_time = datetime.fromtimestamp(
+                                float(c_time) / 1000.0, tz=timezone.utc
+                            )
                         else:
-                            entry_time = datetime.fromisoformat(c_time.replace("Z", "+00:00"))
+                            entry_time = datetime.fromisoformat(
+                                c_time.replace("Z", "+00:00")
+                            )
                             if entry_time.tzinfo is None:
                                 entry_time = entry_time.replace(tzinfo=timezone.utc)
                         logger.debug(
@@ -3624,7 +3640,7 @@ class FuturesPositionManager:
                         logger.warning(
                             f"⚠️ Не удалось распарсить cTime/uTime для {symbol}: {e}"
                         )
-            
+
             # 5. Последний fallback: текущее время (только если ничего не найдено)
             if entry_time is None:
                 logger.warning(
@@ -3761,8 +3777,12 @@ class FuturesPositionManager:
             )
             logger.info(f"   📊 Entry price: ${entry_price:.6f}")
             logger.info(f"   📊 Exit price: ${exit_price:.6f}")
-            logger.info(f"   📦 Size ДО закрытия: {size_before_close:.8f} контрактов ({size_in_coins:.8f} монет)")
-            logger.info(f"   📦 Size закрыто: {size_in_coins:.8f} монет ({size} контрактов)")
+            logger.info(
+                f"   📦 Size ДО закрытия: {size_before_close:.8f} контрактов ({size_in_coins:.8f} монет)"
+            )
+            logger.info(
+                f"   📦 Size закрыто: {size_in_coins:.8f} монет ({size} контрактов)"
+            )
             logger.info(f"   ⏱️  Длительность удержания: {duration_str}")
             logger.info(f"   💵 Gross PnL: ${gross_pnl:+.4f} USDT")
             logger.info(
@@ -3773,7 +3793,9 @@ class FuturesPositionManager:
             )
             logger.info(f"   💸 Комиссия общая: ${commission:.4f} USDT")
             logger.info(f"   💸 Funding Fee: ${funding_fee:.4f} USDT")
-            logger.info(f"   💵 Net PnL: ${net_pnl:+.4f} USDT (Gross - Commission - Funding)")
+            logger.info(
+                f"   💵 Net PnL: ${net_pnl:+.4f} USDT (Gross - Commission - Funding)"
+            )
             logger.info(f"   🎯 Причина закрытия: {reason}")
             logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             # ✅ Метрики: суммарное время удержания
@@ -3805,9 +3827,13 @@ class FuturesPositionManager:
                     # Пробуем получить еще раз из actual_position (может быть обновлен после закрытия)
                     try:
                         if "fundingFee" in actual_position:
-                            funding_fee = float(actual_position.get("fundingFee", 0) or 0)
+                            funding_fee = float(
+                                actual_position.get("fundingFee", 0) or 0
+                            )
                         elif "funding_fee" in actual_position:
-                            funding_fee = float(actual_position.get("funding_fee", 0) or 0)
+                            funding_fee = float(
+                                actual_position.get("funding_fee", 0) or 0
+                            )
                         # Если funding_fee был 0, но теперь найден - пересчитываем net_pnl
                         if funding_fee != 0.0:
                             net_pnl = gross_pnl - commission - funding_fee

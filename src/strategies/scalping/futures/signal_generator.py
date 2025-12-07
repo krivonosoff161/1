@@ -1326,10 +1326,12 @@ class FuturesSignalGenerator:
                     try:
                         filters_passed = signal.get("filters_passed", [])
                         if isinstance(filters_passed, str):
-                            filters_passed = filters_passed.split(",") if filters_passed else []
+                            filters_passed = (
+                                filters_passed.split(",") if filters_passed else []
+                            )
                         elif not isinstance(filters_passed, list):
                             filters_passed = []
-                        
+
                         self.performance_tracker.record_signal(
                             symbol=signal.get("symbol", ""),
                             side=signal.get("side", ""),
@@ -1341,7 +1343,9 @@ class FuturesSignalGenerator:
                             order_id=None,  # Будет обновлено при исполнении
                         )
                     except Exception as e:
-                        logger.warning(f"⚠️ SignalGenerator: Ошибка записи сигнала в CSV: {e}")
+                        logger.warning(
+                            f"⚠️ SignalGenerator: Ошибка записи сигнала в CSV: {e}"
+                        )
 
             return filtered_signals
 

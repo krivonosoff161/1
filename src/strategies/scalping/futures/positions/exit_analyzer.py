@@ -1305,7 +1305,7 @@ class ExitAnalyzer:
                             "trend_strength": trend_strength,
                             "minutes_in_position": minutes_in_position,
                         }
-                    
+
                     # Нет сильных сигналов, но позиция в прибыли - закрываем по времени
                     logger.info(
                         f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
@@ -1603,7 +1603,7 @@ class ExitAnalyzer:
                         "minutes_in_position": minutes_in_position,
                         "max_holding_minutes": actual_max_holding,
                     }
-                
+
                 # Время превышено и позиция в прибыли - закрываем
                 logger.info(
                     f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
@@ -1832,7 +1832,7 @@ class ExitAnalyzer:
                         "minutes_in_position": minutes_in_position,
                         "max_holding_minutes": max_holding_minutes,
                     }
-                
+
                 # В choppy режиме закрываем строго по времени, но только если в прибыли
                 logger.info(
                     f"⏰ ExitAnalyzer CHOPPY: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "

@@ -301,7 +301,7 @@ class FuturesScalpingOrchestrator:
         # ✅ НОВОЕ: Передаем symbol_profiles в position_manager для per-symbol TP
         # (инициализируем после создания symbol_profiles)
         self.performance_tracker = PerformanceTracker()
-        
+
         # ✅ НОВОЕ: Передаем performance_tracker в entry_manager, order_executor и signal_generator для CSV логирования
         if hasattr(self.entry_manager, "set_performance_tracker"):
             self.entry_manager.set_performance_tracker(self.performance_tracker)
@@ -1356,7 +1356,11 @@ class FuturesScalpingOrchestrator:
                     # Получаем данные позиции
                     entry_price = float(pos.get("avgPx", "0"))
                     # ✅ ИСПРАВЛЕНО: Нормализуем position_side перед сравнением
-                    position_side_normalized = position_side.lower() if isinstance(position_side, str) else "long"
+                    position_side_normalized = (
+                        position_side.lower()
+                        if isinstance(position_side, str)
+                        else "long"
+                    )
                     side = "buy" if position_side_normalized == "long" else "sell"
 
                     if entry_price == 0:
@@ -1402,7 +1406,9 @@ class FuturesScalpingOrchestrator:
                             entry_timestamp_ms = int(entry_time_str)
                             entry_timestamp_sec = entry_timestamp_ms / 1000.0
                             # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc
-                            entry_time_dt = datetime.fromtimestamp(entry_timestamp_sec, tz=timezone.utc)
+                            entry_time_dt = datetime.fromtimestamp(
+                                entry_timestamp_sec, tz=timezone.utc
+                            )
                             logger.debug(
                                 f"✅ Реальное время открытия для {symbol} получено из API: {entry_time_dt} "
                                 f"(из {'cTime' if c_time else 'uTime'})"
