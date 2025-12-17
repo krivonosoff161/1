@@ -143,8 +143,12 @@ class EntryManager:
             # 4. Создаем метаданные позиции
             from datetime import timezone
 
+            now_utc = datetime.now(timezone.utc)
             metadata = PositionMetadata(
-                entry_time=datetime.now(timezone.utc),
+                entry_time=now_utc,
+                # ✅ Трассировка: устойчивый position_id для склейки событий (entry/partial/final)
+                # Формат: SYMBOL:epoch_ms:order_id
+                position_id=f"{symbol}:{int(now_utc.timestamp()*1000)}:{order_result.get('order_id','')}",
                 regime=regime,
                 balance_profile=balance_profile,
                 entry_price=position_data.get("entry_price"),
@@ -440,8 +444,16 @@ class EntryManager:
                     f"Позиция будет использовать fallback 'ranging' в ExitAnalyzer"
                 )
 
+            # ✅ НОВОЕ: Получаем min_holding_seconds из regime_params для сохранения в metadata
+            min_holding_seconds = None
+            if regime_params and isinstance(regime_params, dict):
+                min_holding_minutes = regime_params.get("min_holding_minutes")
+                if min_holding_minutes is not None:
+                    min_holding_seconds = float(min_holding_minutes) * 60.0
+
             metadata = PositionMetadata(
                 entry_time=entry_time_for_metadata,  # ✅ Используем entry_time из API или текущее время
+                position_id=f"{symbol}:{int(entry_time_for_metadata.timestamp()*1000)}:{order_result.get('order_id','')}",
                 regime=final_regime,  # Может быть None - ExitAnalyzer использует динамический режим
                 balance_profile=balance_profile,
                 entry_price=position_data.get("entry_price"),
@@ -452,6 +464,7 @@ class EntryManager:
                 leverage=signal.get("leverage"),
                 size_in_coins=position_size,
                 margin_used=position_data.get("margin_used"),
+                min_holding_seconds=min_holding_seconds,  # ✅ НОВОЕ: Сохраняем min_holding из конфига
             )
 
             # 4. Регистрация в PositionRegistry

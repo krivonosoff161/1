@@ -42,7 +42,120 @@ class ConfigManager:
         # Загружаем symbol_profiles при инициализации
         self.symbol_profiles: Dict[str, Dict[str, Any]] = self.load_symbol_profiles()
 
+        # ✅ Валидация единиц/диапазонов ключевых параметров (fail-fast на явно опасных значениях)
+        self._validate_units_and_ranges()
+
         logger.info("ConfigManager инициализирован")
+
+    def _validate_units_and_ranges(self) -> None:
+        """
+        Валидация ключевых параметров, где часто путают доли/проценты.
+
+        Контракт проекта:
+        - *_percent (tp_percent, sl_percent, trigger_percent, loss_cut_percent, etc.) хранится в процентных пунктах
+          (0.8 = 0.8%, 65 = 65%).
+        - *_rate (комиссии) хранится в долях (0.0002 = 0.02%).
+        - Значения без суффикса percent (например initial_trail, min_profit_to_close) могут быть в долях (см. TSL).
+        """
+
+        def _require_pct_points(
+            name: str, value: Any, min_v: float, max_v: float
+        ) -> float:
+            if not isinstance(value, (int, float)):
+                raise ValueError(f"{name} должен быть числом, получено: {type(value)}")
+            v = float(value)
+            if v < min_v or v > max_v:
+                raise ValueError(
+                    f"{name}={v} вне диапазона [{min_v}, {max_v}] (ожидаются процентные пункты)"
+                )
+            return v
+
+        def _warn_pct_points(name: str, value: Any, soft_max: float) -> None:
+            try:
+                v = float(value)
+            except Exception:
+                return
+            if v > soft_max:
+                logger.warning(
+                    f"⚠️ {name}={v} выглядит подозрительно высоким для процентных пунктов"
+                )
+
+        # scalping tp/sl
+        try:
+            tp = self.get_config_value(self.scalping_config, "tp_percent", None)
+            sl = self.get_config_value(self.scalping_config, "sl_percent", None)
+            if tp is not None:
+                _require_pct_points("scalping.tp_percent", tp, 0.01, 50.0)
+                _warn_pct_points("scalping.tp_percent", tp, 10.0)
+            if sl is not None:
+                _require_pct_points("scalping.sl_percent", sl, 0.01, 50.0)
+                _warn_pct_points("scalping.sl_percent", sl, 10.0)
+        except Exception as e:
+            # На старте лучше упасть с понятной ошибкой, чем торговать с неверными единицами
+            logger.critical(f"❌ Ошибка валидации tp/sl: {e}")
+            raise
+
+        # partial_tp trigger (pct points)
+        try:
+            partial_cfg = (
+                self.get_config_value(self.scalping_config, "partial_tp", {}) or {}
+            )
+            if not isinstance(partial_cfg, dict):
+                partial_cfg = self.to_dict(partial_cfg)
+            trig = partial_cfg.get("trigger_percent")
+            if trig is not None:
+                _require_pct_points(
+                    "scalping.partial_tp.trigger_percent", trig, 0.01, 50.0
+                )
+        except Exception as e:
+            logger.critical(f"❌ Ошибка валидации partial_tp: {e}")
+            raise
+
+        # risk_config caps (pct points)
+        try:
+            risk_cfg = (
+                self.get_config_value(self.scalping_config, "risk_config", {}) or {}
+            )
+            if not isinstance(risk_cfg, dict):
+                risk_cfg = self.to_dict(risk_cfg)
+            m = risk_cfg.get("max_margin_per_trade")
+            if m is not None:
+                _require_pct_points(
+                    "scalping.risk_config.max_margin_per_trade", m, 0.1, 100.0
+                )
+        except Exception as e:
+            logger.critical(f"❌ Ошибка валидации risk_config: {e}")
+            raise
+
+        # adaptive_regime: min_profit_for_extension в процентных пунктах (0.4 = 0.4%)
+        try:
+            adaptive_regime = self.get_config_value(
+                self.scalping_config, "adaptive_regime", None
+            )
+            if adaptive_regime is not None:
+                adaptive_dict = self.to_dict(adaptive_regime)
+                for regime_name, regime_cfg in adaptive_dict.items():
+                    if not isinstance(regime_cfg, dict):
+                        continue
+                    mpe = regime_cfg.get("min_profit_for_extension")
+                    ext_pct = regime_cfg.get("extension_percent")
+                    if mpe is not None:
+                        _require_pct_points(
+                            f"scalping.adaptive_regime.{regime_name}.min_profit_for_extension",
+                            mpe,
+                            0.0,
+                            50.0,
+                        )
+                    if ext_pct is not None:
+                        _require_pct_points(
+                            f"scalping.adaptive_regime.{regime_name}.extension_percent",
+                            ext_pct,
+                            0.0,
+                            500.0,
+                        )
+        except Exception as e:
+            logger.critical(f"❌ Ошибка валидации adaptive_regime: {e}")
+            raise
 
     @staticmethod
     def get_config_value(source: Any, key: str, default: Any = None) -> Any:

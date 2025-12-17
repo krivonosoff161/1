@@ -791,8 +791,42 @@ class FuturesScalpingOrchestrator:
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка отключения Private WebSocket: {e}")
 
-        # Закрытие клиента
-        await self.client.close()
+        # ✅ ИСПРАВЛЕНО: Закрытие клиента (включая его aiohttp сессию)
+        if self.client:
+            try:
+                await self.client.close()
+                logger.info("✅ OKX клиент закрыт")
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка закрытия клиента: {e}")
+
+        # ✅ НОВОЕ: Дополнительная проверка и закрытие всех aiohttp сессий
+        # Даем время на закрытие всех сессий
+        await asyncio.sleep(0.3)
+
+        # Закрываем все незакрытые сессии (если есть)
+        try:
+            import gc
+
+            import aiohttp
+
+            unclosed_sessions = []
+            for obj in gc.get_objects():
+                if isinstance(obj, aiohttp.ClientSession) and not obj.closed:
+                    unclosed_sessions.append(obj)
+
+            if unclosed_sessions:
+                logger.debug(
+                    f"🔍 Найдено {len(unclosed_sessions)} незакрытых aiohttp сессий, закрываем..."
+                )
+                for session in unclosed_sessions:
+                    try:
+                        await session.close()
+                        await asyncio.sleep(0.1)
+                    except Exception:
+                        pass
+                logger.debug("✅ Все незакрытые aiohttp сессии закрыты")
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка при проверке незакрытых сессий: {e}")
 
         logger.info("✅ Futures торговый бот остановлен")
 
@@ -1741,8 +1775,37 @@ class FuturesScalpingOrchestrator:
             total_margin += max(margin, 0.0)
 
             effective_price = entry_price or mark_price
-            # ✅ FIX #3: Используем UTC для корректного расчета времени в позиции
-            timestamp = datetime.now(timezone.utc)
+            # ✅ ИСПРАВЛЕНО: Восстанавливаем entry_time с биржи (cTime/uTime), не datetime.now()
+            # Это критично для DRIFT_ADD - иначе min_holding будет считаться от "сейчас"
+            timestamp = None
+            try:
+                # Пробуем получить из cTime (create time) или uTime (update time)
+                c_time = pos.get("cTime")
+                u_time = pos.get("uTime")
+                if c_time:
+                    # cTime в миллисекундах
+                    timestamp = datetime.fromtimestamp(
+                        int(c_time) / 1000.0, tz=timezone.utc
+                    )
+                elif u_time:
+                    # uTime в миллисекундах
+                    timestamp = datetime.fromtimestamp(
+                        int(u_time) / 1000.0, tz=timezone.utc
+                    )
+            except (ValueError, TypeError, AttributeError) as e:
+                logger.debug(
+                    f"⚠️ Не удалось распарсить cTime/uTime для {symbol}: {e}, "
+                    f"используем datetime.now() как fallback"
+                )
+
+            # Fallback на datetime.now() только если не удалось получить с биржи
+            if timestamp is None:
+                timestamp = datetime.now(timezone.utc)
+                logger.debug(
+                    f"⚠️ cTime/uTime не найдены для {symbol} в данных позиции, "
+                    f"используем datetime.now() как fallback"
+                )
+
             active_position = self.active_positions.setdefault(symbol, {})
             if "entry_time" not in active_position:
                 active_position["entry_time"] = timestamp
@@ -1808,11 +1871,11 @@ class FuturesScalpingOrchestrator:
                             "position_side": position_side,
                             "margin_used": margin,
                         }
-                        # Создаём metadata
-                        from .positions.entry_manager import PositionMetadata
+                        # ✅ ИСПРАВЛЕНО: Создаём metadata с правильным entry_time (восстановленным с биржи)
+                        from .core.position_registry import PositionMetadata
 
                         metadata = PositionMetadata(
-                            entry_time=timestamp,
+                            entry_time=timestamp,  # ✅ Используем timestamp, восстановленный из cTime/uTime биржи
                             regime=regime,
                             balance_profile="small",  # Fallback
                             entry_price=effective_price,
@@ -3387,7 +3450,7 @@ class FuturesScalpingOrchestrator:
         Args:
             symbol: Символ позиции
             current_price: Текущая цена
-            profit_pct: Прибыль в процентах (с учетом комиссии)
+            profit_pct: Прибыль в долях (0.005 = 0.5%, с учетом комиссии)
             market_regime: Режим рынка (trending/ranging/choppy)
         """
         try:
@@ -3519,11 +3582,15 @@ class FuturesScalpingOrchestrator:
             if time_held >= actual_max_holding:
                 time_extended = position.get("time_extended", False)
 
+                # ✅ ЕДИНЫЙ СТАНДАРТ: min_profit_for_extension в конфиге = процентные пункты (0.4 = 0.4%)
+                # profit_pct здесь в долях (0.004 = 0.4%), поэтому конвертируем порог в долю
+                min_profit_for_extension_frac = min_profit_for_extension / 100.0
+
                 # Если время можно продлить и позиция в прибыли
                 if (
                     extend_time_if_profitable
                     and not time_extended
-                    and profit_pct > min_profit_for_extension
+                    and profit_pct > min_profit_for_extension_frac
                 ):
                     # Продлеваем время от исходного значения
                     original_max_holding = max_holding_minutes
@@ -3537,7 +3604,7 @@ class FuturesScalpingOrchestrator:
                     ] = new_max_holding  # Сохраняем новое значение
 
                     logger.info(
-                        f"⏰ Позиция {symbol} в прибыли {profit_pct:.2%} (>{min_profit_for_extension:.2%}), "
+                        f"⏰ Позиция {symbol} в прибыли {profit_pct:.2%} (>{min_profit_for_extension_frac:.2%}), "
                         f"продлеваем время на {extension_minutes:.1f} минут "
                         f"(до {new_max_holding:.1f} минут, было {original_max_holding:.1f})"
                     )
@@ -3716,33 +3783,55 @@ class FuturesScalpingOrchestrator:
                                         else str(regime_obj).lower()
                                     )
 
-                        # Получаем данные из trade_result
-                        side = (
-                            trade_result.side
-                            if hasattr(trade_result, "side")
-                            else position.get("side", "buy")
+                        # Получаем данные из trade_result (TradeResult имеет net_pnl, но НЕ имеет pnl/entry_time/exit_time)
+                        side = getattr(trade_result, "side", None) or position.get(
+                            "side", "buy"
                         )
-                        pnl = trade_result.pnl if hasattr(trade_result, "pnl") else 0.0
-                        entry_price = (
-                            trade_result.entry_price
-                            if hasattr(trade_result, "entry_price")
-                            else position.get("entry_price", 0)
-                        )
-                        exit_price = (
-                            trade_result.exit_price
-                            if hasattr(trade_result, "exit_price")
-                            else position.get("current_price", 0)
-                        )
-                        entry_time = (
-                            trade_result.entry_time
-                            if hasattr(trade_result, "entry_time")
-                            else position.get("entry_time", datetime.now())
-                        )
-                        exit_time = (
-                            trade_result.exit_time
-                            if hasattr(trade_result, "exit_time")
-                            else datetime.now()
-                        )
+
+                        # ✅ FIX: используем net_pnl вместо несуществующего trade_result.pnl
+                        try:
+                            pnl = float(getattr(trade_result, "net_pnl", 0.0) or 0.0)
+                        except (TypeError, ValueError):
+                            pnl = 0.0
+
+                        entry_price = getattr(trade_result, "entry_price", None)
+                        if entry_price is None:
+                            entry_price = position.get("entry_price", 0)
+
+                        exit_price = getattr(trade_result, "exit_price", None)
+                        if exit_price is None:
+                            exit_price = position.get("current_price", 0)
+
+                        # ✅ FIX: entry_time берём из PositionRegistry.metadata (UTC), иначе fallback
+                        entry_time = None
+                        try:
+                            if (
+                                hasattr(self, "position_registry")
+                                and self.position_registry
+                            ):
+                                metadata = await self.position_registry.get_metadata(
+                                    symbol
+                                )
+                                if metadata and getattr(metadata, "entry_time", None):
+                                    entry_time = metadata.entry_time
+                        except Exception:
+                            entry_time = None
+
+                        if not isinstance(entry_time, datetime):
+                            entry_time = position.get("entry_time")
+                            if isinstance(entry_time, str):
+                                try:
+                                    entry_time = datetime.fromisoformat(
+                                        entry_time.replace("Z", "+00:00")
+                                    )
+                                except (ValueError, TypeError):
+                                    entry_time = None
+
+                        if not isinstance(entry_time, datetime):
+                            entry_time = datetime.now(timezone.utc)
+
+                        # exit_time — фактическое время записи (UTC)
+                        exit_time = datetime.now(timezone.utc)
                         signal_strength = position.get("signal_strength", 0.0)
                         signal_type = position.get("signal_type", "unknown")
 
@@ -3774,8 +3863,21 @@ class FuturesScalpingOrchestrator:
                     logger.debug(f"📦 Обновлен статус ордера для {symbol} на 'closed'")
 
                 # 🛡️ Обновляем маржу и лимит позиций
-                position_margin = position.get("margin", 0)
+                # ✅ FIX: position["margin"] иногда строка → приводим к float, иначе будет TypeError ('str' > 0)
+                position_margin_raw = position.get("margin", 0) or 0
+                try:
+                    position_margin = (
+                        float(position_margin_raw) if position_margin_raw else 0.0
+                    )
+                except (TypeError, ValueError):
+                    position_margin = 0.0
+
                 if position_margin > 0:
+                    # На всякий случай нормализуем total_margin_used (иногда может быть None/str при ошибочных обновлениях)
+                    try:
+                        self.total_margin_used = float(self.total_margin_used or 0.0)
+                    except (TypeError, ValueError):
+                        self.total_margin_used = 0.0
                     # ✅ МОДЕРНИЗАЦИЯ: Обновляем total_margin_used (будет пересчитано при следующей синхронизации)
                     # Временно обновляем локально для быстрого доступа
                     self.total_margin_used -= position_margin

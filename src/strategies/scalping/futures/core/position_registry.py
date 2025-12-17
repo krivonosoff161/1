@@ -19,6 +19,8 @@ class PositionMetadata:
     """Метаданные позиции"""
 
     entry_time: datetime
+    # ✅ Трассировка (для связывания entry/partial/final close в логах и CSV)
+    position_id: Optional[str] = None
     regime: Optional[str] = None  # trending, ranging, choppy
     balance_profile: Optional[str] = None  # small, medium, large
     entry_price: Optional[float] = None
@@ -29,6 +31,9 @@ class PositionMetadata:
     leverage: Optional[int] = None
     size_in_coins: Optional[float] = None
     margin_used: Optional[float] = None
+    min_holding_seconds: Optional[
+        float
+    ] = None  # ✅ НОВОЕ: Минимальное время удержания (из конфига)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     # ✅ НОВОЕ: Отслеживание максимальной прибыли
     peak_profit_usd: float = 0.0  # Максимальная прибыль в USD
@@ -41,6 +46,7 @@ class PositionMetadata:
         """Конвертация в словарь для сериализации"""
         return {
             "entry_time": self.entry_time.isoformat() if self.entry_time else None,
+            "position_id": self.position_id,
             "regime": self.regime,
             "balance_profile": self.balance_profile,
             "entry_price": self.entry_price,
@@ -51,6 +57,7 @@ class PositionMetadata:
             "leverage": self.leverage,
             "size_in_coins": self.size_in_coins,
             "margin_used": self.margin_used,
+            "min_holding_seconds": self.min_holding_seconds,  # ✅ НОВОЕ
             "created_at": self.created_at.isoformat() if self.created_at else None,
             # ✅ НОВОЕ: Отслеживание максимальной прибыли
             "peak_profit_usd": self.peak_profit_usd,
@@ -106,6 +113,7 @@ class PositionMetadata:
 
         return cls(
             entry_time=entry_time or datetime.now(timezone.utc),
+            position_id=data.get("position_id"),
             regime=deepcopy(
                 data.get("regime")
             ),  # ✅ deepcopy для защиты от вложенных структур
@@ -120,6 +128,9 @@ class PositionMetadata:
             leverage=data.get("leverage"),  # int - не нужен deepcopy
             size_in_coins=data.get("size_in_coins"),  # float - не нужен deepcopy
             margin_used=data.get("margin_used"),  # float - не нужен deepcopy
+            min_holding_seconds=data.get(
+                "min_holding_seconds"
+            ),  # ✅ НОВОЕ: float - не нужен deepcopy
             created_at=created_at,  # datetime - immutable
             # ✅ НОВОЕ: Отслеживание максимальной прибыли
             peak_profit_usd=data.get(

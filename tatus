@@ -1,0 +1,22 @@
+[33mcommit c26b447d7c016b9089f7f86e35b376620ab5a90b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: krivonosoff161 <krivonosoffya@yandex.ru>
+Date:   Mon Dec 8 00:36:34 2025 +0300
+
+    chore: дополнительные изменения в системе логирования и торговой логике
+    
+    - Обновлены модули для работы с новой системой логирования
+    - Исправления в координаторах и менеджерах позиций
+    - Улучшения в exit_analyzer и risk_manager
+
+ src/indicators/advanced/candle_patterns.py         |   1 [31m-[m
+ .../scalping/futures/config/config_manager.py      |  22 [32m++[m[31m-[m
+ .../futures/coordinators/order_coordinator.py      |  51 [32m+++++[m[31m--[m
+ .../coordinators/trailing_sl_coordinator.py        |   7 [32m+[m[31m-[m
+ .../futures/indicators/liquidity_levels.py         |   9 [32m+[m[31m-[m
+ .../futures/indicators/trailing_stop_loss.py       |   4 [32m+[m[31m-[m
+ src/strategies/scalping/futures/orchestrator.py    | 110 [32m++++++++++[m[31m-----[m
+ src/strategies/scalping/futures/order_executor.py  |  24 [32m++[m[31m--[m
+ .../scalping/futures/position_manager.py           |  49 [32m+++++[m[31m--[m
+ .../scalping/futures/positions/exit_analyzer.py    |  45 [32m+++[m[31m---[m
+ src/strategies/scalping/futures/risk_manager.py    | 156 [32m+++++++++++++[m[31m--------[m
+ 11 files changed, 312 insertions(+), 166 deletions(-)

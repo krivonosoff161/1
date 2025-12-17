@@ -1,0 +1,38 @@
+{
+  "backtest": {
+    "total_trades": 21,
+    "profitable": 14,
+    "losing": 7,
+    "win_rate": 66.7,
+    "total_pnl_pct": 7.98,
+    "max_drawdown": -1.2,
+    "profit_factor": 1.89
+  },
+  "reality": {
+    "total_trades": 27,
+    "profitable": 19,
+    "losing": 8,
+    "win_rate": 70.37037037037037,
+    "total_pnl_usd": -4.433500000000002,
+    "total_commission": 2.5677000000000003,
+    "avg_pnl": -0.1642037037037038,
+    "reasons": {
+      "sl_reached": {
+        "count": 7,
+        "pnl": -8.597000000000001
+      },
+      "partial_tp": {
+        "count": 18,
+        "pnl": 2.8585000000000003
+      },
+      "profit_drawdown": {
+        "count": 2,
+        "pnl": 1.3050000000000002
+      }
+    }
+  },
+  "discrepancies": {
+    "win_rate_diff": -3.670370370370364,
+    "note": "Backtest показывает лучшие результаты из-за идеальных условий (нет slippage, мгновенное исполнение, close цена)"
+  }
+}

@@ -39,6 +39,13 @@ class TradeResult:
     timestamp: datetime
     funding_fee: float = 0.0  # ✅ КРИТИЧЕСКОЕ: Funding fee для фьючерсов
 
+    # ✅ Трассировка: не обязательно для стратегии, но критично для дебага/аудита
+    trade_id: str = ""
+    position_id: str = ""
+    is_partial: bool = False
+    entry_order_id: str = ""
+    exit_order_id: str = ""
+
 
 class PositionManager:
     """

@@ -801,21 +801,21 @@ class TrailingSLCoordinator:
                         # profit_pct из TSL в долях (0.005 = 0.5%), конвертируем для единообразия
                         decision_pnl_raw = exit_decision.get("pnl_pct")
                         if decision_pnl_raw is not None:
-                            # pnl_pct из ExitAnalyzer уже в процентах
-                            decision_pnl = decision_pnl_raw
+                            # pnl_pct из ExitAnalyzer в процентах (0.5 = 0.5%) -> в долю для единого форматирования
+                            decision_pnl_frac = float(decision_pnl_raw) / 100.0
                         else:
-                            # Fallback: используем profit_pct из TSL (в долях), конвертируем в проценты
-                            decision_pnl = profit_pct * 100.0 if profit_pct else 0.0
+                            # Fallback: profit_pct из TSL уже в долях
+                            decision_pnl_frac = float(profit_pct or 0.0)
 
                         logger.info(
                             f"🎯 ExitAnalyzer решение для {symbol}: action={action}, "
-                            f"reason={reason}, pnl={decision_pnl:.2%}"
+                            f"reason={reason}, pnl={decision_pnl_frac:.2%}"
                         )
 
                         # Если ExitAnalyzer решил закрыть - закрываем сразу
                         if action == "close":
                             logger.info(
-                                f"✅ ExitAnalyzer: Закрываем {symbol} (reason={reason}, pnl={decision_pnl:.2%})"
+                                f"✅ ExitAnalyzer: Закрываем {symbol} (reason={reason}, pnl={decision_pnl_frac:.2%})"
                             )
                             if self._has_position(symbol):
                                 await self.close_position_callback(symbol, reason)
@@ -1029,7 +1029,8 @@ class TrailingSLCoordinator:
                         self.debug_logger.log_position_close(
                             symbol=symbol,
                             exit_price=current_price,
-                            pnl_usd=profit_pct * position.get("margin", 0) / 100.0
+                            # profit_pct здесь в долях (0.005 = 0.5% от маржи)
+                            pnl_usd=(profit_pct * float(position.get("margin", 0)))
                             if position.get("margin")
                             else 0.0,
                             pnl_pct=profit_pct,
@@ -1189,7 +1190,8 @@ class TrailingSLCoordinator:
                     self.debug_logger.log_position_close(
                         symbol=symbol,
                         exit_price=current_price,
-                        pnl_usd=profit_pct * position.get("margin", 0) / 100.0
+                        # profit_pct здесь в долях (0.005 = 0.5% от маржи)
+                        pnl_usd=(profit_pct * float(position.get("margin", 0)))
                         if position.get("margin")
                         else 0.0,
                         pnl_pct=profit_pct,

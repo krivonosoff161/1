@@ -419,23 +419,43 @@ class ExitAnalyzer:
                     )
                     return gross_pnl_pct
                 else:
-                    # После 10 секунд учитываем комиссию
-                    trading_fee_rate = 0.0010  # 0.1% по умолчанию
+                    # ✅ ИСПРАВЛЕНО: После 10 секунд учитываем комиссию с учётом плеча и двух сторон (вход+выход)
+                    # Используем maker_fee_rate (0.02%) для limit ордеров, т.к. бот использует limit ордера
+                    trading_fee_rate = (
+                        0.0002  # 0.02% по умолчанию (на одну сторону для maker)
+                    )
                     if self.scalping_config:
                         commission_config = getattr(
                             self.scalping_config, "commission", {}
                         )
                         if isinstance(commission_config, dict):
+                            # ✅ ИСПРАВЛЕНО: Используем maker_fee_rate для limit ордеров (0.02% на сторону)
                             trading_fee_rate = commission_config.get(
-                                "trading_fee_rate", 0.0010
+                                "maker_fee_rate",
+                                commission_config.get("trading_fee_rate", 0.0002),
+                            )
+                        elif hasattr(commission_config, "maker_fee_rate"):
+                            trading_fee_rate = getattr(
+                                commission_config, "maker_fee_rate", 0.0002
                             )
                         elif hasattr(commission_config, "trading_fee_rate"):
                             trading_fee_rate = getattr(
-                                commission_config, "trading_fee_rate", 0.0010
+                                commission_config, "trading_fee_rate", 0.0002
                             )
 
-                    # Комиссия в процентах от маржи (на круг)
-                    commission_pct = trading_fee_rate * 100  # 0.1% = 0.1
+                    # ✅ ИСПРАВЛЕНО: Комиссия учитывает плечо и две стороны (вход + выход)
+                    # Получаем leverage из metadata или position
+                    leverage = 5  # Default
+                    if metadata and hasattr(metadata, "leverage") and metadata.leverage:
+                        leverage = int(metadata.leverage)
+                    elif position and isinstance(position, dict):
+                        leverage = position.get("leverage", 5) or 5
+
+                    # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
+                    # (т.к. комиссия считается от номинала, а PnL% от маржи)
+                    commission_pct = (
+                        (trading_fee_rate * 2) * leverage * 100
+                    )  # 0.02% × 2 × leverage = 0.2% при leverage=5
                     net_pnl_pct = gross_pnl_pct - commission_pct
                     logger.debug(
                         f"💰 ExitAnalyzer: PnL% от маржи={gross_pnl_pct:.4f}%, "
@@ -485,19 +505,37 @@ class ExitAnalyzer:
                 )
                 return gross_profit_pct
             else:
-                trading_fee_rate = 0.0010  # 0.1% по умолчанию
+                # ✅ ИСПРАВЛЕНО: Комиссия с учётом плеча и двух сторон (вход+выход)
+                # Используем maker_fee_rate (0.02%) для limit ордеров
+                trading_fee_rate = (
+                    0.0002  # 0.02% по умолчанию (на одну сторону для maker)
+                )
                 if self.scalping_config:
                     commission_config = getattr(self.scalping_config, "commission", {})
                     if isinstance(commission_config, dict):
+                        # ✅ ИСПРАВЛЕНО: Используем maker_fee_rate для limit ордеров (0.02% на сторону)
                         trading_fee_rate = commission_config.get(
-                            "trading_fee_rate", 0.0010
+                            "maker_fee_rate",
+                            commission_config.get("trading_fee_rate", 0.0002),
+                        )
+                    elif hasattr(commission_config, "maker_fee_rate"):
+                        trading_fee_rate = getattr(
+                            commission_config, "maker_fee_rate", 0.0002
                         )
                     elif hasattr(commission_config, "trading_fee_rate"):
                         trading_fee_rate = getattr(
-                            commission_config, "trading_fee_rate", 0.0010
+                            commission_config, "trading_fee_rate", 0.0002
                         )
 
-                commission_pct = trading_fee_rate * 100
+                # Получаем leverage из metadata или position
+                leverage = 5  # Default
+                if metadata and hasattr(metadata, "leverage") and metadata.leverage:
+                    leverage = int(metadata.leverage)
+                elif position and isinstance(position, dict):
+                    leverage = position.get("leverage", 5) or 5
+
+                # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
+                commission_pct = (trading_fee_rate * 2) * leverage * 100
                 net_profit_pct = gross_profit_pct - commission_pct
                 return net_profit_pct
         else:
@@ -1568,6 +1606,21 @@ class ExitAnalyzer:
 
             # 2.5. ✅ НОВОЕ: Проверка SL (Stop Loss) - должна быть ДО проверки TP
             sl_percent = self._get_sl_percent(symbol, "ranging")
+
+            # ✅ ИСПРАВЛЕНО: После partial TP используем более мягкий SL для оставшейся позиции
+            # Это защищает оставшиеся 40% от преждевременного закрытия
+            if (
+                metadata
+                and hasattr(metadata, "partial_tp_executed")
+                and metadata.partial_tp_executed
+            ):
+                # После partial TP увеличиваем SL в 1.5 раза для оставшейся позиции
+                sl_percent = sl_percent * 1.5  # 1.2% * 1.5 = 1.8%
+                logger.debug(
+                    f"🛡️ ExitAnalyzer RANGING: После partial TP для {symbol} используем более мягкий SL: "
+                    f"{sl_percent:.2f}% (вместо стандартного {self._get_sl_percent(symbol, 'ranging'):.2f}%)"
+                )
+
             spread_buffer = self._get_spread_buffer(symbol, current_price)
             sl_threshold = -sl_percent - spread_buffer
             pnl_format_sl = (

@@ -22,6 +22,7 @@ from .config.config_manager import ConfigManager
 from .risk.liquidation_protector import LiquidationProtector
 from .risk.margin_monitor import MarginMonitor
 from .risk.max_size_limiter import MaxSizeLimiter
+from .utils.units import pct_points_to_fraction
 
 
 class FuturesRiskManager:
@@ -1230,10 +1231,9 @@ class FuturesRiskManager:
 
                     # Получаем sl_percent
                     sl_percent = getattr(self.scalping_config, "sl_percent", 0.2)
-                    if sl_percent > 1:
-                        sl_percent_decimal = sl_percent / 100
-                    else:
-                        sl_percent_decimal = sl_percent
+                    # ✅ ЕДИНЫЙ СТАНДАРТ: sl_percent в конфиге = процентные пункты (0.8 = 0.8%)
+                    # В risk-based формуле нужен SL в доле (0.008 = 0.8%)
+                    sl_percent_decimal = pct_points_to_fraction(sl_percent)
 
                     # Рассчитываем risk-based margin
                     risk_based_margin = self._calculate_risk_based_margin(
@@ -1263,11 +1263,8 @@ class FuturesRiskManager:
             max_loss_usd = balance * max_loss_per_trade_percent
             sl_percent = getattr(self.scalping_config, "sl_percent", 0.2)
 
-            # ⚠️ sl_percent в конфиге может быть как в долях (0.2 = 20%) или в процентах (20)
-            if sl_percent > 1:
-                sl_percent_decimal = sl_percent / 100
-            else:
-                sl_percent_decimal = sl_percent
+            # ✅ ЕДИНЫЙ СТАНДАРТ: sl_percent в конфиге = процентные пункты (0.8 = 0.8%)
+            sl_percent_decimal = pct_points_to_fraction(sl_percent)
 
             max_safe_margin = (
                 max_loss_usd / sl_percent_decimal

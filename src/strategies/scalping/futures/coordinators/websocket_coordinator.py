@@ -886,7 +886,8 @@ class WebSocketCoordinator:
                         )
 
                         # Записываем в CSV
-                        self.performance_tracker.record_trade_result(trade_result)
+                        # PerformanceTracker API: record_trade()
+                        self.performance_tracker.record_trade(trade_result)
                         logger.info(
                             f"✅ Закрытие позиции {symbol} через WebSocket записано в CSV"
                         )

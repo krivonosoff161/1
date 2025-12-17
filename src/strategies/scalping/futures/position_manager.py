@@ -1628,7 +1628,7 @@ class FuturesPositionManager:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем MIN_HOLDING перед Profit Harvesting
             # Защита от шума должна работать - адаптивный min_holding по режиму
             # ✅ НОВОЕ: Игнорируем MIN_HOLDING для экстремально больших прибылей (> 2x порога)
-            min_holding_minutes = 3.0  # Default (было 35.0 - СЛИШКОМ ДОЛГО!)
+            min_holding_minutes = 0.2  # ✅ СКАЛЬПИНГ: 0.2 мин (12 сек) - не блокирует фиксацию прибыли (было 3.0!)
             try:
                 # Получаем режим рынка
                 market_regime = None
@@ -1890,7 +1890,7 @@ class FuturesPositionManager:
                         current_timestamp = datetime.now(timezone.utc).timestamp()
                         time_since_open = current_timestamp - entry_timestamp
 
-                        min_holding_minutes = 35.0  # Default
+                        min_holding_minutes = 0.2  # ✅ СКАЛЬПИНГ: 0.2 мин (12 сек) - не блокирует фиксацию прибыли (было 35.0!)
                         if hasattr(self, "orchestrator") and self.orchestrator:
                             if (
                                 hasattr(self.orchestrator, "signal_generator")
@@ -1901,7 +1901,7 @@ class FuturesPositionManager:
                                 )
                                 if regime_params:
                                     min_holding_minutes = getattr(
-                                        regime_params, "min_holding_minutes", 35.0
+                                        regime_params, "min_holding_minutes", 0.2
                                     )
 
                         min_holding_seconds = min_holding_minutes * 60.0
@@ -3970,6 +3970,25 @@ class FuturesPositionManager:
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
                 # ✅ FIX: Создаем trade_result ПЕРЕД использованием в логировании
+                position_id = ""
+                try:
+                    position_registry = None
+                    if hasattr(self, "position_registry") and self.position_registry:
+                        position_registry = self.position_registry
+                    elif (
+                        hasattr(self, "orchestrator")
+                        and self.orchestrator
+                        and hasattr(self.orchestrator, "position_registry")
+                    ):
+                        position_registry = self.orchestrator.position_registry
+                    if position_registry:
+                        meta = await position_registry.get_metadata(symbol)
+                        if meta and getattr(meta, "position_id", None):
+                            position_id = str(getattr(meta, "position_id") or "")
+                except Exception:
+                    position_id = ""
+
+                trade_id = f"{position_id or symbol}:{int(datetime.now(timezone.utc).timestamp()*1000)}:{reason}"
                 trade_result = TradeResult(
                     symbol=symbol,
                     side=side.lower(),  # "long" или "short"
@@ -3983,6 +4002,8 @@ class FuturesPositionManager:
                     reason=reason,
                     timestamp=datetime.now(timezone.utc),
                     funding_fee=funding_fee,  # ✅ КРИТИЧЕСКОЕ: Учитываем funding fee
+                    trade_id=trade_id,
+                    position_id=position_id,
                 )
 
                 # Обновление статистики
@@ -4175,15 +4196,23 @@ class FuturesPositionManager:
 
                 # Вычитаем комиссию
                 commission_config = getattr(self.scalping_config, "commission", {})
+                # ✅ ИСПРАВЛЕНО: Используем maker_fee_rate для limit ордеров (0.02% на сторону)
                 if isinstance(commission_config, dict):
-                    commission_rate = commission_config.get("trading_fee_rate", 0.0010)
+                    commission_rate = commission_config.get(
+                        "maker_fee_rate",
+                        commission_config.get("trading_fee_rate", 0.0002),
+                    )
                 else:
                     commission_rate = getattr(
-                        commission_config, "trading_fee_rate", 0.0010
+                        commission_config,
+                        "maker_fee_rate",
+                        getattr(commission_config, "trading_fee_rate", 0.0002),
                     )
 
                 position_value = size_in_coins * entry_price
-                commission = position_value * commission_rate * 2  # Открытие + закрытие
+                commission = (
+                    position_value * commission_rate * 2
+                )  # Открытие + закрытие (0.02% × 2 = 0.04%)
                 net_pnl = current_pnl - commission
 
                 # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Расчет PnL
@@ -4196,6 +4225,47 @@ class FuturesPositionManager:
                 # Для прибыльных позиций: обновляем если PnL больше
                 # Для убыточных позиций: обновляем если убыток уменьшился (PnL ближе к 0)
                 if metadata:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обработка partial_tp_executed
+                    # После partial_close нужно сбросить старый peak_profit_usd и начать отслеживать заново
+                    if (
+                        hasattr(metadata, "partial_tp_executed")
+                        and metadata.partial_tp_executed
+                    ):
+                        # После partial_close сбрасываем peak_profit_usd и начинаем отслеживать заново
+                        if net_pnl > 0:
+                            metadata.peak_profit_usd = net_pnl
+                            metadata.peak_profit_time = datetime.now(timezone.utc)
+                            metadata.peak_profit_price = current_price
+                            logger.debug(
+                                f"🔍 [UPDATE_PEAK_PROFIT] {symbol}: Partial TP выполнен, "
+                                f"peak_profit_usd пересчитан до ${net_pnl:.4f}"
+                            )
+                        else:
+                            metadata.peak_profit_usd = 0.0
+                            metadata.peak_profit_time = None
+                            metadata.peak_profit_price = None
+                            logger.debug(
+                                f"🔍 [UPDATE_PEAK_PROFIT] {symbol}: Partial TP выполнен, "
+                                f"PnL <= 0, peak_profit_usd сброшен"
+                            )
+                        # Сбрасываем флаг после обработки
+                        metadata.partial_tp_executed = False
+
+                        # Обновляем в position_registry
+                        if hasattr(self, "orchestrator") and self.orchestrator:
+                            if hasattr(self.orchestrator, "position_registry"):
+                                await self.orchestrator.position_registry.update_position(
+                                    symbol,
+                                    metadata_updates={
+                                        "peak_profit_usd": metadata.peak_profit_usd,
+                                        "peak_profit_time": metadata.peak_profit_time,
+                                        "peak_profit_price": metadata.peak_profit_price,
+                                        "partial_tp_executed": False,
+                                    },
+                                )
+                        # Выходим, чтобы не выполнять обычную логику обновления
+                        return
+
                     # ✅ ИСПРАВЛЕНИЕ #1: Первое обновление - устанавливаем текущий PnL (даже если отрицательный)
                     if (
                         metadata.peak_profit_usd == 0.0
@@ -5153,6 +5223,24 @@ class FuturesPositionManager:
                             elif not isinstance(entry_time, datetime):
                                 entry_time = None
 
+                    # ✅ FIX: если entry_time не найден в локальном active_positions,
+                    # пробуем взять из PositionRegistry.metadata (источник истины)
+                    if entry_time is None:
+                        try:
+                            if (
+                                hasattr(self, "orchestrator")
+                                and self.orchestrator
+                                and hasattr(self.orchestrator, "position_registry")
+                                and self.orchestrator.position_registry
+                            ):
+                                metadata = await self.orchestrator.position_registry.get_metadata(
+                                    symbol
+                                )
+                                if metadata and getattr(metadata, "entry_time", None):
+                                    entry_time = metadata.entry_time
+                        except Exception:
+                            pass
+
                     if entry_time is None:
                         entry_time = datetime.now(timezone.utc)
 
@@ -5324,7 +5412,7 @@ class FuturesPositionManager:
                         )
 
                     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                    logger.info(f"💰 ПОЗИЦИЯ ЗАКРЫТА (manual): {symbol} {side.upper()}")
+                    logger.info(f"💰 ПОЗИЦИЯ ЗАКРЫТА: {symbol} {side.upper()}")
                     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                     logger.info(
                         f"   ⏰ Время закрытия: {close_time.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -5358,6 +5446,27 @@ class FuturesPositionManager:
                     logger.info(f"   🎯 Причина закрытия: {reason}")
                     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
+                    # ✅ Трассировка: пробуем проставить position_id из PositionRegistry
+                    position_id = ""
+                    try:
+                        if (
+                            hasattr(self, "orchestrator")
+                            and self.orchestrator
+                            and hasattr(self.orchestrator, "position_registry")
+                            and self.orchestrator.position_registry
+                        ):
+                            meta = (
+                                await self.orchestrator.position_registry.get_metadata(
+                                    symbol
+                                )
+                            )
+                            if meta and getattr(meta, "position_id", None):
+                                position_id = str(getattr(meta, "position_id") or "")
+                    except Exception:
+                        position_id = ""
+
+                    trade_id = f"{position_id or symbol}:{int(datetime.now(timezone.utc).timestamp()*1000)}:{reason}"
+
                     trade_result = TradeResult(
                         symbol=symbol,
                         side=side.lower(),
@@ -5371,6 +5480,8 @@ class FuturesPositionManager:
                         reason=reason,  # ✅ ИСПРАВЛЕНО: Используем переданный reason вместо "manual"
                         timestamp=datetime.now(),
                         funding_fee=funding_fee,  # ✅ КРИТИЧЕСКОЕ: Учитываем funding fee
+                        trade_id=trade_id,
+                        position_id=position_id,
                     )
                     # ✅ Метрики: суммарное время удержания и счётчики закрытий
                     try:
@@ -5658,8 +5769,7 @@ class FuturesPositionManager:
                                     # Если <= 0, сбрасываем peak в 0 (начнем отслеживать заново)
                                     if remaining_net_pnl > 0:
                                         new_peak_profit_usd = remaining_net_pnl
-                                        from datetime import datetime, timezone
-
+                                        # datetime уже импортирован в начале файла
                                         new_peak_profit_time = datetime.now(
                                             timezone.utc
                                         )
@@ -5670,6 +5780,10 @@ class FuturesPositionManager:
                                             f"(текущий PnL оставшейся позиции, размер={remaining_size:.6f})"
                                         )
                                     else:
+                                        # ✅ ИСПРАВЛЕНО: Если PnL <= 0, устанавливаем peak_profit_usd = 0.0
+                                        new_peak_profit_usd = 0.0
+                                        new_peak_profit_time = None
+                                        new_peak_profit_price = None
                                         logger.info(
                                             f"✅ [PARTIAL_CLOSE] {symbol}: Пересчет peak_profit_usd после partial_close: "
                                             f"peak сброшен в 0 (текущий PnL={remaining_net_pnl:.4f} USDT <= 0, "
@@ -5690,7 +5804,14 @@ class FuturesPositionManager:
                     )
 
                 # Обновляем PositionRegistry если используется
-                if self.position_registry:
+                position_registry = None
+                if hasattr(self, "position_registry") and self.position_registry:
+                    position_registry = self.position_registry
+                elif hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "position_registry"):
+                        position_registry = self.orchestrator.position_registry
+
+                if position_registry:
                     try:
                         metadata_updates = {
                             "partial_tp_executed": True,  # Используем правильное имя поля из PositionMetadata
@@ -5698,21 +5819,28 @@ class FuturesPositionManager:
                         }
 
                         # ✅ НОВОЕ: Обновляем peak_profit_usd после partial_close
+                        # ✅ ИСПРАВЛЕНО: Всегда обновляем, даже если 0.0 (для сброса старого peak)
                         if new_peak_profit_usd is not None:
                             metadata_updates["peak_profit_usd"] = new_peak_profit_usd
                         if new_peak_profit_time is not None:
                             metadata_updates["peak_profit_time"] = new_peak_profit_time
+                        elif new_peak_profit_usd == 0.0:
+                            # Если peak сброшен в 0, сбрасываем и time
+                            metadata_updates["peak_profit_time"] = None
                         if new_peak_profit_price is not None:
                             metadata_updates[
                                 "peak_profit_price"
                             ] = new_peak_profit_price
+                        elif new_peak_profit_usd == 0.0:
+                            # Если peak сброшен в 0, сбрасываем и price
+                            metadata_updates["peak_profit_price"] = None
 
-                        await self.position_registry.update_position(
+                        await position_registry.update_position(
                             symbol,
                             metadata_updates=metadata_updates,
                         )
                         logger.debug(
-                            f"✅ [PARTIAL_CLOSE] {symbol}: PositionRegistry обновлен с новым peak_profit_usd={new_peak_profit_usd:.4f}"
+                            f"✅ [PARTIAL_CLOSE] {symbol}: PositionRegistry обновлен с новым peak_profit_usd={new_peak_profit_usd if new_peak_profit_usd is not None else 0.0:.4f}"
                         )
                     except Exception as e:
                         logger.debug(
@@ -5724,6 +5852,162 @@ class FuturesPositionManager:
                     f"PnL={net_partial_pnl:+.2f} USDT, "
                     f"комиссия={commission:.4f} USDT"
                 )
+
+                # ✅ ВАЖНО: фиксируем partial_close в trades.csv через PerformanceTracker
+                # Иначе итоговый отчёт по CSV будет расходиться с фактической прибылью/убытком на бирже.
+                try:
+                    if (
+                        hasattr(self, "orchestrator")
+                        and self.orchestrator
+                        and hasattr(self.orchestrator, "performance_tracker")
+                        and self.orchestrator.performance_tracker
+                    ):
+                        # entry_time для duration (берем из active_positions или из PositionRegistry)
+                        entry_time = None
+                        position_id = ""
+                        if symbol in self.active_positions:
+                            entry_time = self.active_positions[symbol].get("entry_time")
+                        if entry_time is None:
+                            position_registry = None
+                            if (
+                                hasattr(self, "position_registry")
+                                and self.position_registry
+                            ):
+                                position_registry = self.position_registry
+                            elif (
+                                hasattr(self, "orchestrator")
+                                and self.orchestrator
+                                and hasattr(self.orchestrator, "position_registry")
+                            ):
+                                position_registry = self.orchestrator.position_registry
+                            if position_registry:
+                                try:
+                                    metadata = await position_registry.get_metadata(
+                                        symbol
+                                    )
+                                    if metadata and getattr(
+                                        metadata, "entry_time", None
+                                    ):
+                                        entry_time = metadata.entry_time
+                                    if metadata and getattr(
+                                        metadata, "position_id", None
+                                    ):
+                                        position_id = str(
+                                            getattr(metadata, "position_id") or ""
+                                        )
+                                except Exception:
+                                    entry_time = None
+
+                        # duration
+                        now_utc = datetime.now(timezone.utc)
+                        if isinstance(entry_time, datetime):
+                            if entry_time.tzinfo is None:
+                                entry_time = entry_time.replace(tzinfo=timezone.utc)
+                            duration_sec = (now_utc - entry_time).total_seconds()
+                        else:
+                            duration_sec = 0.0
+
+                        # side
+                        side_for_trade = (
+                            side.lower() if isinstance(side, str) else "long"
+                        )
+
+                        trade_id = f"{position_id or symbol}:{int(now_utc.timestamp()*1000)}:{reason}:partial"
+                        trade_result = TradeResult(
+                            symbol=symbol,
+                            side=side_for_trade,
+                            entry_price=float(entry_price),
+                            exit_price=float(current_price),
+                            size=float(close_size_coins),
+                            gross_pnl=float(partial_pnl),
+                            commission=float(commission),
+                            net_pnl=float(net_partial_pnl),
+                            duration_sec=float(duration_sec),
+                            reason=str(reason),
+                            timestamp=now_utc,
+                            funding_fee=0.0,
+                            trade_id=trade_id,
+                            position_id=position_id,
+                        )
+                        # Помечаем как частичную сделку (доп. поля dataclass могут отсутствовать в старых версиях)
+                        if hasattr(trade_result, "is_partial"):
+                            setattr(trade_result, "is_partial", True)
+
+                        self.orchestrator.performance_tracker.record_trade(trade_result)
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Не удалось записать partial_close {symbol} в trades.csv: {e}"
+                    )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Вызываем _update_peak_profit после partial_close
+                # чтобы обработать флаг partial_tp_executed и правильно пересчитать peak_profit_usd
+                try:
+                    # Получаем актуальную позицию с биржи для передачи в _update_peak_profit
+                    position_data = None
+
+                    # 1. Пробуем получить позицию с биржи
+                    if hasattr(self, "client") and self.client:
+                        try:
+                            positions = await self.client.get_positions(symbol)
+                            if positions:
+                                for pos in positions:
+                                    pos_inst_id = pos.get("instId", "").replace(
+                                        "-SWAP", ""
+                                    )
+                                    if pos_inst_id == symbol:
+                                        position_data = pos
+                                        break
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Не удалось получить позицию с биржи для {symbol}: {e}"
+                            )
+
+                    # 2. Если не получилось с биржи, формируем из active_positions
+                    if not position_data and symbol in self.active_positions:
+                        active_pos = self.active_positions[symbol]
+                        # Формируем словарь position в формате API
+                        position_data = {
+                            "instId": f"{symbol}-SWAP",
+                            "pos": str(active_pos.get("size", 0)),
+                            "avgPx": str(active_pos.get("entry_price", 0)),
+                            "markPx": str(active_pos.get("current_price", 0)),
+                            "posSide": active_pos.get("side", "long"),
+                        }
+                        # Получаем markPx из DataRegistry если нет current_price
+                        if (
+                            not position_data.get("markPx")
+                            or float(position_data.get("markPx", 0)) == 0
+                        ):
+                            if hasattr(self, "orchestrator") and self.orchestrator:
+                                if (
+                                    hasattr(self.orchestrator, "data_registry")
+                                    and self.orchestrator.data_registry
+                                ):
+                                    try:
+                                        current_price = await self.orchestrator.data_registry.get_price(
+                                            symbol
+                                        )
+                                        if current_price:
+                                            position_data["markPx"] = str(current_price)
+                                    except Exception as e:
+                                        logger.debug(
+                                            f"⚠️ Не удалось получить цену из DataRegistry для {symbol}: {e}"
+                                        )
+
+                    if position_data:
+                        await self._update_peak_profit(position_data)
+                        logger.debug(
+                            f"✅ [PARTIAL_CLOSE] {symbol}: _update_peak_profit вызван после partial_close"
+                        )
+                    else:
+                        logger.warning(
+                            f"⚠️ [PARTIAL_CLOSE] {symbol}: Не удалось получить position_data для вызова _update_peak_profit"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ [PARTIAL_CLOSE] {symbol}: Не удалось вызвать _update_peak_profit после partial_close: {e}",
+                        exc_info=True,
+                    )
 
                 return {
                     "success": True,

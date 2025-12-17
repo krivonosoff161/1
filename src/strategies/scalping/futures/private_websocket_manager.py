@@ -449,14 +449,18 @@ class PrivateWebSocketManager:
             except Exception:
                 pass
 
-        # Закрываем сессию
-        if self.session and not self.session.closed:
+        # ✅ ИСПРАВЛЕНО: Закрываем сессию с явным ожиданием
+        if self.session:
             try:
-                await self.session.close()
-                await asyncio.sleep(0.1)
+                if not self.session.closed:
+                    await self.session.close()
+                    # Даем время на полное закрытие сессии
+                    await asyncio.sleep(0.2)
+                self.session = None
                 logger.debug("✅ Private WebSocket сессия закрыта")
             except Exception as e:
                 logger.debug(f"⚠️ Ошибка при закрытии Private WebSocket сессии: {e}")
+                self.session = None
 
         logger.info("🔌 Private WebSocket отключен")
 

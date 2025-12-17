@@ -63,13 +63,16 @@ class OKXFuturesClient:
     async def close(self):
         """Корректное закрытие клиента и сессии"""
         try:
-            if self.session and not self.session.closed:
-                await self.session.close()
-                # Даем время на корректное закрытие
-                await asyncio.sleep(0.1)
+            if self.session:
+                if not self.session.closed:
+                    await self.session.close()
+                    # Даем время на корректное закрытие
+                    await asyncio.sleep(0.2)
+                self.session = None
                 logger.debug("✅ OKXFuturesClient сессия закрыта")
         except Exception as e:
             logger.debug(f"⚠️ Ошибка при закрытии сессии: {e}")
+            self.session = None
 
     # ---------- HTTP internals ----------
     async def _make_request(
