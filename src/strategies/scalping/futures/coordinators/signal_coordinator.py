@@ -1385,6 +1385,35 @@ class SignalCoordinator:
                 logger.debug(f"Позиция {symbol} уже в активных, пропускаем")
                 return False
 
+            # ✅ ОПТИМИЗАЦИЯ: Проверяем актуальность signal["price"] перед размещением ордера
+            if signal and signal.get("price"):
+                signal_price = signal.get("price", 0.0)
+                try:
+                    price_limits = await self.order_executor.client.get_price_limits(
+                        symbol
+                    )
+                    if price_limits:
+                        current_price = price_limits.get("current_price", 0)
+                        if current_price > 0 and signal_price > 0:
+                            price_diff_pct = (
+                                abs(signal_price - current_price) / current_price * 100
+                            )
+                            if price_diff_pct > 0.5:  # Разница > 0.5% - сигнал устарел
+                                logger.warning(
+                                    f"⚠️ signal['price']={signal_price:.2f} устарела для {symbol} "
+                                    f"(разница с current_price={current_price:.2f} составляет {price_diff_pct:.2f}%), "
+                                    f"рассматриваем использование market order"
+                                )
+                                # Обновляем цену сигнала на актуальную
+                                signal["price"] = current_price
+                                logger.info(
+                                    f"✅ Обновлена цена сигнала для {symbol}: {signal_price:.2f} → {current_price:.2f}"
+                                )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Ошибка проверки актуальности signal['price'] для {symbol}: {e}"
+                    )
+
             # Используем переданный сигнал или создаем тестовый
             if signal is None:
                 # ✅ НОВОЕ: Определяем режим из DataRegistry (если ARM активен)
@@ -1837,8 +1866,8 @@ class SignalCoordinator:
                 else:
                     # Лимитный ордер - проверяем статус
                     try:
-                        # Ждем немного для исполнения лимитного ордера (1-2 секунды)
-                        await asyncio.sleep(2)
+                        # ✅ ОПТИМИЗАЦИЯ: Уменьшено время ожидания с 2 сек до 0.5 сек для быстрого fallback
+                        await asyncio.sleep(0.5)
                         # Проверяем статус ордера
                         active_orders = await self.client.get_active_orders(symbol)
                         inst_id = f"{symbol}-SWAP"
@@ -1872,57 +1901,151 @@ class SignalCoordinator:
 
                         if not position_opened:
                             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем, не был ли ордер отменен
-                            # Если ордер был отменен (например, Slippage Guard), но позиция не открылась,
-                            # проверяем еще раз через 1 секунду на случай, если ордер был частично исполнен
+                            # ✅ ОПТИМИЗАЦИЯ: Уменьшено время ожидания с 1 сек до 0.3 сек
+                            # ✅ НОВОЕ: Проверяем отклонение цены для немедленного fallback на market
                             try:
-                                await asyncio.sleep(1)
-                                # Проверяем статус ордера
-                                active_orders = await self.client.get_active_orders(
-                                    symbol
-                                )
-                                order_cancelled = True
-                                for order in active_orders:
-                                    if str(order.get("ordId", "")) == str(order_id):
-                                        order_state = order.get("state", "").lower()
-                                        if order_state in [
-                                            "filled",
-                                            "partially_filled",
-                                        ]:
-                                            # Ордер исполнен! Проверяем позицию еще раз
-                                            positions = (
-                                                await self.client.get_positions()
-                                            )
-                                            for pos in positions:
-                                                pos_inst_id = pos.get("instId", "")
-                                                pos_size = abs(
-                                                    float(pos.get("pos", "0"))
-                                                )
-                                                if (
-                                                    pos_inst_id == inst_id
-                                                    or pos_inst_id == symbol
-                                                ) and pos_size > 0.000001:
-                                                    position_opened = True
-                                                    logger.info(
-                                                        f"✅ Лимитный ордер {order_id} исполнен после проверки, позиция открыта: {symbol}"
-                                                    )
-                                                    break
-                                        order_cancelled = False
-                                        break
-
-                                if order_cancelled:
-                                    logger.warning(
-                                        f"⚠️ Лимитный ордер {order_id} для {symbol} был отменен (возможно Slippage Guard), "
-                                        f"позиция НЕ открылась"
+                                # ✅ ОПТИМИЗАЦИЯ: Проверяем отклонение цены от ордера для немедленного fallback на market
+                                price_drift_pct = 0.0
+                                should_fallback_market = False
+                                try:
+                                    # Получаем цену ордера из активных ордеров
+                                    active_orders_check = (
+                                        await self.client.get_active_orders(symbol)
                                     )
-                                    # Обновляем кэш со статусом "cancelled"
-                                    self.last_orders_cache_ref[normalized_symbol] = {
-                                        "order_id": order_id,
-                                        "timestamp": current_time,
-                                        "status": "cancelled",
-                                        "order_type": order_type,
-                                        "side": signal.get("side", "unknown"),
-                                    }
-                                    return False
+                                    order_price = 0.0
+                                    for order in active_orders_check:
+                                        if str(order.get("ordId", "")) == str(order_id):
+                                            order_price = float(order.get("px", "0"))
+                                            break
+
+                                    # Если не нашли цену в активных, используем из order_result
+                                    if order_price == 0:
+                                        order_price = float(
+                                            order_result.get("price", 0)
+                                        )
+
+                                    if order_price > 0:
+                                        price_limits = (
+                                            await self.client.get_price_limits(symbol)
+                                        )
+                                        if price_limits:
+                                            current_price = price_limits.get(
+                                                "current_price", 0
+                                            )
+
+                                            if current_price > 0:
+                                                signal_side = (
+                                                    signal.get("side", "").lower()
+                                                    if signal
+                                                    else "buy"
+                                                )
+                                                if signal_side == "buy":
+                                                    # Для BUY: если цена ушла вниз > 0.05% от ордера
+                                                    price_drift_pct = (
+                                                        (order_price - current_price)
+                                                        / order_price
+                                                    ) * 100.0
+                                                    if (
+                                                        price_drift_pct > 0.05
+                                                    ):  # Цена ушла вниз > 0.05%
+                                                        should_fallback_market = True
+                                                else:  # sell
+                                                    # Для SELL: если цена ушла вверх > 0.05% от ордера
+                                                    price_drift_pct = (
+                                                        (current_price - order_price)
+                                                        / order_price
+                                                    ) * 100.0
+                                                    if (
+                                                        price_drift_pct > 0.05
+                                                    ):  # Цена ушла вверх > 0.05%
+                                                        should_fallback_market = True
+                                except Exception as e:
+                                    logger.debug(
+                                        f"⚠️ Ошибка проверки отклонения цены для {symbol}: {e}"
+                                    )
+
+                                # Если цена ушла значительно - немедленный fallback на market
+                                if should_fallback_market:
+                                    logger.warning(
+                                        f"💨 Цена ушла {price_drift_pct:.2f}% от лимитного ордера {order_id} для {symbol}, "
+                                        f"отменяем и размещаем market ордер"
+                                    )
+                                    try:
+                                        # Отменяем лимитный ордер
+                                        await self.order_executor.cancel_order(
+                                            order_id, symbol
+                                        )
+                                        # Размещаем market ордер
+                                        market_result = await self.order_executor._place_market_order(
+                                            symbol,
+                                            signal.get("side", "buy"),
+                                            position_size,
+                                        )
+                                        if market_result.get("success"):
+                                            logger.info(
+                                                f"✅ Market ордер размещен вместо лимитного для {symbol}: {market_result.get('order_id')}"
+                                            )
+                                            position_opened = True  # Market ордер исполняется мгновенно
+                                        else:
+                                            logger.error(
+                                                f"❌ Не удалось разместить market ордер для {symbol}: {market_result.get('error')}"
+                                            )
+                                    except Exception as e:
+                                        logger.error(
+                                            f"❌ Ошибка fallback на market для {symbol}: {e}"
+                                        )
+
+                                if not position_opened:
+                                    await asyncio.sleep(0.3)
+                                    # Проверяем статус ордера
+                                    active_orders = await self.client.get_active_orders(
+                                        symbol
+                                    )
+                                    order_cancelled = True
+                                    for order in active_orders:
+                                        if str(order.get("ordId", "")) == str(order_id):
+                                            order_state = order.get("state", "").lower()
+                                            if order_state in [
+                                                "filled",
+                                                "partially_filled",
+                                            ]:
+                                                # Ордер исполнен! Проверяем позицию еще раз
+                                                positions = (
+                                                    await self.client.get_positions()
+                                                )
+                                                for pos in positions:
+                                                    pos_inst_id = pos.get("instId", "")
+                                                    pos_size = abs(
+                                                        float(pos.get("pos", "0"))
+                                                    )
+                                                    if (
+                                                        pos_inst_id == inst_id
+                                                        or pos_inst_id == symbol
+                                                    ) and pos_size > 0.000001:
+                                                        position_opened = True
+                                                        logger.info(
+                                                            f"✅ Лимитный ордер {order_id} исполнен после проверки, позиция открыта: {symbol}"
+                                                        )
+                                                        break
+                                            order_cancelled = False
+                                            break
+
+                                    if order_cancelled:
+                                        logger.warning(
+                                            f"⚠️ Лимитный ордер {order_id} для {symbol} был отменен (возможно Slippage Guard), "
+                                            f"позиция НЕ открылась"
+                                        )
+                                        # Обновляем кэш со статусом "cancelled"
+                                        self.last_orders_cache_ref[
+                                            normalized_symbol
+                                        ] = {
+                                            "order_id": order_id,
+                                            "timestamp": current_time,
+                                            "status": "cancelled",
+                                            "order_type": order_type,
+                                            "side": signal.get("side", "unknown"),
+                                        }
+                                        return False
                             except Exception as e:
                                 logger.debug(
                                     f"Ошибка повторной проверки ордера {order_id}: {e}"
@@ -2038,8 +2161,8 @@ class SignalCoordinator:
                 # Получаем реальную цену входа (avgPx) с биржи и обновляем trailing stop loss
                 real_entry_price = price  # Fallback на цену сигнала
                 try:
-                    # Ждем немного для синхронизации позиций на бирже (2-3 секунды)
-                    await asyncio.sleep(2)
+                    # ✅ ОПТИМИЗАЦИЯ: Уменьшено время ожидания с 2 сек до 0.5 сек для быстрой синхронизации
+                    await asyncio.sleep(0.5)
                     # Получаем позицию с биржи
                     positions = await self.client.get_positions()
                     inst_id = f"{symbol}-SWAP"

@@ -1199,7 +1199,21 @@ class FuturesPositionManager:
             symbol = position.get("instId", "").replace("-SWAP", "")
             size = float(position.get("pos", "0"))
             entry_price = float(position.get("avgPx", "0"))
-            current_price = float(position.get("markPx", "0"))
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для скальпинга, markPx только как fallback
+            current_price = float(position.get("markPx", "0"))  # Fallback
+            try:
+                price_limits = await self.client.get_price_limits(symbol)
+                if price_limits:
+                    actual_price = price_limits.get("current_price", 0)
+                    if actual_price > 0:
+                        current_price = actual_price
+                        logger.debug(
+                            f"✅ Используем актуальную цену из стакана для SL проверки {symbol}: {current_price:.2f}"
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить актуальную цену для {symbol}, используем markPx: {e}"
+                )
 
             if size == 0 or entry_price == 0 or current_price == 0:
                 return False
@@ -1829,7 +1843,21 @@ class FuturesPositionManager:
             if isinstance(side, str):
                 side = side.lower()
             entry_price = float(position.get("avgPx", "0"))
-            current_price = float(position.get("markPx", "0"))
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для скальпинга, markPx только как fallback
+            current_price = float(position.get("markPx", "0"))  # Fallback
+            try:
+                price_limits = await self.client.get_price_limits(symbol)
+                if price_limits:
+                    actual_price = price_limits.get("current_price", 0)
+                    if actual_price > 0:
+                        current_price = actual_price
+                        logger.debug(
+                            f"✅ Используем актуальную цену из стакана для TP проверки {symbol}: {current_price:.2f}"
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить актуальную цену для {symbol}, используем markPx: {e}"
+                )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало проверки
             logger.debug(
@@ -2434,9 +2462,37 @@ class FuturesPositionManager:
                 else:
                     tsl = None
                 if tsl:
-                    # Получаем текущую прибыль (net с комиссией)
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем margin и unrealized_pnl для правильного расчета от маржи
+                    margin_used_tsl = None
+                    unrealized_pnl_tsl = None
+                    try:
+                        margin_str = (
+                            position.get("margin") or position.get("imr") or "0"
+                        )
+                        if (
+                            margin_str
+                            and str(margin_str).strip()
+                            and str(margin_str) != "0"
+                        ):
+                            margin_used_tsl = float(margin_str)
+                        upl_str = (
+                            position.get("upl") or position.get("unrealizedPnl") or "0"
+                        )
+                        if upl_str and str(upl_str).strip() and str(upl_str) != "0":
+                            unrealized_pnl_tsl = float(upl_str)
+                    except (ValueError, TypeError):
+                        pass
+
+                    # Получаем текущую прибыль (net с комиссией) с правильным расчетом от маржи
                     profit_pct_net = tsl.get_profit_pct(
-                        current_price, include_fees=True
+                        current_price,
+                        include_fees=True,
+                        margin_used=margin_used_tsl
+                        if margin_used_tsl and margin_used_tsl > 0
+                        else None,
+                        unrealized_pnl=unrealized_pnl_tsl
+                        if unrealized_pnl_tsl is not None
+                        else None,
                     )
                     min_profit_to_close = getattr(tsl, "min_profit_to_close", None)
 
@@ -3207,11 +3263,20 @@ class FuturesPositionManager:
                                 )
 
                             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Генерируем уникальный clOrdID для предотвращения дубликатов
+                            # ✅ ИСПРАВЛЕНО: Формат должен соответствовать требованиям OKX (макс 32 символа, только буквы/цифры/дефисы/подчеркивания)
                             timestamp_ms = int(time.time() * 1000)
                             random_suffix = random.randint(1000, 9999)
-                            unique_cl_ord_id = (
-                                f"TP_{symbol}_{timestamp_ms}_{random_suffix}"[:32]
-                            )  # OKX макс 32 символа
+                            # Убираем дефисы из symbol для более короткого ID
+                            symbol_clean = symbol.replace("-", "")
+                            # Формат: TP_SYMBOL_TIMESTAMP_RANDOM (макс 32 символа)
+                            base_id = f"TP{symbol_clean}{timestamp_ms}{random_suffix}"
+                            # Обрезаем до 32 символов и убеждаемся что не начинается/заканчивается подчеркиванием
+                            unique_cl_ord_id = base_id[:32].strip("_")
+                            if not unique_cl_ord_id:
+                                # Fallback если что-то пошло не так
+                                unique_cl_ord_id = (
+                                    f"TP{symbol_clean[:10]}{random_suffix}"[:32]
+                                )
 
                             # Размещаем лимитный reduce-only ордер (size уже в контрактах)
                             result = await self.client.place_futures_order(
@@ -3242,13 +3307,18 @@ class FuturesPositionManager:
                                     f"⚠️ Partial TP лимит не размещён для {symbol}: {result}. Fallback → MARKET reduce_only"
                                 )
                                 # ✅ Генерируем новый уникальный clOrdID для market ордера
+                                # ✅ ИСПРАВЛЕНО: Формат должен соответствовать требованиям OKX
                                 timestamp_ms = int(time.time() * 1000)
                                 random_suffix = random.randint(1000, 9999)
-                                market_cl_ord_id = (
-                                    f"TP_MKT_{symbol}_{timestamp_ms}_{random_suffix}"[
-                                        :32
-                                    ]
+                                symbol_clean = symbol.replace("-", "")
+                                base_id = (
+                                    f"TPMKT{symbol_clean}{timestamp_ms}{random_suffix}"
                                 )
+                                market_cl_ord_id = base_id[:32].strip("_")
+                                if not market_cl_ord_id:
+                                    market_cl_ord_id = (
+                                        f"TPMKT{symbol_clean[:10]}{random_suffix}"[:32]
+                                    )
 
                                 market_res = await self.client.place_futures_order(
                                     symbol=symbol,
@@ -3369,8 +3439,31 @@ class FuturesPositionManager:
                 if symbol in self.active_positions:
                     del self.active_positions[symbol]
                 # ✅ НОВОЕ: Удаляем из PositionRegistry
-                if hasattr(self, "position_registry"):
-                    await self.position_registry.unregister_position(symbol)
+                # ✅ ИСПРАВЛЕНО: Проверяем что position_registry не None
+                if (
+                    hasattr(self, "position_registry")
+                    and self.position_registry is not None
+                ):
+                    try:
+                        await self.position_registry.unregister_position(symbol)
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Ошибка удаления {symbol} из position_registry: {e}"
+                        )
+                elif hasattr(self, "orchestrator") and self.orchestrator:
+                    # Пробуем через orchestrator
+                    if (
+                        hasattr(self.orchestrator, "position_registry")
+                        and self.orchestrator.position_registry is not None
+                    ):
+                        try:
+                            await self.orchestrator.position_registry.unregister_position(
+                                symbol
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"⚠️ Ошибка удаления {symbol} из orchestrator.position_registry: {e}"
+                            )
                 return None
 
             size = float(actual_position.get("pos", "0"))
@@ -3396,8 +3489,30 @@ class FuturesPositionManager:
                 )
                 if symbol in self.active_positions:
                     del self.active_positions[symbol]
-                if hasattr(self, "position_registry"):
-                    await self.position_registry.unregister_position(symbol)
+                # ✅ ИСПРАВЛЕНО: Проверяем что position_registry не None
+                if (
+                    hasattr(self, "position_registry")
+                    and self.position_registry is not None
+                ):
+                    try:
+                        await self.position_registry.unregister_position(symbol)
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Ошибка удаления {symbol} из position_registry: {e}"
+                        )
+                elif hasattr(self, "orchestrator") and self.orchestrator:
+                    if (
+                        hasattr(self.orchestrator, "position_registry")
+                        and self.orchestrator.position_registry is not None
+                    ):
+                        try:
+                            await self.orchestrator.position_registry.unregister_position(
+                                symbol
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"⚠️ Ошибка удаления {symbol} из orchestrator.position_registry: {e}"
+                            )
                 return None
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем актуальную цену из стакана перед закрытием
@@ -5091,7 +5206,22 @@ class FuturesPositionManager:
             # Нужно получить ctVal для конвертации в монеты перед расчетом PnL
             try:
                 details = await self.client.get_instrument_details(symbol)
-                ct_val = float(details.get("ctVal", "0.01"))
+                # ✅ ИСПРАВЛЕНО: Проверка на пустые строки перед конвертацией в float
+                ct_val_str = details.get("ctVal", "0.01")
+                if ct_val_str == "" or ct_val_str is None:
+                    ct_val_str = "0.01"  # Fallback значение
+                try:
+                    ct_val = float(ct_val_str)
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"⚠️ Не удалось конвертировать ctVal '{ct_val_str}' в float для {symbol} в _update_position_stats, используем 0.01"
+                    )
+                    ct_val = 0.01
+                if ct_val <= 0:
+                    logger.warning(
+                        f"⚠️ ctVal <= 0 для {symbol} в _update_position_stats, используем 0.01"
+                    )
+                    ct_val = 0.01
                 # Реальный размер в монетах
                 size_in_coins = abs(size) * ct_val
             except Exception as e:

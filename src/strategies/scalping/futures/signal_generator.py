@@ -1387,6 +1387,42 @@ class FuturesSignalGenerator:
             logger.error(f"Ошибка генерации сигналов для {symbol}: {e}")
             return []
 
+    async def _get_current_market_price(
+        self, symbol: str, fallback_price: float = 0.0
+    ) -> float:
+        """
+        ✅ НОВОЕ: Получение текущей цены из стакана для актуальной цены сигнала.
+
+        Используется для синхронизации цены сигнала с текущей рыночной ценой,
+        чтобы избежать рассинхронизации между генерацией сигнала и размещением ордера.
+
+        Args:
+            symbol: Торговый символ
+            fallback_price: Цена закрытия свечи как fallback если не удалось получить текущую цену
+
+        Returns:
+            Текущая цена из стакана или fallback_price
+        """
+        try:
+            if self.client and hasattr(self.client, "get_price_limits"):
+                price_limits = await self.client.get_price_limits(symbol)
+                if price_limits:
+                    current_price = price_limits.get("current_price", 0)
+                    if current_price > 0:
+                        logger.debug(
+                            f"💰 Получена актуальная цена из стакана для {symbol}: {current_price:.2f} "
+                            f"(fallback был: {fallback_price:.2f})"
+                        )
+                        return current_price
+        except Exception as e:
+            logger.debug(
+                f"⚠️ Не удалось получить актуальную цену из стакана для {symbol}: {e}, "
+                f"используем fallback: {fallback_price:.2f}"
+            )
+
+        # Fallback: возвращаем цену закрытия свечи если не удалось получить текущую цену
+        return fallback_price
+
     async def _get_market_data(self, symbol: str) -> Optional[MarketData]:
         """
         ✅ НОВОЕ: Получение рыночных данных из DataRegistry (инкрементальное обновление).
@@ -1615,8 +1651,13 @@ class FuturesSignalGenerator:
             ema_12 = indicators.get("ema_12", 0)
             ema_26 = indicators.get("ema_26", 0)
             bb = indicators.get("bollinger_bands", {})
-            current_price = (
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов вместо цены закрытия свечи
+            # Это синхронизирует цену сигнала с текущей рыночной ценой
+            candle_close_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
+            current_price = await self._get_current_market_price(
+                symbol, candle_close_price
             )
 
             # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование всех индикаторов (экономия ~30% логов)
@@ -1731,7 +1772,7 @@ class FuturesSignalGenerator:
             if regime_manager:
                 current_regime = regime_manager.get_current_regime()
 
-            impulse_signals = self._detect_impulse_signals(
+            impulse_signals = await self._detect_impulse_signals(
                 symbol, market_data, indicators, current_regime
             )
 
@@ -1900,8 +1941,12 @@ class FuturesSignalGenerator:
             # ✅ Получаем EMA для проверки тренда
             ema_fast = indicators.get("ema_12", 0)
             ema_slow = indicators.get("ema_26", 0)
-            current_price = (
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
+            candle_close_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
+            current_price = await self._get_current_market_price(
+                symbol, candle_close_price
             )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем confidence_config_rsi ДО всех условий
@@ -2262,8 +2307,12 @@ class FuturesSignalGenerator:
             # Для BULLISH: ema_fast>ema_slow AND price>ema_fast
             ema_fast = indicators.get("ema_12", 0)
             ema_slow = indicators.get("ema_26", 0)
-            current_price = (
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
+            candle_close_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
+            current_price = await self._get_current_market_price(
+                symbol, candle_close_price
             )
 
             # Пересечение MACD линии и сигнальной линии
@@ -2335,9 +2384,7 @@ class FuturesSignalGenerator:
                             "side": "buy",
                             "type": "macd_bullish",
                             "strength": base_strength,
-                            "price": market_data.ohlcv_data[-1].close
-                            if market_data.ohlcv_data
-                            else 0.0,
+                            "price": current_price,  # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана
                             "timestamp": datetime.now(),
                             "indicator_value": histogram,
                             "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
@@ -2412,9 +2459,7 @@ class FuturesSignalGenerator:
                             "side": "sell",
                             "type": "macd_bearish",
                             "strength": base_strength,
-                            "price": market_data.ohlcv_data[-1].close
-                            if market_data.ohlcv_data
-                            else 0.0,
+                            "price": current_price,  # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана
                             "timestamp": datetime.now(),
                             "indicator_value": histogram,
                             "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
@@ -2443,8 +2488,12 @@ class FuturesSignalGenerator:
             upper = bb.get("upper", 0)
             lower = bb.get("lower", 0)
             middle = bb.get("middle", 0)
-            current_price = (
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
+            candle_close_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
+            current_price = await self._get_current_market_price(
+                symbol, candle_close_price
             )
 
             # ✅ ОПТИМИЗАЦИЯ: Логируем BB только при генерации сигналов (не каждый раз)
@@ -2563,9 +2612,7 @@ class FuturesSignalGenerator:
                             "side": "buy",
                             "type": "bb_oversold",
                             "strength": base_strength,
-                            "price": market_data.ohlcv_data[-1].close
-                            if market_data.ohlcv_data
-                            else 0.0,
+                            "price": current_price,  # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана
                             "timestamp": datetime.now(),
                             "indicator_value": current_price,
                             "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
@@ -2652,9 +2699,7 @@ class FuturesSignalGenerator:
                             "side": "sell",
                             "type": "bb_overbought",
                             "strength": base_strength,
-                            "price": market_data.ohlcv_data[-1].close
-                            if market_data.ohlcv_data
-                            else 0.0,
+                            "price": current_price,  # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана
                             "timestamp": datetime.now(),
                             "indicator_value": current_price,
                             "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
@@ -2681,8 +2726,12 @@ class FuturesSignalGenerator:
         try:
             ma_fast = indicators.get("ema_12", 0)
             ma_slow = indicators.get("ema_26", 0)
-            current_price = (
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
+            candle_close_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
+            current_price = await self._get_current_market_price(
+                symbol, candle_close_price
             )
 
             # ✅ АДАПТИВНО: Получаем параметры signal_generator из конфига (ПЕРЕД использованием)
@@ -3260,9 +3309,7 @@ class FuturesSignalGenerator:
                             "side": "buy",
                             "type": "ma_bullish",
                             "strength": strength,
-                            "price": market_data.ohlcv_data[-1].close
-                            if market_data.ohlcv_data
-                            else 0.0,
+                            "price": current_price,  # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана
                             "timestamp": datetime.now(),
                             "indicator_value": ma_fast,
                             "confidence": confidence_config.get("bullish_strong", 0.7)
@@ -3326,9 +3373,7 @@ class FuturesSignalGenerator:
                             "side": "sell",
                             "type": "ma_bearish",
                             "strength": strength,
-                            "price": market_data.ohlcv_data[-1].close
-                            if market_data.ohlcv_data
-                            else 0.0,
+                            "price": current_price,  # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана
                             "timestamp": datetime.now(),
                             "indicator_value": ma_fast,
                             "confidence": confidence_config.get("bearish_strong", 0.7)
@@ -3344,7 +3389,7 @@ class FuturesSignalGenerator:
 
         return signals
 
-    def _detect_impulse_signals(
+    async def _detect_impulse_signals(
         self,
         symbol: str,
         market_data: MarketData,
@@ -3469,12 +3514,18 @@ class FuturesSignalGenerator:
         relax_cfg = getattr(config, "relax", None)
         trailing_cfg = getattr(config, "trailing", None)
 
+        # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигнала
+        candle_close_price = current_candle.close
+        current_market_price = await self._get_current_market_price(
+            symbol, candle_close_price
+        )
+
         signal = {
             "symbol": symbol,
             "side": "buy" if direction == "buy" else "sell",
             "type": "impulse_breakout",
             "strength": strength,
-            "price": current_candle.close,
+            "price": current_market_price,  # ✅ Используем актуальную цену из стакана
             "timestamp": datetime.now(),
             "indicator_value": body_ratio,
             "confidence": 0.9,

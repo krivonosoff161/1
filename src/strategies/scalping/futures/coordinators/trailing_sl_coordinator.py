@@ -410,7 +410,8 @@ class TrailingSLCoordinator:
                     f"step_trail={step_trail:.3%}, cap={aggressive_cap if aggressive_cap else 'auto'}"
                 )
         if current_price and current_price > 0:
-            tsl.update(current_price)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: При инициализации margin/unrealized_pnl еще нет, передаем None
+            tsl.update(current_price, margin_used=None, unrealized_pnl=None)
         self.trailing_sl_by_symbol[symbol] = tsl
         fee_display = trading_fee_rate if trading_fee_rate else 0.0
         # ✅ ИСПРАВЛЕНИЕ: loss_cut_percent уже в процентах (1.8 = 1.8%), не нужно умножать на 100
@@ -608,11 +609,8 @@ class TrailingSLCoordinator:
                     return
 
             tsl = self.trailing_sl_by_symbol[symbol]
-            tsl.update(current_price)
 
-            stop_loss = tsl.get_stop_loss()
-
-            # ✅ ИСПРАВЛЕНО: Передаем margin и unrealizedPnl для правильного расчета от маржи
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем margin и unrealizedPnl ДО вызова update()
             margin_used = None
             unrealized_pnl = None
             try:
@@ -626,6 +624,15 @@ class TrailingSLCoordinator:
                 logger.debug(
                     f"⚠️ TrailingSLCoordinator: Ошибка получения margin/upl для {symbol}: {e}"
                 )
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем margin и unrealizedPnl в update() для правильного расчета от маржи
+            tsl.update(
+                current_price,
+                margin_used=margin_used if margin_used and margin_used > 0 else None,
+                unrealized_pnl=unrealized_pnl if unrealized_pnl is not None else None,
+            )
+
+            stop_loss = tsl.get_stop_loss()
 
             profit_pct = tsl.get_profit_pct(
                 current_price,
@@ -921,6 +928,8 @@ class TrailingSLCoordinator:
                 current_price,
                 trend_strength=trend_strength,
                 market_regime=market_regime,
+                margin_used=margin_used if margin_used and margin_used > 0 else None,
+                unrealized_pnl=unrealized_pnl if unrealized_pnl is not None else None,
             )
 
             should_block_close = False

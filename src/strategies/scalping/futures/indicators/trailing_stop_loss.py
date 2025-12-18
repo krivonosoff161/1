@@ -210,12 +210,19 @@ class TrailingStopLoss:
             f"step_trail={step_trail:.3%}, cap={cap_display}"
         )
 
-    def update(self, current_price: float) -> Optional[float]:
+    def update(
+        self,
+        current_price: float,
+        margin_used: Optional[float] = None,
+        unrealized_pnl: Optional[float] = None,
+    ) -> Optional[float]:
         """
         Обновление трейлинга и расчет нового стоп-лосса.
 
         Args:
             current_price: Текущая цена актива
+            margin_used: Использованная маржа (опционально, для правильного расчета от маржи)
+            unrealized_pnl: Нереализованный PnL (опционально, для правильного расчета от маржи)
 
         Returns:
             Новый стоп-лосс или None если не нужно менять
@@ -224,7 +231,12 @@ class TrailingStopLoss:
             return None
 
         old_stop_loss = self.get_stop_loss()
-        profit_pct_total = self.get_profit_pct(current_price, include_fees=True)
+        profit_pct_total = self.get_profit_pct(
+            current_price,
+            include_fees=True,
+            margin_used=margin_used,
+            unrealized_pnl=unrealized_pnl,
+        )
 
         # Обновление экстремумов и трейлинга
         if self.side == "long":
@@ -500,6 +512,8 @@ class TrailingStopLoss:
         min_profit_pct: Optional[float] = None,
         trend_strength: Optional[float] = None,
         market_regime: Optional[str] = None,
+        margin_used: Optional[float] = None,
+        unrealized_pnl: Optional[float] = None,
     ) -> Tuple[bool, Optional[str]]:
         """
         Проверка, нужно ли закрывать позицию по стоп-лоссу.
@@ -513,13 +527,20 @@ class TrailingStopLoss:
             min_profit_pct: Минимальный % прибыли для удержания позиции (если указан)
             trend_strength: Сила тренда 0-1 (если указан, >0.7 = сильный тренд)
             market_regime: Режим рынка ("trending", "ranging", "choppy")
+            margin_used: Использованная маржа (опционально, для правильного расчета от маржи)
+            unrealized_pnl: Нереализованный PnL (опционально, для правильного расчета от маржи)
 
         Returns:
             Tuple[bool, Optional[str]]: (True, причина_закрытия) если нужно закрыть, (False, None) если нет
         """
         stop_loss = self.get_stop_loss()
-        # ⚠️ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ!
-        profit_pct = self.get_profit_pct(current_price, include_fees=True)
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ и передаем margin/unrealized_pnl для правильного расчета от маржи
+        profit_pct = self.get_profit_pct(
+            current_price,
+            include_fees=True,
+            margin_used=margin_used,
+            unrealized_pnl=unrealized_pnl,
+        )
         # ✅ ИСПРАВЛЕНО: max(0.0, ...) для защиты от отрицательных значений (часы слетели)
         minutes_in_position = max(
             0.0,
@@ -856,7 +877,10 @@ class TrailingStopLoss:
                     # Не закрываем если цена выше скорректированного стопа
                     if current_price > adjusted_stop:
                         profit_gross = self.get_profit_pct(
-                            current_price, include_fees=False
+                            current_price,
+                            include_fees=False,
+                            margin_used=margin_used,
+                            unrealized_pnl=unrealized_pnl,
                         )
                         trend_str = (
                             f"{trend_strength:.2f}"
@@ -894,7 +918,10 @@ class TrailingStopLoss:
                     # Не закрываем если цена ниже скорректированного стопа (для SHORT цена должна подняться до стопа)
                     if current_price < adjusted_stop:
                         profit_gross = self.get_profit_pct(
-                            current_price, include_fees=False
+                            current_price,
+                            include_fees=False,
+                            margin_used=margin_used,
+                            unrealized_pnl=unrealized_pnl,
                         )
                         trend_str = (
                             f"{trend_strength:.2f}"

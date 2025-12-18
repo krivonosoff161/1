@@ -247,7 +247,30 @@ class ExitAnalyzer:
 
             # Получаем рыночные данные
             market_data = await self.data_registry.get_market_data(symbol)
-            current_price = await self.data_registry.get_price(symbol)
+
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для анализа закрытия, data_registry только как fallback
+            current_price = None
+            if self.client and hasattr(self.client, "get_price_limits"):
+                try:
+                    price_limits = await self.client.get_price_limits(symbol)
+                    if price_limits:
+                        current_price = price_limits.get("current_price", 0)
+                        if current_price > 0:
+                            logger.debug(
+                                f"✅ ExitAnalyzer: Используем актуальную цену из стакана для {symbol}: {current_price:.2f}"
+                            )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ ExitAnalyzer: Не удалось получить актуальную цену из стакана для {symbol}: {e}"
+                    )
+
+            # Fallback на data_registry если не получили из стакана
+            if current_price is None or current_price <= 0:
+                current_price = await self.data_registry.get_price(symbol)
+                if current_price and current_price > 0:
+                    logger.debug(
+                        f"✅ ExitAnalyzer: Используем цену из data_registry для {symbol}: {current_price:.2f}"
+                    )
 
             # ✅ ИСПРАВЛЕНО: Проверка current_price на None и <= 0
             if current_price is None:
@@ -1500,10 +1523,44 @@ class ExitAnalyzer:
                             "minutes_in_position": minutes_in_position,
                         }
 
-                    # Нет сильных сигналов, но позиция в прибыли - закрываем по времени
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем min_profit_to_close перед закрытием по времени
+                    # Не закрываем по времени если прибыль < min_profit_to_close (после комиссий будет убыток!)
+                    min_profit_to_close = None
+                    if self.orchestrator and hasattr(
+                        self.orchestrator, "trailing_sl_coordinator"
+                    ):
+                        tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                        if tsl:
+                            min_profit_to_close = getattr(
+                                tsl, "min_profit_to_close", None
+                            )
+
+                    # Если min_profit_to_close не найден, используем минимальный порог 0.3% (чтобы покрыть комиссии)
+                    min_profit_threshold = (
+                        min_profit_to_close
+                        if min_profit_to_close is not None
+                        else 0.003
+                    )  # 0.3%
+
+                    if pnl_percent < min_profit_threshold:
+                        # Прибыль меньше min_profit_to_close - НЕ закрываем по времени (после комиссий будет убыток!)
+                        logger.info(
+                            f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                            f"но прибыль {pnl_percent:.2f}% < min_profit_threshold {min_profit_threshold:.2%} - "
+                            f"НЕ закрываем по времени (после комиссий будет убыток!)"
+                        )
+                        return {
+                            "action": "hold",
+                            "reason": "max_holding_low_profit",
+                            "pnl_pct": pnl_percent,
+                            "min_profit_threshold": min_profit_threshold,
+                            "minutes_in_position": minutes_in_position,
+                        }
+
+                    # Нет сильных сигналов, но позиция в прибыли >= min_profit_to_close - закрываем по времени
                     logger.info(
                         f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
-                        f"нет сильных сигналов держать (trend_strength={trend_strength:.2f}, pnl={pnl_percent:.2f}%) - закрываем"
+                        f"нет сильных сигналов держать (trend_strength={trend_strength:.2f}, pnl={pnl_percent:.2f}% >= {min_profit_threshold:.2%}) - закрываем"
                     )
                     return {
                         "action": "close",
@@ -1882,10 +1939,40 @@ class ExitAnalyzer:
                         "max_holding_minutes": actual_max_holding,
                     }
 
-                # Время превышено и позиция в прибыли - закрываем
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем min_profit_to_close перед закрытием по времени
+                # Не закрываем по времени если прибыль < min_profit_to_close (после комиссий будет убыток!)
+                min_profit_to_close = None
+                if self.orchestrator and hasattr(
+                    self.orchestrator, "trailing_sl_coordinator"
+                ):
+                    tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                    if tsl:
+                        min_profit_to_close = getattr(tsl, "min_profit_to_close", None)
+
+                # Если min_profit_to_close не найден, используем минимальный порог 0.3% (чтобы покрыть комиссии)
+                min_profit_threshold = (
+                    min_profit_to_close if min_profit_to_close is not None else 0.003
+                )  # 0.3%
+
+                if pnl_percent < min_profit_threshold:
+                    # Прибыль меньше min_profit_to_close - НЕ закрываем по времени (после комиссий будет убыток!)
+                    logger.info(
+                        f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
+                        f"(базовое: {max_holding_minutes:.1f} мин), но прибыль {pnl_percent:.2f}% < "
+                        f"min_profit_threshold {min_profit_threshold:.2%} - НЕ закрываем по времени (после комиссий будет убыток!)"
+                    )
+                    return {
+                        "action": "hold",
+                        "reason": "max_holding_low_profit",
+                        "pnl_pct": pnl_percent,
+                        "min_profit_threshold": min_profit_threshold,
+                        "minutes_in_position": minutes_in_position,
+                    }
+
+                # Время превышено и позиция в прибыли >= min_profit_to_close - закрываем
                 logger.info(
                     f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
-                    f"(базовое: {max_holding_minutes:.1f} мин), прибыль={pnl_percent:.2f}% - закрываем по времени"
+                    f"(базовое: {max_holding_minutes:.1f} мин), прибыль={pnl_percent:.2f}% >= {min_profit_threshold:.2%} - закрываем по времени"
                 )
                 return {
                     "action": "close",
@@ -2136,10 +2223,40 @@ class ExitAnalyzer:
                         "max_holding_minutes": max_holding_minutes,
                     }
 
-                # В choppy режиме закрываем строго по времени, но только если в прибыли
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем min_profit_to_close перед закрытием по времени
+                # Не закрываем по времени если прибыль < min_profit_to_close (после комиссий будет убыток!)
+                min_profit_to_close = None
+                if self.orchestrator and hasattr(
+                    self.orchestrator, "trailing_sl_coordinator"
+                ):
+                    tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                    if tsl:
+                        min_profit_to_close = getattr(tsl, "min_profit_to_close", None)
+
+                # Если min_profit_to_close не найден, используем минимальный порог 0.3% (чтобы покрыть комиссии)
+                min_profit_threshold = (
+                    min_profit_to_close if min_profit_to_close is not None else 0.003
+                )  # 0.3%
+
+                if pnl_percent < min_profit_threshold:
+                    # Прибыль меньше min_profit_to_close - НЕ закрываем по времени (после комиссий будет убыток!)
+                    logger.info(
+                        f"⏰ ExitAnalyzer CHOPPY: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                        f"но прибыль {pnl_percent:.2f}% < min_profit_threshold {min_profit_threshold:.2%} - "
+                        f"НЕ закрываем по времени (после комиссий будет убыток!)"
+                    )
+                    return {
+                        "action": "hold",
+                        "reason": "max_holding_low_profit",
+                        "pnl_pct": pnl_percent,
+                        "min_profit_threshold": min_profit_threshold,
+                        "minutes_in_position": minutes_in_position,
+                    }
+
+                # В choppy режиме закрываем строго по времени, но только если прибыль >= min_profit_to_close
                 logger.info(
                     f"⏰ ExitAnalyzer CHOPPY: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
-                    f"прибыль={pnl_percent:.2f}% - закрываем по времени"
+                    f"прибыль={pnl_percent:.2f}% >= {min_profit_threshold:.2%} - закрываем по времени"
                 )
                 return {
                     "action": "close",
@@ -2260,6 +2377,10 @@ class ExitAnalyzer:
     ) -> Optional[Any]:
         """Получить Volume Profile для символа"""
         try:
+            # ✅ ИСПРАВЛЕНО: Проверка volume_profile_calculator на None перед использованием
+            if not self.volume_profile_calculator:
+                return None
+
             candles = await self.data_registry.get_candles(symbol, "1h")
             if not candles or len(candles) < lookback:
                 # Fallback на меньший таймфрейм
@@ -2377,6 +2498,10 @@ class ExitAnalyzer:
             1 если обнаружен разворотный паттерн, 0 иначе
         """
         try:
+            # ✅ ИСПРАВЛЕНО: Проверка candle_pattern_detector на None перед использованием
+            if not self.candle_pattern_detector:
+                return 0
+
             candles = await self.data_registry.get_candles(symbol, "1m")
             if not candles or len(candles) < 3:
                 return 0
@@ -2415,7 +2540,20 @@ class ExitAnalyzer:
             1 если цена в зоне высокого объема, 0 иначе
         """
         try:
-            current_price = await self.data_registry.get_price(symbol)
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для Volume Profile анализа
+            current_price = None
+            if self.client and hasattr(self.client, "get_price_limits"):
+                try:
+                    price_limits = await self.client.get_price_limits(symbol)
+                    if price_limits:
+                        current_price = price_limits.get("current_price", 0)
+                except Exception:
+                    pass
+
+            # Fallback на data_registry если не получили из стакана
+            if current_price is None or current_price <= 0:
+                current_price = await self.data_registry.get_price(symbol)
+
             if not current_price:
                 return 0
 

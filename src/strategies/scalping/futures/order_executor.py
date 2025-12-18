@@ -178,7 +178,10 @@ class FuturesOrderExecutor:
             if order_type == "limit":
                 # ✅ НОВОЕ: Получаем режим из сигнала для адаптивного offset
                 regime = signal.get("regime", None)
-                price = await self._calculate_limit_price(symbol, side, regime=regime)
+                # ✅ ОПТИМИЗАЦИЯ: Передаем signal для использования signal["price"] если актуальна
+                price = await self._calculate_limit_price(
+                    symbol, side, regime=regime, signal=signal
+                )
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если не удалось рассчитать цену - используем рыночный ордер
                 if price is None or price <= 0:
                     logger.warning(
@@ -258,7 +261,11 @@ class FuturesOrderExecutor:
         return "limit"
 
     async def _calculate_limit_price(
-        self, symbol: str, side: str, regime: Optional[str] = None
+        self,
+        symbol: str,
+        side: str,
+        regime: Optional[str] = None,
+        signal: Optional[Dict[str, Any]] = None,
     ) -> float:
         """
         ✅ УЛУЧШЕННЫЙ: Расчет цены для лимитного ордера с учетом режима рынка
@@ -626,6 +633,35 @@ class FuturesOrderExecutor:
                 logger.error(f"❌ Неверная текущая цена для {symbol}: {current_price}")
                 return 0.0
 
+            # ✅ ОПТИМИЗАЦИЯ: Проверяем актуальность signal["price"] и используем как основу если актуальна
+            signal_price = None
+            if signal:
+                signal_price = signal.get("price", 0.0)
+                if signal_price > 0:
+                    price_diff_pct = (
+                        abs(signal_price - current_price) / current_price * 100
+                        if current_price > 0
+                        else 100
+                    )
+                    if price_diff_pct < 0.5:  # Разница < 0.5% - сигнал актуален
+                        logger.debug(
+                            f"💰 Используем signal['price']={signal_price:.2f} как основу для {symbol} {side} "
+                            f"(разница с current_price={current_price:.2f} составляет {price_diff_pct:.2f}%)"
+                        )
+                        # Используем signal_price как основу вместо current_price
+                        base_price = signal_price
+                    else:
+                        logger.warning(
+                            f"⚠️ signal['price']={signal_price:.2f} устарела для {symbol} {side} "
+                            f"(разница с current_price={current_price:.2f} составляет {price_diff_pct:.2f}%), "
+                            f"используем current_price"
+                        )
+                        base_price = current_price
+                else:
+                    base_price = current_price
+            else:
+                base_price = current_price
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем правильную логику для SELL и BUY
             # ✅ НОВОЕ: Используем настраиваемый offset из конфига
             # ✅ НОВОЕ: Адаптивный offset на основе спреда (если включен)
@@ -684,8 +720,8 @@ class FuturesOrderExecutor:
                 use_best_ask = False
                 if best_ask > 0 and current_price > 0:
                     ask_price_diff_pct = abs(best_ask - current_price) / current_price
-                    # Используем best_ask только если разница < 0.5% (актуальные данные)
-                    if ask_price_diff_pct < 0.005:
+                    # ✅ ОПТИМИЗАЦИЯ: Используем best_ask только если разница < 0.1% (более строгая проверка актуальности)
+                    if ask_price_diff_pct < 0.001:
                         use_best_ask = True
                         logger.debug(
                             f"✅ best_ask актуален для {symbol} BUY: "
@@ -727,13 +763,13 @@ class FuturesOrderExecutor:
                             f"💰 Для {symbol} BUY: используем offset из конфига {offset_percent:.3f}% "
                             f"(best_ask={best_ask:.2f} → limit_price={limit_price:.2f})"
                         )
-                elif current_price > 0:
-                    # best_ask устарел или недоступен, используем current_price
+                elif base_price > 0:
+                    # best_ask устарел или недоступен, используем base_price (signal_price или current_price)
                     min_offset = max(offset_percent, 0.01)  # Минимальный offset 0.01%
-                    limit_price = current_price * (1 + min_offset / 100.0)
+                    limit_price = base_price * (1 + min_offset / 100.0)
                     logger.debug(
-                        f"💰 Используем current_price для {symbol} BUY: "
-                        f"current={current_price:.2f}, offset={min_offset:.3f}%, "
+                        f"💰 Используем base_price для {symbol} BUY: "
+                        f"base={base_price:.2f}, offset={min_offset:.3f}%, "
                         f"limit_price={limit_price:.2f}"
                     )
                 else:
@@ -773,8 +809,8 @@ class FuturesOrderExecutor:
                 use_best_bid = False
                 if best_bid > 0 and current_price > 0:
                     bid_price_diff_pct = abs(best_bid - current_price) / current_price
-                    # Используем best_bid только если разница < 0.5% (актуальные данные)
-                    if bid_price_diff_pct < 0.005:
+                    # ✅ ОПТИМИЗАЦИЯ: Используем best_bid только если разница < 0.1% (более строгая проверка актуальности)
+                    if bid_price_diff_pct < 0.001:
                         use_best_bid = True
                         logger.debug(
                             f"✅ best_bid актуален для {symbol} SELL: "
@@ -804,12 +840,12 @@ class FuturesOrderExecutor:
                             f"💰 Для {symbol} SELL: используем offset из конфига {offset_percent:.3f}% "
                             f"(best_bid={best_bid:.2f} → limit_price={limit_price:.2f})"
                         )
-                elif current_price > 0:
-                    # best_bid устарел, используем current_price
-                    limit_price = current_price * (1 - offset_percent / 100.0)
+                elif base_price > 0:
+                    # best_bid устарел, используем base_price (signal_price или current_price)
+                    limit_price = base_price * (1 - offset_percent / 100.0)
                     logger.debug(
-                        f"💰 Используем current_price для {symbol} SELL: "
-                        f"current={current_price:.2f}, offset={offset_percent:.3f}%, "
+                        f"💰 Используем base_price для {symbol} SELL: "
+                        f"base={base_price:.2f}, offset={offset_percent:.3f}%, "
                         f"limit_price={limit_price:.2f}"
                     )
                 else:
@@ -848,25 +884,25 @@ class FuturesOrderExecutor:
             # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что цена в допустимом диапазоне
             # Финальная проверка лимитов биржи уже выполнена выше
 
-            # ✅ ИСПРАВЛЕНО: Проверяем разницу между limit_price и current_price (0.2% для скальпинга)
+            # ✅ ИСПРАВЛЕНО: Проверяем разницу между limit_price и base_price (0.2% для скальпинга)
             price_diff_pct = (
-                abs(limit_price - current_price) / current_price * 100
-                if current_price > 0
+                abs(limit_price - base_price) / base_price * 100
+                if base_price > 0
                 else 0
             )
             if (
                 price_diff_pct > 0.2
             ):  # ✅ ИСПРАВЛЕНО: Если разница > 0.2% - это проблема для скальпинга!
                 logger.error(
-                    f"❌ КРИТИЧЕСКАЯ ОШИБКА: Лимитная цена для {symbol} {side} слишком далеко от текущей! "
-                    f"limit_price={limit_price:.2f}, current_price={current_price:.2f}, "
+                    f"❌ КРИТИЧЕСКАЯ ОШИБКА: Лимитная цена для {symbol} {side} слишком далеко от базовой! "
+                    f"limit_price={limit_price:.2f}, base_price={base_price:.2f}, "
                     f"разница={price_diff_pct:.2f}%, offset={offset_percent:.3f}%, режим={regime or 'N/A'}"
                 )
                 # ✅ НОВОЕ: Корректируем цену до безопасного значения
                 if side.lower() == "buy":
-                    limit_price = current_price * 1.001  # Максимум 0.1% выше
+                    limit_price = base_price * 1.001  # Максимум 0.1% выше
                 else:
-                    limit_price = current_price * 0.999  # Максимум 0.1% ниже
+                    limit_price = base_price * 0.999  # Максимум 0.1% ниже
                 logger.warning(
                     f"⚠️ Цена скорректирована до безопасного значения: {limit_price:.2f} "
                     f"(было {limit_price:.2f}, разница была {price_diff_pct:.2f}%)"
@@ -882,7 +918,8 @@ class FuturesOrderExecutor:
             offset_type = "adaptive" if adaptive_offset_pct is not None else "config"
             logger.info(
                 f"💰 Лимитная цена для {symbol} {side}: {limit_price:.2f} "
-                f"(best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, current_price={current_price:.2f}, "
+                f"(best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, base_price={base_price:.2f}, "
+                f"signal_price={signal_price if signal_price else 'N/A'}, current_price={current_price:.2f}, "
                 f"spread={spread:.6f} ({spread_pct:.4f}%), offset={offset_used:.4f}% ({offset_type}), "
                 f"режим={regime or 'default'}, разница={price_diff_pct:.2f}%, "
                 f"лимиты: max_buy={max_buy_price:.2f}, min_sell={min_sell_price:.2f})"

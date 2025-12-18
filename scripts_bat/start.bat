@@ -124,7 +124,7 @@ echo ================================================================
 echo              FUTURES TRADING MODE
 echo.
 echo   Futures Trading Features:
-echo   - Trading with leverage (3x default)
+echo   - Trading with leverage (5x default)
 echo   - High risks and potential returns
 echo   - Requires trading experience
 echo   - Liquidation protection

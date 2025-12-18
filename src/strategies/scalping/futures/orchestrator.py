@@ -3486,21 +3486,11 @@ class FuturesScalpingOrchestrator:
                 )
                 return
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: TIMEOUT - абсолютный лимит времени
-            # Получаем timeout_minutes из TSL (жесткий лимит времени) ПЕРЕД остальными проверками
-            timeout_minutes = None
-            tsl = self.trailing_sl_coordinator.get_tsl(symbol)
-            if tsl and hasattr(tsl, "timeout_minutes"):
-                timeout_minutes = tsl.timeout_minutes
-
-            # ✅ ПЕРВАЯ ПРОВЕРКА: TIMEOUT - принудительное закрытие после максимального времени
-            if timeout_minutes is not None and time_held >= timeout_minutes:
-                logger.info(
-                    f"⏰ TIMEOUT для {symbol}: {time_held:.1f} минут >= {timeout_minutes:.1f} минут, "
-                    f"принудительно закрываем (прибыль: {profit_pct:.2%})"
-                )
-                await self._close_position(symbol, "timeout")
-                return
+            # ✅ ОПТИМИЗАЦИЯ: Убрана проверка timeout - ExitAnalyzer уже проверяет max_holding умно
+            # ExitAnalyzer анализирует время в позиции вместе с другими факторами (тренд, PnL, сигналы)
+            # и может продлевать время при необходимости. Отдельный timeout только мешает.
+            # Если нужна защита от багов ExitAnalyzer, можно добавить очень большой timeout (3-4 часа)
+            # как последнюю защиту, но проверять его ПОСЛЕ всех проверок ExitAnalyzer.
 
             # Получаем параметры режима
             try:
@@ -3642,11 +3632,30 @@ class FuturesScalpingOrchestrator:
                         )
                         return  # Не закрываем убыточные позиции по времени
 
-                    # Время истекло и позиция не в прибыли > min_profit_to_close - закрываем
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем минимальный порог прибыли перед закрытием по времени
+                    # Не закрываем по времени если прибыль очень маленькая (после комиссий будет убыток!)
+                    # Используем min_profit_to_close если есть, иначе минимальный порог 0.3%
+                    min_profit_threshold = (
+                        min_profit_to_close
+                        if min_profit_to_close is not None
+                        else 0.003
+                    )  # 0.3%
+
+                    if profit_pct < min_profit_threshold:
+                        # Прибыль меньше min_profit_threshold - НЕ закрываем по времени (после комиссий будет убыток!)
+                        logger.info(
+                            f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
+                            f"(лимит: {actual_max_holding:.1f} минут), "
+                            f"но прибыль {profit_pct:.2%} < min_profit_threshold {min_profit_threshold:.2%} - "
+                            f"НЕ закрываем по времени (после комиссий будет убыток!)"
+                        )
+                        return  # Не закрываем по времени
+
+                    # Время истекло и позиция в прибыли >= min_profit_threshold - закрываем
                     logger.info(
                         f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
                         f"(лимит: {actual_max_holding:.1f} минут), "
-                        f"прибыль: {profit_pct:.2%}, закрываем по времени"
+                        f"прибыль: {profit_pct:.2%} >= {min_profit_threshold:.2%}, закрываем по времени"
                     )
                     await self._close_position(symbol, "max_holding_time")
                     return
