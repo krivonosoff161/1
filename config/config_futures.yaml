@@ -31,7 +31,8 @@ scalping:
   check_interval: 1.0  # ✅ ОПТИМИЗИРОВАНО: 1.0 сек для быстрого анализа позиций (было 5.0 по умолчанию)
   
   # Параметры скальпинга (адаптированы для Futures)
-  min_signal_strength: 0.25  # Более чувствительные сигналы
+  min_signal_strength: 0.7  # ✅ ГРОК: Поднято с 0.25 до 0.7 для улучшения winrate
+  min_signal_strength_ranging: 0.8  # ✅ ГРОК ФИКС: Строже для ranging (0.8 вместо 0.7)
   max_concurrent_signals: 3  # Меньше одновременных сигналов
   max_positions_per_symbol: 1  # ✅ По одной позиции на символ (предотвращаем «сложение» ордеров)
   allow_concurrent_positions: true  # ✅ ИЗМЕНЕНО: true - разрешаем суммирование ордеров (до 5 в одном направлении) и LONG/SHORT одновременно
@@ -86,8 +87,8 @@ scalping:
         fraction: 0.4        # ✅ ГРОК: 40% позиции (было 50%)
         trigger_percent: 1.8 # ✅ ГРОК: 1.8% (было 1.2%) - +50% от текущего
       ranging:
-        fraction: 0.5        # ✅ ГРОК: 50% позиции (было 60%)
-        trigger_percent: 2.0 # ✅ ГРОК: 2.0% (было 1.2%) - +67% от текущего
+        fraction: 0.5        # ✅ ГРОК: 50% позиции
+        trigger_percent: 0.65 # ✅ ГРОК ФИКС: 0.65% (баланс между 0.6-0.7% для early partial)
       choppy:
         fraction: 0.6        # ✅ ГРОК: 60% позиции (было 70%)
         trigger_percent: 1.2 # ✅ ГРОК: 1.2% (было 0.8%) - +50% от текущего
@@ -133,7 +134,7 @@ scalping:
       trending:
         multiplier: 2.0  # 130% откат в тренде (0.65 * 2.0) - больше времени для продолжения тренда
       ranging:
-        multiplier: 1.2  # ✅ ОПТИМИЗАЦИЯ (08.12.2025): Уменьшено с 1.5 до 1.2 (-20%) - новый threshold: 78% (0.65 * 1.2) - мягче защита прибыли
+        multiplier: 0.25  # ✅ ГРОК КОМПРОМИСС: 20-25% откат от пика (0.75 * 0.25 = 0.1875 ≈ 20%) - быстрее защитит прибыль
       choppy:
         multiplier: 1.0  # 65% откат в хаосе (0.65 * 1.0) - больше времени для фиксации прибыли
   
@@ -219,7 +220,7 @@ scalping:
     enabled: true
     detection:
       trending_adx_threshold: 20.0  # Futures: ниже порог для тренда (быстрее)
-      ranging_adx_threshold: 15.0   # Futures: ниже порог для флэта
+      ranging_adx_threshold: 20.0   # ✅ ГРОК: Поднято с 15.0 до 20.0 для более сильных трендов
       high_volatility_threshold: 0.03  # 3% для Futures
       lookback_candles: 50  # Меньше свечей для Futures (быстрее)
       adx_period: 9  # Быстрый ADX для Futures
@@ -296,9 +297,20 @@ scalping:
       position_size_multiplier: 1.2  # ✅ АГРЕССИВНО: Увеличено с 1.0 до 1.2 (+20%) - больше размер позиций
       tp_atr_multiplier: 1.0  # ✅ АГРЕССИВНО: Увеличено с 0.8 до 1.0 (+25%) - больше прибыль
       sl_atr_multiplier: 0.6  # ✅ АГРЕССИВНО: Увеличено с 0.5 до 0.6 (+20%) - больше места для откатов
-      tp_percent: 2.0  # ✅ ГРОК: Увеличено с 1.2% до 2.0% (+67%) - соотношение R:R = 1:2.5
-      sl_percent: 0.8  # ✅ ГРОК: Уменьшено с 1.2% до 0.8% - оптимальное соотношение с TP
-      max_holding_minutes: 28  # ✅ АГРЕССИВНО: Увеличено с 20 до 28 минут (+40%) - больше времени для прибыли
+      tp_percent: 1.8  # ✅ ГРОК ФИКС: Снижено с 2.0% до 1.8% (агрессивнее для ranging)
+      tp_adaptive: true  # ✅ ГРОК: Включить адаптивный TP с ATR
+      tp_atr_based: true  # ✅ ГРОК ФИКС: Включить ATR-based TP для ranging
+      tp_atr_multiplier: 2.5  # ✅ ГРОК ФИКС: Множитель ATR для TP (2.5 для ranging)
+      tp_min_percent: 1.5  # ✅ ГРОК ФИКС: Минимальный TP 1.5%
+      tp_max_percent: 2.2  # ✅ ГРОК: Максимальный TP 2.2%
+      sl_percent: 1.0  # ✅ ГРОК ФИКС: Увеличено с 0.8% до 1.0% (баланс для ranging noise)
+      sl_atr_based: true  # ✅ ГРОК: Использовать ATR-based SL вместо фиксированного
+      sl_atr_multiplier: 1.5  # ✅ ГРОК ФИКС: Увеличено с 1.2 до 1.5 для меньших шумовых хитов (max(0.6%, 1.5*ATR_1m))
+      sl_min_percent: 0.6  # ✅ ГРОК: Минимальный SL 0.6% (защита от шума)
+      sl_max_percent: 1.2  # ✅ ГРОК ФИКС: Максимальный SL 1.2% (защита от слишком широкого SL)
+      max_holding_minutes: 25  # ✅ ГРОК: Уменьшено с 28 до 25 минут для более быстрой ротации
+      max_holding_hard_stop: true  # ✅ ГРОК: Жесткий стоп по max_holding (не игнорировать убыточные)
+      timeout_loss_percent: 1.5  # ✅ ГРОК: Закрывать по max_holding если убыток >= 1.5%
       extend_time_if_profitable: true  # ✅ НОВОЕ: Продлевать время если позиция в прибыли
       min_profit_for_extension: 0.4  # ✅ АГРЕССИВНО: Снижено с 0.5% до 0.4% - раньше продлеваем
       extension_percent: 120  # ✅ АГРЕССИВНО: Увеличено с 100% до 120% - продлеваем еще больше
@@ -307,7 +319,8 @@ scalping:
       volume_profile_bonus_multiplier: 1.0
       ph_enabled: true
       ph_threshold_type: "margin_percent"  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (21.12.2025): Адаптивный PH от маржи
-      ph_threshold_percent: 1.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (21.12.2025): 1.5% от маржи для ranging
+      ph_threshold_percent: 0.9  # ✅ ГРОК ФИКС: 0.9% (баланс между 0.8-1.0% для early PH)
+      ph_min_absolute_usd: 0.05  # ✅ ГРОК КОМПРОМИСС: Минимальный абсолютный порог 0.05 USD (1.5-2x комиссии)
       ph_threshold: 0.10  # ✅ Fallback для обратной совместимости
       ph_time_limit: 1200  # ✅ УВЕЛИЧЕНО: 20 минут (было 300 = 5 минут) для большего охвата
       min_holding_minutes: 0.5  # ✅ ГРОК: Уменьшено с 1 до 0.5 минуты (30 сек) для быстрого Partial TP
@@ -346,7 +359,7 @@ scalping:
           poc_tolerance_percent: 0.4
           lookback_candles: 150
         adx_filter:
-          adx_threshold: 15.0
+          adx_threshold: 20.0  # ✅ ГРОК: Поднято с 15.0 до 20.0 для более сильных трендов
           adx_di_difference: 1.2
     
     # Choppy режим (хаос) - ✅ АГРЕССИВНО ОПТИМИЗИРОВАНО
@@ -1231,8 +1244,8 @@ risk:
     
     ranging:
       # Параметры риска для флэта (стандартные)
-      risk_per_trade_percent: 1.5   # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Риск на сделку 1.5% для ranging
-      max_loss_per_trade_percent: 1.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Снижено с 2.0% до 1.5%
+      risk_per_trade_percent: 1.2   # ✅ ГРОК ФИКС: Увеличено с 1.0% до 1.2% (looser для better RR)
+      max_loss_per_trade_percent: 1.0  # ✅ ГРОК КОМПРОМИСС: Снижено с 1.5% до 1.0% для безопасности
       max_margin_percent: 90.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 85 до 90 (+6%) для активного использования баланса
       max_drawdown_percent: 7.0  # ✅ PHASE 1: Увеличено с 5 до 7 (+40%)
       max_margin_safety_percent: 90.0  # 90% безопасности
@@ -1716,8 +1729,10 @@ futures_modules:
           warning: 1.5  # Предупреждение
           danger: 1.2  # Опасность
       ranging:
-        safety_threshold: 1.3  # Менее строго для боковика
-        risk_percentage: 0.025  # 2.5% риск на сделку
+        safety_threshold: 1.5  # ✅ ГРОК КОМПРОМИСС: Базово 1.5, динамика до 1.8-2.0 при equity<100 или ADX низкий или >3 позиций
+        safety_threshold_dynamic: true  # ✅ ГРОК КОМПРОМИСС: Включить динамическое усиление
+        safety_threshold_max: 2.0  # ✅ ГРОК КОМПРОМИСС: Максимальный порог при усилении
+        risk_percentage: 0.01  # ✅ ГРОК КОМПРОМИСС: 1.0% риск на сделку (было 2.5%)
         margin_health_thresholds:
           excellent: 2.5
           good: 1.8
@@ -1848,19 +1863,19 @@ futures_modules:
           pivot_tolerance: 0.002
           volume_profile_va_percent: 75.0
           volume_profile_poc_tolerance: 0.004
-          min_signal_strength: 0.4
+          min_signal_strength: 0.8  # ✅ ГРОК: Поднято с 0.4 до 0.8 для trending
         ranging:
           correlation_threshold: 0.7  # Стандартные значения
           pivot_tolerance: 0.003
           volume_profile_va_percent: 70.0
           volume_profile_poc_tolerance: 0.005
-          min_signal_strength: 0.3
+          min_signal_strength: 0.7  # ✅ ГРОК: Поднято с 0.3 до 0.7 для ranging
         choppy:
           correlation_threshold: 0.6  # Менее строго в хаосе
           pivot_tolerance: 0.004
           volume_profile_va_percent: 65.0
           volume_profile_poc_tolerance: 0.006
-          min_signal_strength: 0.25
+          min_signal_strength: 0.6  # ✅ ГРОК: Поднято с 0.25 до 0.6 для choppy
 
   # ✅ НОВОЕ: FastADX - параметры быстрого ADX
   fast_adx:

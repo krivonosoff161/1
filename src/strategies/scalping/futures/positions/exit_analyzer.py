@@ -564,18 +564,25 @@ class ExitAnalyzer:
         else:
             return gross_profit_pct
 
-    def _get_tp_percent(self, symbol: str, regime: str) -> float:
+    def _get_tp_percent(self, symbol: str, regime: str, current_price: Optional[float] = None, market_data: Optional[Any] = None) -> float:
         """
         Получение TP% из конфига по символу и режиму.
+        ✅ ГРОК ФИКС: Поддержка ATR-based TP (max(1.5%, 2.5*ATR_1m) для ranging)
 
         Args:
             symbol: Торговый символ
             regime: Режим рынка (trending, ranging, choppy)
+            current_price: Текущая цена (для ATR расчета)
+            market_data: Рыночные данные (для ATR)
 
         Returns:
             TP% для использования
         """
         tp_percent = 2.4  # Fallback значение
+        tp_atr_based = False
+        tp_atr_multiplier = 2.5
+        tp_min_percent = 1.5
+        tp_max_percent = 2.2  # ✅ ГРОК ФИКС: Максимальный TP 2.2%
 
         if self.config_manager:
             try:
@@ -589,42 +596,126 @@ class ExitAnalyzer:
                             isinstance(regime_config, dict)
                             and "tp_percent" in regime_config
                         ):
-                            return float(regime_config["tp_percent"])
+                            # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float для предотвращения str vs int ошибок
+                            try:
+                                tp_percent = float(regime_config["tp_percent"])
+                                tp_atr_based = regime_config.get("tp_atr_based", False)
+                                tp_atr_multiplier = float(regime_config.get("tp_atr_multiplier", 2.5))
+                                tp_min_percent = float(regime_config.get("tp_min_percent", 1.5))
+                                tp_max_percent = float(regime_config.get("tp_max_percent", 2.2))
+                            except (TypeError, ValueError) as e:
+                                logger.warning(
+                                    f"⚠️ ExitAnalyzer: Не удалось преобразовать tp_percent={regime_config.get('tp_percent')} "
+                                    f"в float для {symbol}: {e}, используем fallback"
+                                )
+                                return 2.4
 
                 # Fallback на by_regime
-                by_regime = self.config_manager.to_dict(
-                    getattr(self.scalping_config, "by_regime", {})
-                    if self.scalping_config
-                    else {}
-                )
-                if regime in by_regime:
-                    regime_config = by_regime[regime]
-                    if (
-                        isinstance(regime_config, dict)
-                        and "tp_percent" in regime_config
-                    ):
-                        return float(regime_config["tp_percent"])
+                if tp_percent == 2.4:  # Если не нашли в symbol_profiles
+                    by_regime = self.config_manager.to_dict(
+                        getattr(self.scalping_config, "by_regime", {})
+                        if self.scalping_config
+                        else {}
+                    )
+                    if regime in by_regime:
+                        regime_config = by_regime[regime]
+                        if (
+                            isinstance(regime_config, dict)
+                            and "tp_percent" in regime_config
+                        ):
+                            # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float для предотвращения str vs int ошибок
+                            try:
+                                tp_percent = float(regime_config["tp_percent"])
+                                tp_atr_based = regime_config.get("tp_atr_based", False)
+                                tp_atr_multiplier = float(regime_config.get("tp_atr_multiplier", 2.5))
+                                tp_min_percent = float(regime_config.get("tp_min_percent", 1.5))
+                                tp_max_percent = float(regime_config.get("tp_max_percent", 2.2))
+                            except (TypeError, ValueError) as e:
+                                logger.warning(
+                                    f"⚠️ ExitAnalyzer: Не удалось преобразовать tp_percent={regime_config.get('tp_percent')} "
+                                    f"в float для {symbol}: {e}, используем fallback"
+                                )
+                                return 2.4
 
                 # Fallback на глобальный TP
-                if self.scalping_config:
-                    tp_percent = getattr(self.scalping_config, "tp_percent", 2.4)
+                if tp_percent == 2.4 and self.scalping_config:
+                    tp_percent_raw = getattr(self.scalping_config, "tp_percent", 2.4)
+                    # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float
+                    try:
+                        tp_percent = float(tp_percent_raw)
+                    except (TypeError, ValueError):
+                        tp_percent = 2.4
             except Exception as e:
                 logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения TP% для {symbol}: {e}")
 
+        # ✅ ГРОК ФИКС: ATR-based TP если включен (для ranging)
+        if tp_atr_based and current_price and current_price > 0:
+            try:
+                # Получаем ATR из market_data или через orchestrator
+                atr_1m = None
+                if market_data and hasattr(market_data, "get"):
+                    atr_1m = market_data.get("atr_1m")
+                elif hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "signal_generator"):
+                        indicator_manager = getattr(self.orchestrator.signal_generator, "indicator_manager", None)
+                        if indicator_manager:
+                            atr_indicator = indicator_manager.get_indicator("ATR")
+                            if atr_indicator:
+                                atr_1m = atr_indicator.get_value() if hasattr(atr_indicator, "get_value") else None
+                
+                if atr_1m and atr_1m > 0:
+                    # ✅ ГРОК ФИКС: ATR-based TP: max(1.5%, 2.5*ATR_1m) для ranging с per-symbol adjustment
+                    atr_pct = (atr_1m / current_price) * 100
+                    atr_tp_percent = atr_pct * tp_atr_multiplier
+                    
+                    # ✅ ГРОК ФИКС: Per-symbol multipliers для адаптации под волатильность символа
+                    # В волатильных символах (SOL, DOGE) делаем TP чуть tighter (меньше), в стабильных (BTC) - стандарт
+                    symbol_multipliers = {
+                        "SOL-USDT": 0.95,  # SOL более волатильный → tighter TP
+                        "BTC-USDT": 1.0,   # BTC стандарт
+                        "ETH-USDT": 1.0,   # ETH стандарт
+                        "DOGE-USDT": 0.9,  # DOGE очень волатильный → tighter TP
+                        "XRP-USDT": 0.98,  # XRP немного волатильный
+                    }
+                    symbol_mult = symbol_multipliers.get(symbol, 1.0)
+                    atr_tp_percent = atr_tp_percent * symbol_mult
+                    
+                    tp_percent = max(tp_min_percent, min(tp_max_percent, atr_tp_percent))
+                    
+                    logger.debug(
+                        f"✅ [ATR_TP] {symbol}: ATR-based TP | "
+                        f"ATR_1m={atr_1m:.6f}, ATR%={atr_pct:.4f}%, "
+                        f"multiplier={tp_atr_multiplier:.2f}, symbol_mult={symbol_mult:.2f}, "
+                        f"min={tp_min_percent:.2f}%, max={tp_max_percent:.2f}%, "
+                        f"final TP={tp_percent:.2f}%"
+                    )
+                else:
+                    logger.debug(
+                        f"⚠️ [ATR_TP] {symbol}: ATR не найден, используем фиксированный TP={tp_percent:.2f}%"
+                    )
+            except Exception as e:
+                logger.debug(f"⚠️ ExitAnalyzer: Ошибка расчета ATR-based TP для {symbol}: {e}, используем фиксированный")
+
         return tp_percent
 
-    def _get_sl_percent(self, symbol: str, regime: str) -> float:
+    def _get_sl_percent(self, symbol: str, regime: str, current_price: Optional[float] = None, market_data: Optional[Any] = None) -> float:
         """
         Получение SL% из конфига по символу и режиму.
+        ✅ ГРОК ФИКС: Поддержка ATR-based SL (max(0.6%, 1.2*ATR_1m) для меньших шумовых хитов)
 
         Args:
             symbol: Торговый символ
             regime: Режим рынка (trending, ranging, choppy)
+            current_price: Текущая цена (для ATR расчета)
+            market_data: Рыночные данные (для ATR)
 
         Returns:
             SL% для использования
         """
         sl_percent = 2.0  # Fallback значение
+        sl_atr_based = False
+        sl_atr_multiplier = 1.0
+        sl_min_percent = 0.6
 
         if self.config_manager:
             try:
@@ -638,27 +729,87 @@ class ExitAnalyzer:
                             isinstance(regime_config, dict)
                             and "sl_percent" in regime_config
                         ):
-                            return float(regime_config["sl_percent"])
+                            # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float для предотвращения str vs int ошибок
+                            try:
+                                sl_percent = float(regime_config["sl_percent"])
+                                sl_atr_based = regime_config.get("sl_atr_based", False)
+                                sl_atr_multiplier = float(regime_config.get("sl_atr_multiplier", 1.0))
+                                sl_min_percent = float(regime_config.get("sl_min_percent", 0.6))
+                            except (TypeError, ValueError) as e:
+                                logger.warning(
+                                    f"⚠️ ExitAnalyzer: Не удалось преобразовать sl_percent={regime_config.get('sl_percent')} "
+                                    f"в float для {symbol}: {e}, используем fallback"
+                                )
+                                return 2.0
 
                 # Fallback на by_regime
-                by_regime = self.config_manager.to_dict(
-                    getattr(self.scalping_config, "by_regime", {})
-                    if self.scalping_config
-                    else {}
-                )
-                if regime in by_regime:
-                    regime_config = by_regime[regime]
-                    if (
-                        isinstance(regime_config, dict)
-                        and "sl_percent" in regime_config
-                    ):
-                        return float(regime_config["sl_percent"])
+                if sl_percent == 2.0:  # Если не нашли в symbol_profiles
+                    by_regime = self.config_manager.to_dict(
+                        getattr(self.scalping_config, "by_regime", {})
+                        if self.scalping_config
+                        else {}
+                    )
+                    if regime in by_regime:
+                        regime_config = by_regime[regime]
+                        if (
+                            isinstance(regime_config, dict)
+                            and "sl_percent" in regime_config
+                        ):
+                            # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float для предотвращения str vs int ошибок
+                            try:
+                                sl_percent = float(regime_config["sl_percent"])
+                                sl_atr_based = regime_config.get("sl_atr_based", False)
+                                sl_atr_multiplier = float(regime_config.get("sl_atr_multiplier", 1.0))
+                                sl_min_percent = float(regime_config.get("sl_min_percent", 0.6))
+                            except (TypeError, ValueError) as e:
+                                logger.warning(
+                                    f"⚠️ ExitAnalyzer: Не удалось преобразовать sl_percent={regime_config.get('sl_percent')} "
+                                    f"в float для {symbol}: {e}, используем fallback"
+                                )
+                                return 2.0
 
                 # Fallback на глобальный SL
-                if self.scalping_config:
-                    sl_percent = getattr(self.scalping_config, "sl_percent", 2.0)
+                if sl_percent == 2.0 and self.scalping_config:
+                    sl_percent_raw = getattr(self.scalping_config, "sl_percent", 2.0)
+                    # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float
+                    try:
+                        sl_percent = float(sl_percent_raw)
+                    except (TypeError, ValueError):
+                        sl_percent = 2.0
             except Exception as e:
                 logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения SL% для {symbol}: {e}")
+
+        # ✅ ГРОК КОМПРОМИСС: ATR-based SL если включен
+        if sl_atr_based and current_price and current_price > 0:
+            try:
+                # Получаем ATR из market_data или через orchestrator
+                atr_1m = None
+                if market_data and hasattr(market_data, "get"):
+                    atr_1m = market_data.get("atr_1m")
+                elif hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "signal_generator"):
+                        indicator_manager = getattr(self.orchestrator.signal_generator, "indicator_manager", None)
+                        if indicator_manager:
+                            atr_indicator = indicator_manager.get_indicator("ATR")
+                            if atr_indicator:
+                                atr_1m = atr_indicator.get_value() if hasattr(atr_indicator, "get_value") else None
+                
+                if atr_1m and atr_1m > 0:
+                    # ✅ ГРОК ФИКС: ATR-based SL: max(0.6%, 1.2*ATR_1m) для меньших шумовых хитов
+                    atr_sl_percent = (atr_1m / current_price) * 100 * sl_atr_multiplier
+                    sl_percent = max(sl_min_percent, atr_sl_percent)
+                    logger.debug(
+                        f"✅ [ATR_SL] {symbol}: ATR-based SL | "
+                        f"ATR_1m={atr_1m:.6f}, ATR%={(atr_1m/current_price)*100:.4f}%, "
+                        f"multiplier={sl_atr_multiplier:.2f}, min={sl_min_percent:.2f}%, "
+                        f"final SL={sl_percent:.2f}%"
+                    )
+                else:
+                    logger.debug(
+                        f"⚠️ [ATR_SL] {symbol}: ATR не найден, используем фиксированный SL={sl_percent:.2f}%"
+                    )
+            except Exception as e:
+                logger.debug(f"⚠️ ExitAnalyzer: Ошибка расчета ATR-based SL для {symbol}: {e}, используем фиксированный")
 
         return sl_percent
 
@@ -721,7 +872,12 @@ class ExitAnalyzer:
             config_key = "big_profit_exit_percent_majors"
 
         if self.scalping_config:
-            return float(getattr(self.scalping_config, config_key, default_value))
+            value_raw = getattr(self.scalping_config, config_key, default_value)
+            # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float для предотвращения str vs int ошибок
+            try:
+                return float(value_raw)
+            except (TypeError, ValueError):
+                return default_value
 
         return default_value
 
@@ -1334,7 +1490,8 @@ class ExitAnalyzer:
             )
 
             # 3. Проверка TP (Take Profit)
-            tp_percent = self._get_tp_percent(symbol, "trending")
+            # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для адаптивного TP
+            tp_percent = self._get_tp_percent(symbol, "trending", current_price, market_data)
             if pnl_percent >= tp_percent:
                 # Проверяем силу тренда перед закрытием по TP
                 trend_data = await self._analyze_trend_strength(symbol)
@@ -1488,7 +1645,7 @@ class ExitAnalyzer:
                     if pnl_percent < 0:
                         # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
                         # Вызывается только если pnl_percent < 0 и |убыток| >= 1.5 * SL
-                        sl_percent = self._get_sl_percent(symbol, "trending")
+                        sl_percent = self._get_sl_percent(symbol, "trending", current_price, market_data)
                         spread_buffer = self._get_spread_buffer(symbol, current_price)
                         if pnl_percent <= -sl_percent * 1.5 - spread_buffer:
                             smart_close = (
@@ -1628,41 +1785,49 @@ class ExitAnalyzer:
                 entry_time = metadata.get("entry_time")
 
             # 2. Рассчитываем PnL
-            pnl_percent = self._calculate_pnl_percent(
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для SL используем Gross PnL (без комиссий)
+            # SL должен срабатывать на основе движения цены, а не комиссий
+            # Комиссии учитываются отдельно при расчете финального PnL
+            gross_pnl_percent = self._calculate_pnl_percent(
                 entry_price,
                 current_price,
                 position_side,
-                include_fees=True,
+                include_fees=False,  # ✅ ИСПРАВЛЕНО: Gross PnL для сравнения с SL
+                entry_time=entry_time,
+                position=position,
+                metadata=metadata,
+            )
+            
+            # Net PnL (с комиссиями) для логирования и других проверок
+            net_pnl_percent = self._calculate_pnl_percent(
+                entry_price,
+                current_price,
+                position_side,
+                include_fees=True,  # Net PnL для логирования
                 entry_time=entry_time,
                 position=position,
                 metadata=metadata,
             )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ для диагностики
-            # Рассчитываем gross PnL для сравнения
-            if position_side.lower() == "long":
-                gross_pnl_pct = (current_price - entry_price) / entry_price * 100
-            else:
-                gross_pnl_pct = (entry_price - current_price) / entry_price * 100
-
             # Показываем больше знаков для маленьких значений
-            pnl_format = (
-                f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
-            )
             gross_format = (
-                f"{gross_pnl_pct:.4f}"
-                if abs(gross_pnl_pct) < 0.1
-                else f"{gross_pnl_pct:.2f}"
+                f"{gross_pnl_percent:.4f}" if abs(gross_pnl_percent) < 0.1 else f"{gross_pnl_percent:.2f}"
+            )
+            net_format = (
+                f"{net_pnl_percent:.4f}" if abs(net_pnl_percent) < 0.1 else f"{net_pnl_percent:.2f}"
             )
 
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: entry_price={entry_price:.2f}, "
                 f"current_price={current_price:.2f}, side={position_side}, "
-                f"Gross PnL%={gross_format}%, Net PnL%={pnl_format}% (с комиссией), entry_time={entry_time}"
+                f"Gross PnL%={gross_format}% (для SL), Net PnL%={net_format}% (с комиссией), entry_time={entry_time}"
             )
 
-            # 2.3. ✅ НОВОЕ: Проверка peak_profit - не закрывать если текущая прибыль < 70% от peak
-            if pnl_percent > 0:  # Только для прибыльных позиций
+            # 2.3. ✅ ГРОК: Проверка peak_profit с absolute threshold - не блокировать для малых прибылей
+            # Применяем только для прибылей > 0.5% чтобы избежать блокировки микроприбылей
+            # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки peak_profit (прибыль должна быть реальной после комиссий)
+            if net_pnl_percent > 0.5:  # ✅ ГРОК: Только для прибылей > 0.5% (absolute threshold)
                 peak_profit_usd = 0.0
                 if metadata and hasattr(metadata, "peak_profit_usd"):
                     peak_profit_usd = metadata.peak_profit_usd
@@ -1683,23 +1848,32 @@ class ExitAnalyzer:
 
                     if margin_used and margin_used > 0:
                         peak_profit_pct = (peak_profit_usd / margin_used) * 100
-                        # Не закрывать если текущая прибыль < 70% от peak
-                        if pnl_percent < peak_profit_pct * 0.7:
+                        # ✅ ГРОК: Не закрывать если текущая прибыль < 70% от peak, но только если прибыль > 0.5%
+                        # ✅ ИСПРАВЛЕНО: Используем Net PnL для сравнения с peak (прибыль должна быть реальной)
+                        if net_pnl_percent < peak_profit_pct * 0.7:
                             logger.info(
                                 f"🛡️ ExitAnalyzer RANGING: Не закрываем {symbol} - "
-                                f"текущая прибыль {pnl_percent:.2f}% < 70% от peak {peak_profit_pct:.2f}% "
+                                f"текущая прибыль {net_pnl_percent:.2f}% < 70% от peak {peak_profit_pct:.2f}% "
                                 f"(peak_profit_usd=${peak_profit_usd:.2f}, margin=${margin_used:.2f})"
                             )
                             return {
                                 "action": "hold",
                                 "reason": "profit_too_low_vs_peak",
-                                "pnl_pct": pnl_percent,
+                                "pnl_pct": net_pnl_percent,
                                 "peak_profit_pct": peak_profit_pct,
                                 "peak_profit_usd": peak_profit_usd,
                             }
 
             # 2.5. ✅ НОВОЕ: Проверка SL (Stop Loss) - должна быть ДО проверки TP
-            sl_percent = self._get_sl_percent(symbol, "ranging")
+            # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для ATR-based SL
+            sl_percent = self._get_sl_percent(symbol, "ranging", current_price, market_data)
+            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что sl_percent - число, а не строка
+            if not isinstance(sl_percent, (int, float)):
+                try:
+                    sl_percent = float(sl_percent)
+                except (TypeError, ValueError):
+                    logger.error(f"❌ ExitAnalyzer RANGING: sl_percent={sl_percent} не является числом, используем fallback 2.0")
+                    sl_percent = 2.0
 
             # ✅ ИСПРАВЛЕНО: После partial TP используем более мягкий SL для оставшейся позиции
             # Это защищает оставшиеся 40% от преждевременного закрытия
@@ -1712,77 +1886,106 @@ class ExitAnalyzer:
                 sl_percent = sl_percent * 1.5  # 1.2% * 1.5 = 1.8%
                 logger.debug(
                     f"🛡️ ExitAnalyzer RANGING: После partial TP для {symbol} используем более мягкий SL: "
-                    f"{sl_percent:.2f}% (вместо стандартного {self._get_sl_percent(symbol, 'ranging'):.2f}%)"
+                    f"{sl_percent:.2f}% (вместо стандартного {self._get_sl_percent(symbol, 'ranging', current_price, market_data):.2f}%)"
                 )
 
             spread_buffer = self._get_spread_buffer(symbol, current_price)
             sl_threshold = -sl_percent - spread_buffer
-            pnl_format_sl = (
-                f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем Gross PnL для сравнения с SL threshold
+            # SL должен срабатывать на основе движения цены, а не комиссий
+            gross_format_sl = (
+                f"{gross_pnl_percent:.4f}" if abs(gross_pnl_percent) < 0.1 else f"{gross_pnl_percent:.2f}"
+            )
+            net_format_sl = (
+                f"{net_pnl_percent:.4f}" if abs(net_pnl_percent) < 0.1 else f"{net_pnl_percent:.2f}"
             )
             # ➞ ОТЛАДОЧНОЕ ЛОГИРОВАНИЕ: всегда показываем проверку SL
             logger.debug(
                 f"🔍 ExitAnalyzer RANGING: SL проверка {symbol} | "
-                f"PnL={pnl_percent:.2f}% | SL={sl_percent:.2f}% | "
-                f"threshold={sl_threshold:.2f}% | action={'PASS' if pnl_percent > sl_threshold else 'TRIGGER'}"
+                f"Gross PnL={gross_pnl_percent:.2f}% (для SL) | Net PnL={net_pnl_percent:.2f}% (с комиссией) | "
+                f"SL={sl_percent:.2f}% | threshold={sl_threshold:.2f}% | action={'PASS' if gross_pnl_percent > sl_threshold else 'TRIGGER'}"
             )
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: SL={sl_percent:.2f}%, "
-                f"PnL%={pnl_format_sl}%, spread_buffer={spread_buffer:.4f}%, "
-                f"SL threshold={sl_threshold:.2f}%, достигнут={pnl_percent <= sl_threshold}"
+                f"Gross PnL%={gross_format_sl}% (для SL), Net PnL%={net_format_sl}% (с комиссией), "
+                f"spread_buffer={spread_buffer:.4f}%, SL threshold={sl_threshold:.2f}%, "
+                f"достигнут={gross_pnl_percent <= sl_threshold}"
             )
-            if pnl_percent <= sl_threshold:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сравниваем Gross PnL с SL threshold
+            if gross_pnl_percent <= sl_threshold:
                 logger.warning(
                     f"🛑 ExitAnalyzer RANGING: SL достигнут для {symbol}: "
-                    f"{pnl_percent:.2f}% <= {sl_threshold:.2f}% (SL={sl_percent:.2f}% + spread_buffer={spread_buffer:.4f}%)"
+                    f"Gross PnL {gross_pnl_percent:.2f}% <= SL threshold {sl_threshold:.2f}% "
+                    f"(SL={sl_percent:.2f}% + spread_buffer={spread_buffer:.4f}%), "
+                    f"Net PnL={net_pnl_percent:.2f}% (с комиссией)"
                 )
                 return {
                     "action": "close",
                     "reason": "sl_reached",
-                    "pnl_pct": pnl_percent,
+                    "pnl_pct": gross_pnl_percent,  # Gross PnL для логирования
+                    "net_pnl_pct": net_pnl_percent,  # Net PnL для информации
                     "sl_percent": sl_percent,
                     "spread_buffer": spread_buffer,
                 }
 
             # 3. Проверка TP (Take Profit) - в ranging режиме закрываем сразу
-            tp_percent = self._get_tp_percent(symbol, "ranging")
-            pnl_format = (
-                f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для адаптивного TP
+            # ✅ ИСПРАВЛЕНО: Для TP используем Net PnL (реальная прибыль после комиссий)
+            tp_percent = self._get_tp_percent(symbol, "ranging", current_price, market_data)
+            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что tp_percent - число, а не строка
+            if not isinstance(tp_percent, (int, float)):
+                try:
+                    tp_percent = float(tp_percent)
+                except (TypeError, ValueError):
+                    logger.error(f"❌ ExitAnalyzer RANGING: tp_percent={tp_percent} не является числом, используем fallback 2.4")
+                    tp_percent = 2.4
+            net_format_tp = (
+                f"{net_pnl_percent:.4f}" if abs(net_pnl_percent) < 0.1 else f"{net_pnl_percent:.2f}"
             )
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: TP={tp_percent:.2f}%, "
-                f"PnL%={pnl_format}%, достигнут={pnl_percent >= tp_percent}"
+                f"Net PnL%={net_format_tp}% (с комиссией), достигнут={net_pnl_percent >= tp_percent}"
             )
-            if pnl_percent >= tp_percent:
+            if net_pnl_percent >= tp_percent:
                 logger.info(
                     f"🎯 ExitAnalyzer RANGING: TP достигнут для {symbol}: "
-                    f"{pnl_percent:.2f}% >= {tp_percent:.2f}%"
+                    f"Net PnL {net_pnl_percent:.2f}% >= {tp_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%)"
                 )
                 return {
                     "action": "close",
                     "reason": "tp_reached",
-                    "pnl_pct": pnl_percent,
+                    "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                    "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                     "tp_percent": tp_percent,
                 }
 
             # 4. Проверка big_profit_exit
+            # ✅ ИСПРАВЛЕНО: Для big_profit_exit используем Net PnL (реальная прибыль после комиссий)
             big_profit_exit_percent = self._get_big_profit_exit_percent(symbol)
-            pnl_format = (
-                f"{pnl_percent:.4f}" if abs(pnl_percent) < 0.1 else f"{pnl_percent:.2f}"
+            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что big_profit_exit_percent - число, а не строка
+            if not isinstance(big_profit_exit_percent, (int, float)):
+                try:
+                    big_profit_exit_percent = float(big_profit_exit_percent)
+                except (TypeError, ValueError):
+                    logger.error(f"❌ ExitAnalyzer RANGING: big_profit_exit_percent={big_profit_exit_percent} не является числом, используем fallback 1.5")
+                    big_profit_exit_percent = 1.5
+            net_format_bp = (
+                f"{net_pnl_percent:.4f}" if abs(net_pnl_percent) < 0.1 else f"{net_pnl_percent:.2f}"
             )
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: big_profit_exit={big_profit_exit_percent:.2f}%, "
-                f"PnL%={pnl_format}%, достигнут={pnl_percent >= big_profit_exit_percent}"
+                f"Net PnL%={net_format_bp}% (с комиссией), достигнут={net_pnl_percent >= big_profit_exit_percent}"
             )
-            if pnl_percent >= big_profit_exit_percent:
+            if net_pnl_percent >= big_profit_exit_percent:
                 logger.info(
                     f"💰 ExitAnalyzer RANGING: Big profit exit достигнут для {symbol}: "
-                    f"{pnl_percent:.2f}% >= {big_profit_exit_percent:.2f}%"
+                    f"Net PnL {net_pnl_percent:.2f}% >= {big_profit_exit_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%)"
                 )
                 return {
                     "action": "close",
                     "reason": "big_profit_exit",
-                    "pnl_pct": pnl_percent,
+                    "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                    "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                     "big_profit_exit_percent": big_profit_exit_percent,
                 }
 
@@ -1802,16 +2005,24 @@ class ExitAnalyzer:
             )
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.6)
-                pnl_format = (
-                    f"{pnl_percent:.4f}"
-                    if abs(pnl_percent) < 0.1
-                    else f"{pnl_percent:.2f}"
+                # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что trigger_percent - число, а не строка
+                if not isinstance(trigger_percent, (int, float)):
+                    try:
+                        trigger_percent = float(trigger_percent)
+                    except (TypeError, ValueError):
+                        logger.error(f"❌ ExitAnalyzer RANGING: trigger_percent={trigger_percent} не является числом, используем fallback 0.6")
+                        trigger_percent = 0.6
+                # ✅ ИСПРАВЛЕНО: Для partial_tp используем Net PnL (реальная прибыль после комиссий)
+                net_format_ptp = (
+                    f"{net_pnl_percent:.4f}"
+                    if abs(net_pnl_percent) < 0.1
+                    else f"{net_pnl_percent:.2f}"
                 )
                 logger.info(
                     f"🔍 ExitAnalyzer RANGING {symbol}: partial_tp trigger={trigger_percent:.2f}%, "
-                    f"PnL%={pnl_format}%, достигнут={pnl_percent >= trigger_percent}"
+                    f"Net PnL%={net_format_ptp}% (с комиссией), достигнут={net_pnl_percent >= trigger_percent}"
                 )
-                if pnl_percent >= trigger_percent:
+                if net_pnl_percent >= trigger_percent:
                     # ✅ ИСПРАВЛЕНО: Проверяем, не выполнялся ли уже partial_tp
                     if (
                         metadata
@@ -1827,23 +2038,23 @@ class ExitAnalyzer:
                             can_partial_close,
                             min_holding_info,
                         ) = await self._check_adaptive_min_holding_for_partial_tp(
-                            symbol, metadata, pnl_percent, "ranging"
+                            symbol, metadata, net_pnl_percent, "ranging"  # ✅ ИСПРАВЛЕНО: Используем Net PnL
                         )
 
                         if can_partial_close:
-                            # ✅ УЛУЧШЕНИЕ #5.2: Адаптивная fraction для Partial TP в зависимости от PnL
+                            # ✅ УЛУЧШЕНИЕ #5.2: Адаптивная fraction для Partial TP в зависимости от Net PnL
                             base_fraction = partial_tp_params.get("fraction", 0.6)
-                            if pnl_percent < 1.0:
-                                fraction = base_fraction * 0.67  # 40% если PnL < 1.0%
-                            elif pnl_percent >= 2.0:
-                                fraction = base_fraction * 1.33  # 80% если PnL >= 2.0%
+                            if net_pnl_percent < 1.0:
+                                fraction = base_fraction * 0.67  # 40% если Net PnL < 1.0%
+                            elif net_pnl_percent >= 2.0:
+                                fraction = base_fraction * 1.33  # 80% если Net PnL >= 2.0%
                             else:
                                 fraction = base_fraction  # 60% стандарт
 
                             logger.info(
                                 f"📊 ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}: "
-                                f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
-                                f"({min_holding_info})"
+                                f"Net PnL {net_pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
+                                f"(Gross PnL {gross_pnl_percent:.2f}%, {min_holding_info})"
                             )
                             # ✅ ИСПРАВЛЕНО: Устанавливаем флаг partial_tp_executed в metadata
                             if metadata and hasattr(metadata, "partial_tp_executed"):
@@ -1851,7 +2062,8 @@ class ExitAnalyzer:
                             return {
                                 "action": "partial_close",
                                 "reason": "partial_tp",
-                                "pnl_pct": pnl_percent,
+                                "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                                "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                                 "trigger_percent": trigger_percent,
                                 "fraction": fraction,
                                 "min_holding_info": min_holding_info,
@@ -1860,30 +2072,32 @@ class ExitAnalyzer:
                             # ✅ ИСПРАВЛЕНИЕ (21.12.2025): Логируем, почему Partial TP блокируется
                             logger.warning(
                                 f"⚠️ ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol} "
-                                f"({pnl_percent:.2f}% >= {trigger_percent:.2f}%), но блокируется: {min_holding_info}"
+                                f"(Net PnL {net_pnl_percent:.2f}% >= {trigger_percent:.2f}%), но блокируется: {min_holding_info}"
                             )
                             return {
                                 "action": "hold",
                                 "reason": "partial_tp_min_holding_wait",
-                                "pnl_pct": pnl_percent,
+                                "pnl_pct": net_pnl_percent,  # Net PnL для логирования
                                 "min_holding_info": min_holding_info,
                             }
 
             # 6. Проверка разворота (Order Flow, MTF) - в ranging режиме более строго
+            # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки прибыли (реальная прибыль после комиссий)
             reversal_detected = await self._check_reversal_signals(
                 symbol, position_side
             )
             if (
-                reversal_detected and pnl_percent > 0.3
-            ):  # Закрываем только если есть прибыль
+                reversal_detected and net_pnl_percent > 0.3
+            ):  # Закрываем только если есть реальная прибыль после комиссий
                 logger.info(
                     f"🔄 ExitAnalyzer RANGING: Разворот обнаружен для {symbol}, закрываем позицию "
-                    f"(profit={pnl_percent:.2f}%)"
+                    f"(Net PnL={net_pnl_percent:.2f}%, Gross PnL={gross_pnl_percent:.2f}%)"
                 )
                 return {
                     "action": "close",
                     "reason": "reversal_detected",
-                    "pnl_pct": pnl_percent,
+                    "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                    "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                     "reversal_signal": "order_flow_or_mtf",
                 }
 
@@ -1900,10 +2114,12 @@ class ExitAnalyzer:
                 f"max_holding_minutes={max_holding_minutes}"
             )
 
-            # Получаем параметры продления времени
+            # Получаем параметры продления времени и жесткого стопа
             extend_time_if_profitable = False
             min_profit_for_extension = 0.5
             extension_percent = 100
+            max_holding_hard_stop = False  # ✅ ГРОК: По умолчанию мягкий стоп
+            timeout_loss_percent = 2.0  # ✅ ГРОК: По умолчанию 2% убыток для жесткого выхода
             try:
                 adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
                 regime_config = None
@@ -1921,6 +2137,12 @@ class ExitAnalyzer:
                             "min_profit_for_extension", 0.5
                         )
                         extension_percent = regime_config.get("extension_percent", 100)
+                        max_holding_hard_stop = regime_config.get(
+                            "max_holding_hard_stop", False
+                        )  # ✅ ГРОК: Получаем из конфига
+                        timeout_loss_percent = regime_config.get(
+                            "timeout_loss_percent", 2.0
+                        )  # ✅ ГРОК: Получаем из конфига
                     else:
                         extend_time_if_profitable = getattr(
                             regime_config, "extend_time_if_profitable", False
@@ -1931,13 +2153,20 @@ class ExitAnalyzer:
                         extension_percent = getattr(
                             regime_config, "extension_percent", 100
                         )
+                        max_holding_hard_stop = getattr(
+                            regime_config, "max_holding_hard_stop", False
+                        )  # ✅ ГРОК: Получаем из конфига
+                        timeout_loss_percent = getattr(
+                            regime_config, "timeout_loss_percent", 2.0
+                        )  # ✅ ГРОК: Получаем из конфига
             except Exception as e:
                 logger.debug(
-                    f"⚠️ ExitAnalyzer: Ошибка получения extend_time_if_profitable: {e}"
+                    f"⚠️ ExitAnalyzer: Ошибка получения параметров max_holding: {e}"
                 )
 
             actual_max_holding = max_holding_minutes
-            if extend_time_if_profitable and pnl_percent >= min_profit_for_extension:
+            # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки продления (реальная прибыль после комиссий)
+            if extend_time_if_profitable and net_pnl_percent >= min_profit_for_extension:
                 extension_minutes = max_holding_minutes * (extension_percent / 100.0)
                 actual_max_holding = max_holding_minutes + extension_minutes
 
@@ -1959,45 +2188,104 @@ class ExitAnalyzer:
                 and isinstance(minutes_in_position, (int, float))
                 and float(minutes_in_position) >= actual_max_holding_float
             ):
-                # ✅ ИСПРАВЛЕНО: Не закрываем убыточные позиции по max_holding
-                # Позволяем им дойти до SL или восстановиться
-                if pnl_percent < 0:
-                    # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
-                    # Вызывается только если pnl_percent < 0 и |убыток| >= 1.5 * SL
-                    # ✅ ИСПРАВЛЕНО: Учитываем спред для предотвращения дергания
-                    sl_percent = self._get_sl_percent(symbol, "ranging")
-                    spread_buffer = self._get_spread_buffer(symbol, current_price)
-                    smart_close_threshold = -sl_percent * 1.5 - spread_buffer
-                    if pnl_percent <= smart_close_threshold:
-                        smart_close = await self._should_force_close_by_smart_analysis(
-                            symbol, position_side, pnl_percent, sl_percent
-                        )
-                        if smart_close:
+                # ✅ ГРОК: Жесткий стоп по max_holding (если включен в конфиге)
+                # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки (реальная прибыль/убыток после комиссий)
+                if max_holding_hard_stop:
+                    # Жесткий стоп: закрываем независимо от PnL, кроме случаев когда убыток < timeout_loss_percent
+                    if net_pnl_percent < 0:
+                        # Если убыток >= timeout_loss_percent - закрываем жестко
+                        if abs(net_pnl_percent) >= timeout_loss_percent:
                             logger.warning(
-                                f"🚨 ExitAnalyzer RANGING: Умное закрытие {symbol} "
-                                f"(убыток {pnl_percent:.2f}% >= {sl_percent * 1.5:.2f}%, нет признаков отката)"
+                                f"⏰ ExitAnalyzer RANGING: ЖЕСТКИЙ СТОП по max_holding для {symbol} - "
+                                f"время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                                f"Net убыток {net_pnl_percent:.2f}% >= {timeout_loss_percent:.2f}% "
+                                f"(Gross PnL {gross_pnl_percent:.2f}%)"
                             )
                             return {
                                 "action": "close",
-                                "reason": "smart_forced_close_ranging",
-                                "pnl_pct": pnl_percent,
-                                "note": "Нет признаков отката — закрываем до SL",
+                                "reason": "max_holding_hard_stop_timeout_loss",
+                                "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                                "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                                 "minutes_in_position": minutes_in_position,
                                 "max_holding_minutes": actual_max_holding,
+                                "timeout_loss_percent": timeout_loss_percent,
                             }
-                    # ---------- КОНЕЦ УМНОГО ЗАКРЫТИЯ ----------
+                        else:
+                            # Убыток < timeout_loss_percent - еще даем шанс
+                            logger.info(
+                                f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                                f"но Net убыток {net_pnl_percent:.2f}% < {timeout_loss_percent:.2f}% "
+                                f"(Gross PnL {gross_pnl_percent:.2f}%) - даем еще шанс"
+                            )
+                            return {
+                                "action": "hold",
+                                "reason": "max_holding_exceeded_but_loss_small",
+                                "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                                "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
+                                "minutes_in_position": minutes_in_position,
+                                "max_holding_minutes": actual_max_holding,
+                                "timeout_loss_percent": timeout_loss_percent,
+                            }
+                    else:
+                        # Позиция в прибыли - закрываем по max_holding
+                        logger.info(
+                            f"⏰ ExitAnalyzer RANGING: ЖЕСТКИЙ СТОП по max_holding для {symbol} - "
+                            f"время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                            f"Net прибыль {net_pnl_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%)"
+                        )
+                        return {
+                            "action": "close",
+                            "reason": "max_holding_hard_stop_profit",
+                            "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                            "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
+                            "minutes_in_position": minutes_in_position,
+                            "max_holding_minutes": actual_max_holding,
+                        }
+                else:
+                    # ✅ МЯГКИЙ СТОП (старая логика): Не закрываем убыточные позиции по max_holding
+                    # Позволяем им дойти до SL или восстановиться
+                    # ✅ ИСПРАВЛЕНО: Используем Gross PnL для проверки убытка (SL должен срабатывать на основе движения цены)
+                    if gross_pnl_percent < 0:
+                        # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
+                        # Вызывается только если gross_pnl_percent < 0 и |убыток| >= 1.5 * SL
+                        # ✅ ИСПРАВЛЕНО: Учитываем спред для предотвращения дергания
+                        sl_percent = self._get_sl_percent(symbol, "ranging", current_price, market_data)
+                        spread_buffer = self._get_spread_buffer(symbol, current_price)
+                        smart_close_threshold = -sl_percent * 1.5 - spread_buffer
+                        if gross_pnl_percent <= smart_close_threshold:
+                            smart_close = await self._should_force_close_by_smart_analysis(
+                                symbol, position_side, gross_pnl_percent, sl_percent
+                            )
+                            if smart_close:
+                                logger.warning(
+                                    f"🚨 ExitAnalyzer RANGING: Умное закрытие {symbol} "
+                                    f"(Gross убыток {gross_pnl_percent:.2f}% >= {sl_percent * 1.5:.2f}%, "
+                                    f"Net PnL {net_pnl_percent:.2f}%, нет признаков отката)"
+                                )
+                                return {
+                                    "action": "close",
+                                    "reason": "smart_forced_close_ranging",
+                                    "pnl_pct": gross_pnl_percent,  # Gross PnL для логирования
+                                    "net_pnl_pct": net_pnl_percent,  # Net PnL для информации
+                                    "note": "Нет признаков отката — закрываем до SL",
+                                    "minutes_in_position": minutes_in_position,
+                                    "max_holding_minutes": actual_max_holding,
+                                }
+                        # ---------- КОНЕЦ УМНОГО ЗАКРЫТИЯ ----------
 
-                    logger.info(
-                        f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
-                        f"но позиция в убытке ({pnl_percent:.2f}%) - НЕ закрываем, ждем SL или восстановления"
-                    )
-                    return {
-                        "action": "hold",
-                        "reason": "max_holding_exceeded_but_loss",
-                        "pnl_pct": pnl_percent,
-                        "minutes_in_position": minutes_in_position,
-                        "max_holding_minutes": actual_max_holding,
-                    }
+                        logger.info(
+                            f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                            f"но позиция в убытке (Gross PnL {gross_pnl_percent:.2f}%, Net PnL {net_pnl_percent:.2f}%) - "
+                            f"НЕ закрываем (мягкий стоп), ждем SL или восстановления"
+                        )
+                        return {
+                            "action": "hold",
+                            "reason": "max_holding_exceeded_but_loss",
+                            "pnl_pct": gross_pnl_percent,  # Gross PnL для логирования
+                            "net_pnl_pct": net_pnl_percent,  # Net PnL для информации
+                            "minutes_in_position": minutes_in_position,
+                            "max_holding_minutes": actual_max_holding,
+                        }
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем min_profit_to_close перед закрытием по времени
                 # Не закрываем по времени если прибыль < min_profit_to_close (после комиссий будет убыток!)
@@ -2014,17 +2302,20 @@ class ExitAnalyzer:
                     min_profit_to_close if min_profit_to_close is not None else 0.003
                 )  # 0.3%
 
-                if pnl_percent < min_profit_threshold:
+                # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки min_profit_to_close (реальная прибыль после комиссий)
+                if net_pnl_percent < min_profit_threshold:
                     # Прибыль меньше min_profit_to_close - НЕ закрываем по времени (после комиссий будет убыток!)
                     logger.info(
                         f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
-                        f"(базовое: {max_holding_minutes:.1f} мин), но прибыль {pnl_percent:.2f}% < "
-                        f"min_profit_threshold {min_profit_threshold:.2%} - НЕ закрываем по времени (после комиссий будет убыток!)"
+                        f"(базовое: {max_holding_minutes:.1f} мин), но Net прибыль {net_pnl_percent:.2f}% < "
+                        f"min_profit_threshold {min_profit_threshold:.2%} (Gross PnL {gross_pnl_percent:.2f}%) - "
+                        f"НЕ закрываем по времени (после комиссий будет убыток!)"
                     )
                     return {
                         "action": "hold",
                         "reason": "max_holding_low_profit",
-                        "pnl_pct": pnl_percent,
+                        "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                        "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                         "min_profit_threshold": min_profit_threshold,
                         "minutes_in_position": minutes_in_position,
                     }
@@ -2032,12 +2323,14 @@ class ExitAnalyzer:
                 # Время превышено и позиция в прибыли >= min_profit_to_close - закрываем
                 logger.info(
                     f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
-                    f"(базовое: {max_holding_minutes:.1f} мин), прибыль={pnl_percent:.2f}% >= {min_profit_threshold:.2%} - закрываем по времени"
+                    f"(базовое: {max_holding_minutes:.1f} мин), Net прибыль={net_pnl_percent:.2f}% >= {min_profit_threshold:.2%} "
+                    f"(Gross PnL {gross_pnl_percent:.2f}%) - закрываем по времени"
                 )
                 return {
                     "action": "close",
                     "reason": "max_holding_exceeded",
-                    "pnl_pct": pnl_percent,
+                    "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                    "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                     "minutes_in_position": minutes_in_position,
                     "max_holding_minutes": actual_max_holding,
                 }
@@ -2060,13 +2353,15 @@ class ExitAnalyzer:
 
                 if float(minutes_in_position) >= max_holding_minutes_float:
                     # Базовое время превышено, но есть продление - проверяем прибыль
+                    # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки продления (реальная прибыль после комиссий)
                     if (
                         extend_time_if_profitable
-                        and pnl_percent >= min_profit_for_extension
+                        and net_pnl_percent >= min_profit_for_extension
                     ):
                         logger.debug(
                             f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes_float:.1f} мин, "
-                            f"но прибыль {pnl_percent:.2f}% >= {min_profit_for_extension:.2f}% - продлеваем до {actual_max_holding:.1f} мин"
+                            f"но Net прибыль {net_pnl_percent:.2f}% >= {min_profit_for_extension:.2f}% "
+                            f"(Gross PnL {gross_pnl_percent:.2f}%) - продлеваем до {actual_max_holding:.1f} мин"
                         )
                         # Продлеваем, но не закрываем пока
                         return None
@@ -2082,9 +2377,10 @@ class ExitAnalyzer:
                     time_info = f"{minutes_in_position:.1f} мин"
 
             # ✅ ИСПРАВЛЕНИЕ (21.12.2025): Используем правильное значение trigger_percent в логировании
+            # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки partial_tp (реальная прибыль после комиссий)
             partial_tp_status = (
                 f"partial_tp={trigger_percent:.2f}% (не достигнут)"
-                if trigger_percent is not None and pnl_percent < trigger_percent
+                if trigger_percent is not None and net_pnl_percent < trigger_percent
                 else f"partial_tp={trigger_percent:.2f}% (достигнут, но блокируется)"
                 if trigger_percent is not None
                 else "partial_tp=disabled"
@@ -2093,7 +2389,7 @@ class ExitAnalyzer:
                 f"🔍 ExitAnalyzer RANGING {symbol}: Нет причин для закрытия - "
                 f"TP={tp_percent:.2f}% (не достигнут), big_profit={big_profit_exit_percent:.2f}% (не достигнут), "
                 f"{partial_tp_status}, "
-                f"текущий PnL%={pnl_percent:.2f}%, время: {time_info}"
+                f"текущий Net PnL%={net_pnl_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%), время: {time_info}"
             )
             return None
 
@@ -2162,8 +2458,8 @@ class ExitAnalyzer:
                 metadata=metadata,
             )
 
-            # 2.5. ✅ НОВОЕ: Проверка peak_profit - не закрывать если текущая прибыль < 70% от peak
-            if pnl_percent > 0:  # Только для прибыльных позиций
+            # 2.5. ✅ ГРОК: Проверка peak_profit с absolute threshold - не блокировать для малых прибылей
+            if pnl_percent > 0.5:  # ✅ ГРОК: Только для прибылей > 0.5% (absolute threshold)
                 peak_profit_usd = 0.0
                 if metadata and hasattr(metadata, "peak_profit_usd"):
                     peak_profit_usd = metadata.peak_profit_usd
@@ -2184,8 +2480,8 @@ class ExitAnalyzer:
 
                     if margin_used and margin_used > 0:
                         peak_profit_pct = (peak_profit_usd / margin_used) * 100
-                        # Не закрывать если текущая прибыль < 70% от peak
-                        if pnl_percent < peak_profit_pct * 0.7:
+                        # ✅ ГРОК: Не закрывать если текущая прибыль < 70% от peak, но только если прибыль > 0.5%
+                        if pnl_percent > 0.5 and pnl_percent < peak_profit_pct * 0.7:
                             logger.info(
                                 f"🛡️ ExitAnalyzer CHOPPY: Не закрываем {symbol} - "
                                 f"текущая прибыль {pnl_percent:.2f}% < 70% от peak {peak_profit_pct:.2f}% "
@@ -2200,7 +2496,8 @@ class ExitAnalyzer:
                             }
 
             # 3. Проверка TP (Take Profit) - в choppy режиме закрываем сразу (меньший TP)
-            tp_percent = self._get_tp_percent(symbol, "choppy")
+            # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для адаптивного TP
+            tp_percent = self._get_tp_percent(symbol, "choppy", current_price, market_data)
             if pnl_percent >= tp_percent:
                 logger.info(
                     f"🎯 ExitAnalyzer CHOPPY: TP достигнут для {symbol}: "
@@ -2308,7 +2605,7 @@ class ExitAnalyzer:
                     # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
                     # Вызывается только если pnl_percent < 0 и |убыток| >= 1.5 * SL
                     # ✅ ИСПРАВЛЕНО: Учитываем спред для предотвращения дергания
-                    sl_percent = self._get_sl_percent(symbol, "choppy")
+                    sl_percent = self._get_sl_percent(symbol, "choppy", current_price, market_data)
                     spread_buffer = self._get_spread_buffer(symbol, current_price)
                     smart_close_threshold = -sl_percent * 1.5 - spread_buffer
                     if pnl_percent <= smart_close_threshold:

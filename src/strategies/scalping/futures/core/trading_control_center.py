@@ -15,7 +15,7 @@ TradingControlCenter - Центральный координатор торго�
 import asyncio
 import os
 import time
-from datetime import datetime
+from datetime import datetime as dt, timezone
 from typing import Any, Dict, Optional
 
 from loguru import logger
@@ -191,13 +191,26 @@ class TradingControlCenter:
                     break
 
                 # ✅ НОВОЕ: Логирование метрик производительности
+                # ✅ ГРОК ОПТИМИЗАЦИЯ: Логируем только если cycle > 10s (проблема) или раз в 10 циклов
                 cycle_time = (time.perf_counter() - cycle_start_time) * 1000  # мс
-                logger.debug(
-                    f"⏱️ TCC Performance: cycle={cycle_time:.1f}ms, "
-                    f"state={state_time:.1f}ms, signals={signals_time:.1f}ms, "
-                    f"process={process_time:.1f}ms, manage={manage_time:.1f}ms, "
-                    f"monitor={monitor_time:.1f}ms"
-                )
+                if not hasattr(self, "_cycle_count"):
+                    self._cycle_count = 0
+                self._cycle_count += 1
+                
+                if cycle_time > 10000 or self._cycle_count % 10 == 0:
+                    logger.info(
+                        f"⏱️ TCC Performance: cycle={cycle_time:.1f}ms, "
+                        f"state={state_time:.1f}ms, signals={signals_time:.1f}ms, "
+                        f"process={process_time:.1f}ms, manage={manage_time:.1f}ms, "
+                        f"monitor={monitor_time:.1f}ms"
+                    )
+                else:
+                    logger.debug(
+                        f"⏱️ TCC Performance: cycle={cycle_time:.1f}ms, "
+                        f"state={state_time:.1f}ms, signals={signals_time:.1f}ms, "
+                        f"process={process_time:.1f}ms, manage={manage_time:.1f}ms, "
+                        f"monitor={monitor_time:.1f}ms"
+                    )
 
                 # Периодически обновляем статус ордеров в кэше
                 await self.order_coordinator.update_orders_cache_status(
@@ -460,7 +473,7 @@ class TradingControlCenter:
                         try:
                             entry_timestamp_ms = int(entry_time_str)
                             entry_timestamp_sec = entry_timestamp_ms / 1000.0
-                            entry_time_from_api = datetime.fromtimestamp(
+                            entry_time_from_api = dt.fromtimestamp(
                                 entry_timestamp_sec
                             )
                         except (ValueError, TypeError):
@@ -474,7 +487,7 @@ class TradingControlCenter:
                         # Сохраняем entry_time, если он еще не установлен, но есть в API
                         if (
                             not existing_metadata.entry_time
-                            or existing_metadata.entry_time == datetime.now()
+                            or existing_metadata.entry_time == dt.now(timezone.utc)
                         ):
                             if entry_time_from_api:
                                 metadata_updates["entry_time"] = entry_time_from_api
@@ -553,7 +566,7 @@ class TradingControlCenter:
                         entry_time_for_metadata = (
                             entry_time_from_api
                             if entry_time_from_api
-                            else datetime.now()
+                            else dt.now(timezone.utc)
                         )
 
                         # Получаем режим для новой позиции

@@ -298,6 +298,18 @@ class TrailingSLCoordinator:
                             f"⚠️ Не удалось преобразовать {key}={value} в правильный тип: {e}"
                         )
                         # Оставляем значение по умолчанию
+        # ✅ ГРОК ФИКС: TSL aggressive для strong signals (strength > 0.8)
+        # Trail 0.4% после +0.6%, losscut 1.0% для быстрой фиксации профита
+        signal_strength = signal.get("strength", 0.0) if signal else 0.0
+        if signal_strength > 0.8:
+            # Агрессивный TSL для сильных сигналов
+            params["initial_trail"] = 0.004  # 0.4% trail
+            params["loss_cut_percent"] = 0.01  # 1.0% losscut
+            logger.info(
+                f"🚀 TSL AGGRESSIVE для {symbol}: strength={signal_strength:.2f} > 0.8, "
+                f"trail={params['initial_trail']:.2%}, losscut={params['loss_cut_percent']:.2%}"
+            )
+        
         impulse_trailing = None
         if signal and signal.get("is_impulse"):
             impulse_trailing = signal.get("impulse_trailing") or {}

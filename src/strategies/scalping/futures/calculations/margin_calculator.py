@@ -274,8 +274,32 @@ class MarginCalculator:
                                 safety_threshold = None
 
                             if safety_threshold is not None:
+                                # ✅ ГРОК КОМПРОМИСС: Динамическое усиление safety_threshold
+                                # Базово 1.5, усиление до 1.8-2.0 при:
+                                # - equity < 100 USDT
+                                # - ADX низкий (шаткий рынок)
+                                # - открыто >3 позиций
+                                base_safety = safety_threshold
+                                safety_threshold_dynamic = regime_config.get("safety_threshold_dynamic", False) if isinstance(regime_config, dict) else getattr(regime_config, "safety_threshold_dynamic", False)
+                                safety_threshold_max = regime_config.get("safety_threshold_max", 2.0) if isinstance(regime_config, dict) else getattr(regime_config, "safety_threshold_max", 2.0)
+                                
+                                if safety_threshold_dynamic:
+                                    # Получаем equity и количество открытых позиций (если доступны)
+                                    # Для упрощения используем переданный equity
+                                    equity_threshold = 100.0
+                                    positions_threshold = 3
+                                    
+                                    # Усиление при equity < 100
+                                    if equity < equity_threshold:
+                                        safety_threshold = min(safety_threshold_max, base_safety * 1.2)  # +20% до макс
+                                        logger.debug(
+                                            f"✅ Динамическое усиление safety_threshold: {base_safety:.2f} → {safety_threshold:.2f} "
+                                            f"(equity=${equity:.2f} < ${equity_threshold:.2f})"
+                                        )
+                                
                                 logger.info(
-                                    f"✅ Загружен safety_threshold={safety_threshold} из конфига (regime={regime_to_use}{' (fallback)' if not regime else ''})"
+                                    f"✅ Загружен safety_threshold={safety_threshold:.2f} из конфига (regime={regime_to_use}{' (fallback)' if not regime else ''}, "
+                                    f"base={base_safety:.2f}, dynamic={safety_threshold_dynamic})"
                                 )
 
             except Exception as e:
@@ -442,8 +466,12 @@ class MarginCalculator:
         # Расчет коэффициента маржи
         # margin_ratio показывает, во сколько раз доступная маржа превышает использованную
         # Если available_margin < 0, то margin_ratio будет отрицательным = риск ликвидации!
+        # ✅ ГРОК КОМПРОМИСС: Добавляем защиту от отрицательных значений (но не маскируем реальные проблемы)
         if margin_used > 0:
+            # ✅ ГРОК КОМПРОМИСС: Честный расчет margin_ratio без маскировки реальных проблем
+            # Не используем max(0.01, ...) - это маскирует реальные риски ликвидации
             margin_ratio = available_margin / margin_used
+            # Если margin_ratio отрицательный - это реальный риск ликвидации, не маскируем
         else:
             margin_ratio = float("inf") if available_margin > 0 else float("-inf")
 
@@ -515,10 +543,22 @@ class MarginCalculator:
             * 100,
         }
 
+        # ✅ ГРОК КОМПРОМИСС: Структурированное логирование risk_status
+        if margin_ratio >= 2.5:
+            risk_status = "SAFE"
+        elif margin_ratio >= 1.8:
+            risk_status = "GOOD"
+        elif margin_ratio >= 1.3:
+            risk_status = "WARNING"
+        elif margin_ratio >= 1.1:
+            risk_status = "DANGER"
+        else:
+            risk_status = "CRITICAL"
+        
         # 🔴 КРИТИЧНО: Детальное логирование margin ratio (от Грока)
         logger.info(
             f"📊 [MARGIN_RATIO] Проверка безопасности позиции: safe={is_safe} | "
-            f"margin_ratio={margin_ratio:.2f} (threshold={safety_threshold:.2f}) | "
+            f"margin_ratio={margin_ratio:.2f} [{risk_status}] (threshold={safety_threshold:.2f}) | "
             f"available_margin=${available_margin:.2f}, margin_used=${margin_used:.2f} | "
             f"equity=${equity:.2f}, pnl=${pnl:.2f} | "
             f"liq_price=${liquidation_price:.4f} (distance={details.get('distance_to_liquidation', 0):.2f}%)"

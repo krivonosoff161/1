@@ -60,9 +60,21 @@ class OKXFuturesClient:
         self._instrument_details_cache: dict = (
             {}
         )  # Кэш для instrument details (ctVal, lotSz, minSz)
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Кэш leverage info с TTL 300s (5 минут) для снижения API calls
         self._leverage_info_cache: dict = (
             {}
-        )  # Кэш для leverage info (maxLever, available_leverages)
+        )  # Кэш: {symbol: {'max': 125, 'avail': [1,2,..], 'ts': now}}
+        self._leverage_info_cache_ttl: float = 300.0  # TTL 5 минут (leverage меняется редко)
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Кэш результатов round_leverage_to_available
+        self._leverage_round_cache: dict = (
+            {}
+        )  # Кэш: {(symbol, desired_leverage): {'rounded': 20, 'ts': now}}
+        self._leverage_round_cache_ttl: float = 300.0  # TTL 5 минут
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Кэш instrument info для снижения API calls
+        self._instrument_info_cache: dict = (
+            {}
+        )  # Кэш: {inst_type: {'data': [...], 'ts': now}}
+        self._instrument_info_cache_ttl: float = 300.0  # TTL 5 минут (instrument info меняется редко)
 
     async def close(self):
         """Корректное закрытие клиента и сессии"""
@@ -356,10 +368,47 @@ class OKXFuturesClient:
         return await self._make_request("GET", "/api/v5/account/config")
 
     async def get_instrument_info(self, inst_type: str = "SWAP") -> dict:
-        """Получает информацию об инструментах (lot size, min size и т.д.)"""
+        """
+        Получает информацию об инструментах (lot size, min size и т.д.).
+        ✅ ГРОК ОПТИМИЗАЦИЯ: Использует кэш с TTL 300s для снижения API calls.
+        """
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш
+        cache_key = inst_type
+        if cache_key in self._instrument_info_cache:
+            cached_data = self._instrument_info_cache[cache_key]
+            now = time.time()
+            cache_age = now - cached_data.get("ts", 0)
+            
+            if cache_age < self._instrument_info_cache_ttl:
+                # Кэш актуален
+                logger.debug(
+                    f"📊 [INSTRUMENT_INFO] {inst_type}: Из кэша (TTL {self._instrument_info_cache_ttl}s) | "
+                    f"{len(cached_data.get('data', []))} инструментов"
+                )
+                return cached_data
+            else:
+                # Кэш устарел - удаляем
+                logger.debug(f"📊 [INSTRUMENT_INFO] {inst_type}: Кэш устарел ({cache_age:.1f}s > {self._instrument_info_cache_ttl}s), обновляем")
+                del self._instrument_info_cache[cache_key]
+
+        # Запрашиваем с API
+        logger.debug(f"📊 [INSTRUMENT_INFO] {inst_type}: Запрос к API...")
         data = await self._make_request(
             "GET", "/api/v5/public/instruments", params={"instType": inst_type}
         )
+        
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Сохраняем в кэш с timestamp
+        if data and data.get("code") == "0":
+            self._instrument_info_cache[cache_key] = {
+                "code": data.get("code"),
+                "data": data.get("data", []),
+                "ts": time.time(),
+            }
+            logger.debug(
+                f"📊 [INSTRUMENT_INFO] {inst_type}: Сохранено в кэш | "
+                f"{len(data.get('data', []))} инструментов"
+            )
+        
         return data
 
     async def get_lot_size(self, symbol: str) -> float:
@@ -491,15 +540,27 @@ class OKXFuturesClient:
                 - max_leverage: Максимальный leverage для символа (int)
                 - available_leverages: Список доступных leverage (List[int])
         """
-        # Проверяем кэш
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш с TTL
         if symbol in self._leverage_info_cache:
             cached_info = self._leverage_info_cache[symbol]
-            logger.debug(
-                f"📊 [LEVERAGE_INFO] {symbol}: Из кэша | "
-                f"max={cached_info['max_leverage']}x, "
-                f"available={cached_info['available_leverages']}"
-            )
-            return cached_info
+            now = time.time()
+            cache_age = now - cached_info.get("ts", 0)
+            
+            if cache_age < self._leverage_info_cache_ttl:
+                # Кэш актуален
+                logger.debug(
+                    f"📊 [LEVERAGE_INFO] {symbol}: Из кэша (TTL {self._leverage_info_cache_ttl}s) | "
+                    f"max={cached_info['max_leverage']}x, "
+                    f"available={cached_info['available_leverages']}"
+                )
+                return {
+                    "max_leverage": cached_info["max_leverage"],
+                    "available_leverages": cached_info["available_leverages"],
+                }
+            else:
+                # Кэш устарел - удаляем
+                logger.debug(f"📊 [LEVERAGE_INFO] {symbol}: Кэш устарел ({cache_age:.1f}s > {self._leverage_info_cache_ttl}s), обновляем")
+                del self._leverage_info_cache[symbol]
 
         try:
             inst_id = f"{symbol}-SWAP"
@@ -550,7 +611,12 @@ class OKXFuturesClient:
                         "available_leverages": available_leverages,
                     }
 
-                    self._leverage_info_cache[symbol] = leverage_info
+                    # ✅ ГРОК ОПТИМИЗАЦИЯ: Сохраняем в кэш с timestamp
+                    self._leverage_info_cache[symbol] = {
+                        "max_leverage": max_leverage,
+                        "available_leverages": available_leverages,
+                        "ts": time.time(),
+                    }
 
                     logger.info(
                         f"✅ [LEVERAGE_INFO] {symbol}: Получено с биржи | "
@@ -572,7 +638,12 @@ class OKXFuturesClient:
             "max_leverage": 125,
             "available_leverages": [1, 2, 3, 5, 10, 20, 50, 75, 100, 125],
         }
-        self._leverage_info_cache[symbol] = default_leverage_info
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Сохраняем fallback в кэш с timestamp
+        self._leverage_info_cache[symbol] = {
+            "max_leverage": 125,
+            "available_leverages": [1, 2, 3, 5, 10, 20, 50, 75, 100, 125],
+            "ts": time.time(),
+        }
         logger.warning(
             f"⚠️ [LEVERAGE_INFO] {symbol}: Fallback | "
             f"max={default_leverage_info['max_leverage']}x, "
@@ -585,6 +656,7 @@ class OKXFuturesClient:
     ) -> int:
         """
         Округляет leverage до ближайшего доступного для символа.
+        ✅ ГРОК ОПТИМИЗАЦИЯ: Использует кэш результатов для снижения API calls.
 
         Args:
             symbol: Торговый символ
@@ -594,6 +666,25 @@ class OKXFuturesClient:
             Округленный leverage (доступный для символа)
         """
         try:
+            # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш результатов округления
+            cache_key = (symbol, desired_leverage)
+            if cache_key in self._leverage_round_cache:
+                cached_result = self._leverage_round_cache[cache_key]
+                now = time.time()
+                cache_age = now - cached_result.get("ts", 0)
+                
+                if cache_age < self._leverage_round_cache_ttl:
+                    # Кэш актуален
+                    rounded_leverage = cached_result["rounded"]
+                    logger.debug(
+                        f"📊 [LEVERAGE_ROUND] {symbol}: Из кэша (TTL {self._leverage_round_cache_ttl}s) | "
+                        f"desired={desired_leverage}x → rounded={rounded_leverage}x"
+                    )
+                    return rounded_leverage
+                else:
+                    # Кэш устарел - удаляем
+                    del self._leverage_round_cache[cache_key]
+
             logger.info(
                 f"📊 [LEVERAGE_ROUND] {symbol}: Начало округления | desired={desired_leverage}x"
             )
@@ -608,38 +699,43 @@ class OKXFuturesClient:
 
             # Если превышает максимум - ограничиваем до максимума
             if desired_leverage > max_leverage:
+                rounded_leverage = max_leverage
                 logger.info(
                     f"📊 [LEVERAGE_ROUND] {symbol}: Ограничение до максимума | "
                     f"desired={desired_leverage}x > max={max_leverage}x → {max_leverage}x"
                 )
-                return max_leverage
-
             # Если меньше минимума - возвращаем минимум
-            if desired_leverage < available_leverages[0]:
+            elif desired_leverage < available_leverages[0]:
+                rounded_leverage = available_leverages[0]
                 logger.info(
                     f"📊 [LEVERAGE_ROUND] {symbol}: Округление до минимума | "
                     f"desired={desired_leverage}x < min={available_leverages[0]}x → {available_leverages[0]}x"
                 )
-                return available_leverages[0]
-
-            # Ищем ближайший доступный leverage
-            closest_leverage = min(
-                available_leverages, key=lambda x: abs(x - desired_leverage)
-            )
-
-            if closest_leverage != desired_leverage:
-                logger.info(
-                    f"✅ [LEVERAGE_ROUND] {symbol}: Округление выполнено | "
-                    f"desired={desired_leverage}x → rounded={closest_leverage}x "
-                    f"(доступные: {available_leverages})"
-                )
             else:
-                logger.info(
-                    f"✅ [LEVERAGE_ROUND] {symbol}: Округление не требуется | "
-                    f"desired={desired_leverage}x уже доступен"
+                # Ищем ближайший доступный leverage
+                rounded_leverage = min(
+                    available_leverages, key=lambda x: abs(x - desired_leverage)
                 )
 
-            return closest_leverage
+                if rounded_leverage != desired_leverage:
+                    logger.info(
+                        f"✅ [LEVERAGE_ROUND] {symbol}: Округление выполнено | "
+                        f"desired={desired_leverage}x → rounded={rounded_leverage}x "
+                        f"(доступные: {available_leverages})"
+                    )
+                else:
+                    logger.info(
+                        f"✅ [LEVERAGE_ROUND] {symbol}: Округление не требуется | "
+                        f"desired={desired_leverage}x уже доступен"
+                    )
+
+            # ✅ ГРОК ОПТИМИЗАЦИЯ: Сохраняем результат в кэш
+            self._leverage_round_cache[cache_key] = {
+                "rounded": rounded_leverage,
+                "ts": time.time(),
+            }
+
+            return rounded_leverage
 
         except Exception as e:
             logger.error(

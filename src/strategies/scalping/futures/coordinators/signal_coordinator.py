@@ -171,8 +171,54 @@ class SignalCoordinator:
                     )
                     continue
 
-                # Проверка минимальной силы сигнала
-                if strength < self.scalping_config.min_signal_strength:
+                # ✅ ГРОК ФИКС: Проверка минимальной силы сигнала с учетом режима
+                # Для ranging режима используем более строгий порог (0.8 вместо 0.7)
+                min_strength = self.scalping_config.min_signal_strength  # Базовый порог (0.7)
+                
+                # Получаем текущий режим для символа
+                regime = signal.get("regime")
+                if not regime and hasattr(self.signal_generator, "regime_managers"):
+                    if symbol in getattr(self.signal_generator, "regime_managers", {}):
+                        regime_manager = self.signal_generator.regime_managers.get(symbol)
+                        if regime_manager:
+                            regime_obj = regime_manager.get_current_regime()
+                            if regime_obj:
+                                regime = (
+                                    regime_obj.value.lower()
+                                    if hasattr(regime_obj, "value")
+                                    else str(regime_obj).lower()
+                                )
+                
+                # Если режим не найден в per-symbol ARM, пробуем общий
+                if not regime and hasattr(self.signal_generator, "regime_manager"):
+                    regime_manager = getattr(self.signal_generator, "regime_manager", None)
+                    if regime_manager:
+                        regime_obj = regime_manager.get_current_regime()
+                        if regime_obj:
+                            regime = (
+                                regime_obj.value.lower()
+                                if hasattr(regime_obj, "value")
+                                else str(regime_obj).lower()
+                            )
+                
+                # ✅ ГРОК ФИКС: Для ranging режима используем более строгий порог
+                if regime and regime.lower() == "ranging":
+                    min_signal_strength_ranging = getattr(
+                        self.scalping_config, "min_signal_strength_ranging", None
+                    )
+                    if min_signal_strength_ranging is not None:
+                        min_strength = float(min_signal_strength_ranging)
+                        logger.debug(
+                            f"🔍 SignalCoordinator: RANGING режим для {symbol}, "
+                            f"используем строгий порог min_signal_strength={min_strength:.2f} "
+                            f"(вместо базового {self.scalping_config.min_signal_strength:.2f})"
+                        )
+                
+                if strength < min_strength:
+                    logger.debug(
+                        f"🔍 Сигнал {symbol} отфильтрован: strength={strength:.2f} < "
+                        f"min={min_strength:.2f} (режим={regime or 'unknown'})"
+                    )
                     continue
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем направление позиции!
