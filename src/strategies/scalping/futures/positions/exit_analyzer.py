@@ -1661,6 +1661,43 @@ class ExitAnalyzer:
                 f"Gross PnL%={gross_format}%, Net PnL%={pnl_format}% (с комиссией), entry_time={entry_time}"
             )
 
+            # 2.3. ✅ НОВОЕ: Проверка peak_profit - не закрывать если текущая прибыль < 70% от peak
+            if pnl_percent > 0:  # Только для прибыльных позиций
+                peak_profit_usd = 0.0
+                if metadata and hasattr(metadata, "peak_profit_usd"):
+                    peak_profit_usd = metadata.peak_profit_usd
+                elif isinstance(metadata, dict):
+                    peak_profit_usd = metadata.get("peak_profit_usd", 0.0)
+
+                if peak_profit_usd > 0:
+                    # Получаем margin_used для конвертации peak_profit_usd в проценты
+                    margin_used = None
+                    if isinstance(position, dict):
+                        margin_used = position.get("margin_used") or position.get(
+                            "margin"
+                        )
+                    elif metadata and hasattr(metadata, "margin_used"):
+                        margin_used = metadata.margin_used
+                    elif isinstance(metadata, dict):
+                        margin_used = metadata.get("margin_used")
+
+                    if margin_used and margin_used > 0:
+                        peak_profit_pct = (peak_profit_usd / margin_used) * 100
+                        # Не закрывать если текущая прибыль < 70% от peak
+                        if pnl_percent < peak_profit_pct * 0.7:
+                            logger.info(
+                                f"🛡️ ExitAnalyzer RANGING: Не закрываем {symbol} - "
+                                f"текущая прибыль {pnl_percent:.2f}% < 70% от peak {peak_profit_pct:.2f}% "
+                                f"(peak_profit_usd=${peak_profit_usd:.2f}, margin=${margin_used:.2f})"
+                            )
+                            return {
+                                "action": "hold",
+                                "reason": "profit_too_low_vs_peak",
+                                "pnl_pct": pnl_percent,
+                                "peak_profit_pct": peak_profit_pct,
+                                "peak_profit_usd": peak_profit_usd,
+                            }
+
             # 2.5. ✅ НОВОЕ: Проверка SL (Stop Loss) - должна быть ДО проверки TP
             sl_percent = self._get_sl_percent(symbol, "ranging")
 
@@ -1895,9 +1932,23 @@ class ExitAnalyzer:
                 extension_minutes = max_holding_minutes * (extension_percent / 100.0)
                 actual_max_holding = max_holding_minutes + extension_minutes
 
+            # ✅ ИСПРАВЛЕНИЕ #1: Приводим оба значения к float перед сравнением
+            # actual_max_holding может быть строкой из конфига, minutes_in_position может быть None
+            try:
+                actual_max_holding_float = (
+                    float(actual_max_holding) if actual_max_holding is not None else 0.0
+                )
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Не удалось преобразовать actual_max_holding={actual_max_holding} в float, "
+                    f"используем max_holding_minutes={max_holding_minutes}"
+                )
+                actual_max_holding_float = float(max_holding_minutes)
+
             if (
                 minutes_in_position is not None
-                and minutes_in_position >= actual_max_holding
+                and isinstance(minutes_in_position, (int, float))
+                and float(minutes_in_position) >= actual_max_holding_float
             ):
                 # ✅ ИСПРАВЛЕНО: Не закрываем убыточные позиции по max_holding
                 # Позволяем им дойти до SL или восстановиться
@@ -2079,6 +2130,43 @@ class ExitAnalyzer:
                 position=position,
                 metadata=metadata,
             )
+
+            # 2.5. ✅ НОВОЕ: Проверка peak_profit - не закрывать если текущая прибыль < 70% от peak
+            if pnl_percent > 0:  # Только для прибыльных позиций
+                peak_profit_usd = 0.0
+                if metadata and hasattr(metadata, "peak_profit_usd"):
+                    peak_profit_usd = metadata.peak_profit_usd
+                elif isinstance(metadata, dict):
+                    peak_profit_usd = metadata.get("peak_profit_usd", 0.0)
+
+                if peak_profit_usd > 0:
+                    # Получаем margin_used для конвертации peak_profit_usd в проценты
+                    margin_used = None
+                    if isinstance(position, dict):
+                        margin_used = position.get("margin_used") or position.get(
+                            "margin"
+                        )
+                    elif metadata and hasattr(metadata, "margin_used"):
+                        margin_used = metadata.margin_used
+                    elif isinstance(metadata, dict):
+                        margin_used = metadata.get("margin_used")
+
+                    if margin_used and margin_used > 0:
+                        peak_profit_pct = (peak_profit_usd / margin_used) * 100
+                        # Не закрывать если текущая прибыль < 70% от peak
+                        if pnl_percent < peak_profit_pct * 0.7:
+                            logger.info(
+                                f"🛡️ ExitAnalyzer CHOPPY: Не закрываем {symbol} - "
+                                f"текущая прибыль {pnl_percent:.2f}% < 70% от peak {peak_profit_pct:.2f}% "
+                                f"(peak_profit_usd=${peak_profit_usd:.2f}, margin=${margin_used:.2f})"
+                            )
+                            return {
+                                "action": "hold",
+                                "reason": "profit_too_low_vs_peak",
+                                "pnl_pct": pnl_percent,
+                                "peak_profit_pct": peak_profit_pct,
+                                "peak_profit_usd": peak_profit_usd,
+                            }
 
             # 3. Проверка TP (Take Profit) - в choppy режиме закрываем сразу (меньший TP)
             tp_percent = self._get_tp_percent(symbol, "choppy")

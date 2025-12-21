@@ -133,9 +133,10 @@ class OrderCoordinator:
                                         datetime.now() - order_time
                                     ).total_seconds()
 
-                                    # ✅ НОВОЕ: Быстрая отмена если цена ушла > 0.1% от ордера
+                                    # ✅ НОВОЕ: Проверка близости цены к исполнению - НЕ отменять если близко
                                     price_drift_pct = 0.0
                                     should_cancel_early = False
+                                    price_close_to_execution = False
                                     try:
                                         # Получаем текущую цену
                                         price_limits = (
@@ -155,7 +156,10 @@ class OrderCoordinator:
                                                         (order_price - current_price)
                                                         / order_price
                                                     ) * 100.0
-                                                    if (
+                                                    # ✅ НОВОЕ: НЕ отменять если цена близка к исполнению (< 0.1%)
+                                                    if abs(price_drift_pct) < 0.1:
+                                                        price_close_to_execution = True
+                                                    elif (
                                                         price_drift_pct > 0.1
                                                     ):  # Цена ушла вниз > 0.1%
                                                         should_cancel_early = True
@@ -165,7 +169,10 @@ class OrderCoordinator:
                                                         (current_price - order_price)
                                                         / order_price
                                                     ) * 100.0
-                                                    if (
+                                                    # ✅ НОВОЕ: НЕ отменять если цена близка к исполнению (< 0.1%)
+                                                    if abs(price_drift_pct) < 0.1:
+                                                        price_close_to_execution = True
+                                                    elif (
                                                         price_drift_pct > 0.1
                                                     ):  # Цена ушла вверх > 0.1%
                                                         should_cancel_early = True
@@ -186,8 +193,239 @@ class OrderCoordinator:
                                             f"(лимит: {max_wait} сек), отменяем..."
                                         )
 
-                                    # Отменяем ордер если нужно (быстрая отмена или таймаут)
-                                    if should_cancel_early or wait_time > max_wait:
+                                    # ✅ НОВОЕ: Проверка post_only ордеров - если цена достигла, но не исполняется, отменяем и заменяем
+                                    # OKX может возвращать postOnly как строку "true"/"false" или булево значение
+                                    post_only_str = str(
+                                        order.get("postOnly", "false")
+                                    ).lower()
+                                    is_post_only = (
+                                        post_only_str == "true" or post_only_str == "1"
+                                    )
+
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: post_only ордер может не исполниться даже при достижении цены
+                                    # Если цена достигла цены ордера, но ордер не исполняется (post_only требует быть maker),
+                                    # и ордер висит уже > 5 секунд - отменяем и заменяем на обычный лимитный ордер
+                                    if (
+                                        price_close_to_execution
+                                        and is_post_only
+                                        and wait_time > 5.0
+                                    ):
+                                        logger.warning(
+                                            f"⚠️ post_only ордер {order_id} для {symbol} близок к исполнению (отклонение {abs(price_drift_pct):.3f}%), "
+                                            f"но не исполняется уже {wait_time:.1f}с (post_only требует быть maker). "
+                                            f"Отменяем и заменяем на обычный лимитный ордер"
+                                        )
+                                        # Отменяем post_only ордер
+                                        if auto_cancel:
+                                            cancel_result = (
+                                                await self.order_executor.cancel_order(
+                                                    order_id, symbol
+                                                )
+                                            )
+                                            if cancel_result.get("success"):
+                                                logger.info(
+                                                    f"✅ post_only ордер {order_id} отменен"
+                                                )
+
+                                        # Заменяем на обычный лимитный ордер (без post_only)
+                                        if replace_with_market:
+                                            size_str = order.get("sz", "0")
+                                            try:
+                                                size_in_contracts = float(size_str)
+                                                if size_in_contracts > 0 and side in [
+                                                    "buy",
+                                                    "sell",
+                                                ]:
+                                                    details = await self.client.get_instrument_details(
+                                                        symbol
+                                                    )
+                                                    if details:
+                                                        ct_val = float(
+                                                            details.get("ctVal", 1.0)
+                                                        )
+                                                        if ct_val > 0:
+                                                            size_in_coins = (
+                                                                size_in_contracts
+                                                                * ct_val
+                                                            )
+                                                        else:
+                                                            size_in_coins = (
+                                                                size_in_contracts
+                                                            )
+
+                                                        # ✅ ВАРИАНТ 4: Размещаем обычный лимитный ордер с оптимальной ценой для максимизации шанса стать maker
+                                                        # Получаем актуальную цену для расчета оптимальной цены ордера
+                                                        try:
+                                                            price_limits_new = await self.client.get_price_limits(
+                                                                symbol
+                                                            )
+                                                            if price_limits_new:
+                                                                current_price_new = price_limits_new.get(
+                                                                    "current_price", 0
+                                                                )
+                                                                best_bid_new = price_limits_new.get(
+                                                                    "best_bid", 0
+                                                                )
+                                                                best_ask_new = price_limits_new.get(
+                                                                    "best_ask", 0
+                                                                )
+
+                                                                # ✅ ОПТИМАЛЬНАЯ ЦЕНА: Для максимизации шанса стать maker
+                                                                if side == "buy":
+                                                                    # Для BUY: цена чуть выше best_ask (чтобы попасть в стакан как maker)
+                                                                    # Используем минимальный offset 0.01% для гарантии попадания в стакан
+                                                                    optimal_price = (
+                                                                        best_ask_new
+                                                                        * 1.0001
+                                                                        if best_ask_new
+                                                                        > 0
+                                                                        else current_price_new
+                                                                        * 1.0001
+                                                                    )
+                                                                    logger.info(
+                                                                        f"💰 Оптимальная цена для BUY {symbol}: best_ask={best_ask_new:.2f} → "
+                                                                        f"optimal_price={optimal_price:.2f} (+0.01% для maker)"
+                                                                    )
+                                                                else:  # sell
+                                                                    # Для SELL: цена чуть ниже best_bid (чтобы попасть в стакан как maker)
+                                                                    # Используем минимальный offset 0.01% для гарантии попадания в стакан
+                                                                    optimal_price = (
+                                                                        best_bid_new
+                                                                        * 0.9999
+                                                                        if best_bid_new
+                                                                        > 0
+                                                                        else current_price_new
+                                                                        * 0.9999
+                                                                    )
+                                                                    logger.info(
+                                                                        f"💰 Оптимальная цена для SELL {symbol}: best_bid={best_bid_new:.2f} → "
+                                                                        f"optimal_price={optimal_price:.2f} (-0.01% для maker)"
+                                                                    )
+                                                            else:
+                                                                # Fallback: используем цену ордера
+                                                                optimal_price = (
+                                                                    order_price
+                                                                )
+                                                                logger.warning(
+                                                                    f"⚠️ Не удалось получить актуальную цену для {symbol}, используем цену ордера"
+                                                                )
+                                                        except Exception as e:
+                                                            logger.warning(
+                                                                f"⚠️ Ошибка получения актуальной цены для {symbol}: {e}, используем цену ордера"
+                                                            )
+                                                            optimal_price = order_price
+
+                                                        logger.info(
+                                                            f"🔄 Размещаем обычный лимитный ордер для {symbol} {side} "
+                                                            f"(без post_only, оптимальная цена для maker) размер={size_in_coins:.6f}, цена={optimal_price:.2f}"
+                                                        )
+                                                        result = await self.order_executor._place_limit_order(
+                                                            symbol=symbol,
+                                                            side=side,
+                                                            size=size_in_coins,
+                                                            price=optimal_price,  # ✅ Используем оптимальную цену для максимизации шанса стать maker
+                                                            post_only=False,  # ✅ БЕЗ post_only для гарантии исполнения
+                                                            regime=current_regime,
+                                                        )
+                                                        if result.get("success"):
+                                                            logger.info(
+                                                                f"✅ Обычный лимитный ордер размещен вместо post_only ордера"
+                                                            )
+                                            except Exception as e:
+                                                logger.error(
+                                                    f"❌ Ошибка замены post_only ордера на обычный: {e}"
+                                                )
+                                        continue  # Пропускаем дальнейшую обработку этого ордера
+
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка таймаута имеет приоритет!
+                                    # Если таймаут превышен - отменяем ВСЕГДА, независимо от близости цены
+                                    if wait_time > max_wait:
+                                        # Таймаут превышен - отменяем ордер
+                                        logger.warning(
+                                            f"⚠️ Лимитный ордер {order_id} для {symbol} висит {wait_time:.0f} сек "
+                                            f"(лимит: {max_wait} сек), отменяем ВСЕГДА (даже если цена близка к исполнению)"
+                                        )
+                                        if auto_cancel:
+                                            cancel_result = (
+                                                await self.order_executor.cancel_order(
+                                                    order_id, symbol
+                                                )
+                                            )
+                                            if cancel_result.get("success"):
+                                                logger.info(
+                                                    f"✅ Лимитный ордер {order_id} отменен по таймауту"
+                                                )
+
+                                        # ✅ НОВОЕ: Заменяем на рыночный ордер, если включено
+                                        if replace_with_market:
+                                            size_str = order.get("sz", "0")
+                                            try:
+                                                size_in_contracts = float(size_str)
+                                                if size_in_contracts > 0 and side in [
+                                                    "buy",
+                                                    "sell",
+                                                ]:
+                                                    # Получаем ctVal для конвертации контрактов в монеты
+                                                    size_in_coins = size_in_contracts
+                                                    try:
+                                                        details = await self.client.get_instrument_details(
+                                                            symbol
+                                                        )
+                                                        if details:
+                                                            ct_val = float(
+                                                                details.get(
+                                                                    "ctVal", 1.0
+                                                                )
+                                                            )
+                                                            if ct_val > 0:
+                                                                size_in_coins = (
+                                                                    size_in_contracts
+                                                                    * ct_val
+                                                                )
+                                                            else:
+                                                                logger.warning(
+                                                                    f"⚠️ ctVal для {symbol} равен 0, используем размер в контрактах как есть"
+                                                                )
+                                                    except Exception as e:
+                                                        logger.warning(
+                                                            f"⚠️ Не удалось получить ctVal для {symbol} при замене на рыночный ордер: {e}, "
+                                                            f"используем размер в контрактах как есть"
+                                                        )
+
+                                                    logger.info(
+                                                        f"📈 Размещаем рыночный ордер вместо зависшего лимитного (таймаут): "
+                                                        f"{symbol} {side} {size_in_coins:.6f} (было {size_in_contracts:.6f} контрактов, висел {wait_time:.0f} сек)"
+                                                    )
+                                                    result = await self.order_executor._place_market_order(
+                                                        symbol, side, size_in_coins
+                                                    )
+                                                    if result.get("success"):
+                                                        logger.info(
+                                                            f"✅ Рыночный ордер размещен вместо лимитного (таймаут): {result.get('order_id')}"
+                                                        )
+                                                    else:
+                                                        logger.error(
+                                                            f"❌ Не удалось разместить рыночный ордер вместо лимитного для {symbol}: "
+                                                            f"{result.get('error', 'unknown error')}"
+                                                        )
+                                            except (ValueError, TypeError) as e:
+                                                logger.debug(
+                                                    f"Ошибка парсинга размера ордера {order_id} при замене на рыночный: {e}"
+                                                )
+
+                                        continue  # Пропускаем дальнейшую обработку
+
+                                    # ✅ НЕ отменять если цена близка к исполнению (< 0.1%) и НЕ превышен таймаут
+                                    if price_close_to_execution:
+                                        logger.debug(
+                                            f"⏸️ Не отменяем ордер {order_id} для {symbol} - "
+                                            f"цена близка к исполнению (отклонение {abs(price_drift_pct):.3f}% < 0.1%), "
+                                            f"таймаут не превышен ({wait_time:.0f}с < {max_wait}с)"
+                                        )
+                                        continue  # Пропускаем отмену этого ордера
+
+                                    # Отменяем ордер если нужно (быстрая отмена)
+                                    if should_cancel_early:
                                         # Отменяем ордер
                                         if auto_cancel:
                                             cancel_result = (

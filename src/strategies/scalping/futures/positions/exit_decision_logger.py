@@ -12,6 +12,25 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 
+def _serialize_datetime(obj: Any) -> Any:
+    """
+    Сериализует datetime объекты в ISO строки для JSON.
+
+    Args:
+        obj: Объект для сериализации
+
+    Returns:
+        Сериализованный объект
+    """
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: _serialize_datetime(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_serialize_datetime(item) for item in obj]
+    return obj
+
+
 class ExitDecisionLogger:
     """
     Логирование решений ExitAnalyzer.
@@ -79,6 +98,9 @@ class ExitDecisionLogger:
             for key, value in decision.items():
                 if key not in log_entry and key not in log_entry.get("metadata", {}):
                     log_entry[key] = value
+
+            # ✅ ИСПРАВЛЕНИЕ: Сериализуем datetime объекты перед сохранением в JSON
+            log_entry = _serialize_datetime(log_entry)
 
             # Сохраняем в JSON файл
             with open(filepath, "w", encoding="utf-8") as f:

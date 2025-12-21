@@ -279,6 +279,68 @@ class FuturesRiskManager:
                 )
             return balance * max_margin_per_trade_pct
 
+    async def calculate_max_margin_per_position(
+        self,
+        balance: float,
+        balance_profile: Optional[str] = None,
+        regime: Optional[str] = None,
+    ) -> float:
+        """
+        Рассчитать максимальную маржу на одну позицию.
+
+        Используется для проверки лимитов при добавлении к позиции.
+        Учитывает баланс, профиль баланса и режим рынка.
+
+        Args:
+            balance: Текущий баланс
+            balance_profile: Профиль баланса (small, medium, large)
+            regime: Режим рынка (trending, ranging, choppy)
+
+        Returns:
+            Максимальная маржа на позицию в USD
+        """
+        try:
+            # Базовый процент по профилю баланса
+            if balance_profile == "small":
+                base_percent = 0.15  # 15% для малого баланса
+            elif balance_profile == "medium":
+                base_percent = 0.20  # 20% для среднего баланса
+            elif balance_profile == "large":
+                base_percent = 0.25  # 25% для большого баланса
+            else:
+                # Fallback: используем средний профиль
+                base_percent = 0.20
+                logger.debug(
+                    f"⚠️ Неизвестный balance_profile={balance_profile}, используем 20%"
+                )
+
+            # Корректировка по режиму рынка
+            regime_multiplier = 1.0
+            if regime == "trending":
+                regime_multiplier = 1.05  # +5% в тренде (можно больше)
+            elif regime == "choppy":
+                regime_multiplier = 0.95  # -5% в хаосе (меньше риска)
+            # ranging: 1.0 (без изменений)
+
+            max_margin_per_position = balance * base_percent * regime_multiplier
+
+            logger.debug(
+                f"📊 [MAX_MARGIN_PER_POSITION] balance=${balance:.2f}, "
+                f"profile={balance_profile}, regime={regime}, "
+                f"base_percent={base_percent*100:.1f}%, "
+                f"regime_multiplier={regime_multiplier}, "
+                f"max_margin=${max_margin_per_position:.2f}"
+            )
+
+            return max_margin_per_position
+
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка расчета max_margin_per_position: {e}", exc_info=True
+            )
+            # Fallback: 20% от баланса
+            return balance * 0.20
+
     def _calculate_risk_based_margin(
         self,
         balance: float,
@@ -1055,14 +1117,30 @@ class FuturesRiskManager:
             except Exception as e:
                 logger.debug(f"⚠️ Ошибка расчета волатильности для {symbol}: {e}")
 
-            # 4. ПРИМЕНЯЕМ ЛЕВЕРИДЖ (Futures) - из конфига!
-            leverage = getattr(self.scalping_config, "leverage", None)
+            # 4. ПРИМЕНЯЕМ ЛЕВЕРИДЖ (Futures) - из signal или из конфига!
+            # ✅ ИСПРАВЛЕНИЕ: Сначала пытаемся получить leverage из signal (адаптивный)
+            leverage = None
+            if signal:
+                leverage = signal.get("leverage")
+                if leverage and leverage > 0:
+                    logger.debug(
+                        f"✅ Используем leverage={leverage}x из signal (адаптивный)"
+                    )
+
+            # Fallback на конфиг, если не был указан в signal
+            if leverage is None or leverage <= 0:
+                leverage = getattr(self.scalping_config, "leverage", None)
+                if leverage and leverage > 0:
+                    logger.debug(
+                        f"✅ Используем leverage={leverage}x из конфига (фиксированный)"
+                    )
+
             if leverage is None or leverage <= 0:
                 logger.error(
-                    "❌ leverage не указан в конфиге или <= 0! Проверьте config_futures.yaml"
+                    "❌ leverage не указан в signal и не указан в конфиге или <= 0! Проверьте config_futures.yaml"
                 )
                 raise ValueError(
-                    "leverage должен быть указан в конфиге (например, leverage: 3)"
+                    "leverage должен быть указан в signal или в конфиге (например, leverage: 3)"
                 )
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: base_usd_size это НОМИНАЛЬНАЯ стоимость (notional)
             margin_required_initial = (
@@ -1169,7 +1247,9 @@ class FuturesRiskManager:
                         ):
                             data_registry = signal_generator.data_registry
                             if data_registry:
-                                atr_data = data_registry.get_indicator(symbol, "atr")
+                                atr_data = await data_registry.get_indicator(
+                                    symbol, "atr"
+                                )  # ✅ ИСПРАВЛЕНО: добавлен await
                                 if atr_data and price > 0:
                                     volatility_atr = (
                                         float(atr_data) / price

@@ -38,6 +38,7 @@ from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
 from .coordinators.websocket_coordinator import WebSocketCoordinator
 from .core.data_registry import DataRegistry
 from .core.position_registry import PositionRegistry
+from .core.position_sync import PositionSync
 from .core.trading_control_center import TradingControlCenter
 from .indicators.fast_adx import FastADX
 from .indicators.funding_rate_monitor import FundingRateMonitor
@@ -46,13 +47,14 @@ from .logging.logger_factory import LoggerFactory
 from .logging.structured_logger import StructuredLogger
 from .order_executor import FuturesOrderExecutor
 from .position_manager import FuturesPositionManager
-from .positions.entry_manager import \
-    EntryManager  # ✅ НОВОЕ: EntryManager для централизованного открытия позиций
+from .positions.entry_manager import EntryManager
 from .positions.exit_analyzer import \
     ExitAnalyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
 from .positions.position_monitor import \
     PositionMonitor  # ✅ НОВОЕ: PositionMonitor для периодического мониторинга позиций
+from .positions.position_scaling_manager import PositionScalingManager
 from .private_websocket_manager import PrivateWebSocketManager
+from .risk.adaptive_leverage import AdaptiveLeverage
 from .risk.max_size_limiter import MaxSizeLimiter
 from .risk_manager import FuturesRiskManager
 from .signal_generator import FuturesSignalGenerator
@@ -293,10 +295,12 @@ class FuturesScalpingOrchestrator:
 
         # ✅ НОВОЕ: Инициализация EntryManager для централизованного открытия позиций
         # EntryManager будет использоваться в signal_coordinator вместо прямого вызова order_executor
+        # ✅ ИСПРАВЛЕНИЕ #12: PositionSizer не используется, используем RiskManager
+        # PositionSizer устарел, расчет размера позиций идет через RiskManager
         self.entry_manager = EntryManager(
             position_registry=self.position_registry,
             order_executor=self.order_executor,
-            position_sizer=None,  # PositionSizer будет добавлен позже, пока используем риск-менеджер
+            position_sizer=None,  # ✅ ИСПРАВЛЕНИЕ #12: PositionSizer не используется, используем RiskManager
         )
         logger.info("✅ EntryManager инициализирован в orchestrator")
 
@@ -389,10 +393,18 @@ class FuturesScalpingOrchestrator:
         # ✅ НОВОЕ: Инициализация ExitAnalyzer после создания fast_adx, order_flow и funding_monitor
         # (position_registry и data_registry уже созданы выше)
         # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия позиций
+        # ✅ ИСПРАВЛЕНИЕ #11: Инициализируем ExitDecisionLogger
+        from .positions.exit_decision_logger import ExitDecisionLogger
+
+        self.exit_decision_logger = ExitDecisionLogger(
+            log_dir="logs/futures/debug/exit_decisions"
+        )
+        logger.info("✅ ExitDecisionLogger инициализирован")
+
         self.exit_analyzer = ExitAnalyzer(
             position_registry=self.position_registry,
             data_registry=self.data_registry,
-            exit_decision_logger=None,  # Можно добавить позже
+            exit_decision_logger=self.exit_decision_logger,  # ✅ ИСПРАВЛЕНИЕ #11: Передаем инициализированный модуль
             orchestrator=self,  # Передаем orchestrator для доступа к модулям
             config_manager=self.config_manager,
             signal_generator=self.signal_generator,
@@ -451,19 +463,47 @@ class FuturesScalpingOrchestrator:
             max_positions=max_positions,
         )
 
+        # ✅ ИСПРАВЛЕНИЕ #3: Инициализируем AdaptiveLeverage для адаптивного левериджа
+        self.adaptive_leverage = AdaptiveLeverage(config=config)
+        logger.info("✅ AdaptiveLeverage инициализирован")
+
+        # ✅ ИСПРАВЛЕНИЕ #7, #8: Инициализируем LiquidationProtector и MarginMonitor
+        from .risk.liquidation_protector import LiquidationProtector
+        from .risk.margin_monitor import MarginMonitor
+
+        self.liquidation_protector = LiquidationProtector(
+            config=config.scalping if hasattr(config, "scalping") else None
+        )
+        self.margin_monitor = MarginMonitor(
+            config=config.risk if hasattr(config, "risk") else None
+        )
+        logger.info("✅ LiquidationProtector и MarginMonitor инициализированы")
+
         # ✅ РЕФАКТОРИНГ: Инициализируем RiskManager для расчета размера позиций
         # Передаем ссылку на orchestrator для доступа к методам (_get_used_margin, _check_drawdown_protection и т.д.)
         self.risk_manager = FuturesRiskManager(
             config=config,
             client=self.client,
             config_manager=self.config_manager,
-            liquidation_protector=None,  # Можно добавить позже
-            margin_monitor=None,  # Можно добавить позже
+            liquidation_protector=self.liquidation_protector,  # ✅ ИСПРАВЛЕНИЕ #7: Передаем инициализированный модуль
+            margin_monitor=self.margin_monitor,  # ✅ ИСПРАВЛЕНИЕ #8: Передаем инициализированный модуль
             max_size_limiter=self.max_size_limiter,
             orchestrator=self,  # ✅ РЕФАКТОРИНГ: Передаем ссылку на orchestrator
             data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для чтения баланса
         )
         logger.info("✅ FuturesRiskManager инициализирован")
+
+        # ✅ НОВОЕ: Инициализация PositionScalingManager для лестничного добавления к позициям
+        # Создаем ПОСЛЕ risk_manager, т.к. он от него зависит
+        self.position_scaling_manager = PositionScalingManager(
+            position_registry=self.position_registry,
+            config_manager=self.config_manager,
+            risk_manager=self.risk_manager,
+            margin_calculator=self.margin_calculator,
+            client=self.client,
+            config=self.config,
+        )
+        logger.info("✅ PositionScalingManager инициализирован в orchestrator")
 
         # WebSocket Manager
         # ✅ ИСПРАВЛЕНИЕ: Используем правильный WebSocket URL в зависимости от sandbox режима
@@ -594,6 +634,9 @@ class FuturesScalpingOrchestrator:
             )  # ✅ МОДЕРНИЗАЦИЯ: 5 секунд вместо 15
         self._last_positions_sync = 0.0
 
+        # ✅ РЕФАКТОРИНГ: PositionSync будет инициализирован после создания всех зависимостей
+        self.position_sync = None
+
         # Signal Coordinator (создаем ПЕРЕД WebSocketCoordinator, т.к. он нужен для callback)
         # Используем список для total_margin_used_ref, чтобы можно было изменять значение
         total_margin_used_ref = [self.total_margin_used]
@@ -636,6 +679,8 @@ class FuturesScalpingOrchestrator:
             initialize_trailing_stop_callback=self.trailing_sl_coordinator.initialize_trailing_stop,
             entry_manager=self.entry_manager,  # ✅ НОВОЕ: EntryManager для централизованного открытия
             data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
+            position_scaling_manager=self.position_scaling_manager,  # ✅ НОВОЕ: PositionScalingManager для лестничного добавления
+            adaptive_leverage=self.adaptive_leverage,  # ✅ ИСПРАВЛЕНИЕ #3: AdaptiveLeverage для адаптивного левериджа
         )
         # Обновляем ссылку на total_margin_used для синхронизации
         self._total_margin_used_ref = total_margin_used_ref
@@ -684,6 +729,24 @@ class FuturesScalpingOrchestrator:
             sync_positions_with_exchange=self._sync_positions_with_exchange,
         )
         logger.info("✅ TradingControlCenter инициализирован в orchestrator")
+
+        # ✅ РЕФАКТОРИНГ: Инициализируем PositionSync после создания всех зависимостей
+        self.position_sync = PositionSync(
+            client=self.client,
+            position_registry=self.position_registry,
+            active_positions=self.active_positions,
+            max_size_limiter=self.max_size_limiter,
+            trailing_sl_coordinator=self.trailing_sl_coordinator,
+            last_orders_cache=self.last_orders_cache,
+            normalize_symbol_callback=self.config_manager.normalize_symbol,
+            scalping_config=self.scalping_config,
+            fast_adx=self.fast_adx,
+            signal_generator=self.signal_generator,
+            data_registry=self.data_registry,
+            config_manager=self.config_manager,
+            get_used_margin_callback=self._get_used_margin,
+        )
+        logger.info("✅ PositionSync инициализирован")
 
         # WebSocket Coordinator (создаем ПОСЛЕ SignalCoordinator, т.к. используем его callback)
         self.websocket_coordinator = WebSocketCoordinator(
@@ -738,9 +801,12 @@ class FuturesScalpingOrchestrator:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Загружаем существующие позиции и инициализируем TrailingStopLoss
             await self._load_existing_positions()
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Синхронизируем позиции с биржей и обновляем MaxSizeLimiter
-            # Это очистит старые данные из MaxSizeLimiter, если позиций на бирже нет
-            await self._sync_positions_with_exchange(force=True)
+            # ✅ РЕФАКТОРИНГ: Используем новый модуль PositionSync
+            if self.position_sync:
+                await self.position_sync.sync_positions_with_exchange(force=True)
+            else:
+                # Fallback на старый метод
+                await self._sync_positions_with_exchange(force=True)
 
             # ✅ НОВОЕ: Запуск PositionMonitor как фоновой задачи для периодического мониторинга
             await self.position_monitor.start()
@@ -1287,7 +1353,13 @@ class FuturesScalpingOrchestrator:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #1: Группируем позиции по символам для проверки противоположных
             positions_by_symbol = {}
             for pos in all_positions:
-                pos_size = float(pos.get("pos", "0"))
+                # ✅ ИСПРАВЛЕНИЕ: Безопасный парсинг pos (может быть пустой строкой)
+                try:
+                    pos_str = str(pos.get("pos", "0")).strip()
+                    pos_size = float(pos_str) if pos_str else 0.0
+                except (ValueError, TypeError):
+                    pos_size = 0.0
+
                 if abs(pos_size) < 0.000001:
                     continue  # Пропускаем нулевые позиции
 
@@ -1340,7 +1412,9 @@ class FuturesScalpingOrchestrator:
                     for p_info in symbol_positions:
                         pos = p_info["pos"]
                         try:
-                            upl = float(pos.get("upl", "0"))
+                            # ✅ ИСПРАВЛЕНИЕ: Безопасный парсинг upl (может быть пустой строкой)
+                            upl_str = str(pos.get("upl", "0")).strip()
+                            upl = float(upl_str) if upl_str else 0.0
                             positions_to_close.append(
                                 {
                                     "pos": pos,
@@ -1391,13 +1465,23 @@ class FuturesScalpingOrchestrator:
             for symbol, symbol_positions in positions_by_symbol.items():
                 for p_info in symbol_positions:
                     pos = p_info["pos"]
-                    pos_size = float(pos.get("pos", "0"))
+                    # ✅ ИСПРАВЛЕНИЕ: Безопасный парсинг pos
+                    try:
+                        pos_str = str(pos.get("pos", "0")).strip()
+                        pos_size = float(pos_str) if pos_str else 0.0
+                    except (ValueError, TypeError):
+                        pos_size = 0.0
                     inst_id = pos.get("instId", "")
                     position_side = p_info["position_side"]
                     pos_size_abs = p_info["pos_size"]
 
                     # Получаем данные позиции
-                    entry_price = float(pos.get("avgPx", "0"))
+                    # ✅ ИСПРАВЛЕНИЕ: Безопасный парсинг avgPx (может быть пустой строкой)
+                    try:
+                        avgpx_str = str(pos.get("avgPx", "0")).strip()
+                        entry_price = float(avgpx_str) if avgpx_str else 0.0
+                    except (ValueError, TypeError):
+                        entry_price = 0.0
                     # ✅ ИСПРАВЛЕНО: Нормализуем position_side перед сравнением
                     position_side_normalized = (
                         position_side.lower()
@@ -1477,7 +1561,8 @@ class FuturesScalpingOrchestrator:
                         "position_side": position_side,  # "long" или "short" для правильного расчета PnL
                         "size": pos_size_abs,
                         "entry_price": entry_price,
-                        "margin": float(pos.get("margin", "0")),
+                        # ✅ ИСПРАВЛЕНИЕ: Безопасный парсинг margin
+                        "margin": float(str(pos.get("margin", "0")).strip() or "0"),
                         "entry_time": entry_time_dt,  # ✅ КРИТИЧЕСКОЕ: Реальное время открытия из API
                         "timestamp": datetime.now(timezone.utc),
                         "time_extended": False,
@@ -1548,7 +1633,8 @@ class FuturesScalpingOrchestrator:
                         entry_price=entry_price,
                         position_side=position_side,
                         size_in_coins=pos_size_abs,
-                        margin_used=float(pos.get("margin", "0")),
+                        # ✅ ИСПРАВЛЕНИЕ: Безопасный парсинг margin
+                        margin_used=float(str(pos.get("margin", "0")).strip() or "0"),
                     )
                     await self.position_registry.register_position(
                         symbol=symbol,
@@ -1715,8 +1801,9 @@ class FuturesScalpingOrchestrator:
                 async with self._drift_locks[symbol]:
                     # Повторная проверка после получения lock (double-check pattern)
                     if symbol not in self.active_positions:
-                        logger.critical(
-                            f"DRIFT_ADD {symbol} found on exchange but not in registry"
+                        logger.warning(
+                            f"⚠️ DRIFT_ADD {symbol}: Позиция найдена на бирже, но отсутствует в реестре. "
+                            f"Регистрируем позицию..."
                         )
 
             try:
@@ -1982,21 +2069,43 @@ class FuturesScalpingOrchestrator:
 
         stale_symbols = set(self.active_positions.keys()) - seen_symbols
         for symbol in list(stale_symbols):
-            # ✅ FIX: DRIFT_REMOVE log — позиция в реестре, но нет на бирже
-            logger.warning(f"DRIFT_REMOVE {symbol} not on exchange")
-            logger.info(
-                f"♻️ Позиция {symbol} отсутствует на бирже, очищаем локальное состояние"
-            )
-            self.active_positions.pop(symbol, None)
-            # ✅ РЕФАКТОРИНГ: Используем trailing_sl_coordinator для удаления TSL
-            tsl = self.trailing_sl_coordinator.remove_tsl(symbol)
-            if tsl:
-                tsl.reset()
-            if symbol in self.max_size_limiter.position_sizes:
-                self.max_size_limiter.remove_position(symbol)
-            normalized_symbol = self.config_manager.normalize_symbol(symbol)
-            if normalized_symbol in self.last_orders_cache:
-                self.last_orders_cache[normalized_symbol]["status"] = "closed"
+            # ✅ ИСПРАВЛЕНИЕ #4: Добавляем LOCK для DRIFT_REMOVE для предотвращения гонок
+            if not hasattr(self, "_drift_locks"):
+                self._drift_locks: Dict[str, asyncio.Lock] = {}
+
+            if symbol not in self._drift_locks:
+                self._drift_locks[symbol] = asyncio.Lock()
+
+            async with self._drift_locks[symbol]:
+                # Повторная проверка после получения lock (double-check pattern)
+                if symbol not in self.active_positions:
+                    # Позиция уже была удалена другим потоком
+                    continue
+
+                # ✅ FIX: DRIFT_REMOVE log — позиция в реестре, но нет на бирже
+                logger.warning(f"DRIFT_REMOVE {symbol} not on exchange")
+                logger.info(
+                    f"♻️ Позиция {symbol} отсутствует на бирже, очищаем локальное состояние"
+                )
+
+                # ✅ ИСПРАВЛЕНО: Используем PositionRegistry для удаления позиции
+                try:
+                    await self.position_registry.unregister_position(symbol)
+                except Exception as e:
+                    logger.error(
+                        f"⚠️ Ошибка удаления позиции {symbol} из PositionRegistry: {e}"
+                    )
+
+                self.active_positions.pop(symbol, None)
+                # ✅ РЕФАКТОРИНГ: Используем trailing_sl_coordinator для удаления TSL
+                tsl = self.trailing_sl_coordinator.remove_tsl(symbol)
+                if tsl:
+                    tsl.reset()
+                if symbol in self.max_size_limiter.position_sizes:
+                    self.max_size_limiter.remove_position(symbol)
+                normalized_symbol = self.config_manager.normalize_symbol(symbol)
+                if normalized_symbol in self.last_orders_cache:
+                    self.last_orders_cache[normalized_symbol]["status"] = "closed"
 
         # ✅ ЭТАП 6.3: Обновляем total_margin_used с актуальными данными с биржи
         # Используем _get_used_margin() для получения точной маржи с биржи
@@ -2126,8 +2235,12 @@ class FuturesScalpingOrchestrator:
                 if not self.is_running:
                     break
 
-                # ✅ Новое: синхронизация локальных позиций с биржей
-                await self._sync_positions_with_exchange()
+                # ✅ РЕФАКТОРИНГ: Используем новый модуль PositionSync
+                if self.position_sync:
+                    await self.position_sync.sync_positions_with_exchange()
+                else:
+                    # Fallback на старый метод
+                    await self._sync_positions_with_exchange()
 
                 if not self.is_running:
                     break
@@ -3792,24 +3905,36 @@ class FuturesScalpingOrchestrator:
                                         else str(regime_obj).lower()
                                     )
 
+                        # ✅ ИСПРАВЛЕНИЕ: trade_result может быть dict или объект
                         # Получаем данные из trade_result (TradeResult имеет net_pnl, но НЕ имеет pnl/entry_time/exit_time)
-                        side = getattr(trade_result, "side", None) or position.get(
-                            "side", "buy"
-                        )
-
-                        # ✅ FIX: используем net_pnl вместо несуществующего trade_result.pnl
-                        try:
-                            pnl = float(getattr(trade_result, "net_pnl", 0.0) or 0.0)
-                        except (TypeError, ValueError):
-                            pnl = 0.0
-
-                        entry_price = getattr(trade_result, "entry_price", None)
-                        if entry_price is None:
-                            entry_price = position.get("entry_price", 0)
-
-                        exit_price = getattr(trade_result, "exit_price", None)
-                        if exit_price is None:
-                            exit_price = position.get("current_price", 0)
+                        if isinstance(trade_result, dict):
+                            side = trade_result.get("side") or position.get(
+                                "side", "buy"
+                            )
+                            pnl = float(trade_result.get("net_pnl", 0.0) or 0.0)
+                            entry_price = trade_result.get(
+                                "entry_price"
+                            ) or position.get("entry_price", 0)
+                            exit_price = trade_result.get("exit_price") or position.get(
+                                "current_price", 0
+                            )
+                        else:
+                            side = getattr(trade_result, "side", None) or position.get(
+                                "side", "buy"
+                            )
+                            # ✅ FIX: используем net_pnl вместо несуществующего trade_result.pnl
+                            try:
+                                pnl = float(
+                                    getattr(trade_result, "net_pnl", 0.0) or 0.0
+                                )
+                            except (TypeError, ValueError):
+                                pnl = 0.0
+                            entry_price = getattr(trade_result, "entry_price", None)
+                            if entry_price is None:
+                                entry_price = position.get("entry_price", 0)
+                            exit_price = getattr(trade_result, "exit_price", None)
+                            if exit_price is None:
+                                exit_price = position.get("current_price", 0)
 
                         # ✅ FIX: entry_time берём из PositionRegistry.metadata (UTC), иначе fallback
                         entry_time = None
@@ -3966,7 +4091,12 @@ class FuturesScalpingOrchestrator:
                     f"🔄 Позиция {symbol} закрыта, система готова к новым сигналам"
                 )
 
-                await self._sync_positions_with_exchange(force=True)
+                # ✅ РЕФАКТОРИНГ: Используем новый модуль PositionSync
+                if self.position_sync:
+                    await self.position_sync.sync_positions_with_exchange(force=True)
+                else:
+                    # Fallback на старый метод
+                    await self._sync_positions_with_exchange(force=True)
             except Exception as e:
                 logger.error(f"Ошибка закрытия позиции {symbol}: {e}")
             finally:

@@ -55,6 +55,8 @@ class SignalCoordinator:
         ] = None,
         entry_manager=None,  # ✅ НОВОЕ: EntryManager для централизованного открытия позиций
         data_registry=None,  # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
+        adaptive_leverage=None,  # ✅ ИСПРАВЛЕНИЕ #3: AdaptiveLeverage для адаптивного левериджа
+        position_scaling_manager=None,  # ✅ НОВОЕ: PositionScalingManager для лестничного добавления
     ):
         """
         Инициализация SignalCoordinator.
@@ -111,6 +113,10 @@ class SignalCoordinator:
         self.entry_manager = entry_manager
         # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
         self.data_registry = data_registry
+        # ✅ ИСПРАВЛЕНИЕ #3: AdaptiveLeverage для адаптивного левериджа
+        self.adaptive_leverage = adaptive_leverage
+        # ✅ НОВОЕ: PositionScalingManager для лестничного добавления
+        self.position_scaling_manager = position_scaling_manager
 
         # Время последнего сигнала по символу: {symbol: timestamp}
         self._last_signal_time: Dict[str, float] = {}
@@ -215,69 +221,192 @@ class SignalCoordinator:
                             break
 
                     if position_in_signal_direction:
-                        # ✅ КРИТИЧЕСКОЕ: Позиция уже есть в направлении сигнала
-                        # На OKX Futures новый ордер в том же направлении просто увеличит размер позиции
-                        # Это означает, что мы НЕ создаем новую позицию, а увеличиваем существующую
-                        # Поэтому блокируем, чтобы не накапливать комиссию на одной позиции
+                        # ✅ ИЗМЕНЕНИЕ: Позиция уже есть в направлении сигнала
+                        # Проверяем возможность добавления через PositionScalingManager
                         pos_size = abs(
                             float(position_in_signal_direction.get("pos", "0"))
                         )
-                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем max_size_limiter с реальными данными с биржи
-                        # Это гарантирует, что если позиция есть на бирже, она будет отражена в max_size_limiter
-                        if symbol not in self.max_size_limiter.position_sizes:
-                            # Позиция есть на бирже, но не в max_size_limiter - добавляем
+
+                        # ✅ НОВОЕ: Если PositionScalingManager доступен, проверяем возможность добавления
+                        if self.position_scaling_manager:
                             try:
-                                entry_price = float(
-                                    position_in_signal_direction.get("avgPx", "0")
-                                ) or float(
-                                    position_in_signal_direction.get("markPx", "0")
-                                )
-                                if entry_price > 0:
-                                    # Получаем ctVal для конвертации
-                                    if hasattr(self.client, "get_instrument_details"):
-                                        try:
-                                            details = await self.client.get_instrument_details(
-                                                symbol
-                                            )
-                                            ct_val = float(details.get("ctVal", "1.0"))
-                                            size_in_coins = pos_size * ct_val
-                                            size_usd = size_in_coins * entry_price
-                                            self.max_size_limiter.add_position(
-                                                symbol, size_usd
-                                            )
-                                            logger.debug(
-                                                f"🔄 Позиция {symbol} добавлена в max_size_limiter из реальных данных биржи: {size_usd:.2f} USD"
-                                            )
-                                        except Exception as detail_error:
-                                            logger.debug(
-                                                f"⚠️ Не удалось получить детали инструмента для {symbol}: {detail_error}"
-                                            )
-                            except Exception as e:
-                                logger.debug(
-                                    f"⚠️ Не удалось обновить max_size_limiter для {symbol}: {e}"
+                                # Получаем баланс для проверки
+                                balance = await self.client.get_balance()
+
+                                # Получаем balance_profile
+                                balance_profile = None
+                                if self.data_registry:
+                                    balance_data = (
+                                        await self.data_registry.get_balance()
+                                    )
+                                    if balance_data:
+                                        balance_profile = balance_data.get("profile")
+                                if not balance_profile:
+                                    balance_profile = (
+                                        self.config_manager.get_balance_profile(
+                                            balance
+                                        ).get("name", "medium")
+                                    )
+
+                                # Получаем regime
+                                regime = signal.get("regime")
+                                if not regime and hasattr(
+                                    self.signal_generator, "regime_manager"
+                                ):
+                                    regime_manager = getattr(
+                                        self.signal_generator, "regime_manager", None
+                                    )
+                                    if regime_manager:
+                                        regime = regime_manager.get_current_regime()
+
+                                # Проверяем возможность добавления
+                                can_add_result = await self.position_scaling_manager.can_add_to_position(
+                                    symbol, balance, balance_profile, regime
                                 )
 
-                        # ✅ ЛОГИРОВАНИЕ: Показываем, было ли переключение направления ADX
-                        original_side = signal.get("original_side", "")
-                        side_switched = signal.get("side_switched_by_adx", False)
-                        if side_switched and original_side:
-                            original_position_side = (
-                                "long" if original_side.lower() == "buy" else "short"
-                            )
-                            logger.warning(
-                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
-                                f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
-                                f"(ADX переключил направление с {original_position_side.upper()} → {signal_position_side.upper()}, "
-                                f"но позиция уже открыта в этом направлении. "
-                                f"На OKX Futures ордера в одном направлении объединяются, комиссия накапливается!)"
-                            )
+                                if can_add_result.get("can_add", False):
+                                    # Рассчитываем базовый размер позиции для лестницы
+                                    # Используем текущий расчет размера как базовый
+                                    base_size_usd = None
+                                    try:
+                                        # Получаем детали инструмента для расчета
+                                        details = (
+                                            await self.client.get_instrument_details(
+                                                symbol
+                                            )
+                                        )
+                                        ct_val = details.get("ctVal", 0.01)
+                                        current_price = signal.get("price", 0)
+                                        if current_price > 0:
+                                            # Используем текущий размер позиции как базовый для лестницы
+                                            # Или можно использовать расчет из risk_manager
+                                            size_in_coins = pos_size * ct_val
+                                            base_size_usd = (
+                                                size_in_coins * current_price
+                                            )
+                                    except Exception as e:
+                                        logger.warning(
+                                            f"⚠️ Ошибка расчета base_size_usd для {symbol}: {e}"
+                                        )
+
+                                    if base_size_usd:
+                                        # Рассчитываем размер добавления
+                                        addition_size_usd = await self.position_scaling_manager.calculate_next_addition_size(
+                                            symbol,
+                                            base_size_usd,
+                                            signal,
+                                            balance,
+                                            balance_profile,
+                                            regime,
+                                        )
+
+                                        if addition_size_usd:
+                                            logger.info(
+                                                f"✅ [POSITION_SCALING] {symbol}: Разрешено добавление | "
+                                                f"size=${addition_size_usd:.2f}, "
+                                                f"добавлений: {can_add_result.get('addition_count', 0)}"
+                                            )
+                                            # Продолжаем выполнение сигнала с рассчитанным размером добавления
+                                            # Размер будет переопределен в процессе размещения ордера
+                                            signal[
+                                                "addition_size_usd"
+                                            ] = addition_size_usd
+                                            signal["is_addition"] = True
+                                        else:
+                                            # ✅ ИСПРАВЛЕНИЕ: Это может быть нормальная ситуация, логируем как debug
+                                            logger.debug(
+                                                f"🔍 [POSITION_SCALING] {symbol}: Не удалось рассчитать размер добавления (возможно недостаточно данных), блокируем"
+                                            )
+                                            continue
+                                    else:
+                                        # ✅ ИСПРАВЛЕНИЕ: Это может быть нормальная ситуация, логируем как debug
+                                        logger.debug(
+                                            f"🔍 [POSITION_SCALING] {symbol}: Не удалось рассчитать base_size_usd (возможно недостаточно данных), блокируем"
+                                        )
+                                        continue
+                                else:
+                                    # Нельзя добавлять - блокируем
+                                    # ✅ ИСПРАВЛЕНИЕ: Это нормальная ситуация, не логируем как warning
+                                    reason = can_add_result.get("reason", "unknown")
+                                    logger.debug(
+                                        f"🔍 [POSITION_SCALING] {symbol}: Добавление заблокировано - {reason}"
+                                    )
+                                    continue
+
+                            except Exception as e:
+                                logger.error(
+                                    f"❌ [POSITION_SCALING] Ошибка проверки возможности добавления для {symbol}: {e}",
+                                    exc_info=True,
+                                )
+                                # При ошибке блокируем (безопаснее)
+                                continue
                         else:
-                            logger.warning(
-                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
-                                f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
-                                f"(на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!)"
-                            )
-                        continue
+                            # ✅ КРИТИЧЕСКОЕ: Позиция уже есть в направлении сигнала
+                            # На OKX Futures новый ордер в том же направлении просто увеличит размер позиции
+                            # Это означает, что мы НЕ создаем новую позицию, а увеличиваем существующую
+                            # Поэтому блокируем, чтобы не накапливать комиссию на одной позиции (если PositionScalingManager не доступен)
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем max_size_limiter с реальными данными с биржи
+                            # Это гарантирует, что если позиция есть на бирже, она будет отражена в max_size_limiter
+                            if symbol not in self.max_size_limiter.position_sizes:
+                                # Позиция есть на бирже, но не в max_size_limiter - добавляем
+                                try:
+                                    entry_price = float(
+                                        position_in_signal_direction.get("avgPx", "0")
+                                    ) or float(
+                                        position_in_signal_direction.get("markPx", "0")
+                                    )
+                                    if entry_price > 0:
+                                        # Получаем ctVal для конвертации
+                                        if hasattr(
+                                            self.client, "get_instrument_details"
+                                        ):
+                                            try:
+                                                details = await self.client.get_instrument_details(
+                                                    symbol
+                                                )
+                                                ct_val = float(
+                                                    details.get("ctVal", "1.0")
+                                                )
+                                                size_in_coins = pos_size * ct_val
+                                                size_usd = size_in_coins * entry_price
+                                                self.max_size_limiter.add_position(
+                                                    symbol, size_usd
+                                                )
+                                                logger.debug(
+                                                    f"🔄 Позиция {symbol} добавлена в max_size_limiter из реальных данных биржи: {size_usd:.2f} USD"
+                                                )
+                                            except Exception as detail_error:
+                                                logger.debug(
+                                                    f"⚠️ Не удалось получить детали инструмента для {symbol}: {detail_error}"
+                                                )
+                                except Exception as e:
+                                    logger.debug(
+                                        f"⚠️ Не удалось обновить max_size_limiter для {symbol}: {e}"
+                                    )
+
+                            # ✅ ЛОГИРОВАНИЕ: Показываем, было ли переключение направления ADX
+                            original_side = signal.get("original_side", "")
+                            side_switched = signal.get("side_switched_by_adx", False)
+                            if side_switched and original_side:
+                                original_position_side = (
+                                    "long"
+                                    if original_side.lower() == "buy"
+                                    else "short"
+                                )
+                                logger.warning(
+                                    f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
+                                    f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                                    f"(ADX переключил направление с {original_position_side.upper()} → {signal_position_side.upper()}, "
+                                    f"но позиция уже открыта в этом направлении. "
+                                    f"На OKX Futures ордера в одном направлении объединяются, комиссия накапливается!)"
+                                )
+                            else:
+                                logger.warning(
+                                    f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
+                                    f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                                    f"(на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!)"
+                                )
+                            continue
                     elif len(symbol_positions) == 0:
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Позиции нет на бирже - очищаем max_size_limiter если там есть устаревшие данные
                         if symbol in self.max_size_limiter.position_sizes:
@@ -308,37 +437,57 @@ class SignalCoordinator:
                             for p in symbol_positions
                         )
 
-                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: НЕ закрываем противоположные позиции автоматически!
-                        # Вместо этого БЛОКИРУЕМ новые сигналы до закрытия одной из позиций вручную или по TP/SL
-                        if has_long and has_short and not allow_concurrent:
-                            logger.warning(
-                                f"🚨 Найдены противоположные позиции для {symbol} в process_signals: "
-                                f"{len(symbol_positions)} позиций (LONG и SHORT). "
-                                f"allow_concurrent=false, БЛОКИРУЕМ новые сигналы до закрытия одной из позиций. "
-                                f"Позиции будут закрыты по TP/SL или вручную"
+                        # ✅ НОВОЕ: Разрешаем LONG и SHORT одновременно, разрешаем суммирование ордеров
+                        # Подсчитываем ордера в том же направлении что и сигнал
+                        signal_position_side = signal.get(
+                            "position_side", "long"
+                        ).lower()
+                        same_direction_count = 0
+                        for pos in symbol_positions:
+                            pos_side_raw = pos.get("posSide", "").lower()
+                            pos_raw = float(pos.get("pos", "0"))
+                            if pos_side_raw in ["long", "short"]:
+                                pos_side = pos_side_raw
+                            else:
+                                pos_side = "long" if pos_raw > 0 else "short"
+
+                            if pos_side == signal_position_side:
+                                same_direction_count += 1
+
+                        # Если уже 5 ордеров в том же направлении → полное закрытие позиции
+                        if same_direction_count >= 5:
+                            logger.info(
+                                f"🔄 {symbol}: Достигнут лимит 5 ордеров в направлении {signal_position_side.upper()}, "
+                                f"закрываем все позиции перед новым сигналом"
                             )
-                            continue  # БЛОКИРУЕМ обработку сигнала, не закрываем автоматически
-                        elif not allow_concurrent:
-                            # РЕЖИМ 1: Не разрешаем несколько позиций (нет противоположных)
+                            # Закрываем все позиции по символу
+                            if hasattr(self, "orchestrator") and self.orchestrator:
+                                if hasattr(self.orchestrator, "position_manager"):
+                                    await self.orchestrator.position_manager.close_position_manually(
+                                        symbol, reason="max_orders_reached"
+                                    )
+                            # Продолжаем открытие новой позиции после закрытия
+                        elif same_direction_count > 0:
                             logger.debug(
-                                f"⚠️ Позиция {symbol} в другом направлении уже открыта ({len(symbol_positions)} позиций), "
-                                f"БЛОКИРУЕМ новые сигналы (allow_concurrent=false)"
+                                f"📊 {symbol}: Уже есть {same_direction_count} ордер(ов) в направлении {signal_position_side.upper()}, "
+                                f"разрешаем суммирование (до 5)"
+                            )
+                            # Разрешаем открытие - ордера суммируются
+
+                        # Разрешаем LONG и SHORT одновременно - бот сам закроет когда увидит разворот
+                        if has_long and has_short:
+                            logger.debug(
+                                f"📊 {symbol}: Есть LONG и SHORT одновременно - разрешаем (хеджирование)"
+                            )
+                            # Разрешаем - бот сам закроет когда увидит разворот
+
+                        # Проверяем общий лимит позиций по символу (максимум 5)
+                        if len(symbol_positions) >= 5:
+                            logger.debug(
+                                f"⚠️ Достигнут общий лимит позиций по {symbol}: {len(symbol_positions)}/5, "
+                                f"БЛОКИРУЕМ новые сигналы"
                             )
                             continue
-                        else:
-                            # РЕЖИМ 2: Разрешаем позиции в разных направлениях, но проверяем лимит
-                            if len(symbol_positions) >= max_positions_per_symbol:
-                                logger.debug(
-                                    f"⚠️ Достигнут лимит позиций по {symbol}: {len(symbol_positions)}/{max_positions_per_symbol}, "
-                                    f"БЛОКИРУЕМ новые сигналы"
-                                )
-                                continue
-                            else:
-                                # Разрешаем - позиция в другом направлении (LONG + SHORT одновременно)
-                                logger.debug(
-                                    f"📊 Есть {len(symbol_positions)} позиция(й) по {symbol} в другом направлении, "
-                                    f"разрешаем открытие {signal_position_side.upper()} позиции (allow_concurrent=true)"
-                                )
                 except Exception as e:
                     logger.warning(f"⚠️ Ошибка проверки позиций для {symbol}: {e}")
                     # При ошибке - лучше пропустить, чем создать дубликат
@@ -997,54 +1146,50 @@ class SignalCoordinator:
                                 for p in symbol_positions
                             )
 
-                            if has_long and has_short:
-                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #1: Найдены противоположные позиции - АВТОМАТИЧЕСКИ ЗАКРЫВАЕМ одну из них
-                                logger.warning(
-                                    f"🚨 Найдены противоположные позиции для {symbol}: "
-                                    f"{positions_info}. allow_concurrent=false, АВТОМАТИЧЕСКИ ЗАКРЫВАЕМ одну из позиций."
-                                )
-                                # Закрываем одну из противоположных позиций
-                                await self._close_opposite_position(
-                                    symbol, symbol_positions
-                                )
-                                return  # Блокируем генерацию сигналов после закрытия
-                            else:
-                                # Только одна позиция (нет противоположных) - блокируем новые сигналы
-                                pos_raw = float(symbol_positions[0].get("pos", "0"))
-                                pos_size = abs(pos_raw)
-                                pos_side_raw = (
-                                    symbol_positions[0].get("posSide", "").lower()
-                                )
+                            # ✅ НОВОЕ: Разрешаем LONG и SHORT одновременно, разрешаем суммирование ордеров
+                            # Подсчитываем ордера в том же направлении что и сигнал
+                            signal_position_side = signal.get(
+                                "position_side", "long"
+                            ).lower()
+                            same_direction_count = 0
+                            for pos in symbol_positions:
+                                pos_side_raw = pos.get("posSide", "").lower()
+                                pos_raw = float(pos.get("pos", "0"))
                                 if pos_side_raw in ["long", "short"]:
                                     pos_side = pos_side_raw
                                 else:
                                     pos_side = "long" if pos_raw > 0 else "short"
-                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Throttling для избыточных предупреждений
-                                warning_key = f"{symbol}_{pos_side}_blocked"
-                                current_time = time.time()
-                                last_warning_time = self._last_warning_time.get(
-                                    warning_key, 0
-                                )
 
-                                # Логируем только если прошло достаточно времени с последнего предупреждения
-                                if (
-                                    current_time - last_warning_time
-                                    >= self._warning_throttle_seconds
-                                ):
-                                    logger.warning(
-                                        f"⚠️ Позиция {symbol} {pos_side.upper()} УЖЕ ОТКРЫТА (size={pos_size}), "
-                                        f"БЛОКИРУЕМ новые сигналы (allow_concurrent=false). "
-                                        f"Позиции: {positions_info}"
-                                    )
-                                    self._last_warning_time[warning_key] = current_time
-                                else:
-                                    # Логируем только на DEBUG уровне если предупреждение недавно было
-                                    logger.debug(
-                                        f"⏭️ Позиция {symbol} {pos_side.upper()} заблокирована "
-                                        f"(throttling: {int(self._warning_throttle_seconds - (current_time - last_warning_time))}s)"
-                                    )
-                                return
-                        # Если allow_concurrent=true, проверка направления будет в process_signals
+                                if pos_side == signal_position_side:
+                                    same_direction_count += 1
+
+                            # Если уже 5 ордеров в том же направлении → полное закрытие позиции
+                            if same_direction_count >= 5:
+                                logger.info(
+                                    f"🔄 {symbol}: Достигнут лимит 5 ордеров в направлении {signal_position_side.upper()}, "
+                                    f"закрываем все позиции перед новым сигналом"
+                                )
+                                # Закрываем все позиции по символу
+                                if hasattr(self, "orchestrator") and self.orchestrator:
+                                    if hasattr(self.orchestrator, "position_manager"):
+                                        await self.orchestrator.position_manager.close_position_manually(
+                                            symbol, reason="max_orders_reached"
+                                        )
+                                # Продолжаем открытие новой позиции после закрытия
+                            elif same_direction_count > 0:
+                                logger.debug(
+                                    f"📊 {symbol}: Уже есть {same_direction_count} ордер(ов) в направлении {signal_position_side.upper()}, "
+                                    f"разрешаем суммирование (до 5)"
+                                )
+                                # Разрешаем открытие - ордера суммируются
+
+                            # Разрешаем LONG и SHORT одновременно - бот сам закроет когда увидит разворот
+                            if has_long and has_short:
+                                logger.debug(
+                                    f"📊 {symbol}: Есть LONG и SHORT одновременно - разрешаем (хеджирование)"
+                                )
+                                # Разрешаем - бот сам закроет когда увидит разворот
+                        # Проверка направления завершена - разрешаем открытие
 
                     # ✅ НОВОЕ: Получаем баланс и режим из DataRegistry
                     balance = None
@@ -1478,14 +1623,50 @@ class SignalCoordinator:
                     "type": order_type,  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: Limit ордера для экономии комиссий
                 }
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем и устанавливаем leverage перед открытием позиции
-            # Учитываем режим позиций (hedge mode требует posSide)
-            leverage_config = getattr(self.scalping_config, "leverage", None)
-            if leverage_config is None or leverage_config <= 0:
-                logger.warning(
-                    f"⚠️ leverage не указан в конфиге для {symbol}, используем 3 (fallback)"
+            # ✅ ИСПРАВЛЕНИЕ #3: Используем адаптивный леверидж на основе качества сигнала
+            # Получаем режим и волатильность для расчета адаптивного левериджа
+            regime = signal.get("regime") or "ranging"
+            volatility = None
+
+            # Получаем волатильность (ATR) из DataRegistry
+            if self.data_registry:
+                try:
+                    atr = await self.data_registry.get_indicator(symbol, "atr")
+                    if atr and price > 0:
+                        volatility = atr / price  # ATR в процентах от цены
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Не удалось получить ATR для расчета волатильности: {e}"
+                    )
+
+            # Используем адаптивный леверидж если доступен, иначе fallback на фиксированный
+            if self.adaptive_leverage:
+                # ✅ ИСПРАВЛЕНИЕ #5: Используем async calculate_leverage с client для округления
+                leverage_config = await self.adaptive_leverage.calculate_leverage(
+                    signal, regime, volatility, client=self.client
                 )
-                leverage_config = 3
+                # ✅ УЛУЧШЕНИЕ: Детальное логирование левериджа
+                volatility_str = f"{volatility*100:.2f}%" if volatility else "N/A"
+                logger.info(
+                    f"📊 [LEVERAGE_FINAL] {symbol}: Адаптивный леверидж={leverage_config}x | "
+                    f"сила={signal.get('strength', 0.5):.2f}, режим={regime}, "
+                    f"волатильность={volatility_str}"
+                )
+                # ✅ ИСПРАВЛЕНИЕ: Добавляем leverage в signal для использования в risk_manager
+                signal["leverage"] = leverage_config
+            else:
+                # Fallback на фиксированный leverage из конфига
+                leverage_config = getattr(self.scalping_config, "leverage", None)
+                if leverage_config is None or leverage_config <= 0:
+                    logger.warning(
+                        f"⚠️ leverage не указан в конфиге для {symbol}, используем 3 (fallback)"
+                    )
+                    leverage_config = 3
+                logger.debug(
+                    f"⚠️ AdaptiveLeverage не доступен, используем фиксированный leverage={leverage_config}x"
+                )
+                # ✅ ИСПРАВЛЕНИЕ: Добавляем leverage в signal для использования в risk_manager
+                signal["leverage"] = leverage_config
 
             # Определяем posSide на основе стороны сигнала
             signal_side = signal.get("side", "").lower()
@@ -1516,8 +1697,8 @@ class SignalCoordinator:
                     )
                     if self.client.sandbox:
                         logger.info(
-                            f"⚠️ Sandbox mode: leverage не установлен на бирже через API для {symbol}, "
-                            f"но расчеты используют leverage={leverage_config}x из конфига. "
+                            f"ℹ️ Sandbox mode: leverage не установлен на бирже через API для {symbol}, "
+                            f"но расчеты используют leverage={leverage_config}x из signal. "
                             f"Позиция может открыться с другим leverage, установленным на бирже."
                         )
 
@@ -1535,9 +1716,34 @@ class SignalCoordinator:
             if balance is None:
                 balance = await self.client.get_balance()
 
-            position_size = await self.risk_manager.calculate_position_size(
-                balance, price, signal, self.signal_generator
-            )
+            # ✅ НОВОЕ: Если это добавление к позиции, используем рассчитанный размер добавления
+            if signal.get("is_addition") and signal.get("addition_size_usd"):
+                addition_size_usd = signal.get("addition_size_usd")
+                # Конвертируем размер добавления в монеты
+                try:
+                    details = await self.client.get_instrument_details(symbol)
+                    ct_val = float(details.get("ctVal", 0.01))
+                    # Размер в USD -> размер в монетах
+                    addition_size_coins = addition_size_usd / price
+                    # Размер в монетах -> размер в контрактах
+                    position_size = addition_size_coins / ct_val
+                    logger.info(
+                        f"📊 [POSITION_SCALING] {symbol}: Используем размер добавления | "
+                        f"addition_size_usd=${addition_size_usd:.2f}, "
+                        f"position_size={position_size:.6f} контрактов"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ [POSITION_SCALING] Ошибка конвертации addition_size_usd для {symbol}: {e}, "
+                        f"используем стандартный расчет"
+                    )
+                    position_size = await self.risk_manager.calculate_position_size(
+                        balance, price, signal, self.signal_generator
+                    )
+            else:
+                position_size = await self.risk_manager.calculate_position_size(
+                    balance, price, signal, self.signal_generator
+                )
 
             if position_size <= 0:
                 logger.warning(f"Размер позиции слишком мал: {position_size}")
@@ -1611,30 +1817,39 @@ class SignalCoordinator:
                             break
 
                     if position_in_signal_direction:
-                        # Позиция действительно есть на бирже в том же направлении - блокируем
-                        pos_size = abs(
-                            float(position_in_signal_direction.get("pos", "0"))
-                        )
-                        # ✅ ЛОГИРОВАНИЕ: Показываем, было ли переключение направления ADX
-                        original_side = signal.get("original_side", "")
-                        side_switched = signal.get("side_switched_by_adx", False)
-                        if side_switched and original_side:
-                            original_position_side = (
-                                "long" if original_side.lower() == "buy" else "short"
-                            )
-                            logger.warning(
-                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
-                                f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
-                                f"(ADX переключил направление с {original_position_side.upper()} → {signal_position_side.upper()}, "
-                                f"но позиция уже открыта. На OKX Futures ордера объединяются, увеличивая комиссию)"
+                        # ✅ ИСПРАВЛЕНИЕ: Проверяем, является ли это добавлением к позиции
+                        if signal.get("is_addition"):
+                            # Это лестничное добавление - разрешаем продолжение
+                            logger.info(
+                                f"✅ [POSITION_SCALING] {symbol}: Позиция найдена, продолжаем добавление (is_addition=True)"
                             )
                         else:
-                            logger.warning(
-                                f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
-                                f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
-                                f"(на OKX Futures ордера в одном направлении объединяются, что увеличивает комиссию)"
+                            # Позиция действительно есть на бирже в том же направлении - блокируем
+                            pos_size = abs(
+                                float(position_in_signal_direction.get("pos", "0"))
                             )
-                        return False
+                            # ✅ ЛОГИРОВАНИЕ: Показываем, было ли переключение направления ADX
+                            original_side = signal.get("original_side", "")
+                            side_switched = signal.get("side_switched_by_adx", False)
+                            if side_switched and original_side:
+                                original_position_side = (
+                                    "long"
+                                    if original_side.lower() == "buy"
+                                    else "short"
+                                )
+                                logger.warning(
+                                    f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
+                                    f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                                    f"(ADX переключил направление с {original_position_side.upper()} → {signal_position_side.upper()}, "
+                                    f"но позиция уже открыта. На OKX Futures ордера объединяются, увеличивая комиссию)"
+                                )
+                            else:
+                                logger.warning(
+                                    f"⚠️ Позиция {symbol} {signal_position_side.upper()} уже открыта на бирже (size={pos_size}), "
+                                    f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
+                                    f"(на OKX Futures ордера в одном направлении объединяются, что увеличивает комиссию)"
+                                )
+                            return False
                     else:
                         # Позиция есть, но в другом направлении - очищаем max_size_limiter для корректной проверки
                         if symbol in self.max_size_limiter.position_sizes:
@@ -1658,7 +1873,14 @@ class SignalCoordinator:
 
             # Проверка через MaxSizeLimiter
             # ⚠️ ИСПРАВЛЕНИЕ: size_usd = notional (номинальная стоимость), а не маржа!
-            leverage = getattr(self.scalping_config, "leverage", 3)
+            # ✅ ИСПРАВЛЕНИЕ: Используем рассчитанный leverage_config вместо дефолтного из конфига
+            leverage = (
+                leverage_config  # Используем адаптивный leverage, рассчитанный выше
+            )
+            logger.debug(
+                f"📊 [LEVERAGE_USAGE] {symbol}: Используем leverage={leverage}x "
+                f"для проверки MaxSizeLimiter и расчетов"
+            )
             size_usd = position_size * price  # Это notional (номинальная стоимость)
             can_open, reason = self.max_size_limiter.can_open_position(symbol, size_usd)
 
@@ -1833,6 +2055,32 @@ class SignalCoordinator:
                     "limit",  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
                 )  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: "limit" для экономии комиссий
 
+                # ✅ НОВОЕ: Для рыночных ордеров сразу записываем добавление (позиция открыта мгновенно)
+                if (
+                    signal.get("is_addition")
+                    and self.position_scaling_manager
+                    and order_type == "market"
+                ):
+                    try:
+                        addition_size_usd = signal.get("addition_size_usd")
+                        existing_leverage = await self.position_scaling_manager._get_existing_position_leverage(
+                            symbol
+                        )
+                        if existing_leverage and addition_size_usd:
+                            await self.position_scaling_manager.record_scaling_addition(
+                                symbol=symbol,
+                                addition_size_usd=addition_size_usd,
+                                leverage=existing_leverage,
+                            )
+                            logger.info(
+                                f"✅ [POSITION_SCALING] {symbol}: Записано добавление в историю (market) | "
+                                f"size=${addition_size_usd:.2f}, leverage={existing_leverage}x"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ [POSITION_SCALING] Ошибка записи добавления в историю для {symbol}: {e}"
+                        )
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем кэш СРАЗУ после размещения ордера
                 # Это предотвращает race condition, когда второй сигнал проходит проверку
                 # до того, как первый ордер появится в API
@@ -1897,6 +2145,32 @@ class SignalCoordinator:
                                     logger.info(
                                         f"✅ Лимитный ордер исполнен, позиция открыта: {symbol} {position_size:.6f}"
                                     )
+                                    # ✅ НОВОЕ: Для лимитных ордеров записываем добавление после подтверждения открытия
+                                    if (
+                                        signal.get("is_addition")
+                                        and self.position_scaling_manager
+                                    ):
+                                        try:
+                                            addition_size_usd = signal.get(
+                                                "addition_size_usd"
+                                            )
+                                            existing_leverage = await self.position_scaling_manager._get_existing_position_leverage(
+                                                symbol
+                                            )
+                                            if existing_leverage and addition_size_usd:
+                                                await self.position_scaling_manager.record_scaling_addition(
+                                                    symbol=symbol,
+                                                    addition_size_usd=addition_size_usd,
+                                                    leverage=existing_leverage,
+                                                )
+                                                logger.info(
+                                                    f"✅ [POSITION_SCALING] {symbol}: Записано добавление в историю (limit) | "
+                                                    f"size=${addition_size_usd:.2f}, leverage={existing_leverage}x"
+                                                )
+                                        except Exception as e:
+                                            logger.warning(
+                                                f"⚠️ [POSITION_SCALING] Ошибка записи добавления в историю для {symbol}: {e}"
+                                            )
                                     break
 
                         if not position_opened:
@@ -1986,6 +2260,35 @@ class SignalCoordinator:
                                                 f"✅ Market ордер размещен вместо лимитного для {symbol}: {market_result.get('order_id')}"
                                             )
                                             position_opened = True  # Market ордер исполняется мгновенно
+                                            # ✅ НОВОЕ: Записываем добавление для fallback market ордера
+                                            if (
+                                                signal.get("is_addition")
+                                                and self.position_scaling_manager
+                                            ):
+                                                try:
+                                                    addition_size_usd = signal.get(
+                                                        "addition_size_usd"
+                                                    )
+                                                    existing_leverage = await self.position_scaling_manager._get_existing_position_leverage(
+                                                        symbol
+                                                    )
+                                                    if (
+                                                        existing_leverage
+                                                        and addition_size_usd
+                                                    ):
+                                                        await self.position_scaling_manager.record_scaling_addition(
+                                                            symbol=symbol,
+                                                            addition_size_usd=addition_size_usd,
+                                                            leverage=existing_leverage,
+                                                        )
+                                                        logger.info(
+                                                            f"✅ [POSITION_SCALING] {symbol}: Записано добавление в историю (fallback market) | "
+                                                            f"size=${addition_size_usd:.2f}, leverage={existing_leverage}x"
+                                                        )
+                                                except Exception as e:
+                                                    logger.warning(
+                                                        f"⚠️ [POSITION_SCALING] Ошибка записи добавления в историю для {symbol}: {e}"
+                                                    )
                                         else:
                                             logger.error(
                                                 f"❌ Не удалось разместить market ордер для {symbol}: {market_result.get('error')}"

@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -59,6 +60,9 @@ class OKXFuturesClient:
         self._instrument_details_cache: dict = (
             {}
         )  # Кэш для instrument details (ctVal, lotSz, minSz)
+        self._leverage_info_cache: dict = (
+            {}
+        )  # Кэш для leverage info (maxLever, available_leverages)
 
     async def close(self):
         """Корректное закрытие клиента и сессии"""
@@ -192,6 +196,26 @@ class OKXFuturesClient:
                             f"Failed to parse JSON response from OKX: {e}, "
                             f"Status: {resp.status}"
                         )
+
+                    # ✅ ИСПРАВЛЕНИЕ #9: Retry для 502 Bad Gateway ошибок
+                    if resp.status == 502:
+                        if attempt < max_retries - 1:
+                            wait_time = retry_delay * (
+                                2**attempt
+                            )  # Exponential backoff
+                            logger.warning(
+                                f"⚠️ OKX вернул 502 Bad Gateway (попытка {attempt + 1}/{max_retries}), "
+                                f"повтор через {wait_time:.1f}с"
+                            )
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            logger.error(
+                                f"❌ OKX вернул 502 Bad Gateway после {max_retries} попыток"
+                            )
+                            raise RuntimeError(
+                                f"OKX API: 502 Bad Gateway after {max_retries} retries"
+                            )
 
                     # Проверяем статус ответа
                     if resp.status != 200:
@@ -391,14 +415,24 @@ class OKXFuturesClient:
 
             for inst in instruments.get("data", []):
                 if inst.get("instId") == inst_id:
+                    # Получаем leverage info
+                    leverage_info = await self.get_instrument_leverage_info(symbol)
+
                     details = {
                         "ctVal": float(inst.get("ctVal", 0.01)),  # Contract value
                         "lotSz": float(inst.get("lotSz", 0.01)),  # Lot size
                         "minSz": float(inst.get("minSz", 0.01)),  # Minimum size
+                        "max_leverage": leverage_info[
+                            "max_leverage"
+                        ],  # ✅ НОВОЕ: Максимальный leverage
+                        "available_leverages": leverage_info[
+                            "available_leverages"
+                        ],  # ✅ НОВОЕ: Доступные leverage
                     }
                     self._instrument_details_cache[symbol] = details
                     logger.debug(
-                        f"📋 Детали инструмента {symbol}: ctVal={details['ctVal']}, lotSz={details['lotSz']}, minSz={details['minSz']}"
+                        f"📋 Детали инструмента {symbol}: ctVal={details['ctVal']}, lotSz={details['lotSz']}, "
+                        f"minSz={details['minSz']}, max_leverage={details['max_leverage']}x"
                     )
                     return details
         except Exception as e:
@@ -407,16 +441,206 @@ class OKXFuturesClient:
             )
 
         # Fallback на значения по умолчанию
+        # Получаем leverage info для fallback
+        leverage_info = await self.get_instrument_leverage_info(symbol)
+
         if "BTC" in symbol:
-            default_details = {"ctVal": 0.01, "lotSz": 0.01, "minSz": 0.01}
+            default_details = {
+                "ctVal": 0.01,
+                "lotSz": 0.01,
+                "minSz": 0.01,
+                "max_leverage": leverage_info["max_leverage"],
+                "available_leverages": leverage_info["available_leverages"],
+            }
         elif "ETH" in symbol:
-            default_details = {"ctVal": 0.1, "lotSz": 0.01, "minSz": 0.01}
+            default_details = {
+                "ctVal": 0.1,
+                "lotSz": 0.01,
+                "minSz": 0.01,
+                "max_leverage": leverage_info["max_leverage"],
+                "available_leverages": leverage_info["available_leverages"],
+            }
         else:
-            default_details = {"ctVal": 0.01, "lotSz": 0.01, "minSz": 0.01}
+            default_details = {
+                "ctVal": 0.01,
+                "lotSz": 0.01,
+                "minSz": 0.01,
+                "max_leverage": leverage_info["max_leverage"],
+                "available_leverages": leverage_info["available_leverages"],
+            }
 
         self._instrument_details_cache[symbol] = default_details
         logger.warning(f"⚠️ Используем fallback детали для {symbol}: {default_details}")
         return default_details
+
+    async def get_instrument_leverage_info(self, symbol: str) -> dict:
+        """
+        Получает информацию о доступных leverage для символа.
+
+        Args:
+            symbol: Торговый символ (например, "BTC", "ETH", "SOL")
+
+        Returns:
+            dict с ключами:
+                - max_leverage: Максимальный leverage для символа (int)
+                - available_leverages: Список доступных leverage (List[int])
+        """
+        # Проверяем кэш
+        if symbol in self._leverage_info_cache:
+            cached_info = self._leverage_info_cache[symbol]
+            logger.debug(
+                f"📊 [LEVERAGE_INFO] {symbol}: Из кэша | "
+                f"max={cached_info['max_leverage']}x, "
+                f"available={cached_info['available_leverages']}"
+            )
+            return cached_info
+
+        try:
+            inst_id = f"{symbol}-SWAP"
+            logger.info(
+                f"📊 [LEVERAGE_INFO] {symbol}: Запрос к API для получения leverage информации..."
+            )
+            instruments = await self.get_instrument_info()
+
+            logger.debug(
+                f"📊 [LEVERAGE_INFO] {symbol}: Получен ответ от API, ищем {inst_id} в {len(instruments.get('data', []))} инструментах"
+            )
+
+            found = False
+            for inst in instruments.get("data", []):
+                if inst.get("instId") == inst_id:
+                    found = True
+                    # Получаем maxLever из API
+                    max_lever_str = inst.get("maxLever", "125")
+                    logger.info(
+                        f"📊 [LEVERAGE_INFO] {symbol}: Найден инструмент {inst_id}, "
+                        f"maxLever из API='{max_lever_str}'"
+                    )
+                    try:
+                        max_leverage = int(max_lever_str)
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"⚠️ [LEVERAGE_INFO] {symbol}: Не удалось преобразовать maxLever='{max_lever_str}' в int, "
+                            f"используем fallback=125x"
+                        )
+                        max_leverage = 125  # Fallback на стандартный максимум
+
+                    # Генерируем список доступных leverage
+                    # OKX обычно поддерживает: 1, 2, 3, 5, 10, 20, 50, 75, 100, 125
+                    available_leverages = []
+                    leverage_steps = [1, 2, 3, 5, 10, 20, 50, 75, 100, 125]
+
+                    for step in leverage_steps:
+                        if step <= max_leverage:
+                            available_leverages.append(step)
+
+                    # Если max_leverage не в списке шагов, добавляем его
+                    if max_leverage not in available_leverages:
+                        available_leverages.append(max_leverage)
+                        available_leverages.sort()
+
+                    leverage_info = {
+                        "max_leverage": max_leverage,
+                        "available_leverages": available_leverages,
+                    }
+
+                    self._leverage_info_cache[symbol] = leverage_info
+
+                    logger.info(
+                        f"✅ [LEVERAGE_INFO] {symbol}: Получено с биржи | "
+                        f"max_leverage={max_leverage}x, "
+                        f"available_leverages={available_leverages}"
+                    )
+
+                    return leverage_info
+
+            if not found:
+                logger.warning(
+                    f"⚠️ [LEVERAGE_INFO] {symbol}: Инструмент {inst_id} не найден в ответе API"
+                )
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось получить leverage info для {symbol}: {e}")
+
+        # Fallback на стандартные значения
+        default_leverage_info = {
+            "max_leverage": 125,
+            "available_leverages": [1, 2, 3, 5, 10, 20, 50, 75, 100, 125],
+        }
+        self._leverage_info_cache[symbol] = default_leverage_info
+        logger.warning(
+            f"⚠️ [LEVERAGE_INFO] {symbol}: Fallback | "
+            f"max={default_leverage_info['max_leverage']}x, "
+            f"available={default_leverage_info['available_leverages']}"
+        )
+        return default_leverage_info
+
+    async def round_leverage_to_available(
+        self, symbol: str, desired_leverage: int
+    ) -> int:
+        """
+        Округляет leverage до ближайшего доступного для символа.
+
+        Args:
+            symbol: Торговый символ
+            desired_leverage: Желаемый leverage
+
+        Returns:
+            Округленный leverage (доступный для символа)
+        """
+        try:
+            logger.info(
+                f"📊 [LEVERAGE_ROUND] {symbol}: Начало округления | desired={desired_leverage}x"
+            )
+            leverage_info = await self.get_instrument_leverage_info(symbol)
+            max_leverage = leverage_info["max_leverage"]
+            available_leverages = leverage_info["available_leverages"]
+
+            logger.info(
+                f"📊 [LEVERAGE_ROUND] {symbol}: Получена информация | "
+                f"max={max_leverage}x, available={available_leverages}"
+            )
+
+            # Если превышает максимум - ограничиваем до максимума
+            if desired_leverage > max_leverage:
+                logger.info(
+                    f"📊 [LEVERAGE_ROUND] {symbol}: Ограничение до максимума | "
+                    f"desired={desired_leverage}x > max={max_leverage}x → {max_leverage}x"
+                )
+                return max_leverage
+
+            # Если меньше минимума - возвращаем минимум
+            if desired_leverage < available_leverages[0]:
+                logger.info(
+                    f"📊 [LEVERAGE_ROUND] {symbol}: Округление до минимума | "
+                    f"desired={desired_leverage}x < min={available_leverages[0]}x → {available_leverages[0]}x"
+                )
+                return available_leverages[0]
+
+            # Ищем ближайший доступный leverage
+            closest_leverage = min(
+                available_leverages, key=lambda x: abs(x - desired_leverage)
+            )
+
+            if closest_leverage != desired_leverage:
+                logger.info(
+                    f"✅ [LEVERAGE_ROUND] {symbol}: Округление выполнено | "
+                    f"desired={desired_leverage}x → rounded={closest_leverage}x "
+                    f"(доступные: {available_leverages})"
+                )
+            else:
+                logger.info(
+                    f"✅ [LEVERAGE_ROUND] {symbol}: Округление не требуется | "
+                    f"desired={desired_leverage}x уже доступен"
+                )
+
+            return closest_leverage
+
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка округления leverage для {symbol}: {e}, "
+                f"используем желаемый leverage={desired_leverage}x"
+            )
+            return desired_leverage
 
     async def get_price_limits(self, symbol: str) -> dict:
         """
@@ -500,6 +724,7 @@ class OKXFuturesClient:
                                                 "best_bid": best_bid,
                                                 "best_ask": best_ask,
                                                 "current_price": current_price,
+                                                "timestamp": time.time(),  # ✅ НОВОЕ: Timestamp для проверки свежести
                                             }
 
                                 # Если не получили текущую цену, используем среднюю из стакана
@@ -510,6 +735,7 @@ class OKXFuturesClient:
                                     "best_bid": best_bid,
                                     "best_ask": best_ask,
                                     "current_price": current_price,
+                                    "timestamp": time.time(),  # ✅ НОВОЕ: Timestamp для проверки свежести
                                 }
 
                 # ✅ FALLBACK: Если не получили стакан, используем тикер
@@ -541,6 +767,7 @@ class OKXFuturesClient:
                             return {
                                 "max_buy_price": max_buy_price,
                                 "min_sell_price": min_sell_price,
+                                "timestamp": time.time(),  # ✅ НОВОЕ: Timestamp для проверки свежести
                                 "best_bid": current_price * 0.999,  # Примерно
                                 "best_ask": current_price * 1.001,  # Примерно
                                 "current_price": current_price,

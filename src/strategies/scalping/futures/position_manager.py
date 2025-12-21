@@ -26,7 +26,10 @@ from .core.position_registry import PositionRegistry
 # ✅ РЕФАКТОРИНГ: Импортируем новые модули
 from .positions.entry_manager import EntryManager
 from .positions.exit_analyzer import ExitAnalyzer
+from .positions.peak_profit_tracker import PeakProfitTracker
 from .positions.position_monitor import PositionMonitor
+from .positions.stop_loss_manager import StopLossManager
+from .positions.take_profit_manager import TakeProfitManager
 
 
 class FuturesPositionManager:
@@ -72,6 +75,11 @@ class FuturesPositionManager:
         self.exit_analyzer = None  # ExitAnalyzer (будет создан при необходимости)
         self.position_monitor = None  # PositionMonitor (будет создан при необходимости)
 
+        # ✅ РЕФАКТОРИНГ: Новые менеджеры для TP/SL/PeakProfit
+        self.peak_profit_tracker = None  # PeakProfitTracker
+        self.take_profit_manager = None  # TakeProfitManager
+        self.stop_loss_manager = None  # StopLossManager
+
         # Состояние
         self.is_initialized = False
         self.active_positions = {}
@@ -97,6 +105,47 @@ class FuturesPositionManager:
     def set_orchestrator(self, orchestrator):
         """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливает ссылку на orchestrator для доступа к trailing_sl_by_symbol"""
         self.orchestrator = orchestrator
+
+        # ✅ РЕФАКТОРИНГ: Инициализируем новые менеджеры после установки orchestrator
+        self._init_refactored_managers()
+
+    def _init_refactored_managers(self):
+        """✅ РЕФАКТОРИНГ: Инициализация новых менеджеров TP/SL/PeakProfit"""
+        if not self.orchestrator:
+            return
+
+        # Получаем необходимые зависимости
+        position_registry = getattr(self.orchestrator, "position_registry", None)
+        exit_analyzer = getattr(self.orchestrator, "exit_analyzer", None)
+
+        # Инициализируем PeakProfitTracker
+        self.peak_profit_tracker = PeakProfitTracker(
+            position_registry=position_registry, client=self.client
+        )
+
+        # Инициализируем TakeProfitManager
+        self.take_profit_manager = TakeProfitManager(
+            client=self.client,
+            position_registry=position_registry,
+            scalping_config=self.scalping_config,
+            orchestrator=self.orchestrator,
+            close_position_callback=self._close_position_by_reason,
+            get_tp_percent_callback=self._get_adaptive_tp_percent,  # ✅ Передаем метод получения TP%
+        )
+
+        # Инициализируем StopLossManager
+        self.stop_loss_manager = StopLossManager(
+            client=self.client,
+            position_registry=position_registry,
+            scalping_config=self.scalping_config,
+            orchestrator=self.orchestrator,
+            exit_analyzer=exit_analyzer,
+            close_position_callback=self._close_position_by_reason,
+        )
+
+        logger.info(
+            "✅ Рефакторированные менеджеры инициализированы: PeakProfitTracker, TakeProfitManager, StopLossManager"
+        )
 
     def _get_adaptive_tp_percent(
         self,
@@ -368,9 +417,9 @@ class FuturesPositionManager:
             # 3. ✅ ПРИОРИТЕТ 3: Глобальный SL (fallback - ТОЛЬКО если ничего не найдено)
             if sl_percent is None:
                 sl_percent = self.scalping_config.sl_percent
-                logger.warning(
-                    f"⚠️ FALLBACK: Используется глобальный SL для {symbol} (regime={regime or 'N/A'}): {sl_percent}% "
-                    f"(per-regime и per-symbol SL не найдены, symbol_profiles: {len(self.symbol_profiles) if self.symbol_profiles else 0} символов)"
+                logger.debug(
+                    f"📊 [SL] {symbol}: Используется глобальный SL={sl_percent}% "
+                    f"(per-regime и per-symbol SL не найдены, regime={regime or 'N/A'})"
                 )
             else:
                 logger.debug(
@@ -553,7 +602,11 @@ class FuturesPositionManager:
 
             # ✅ НОВОЕ: Обновление максимальной прибыли (перед проверкой отката)
             logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Обновление peak_profit")
-            await self._update_peak_profit(position)
+            # ✅ РЕФАКТОРИНГ: Используем новый модуль PeakProfitTracker
+            if self.peak_profit_tracker:
+                await self.peak_profit_tracker.update_peak_profit(position)
+            else:
+                await self._update_peak_profit(position)  # Fallback на старый метод
 
             # ✅ НОВОЕ: Проверка отката от максимальной прибыли - ПРИОРИТЕТ #2
             logger.debug(
@@ -575,7 +628,11 @@ class FuturesPositionManager:
             # TrailingSL проверяется в orchestrator._update_trailing_stop_loss
             # Здесь проверяем только TP (Take Profit)
             logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка TP/SL")
-            await self._check_tp_only(position)
+            # ✅ РЕФАКТОРИНГ: Используем новый модуль TakeProfitManager
+            if self.take_profit_manager:
+                await self.take_profit_manager.check_tp(position)
+            else:
+                await self._check_tp_only(position)  # Fallback на старый метод
 
             # ✅ ИЗМЕНЕНО: MAX_HOLDING теперь проверяется в ExitAnalyzer как часть анализа
             # Оставляем как fallback на случай, если ExitAnalyzer не используется
@@ -663,17 +720,51 @@ class FuturesPositionManager:
                     f"⚠️ Не удалось проверить время открытия позиции {symbol}: {e}"
                 )
                 # При ошибке продолжаем проверку
-            # ✅ ИСПРАВЛЕНИЕ: Используем leverage из конфига, а не из позиции на бирже
-            # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
-            leverage_from_position = int(position.get("lever", "0"))
+            # ✅ ИСПРАВЛЕНИЕ #2: Правильное чтение leverage с биржи - проверяем разные поля
+            leverage_from_position = None
+
+            # Пробуем получить leverage из поля "lever"
+            if "lever" in position and position.get("lever"):
+                try:
+                    lever_value = position.get("lever", "0")
+                    leverage_from_position = int(lever_value) if lever_value else None
+                    if leverage_from_position and leverage_from_position > 0:
+                        # Leverage найден и валиден
+                        pass
+                    else:
+                        leverage_from_position = None
+                except (ValueError, TypeError):
+                    leverage_from_position = None
+
+            # Если не получили из "lever", пробуем другие поля
+            if not leverage_from_position:
+                if "leverage" in position and position.get("leverage"):
+                    try:
+                        leverage_value = position.get("leverage", "0")
+                        leverage_from_position = (
+                            int(leverage_value) if leverage_value else None
+                        )
+                        if leverage_from_position and leverage_from_position > 0:
+                            pass
+                        else:
+                            leverage_from_position = None
+                    except (ValueError, TypeError):
+                        leverage_from_position = None
+
+            # Определяем итоговый leverage: приоритет конфиг → позиция → fallback
             leverage = (
                 getattr(self.scalping_config, "leverage", None)
                 or leverage_from_position
                 or 3
             )
-            if leverage_from_position != leverage:
+
+            if leverage_from_position and leverage_from_position != leverage:
                 logger.debug(
                     f"📊 Leverage: биржа={leverage_from_position}x, конфиг={leverage}x, используем {leverage}x для расчетов"
+                )
+            elif not leverage_from_position:
+                logger.debug(
+                    f"⚠️ Leverage не найден на бирже для {symbol}, используем конфиг: {leverage}x"
                 )
 
             # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для изолированной маржи получаем equity через get_margin_info!
@@ -843,21 +934,55 @@ class FuturesPositionManager:
                             f"используем общий баланс: {equity:.2f}"
                         )
 
-            # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: size из API в контрактах!
+            # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: size из API в контрактах!
             # Нужно получить ctVal для правильного расчета стоимости
+            position_value = 0.0
             try:
                 details = await self.client.get_instrument_details(symbol)
-                ct_val = details.get("ctVal", 0.01)  # По умолчанию для BTC/ETH
+                ct_val = float(details.get("ctVal", 0.01))  # По умолчанию для BTC/ETH
+
+                # ✅ ИСПРАВЛЕНО: Проверяем что ctVal валиден
+                if ct_val <= 0:
+                    logger.warning(
+                        f"⚠️ Невалидный ctVal={ct_val} для {symbol}, используем fallback"
+                    )
+                    raise ValueError(f"Invalid ctVal: {ct_val}")
+
                 # Реальный размер в монетах
                 size_in_coins = abs(size) * ct_val
+
+                # ✅ ИСПРАВЛЕНО: Проверяем что размер и цена валидны
+                if size_in_coins <= 0 or current_price <= 0:
+                    logger.warning(
+                        f"⚠️ Невалидные данные для расчета position_value {symbol}: "
+                        f"size_in_coins={size_in_coins:.6f}, current_price={current_price:.2f}"
+                    )
+                    raise ValueError("Invalid size or price")
+
                 # Стоимость позиции в USD
                 position_value = size_in_coins * current_price
+
+                # ✅ ИСПРАВЛЕНО: Проверка на разумность результата (защита от ошибок в 100 раз)
+                # Для большинства позиций position_value должна быть в разумных пределах
+                # Если position_value < $0.01 или > $1,000,000 - подозрительно
+                if position_value < 0.01:
+                    logger.warning(
+                        f"⚠️ Подозрительно маленький position_value для {symbol}: ${position_value:.2f} "
+                        f"(size={size} контрактов, ctVal={ct_val}, size_in_coins={size_in_coins:.6f}, price={current_price:.2f})"
+                    )
+                elif position_value > 1000000:
+                    logger.warning(
+                        f"⚠️ Подозрительно большой position_value для {symbol}: ${position_value:.2f} "
+                        f"(size={size} контрактов, ctVal={ct_val}, size_in_coins={size_in_coins:.6f}, price={current_price:.2f})"
+                    )
+
                 logger.debug(
-                    f"📊 Расчет position_value для {symbol}: "
+                    f"📊 [POSITION_VALUE] {symbol}: Расчет | "
                     f"size={size} контрактов, ctVal={ct_val}, "
                     f"size_in_coins={size_in_coins:.6f}, "
                     f"current_price={current_price:.2f}, "
-                    f"position_value={position_value:.2f} USD"
+                    f"position_value=${position_value:.2f} USD "
+                    f"(формула: {size_in_coins:.6f} × {current_price:.2f} = {position_value:.2f})"
                 )
             except Exception as e:
                 logger.warning(
@@ -867,7 +992,9 @@ class FuturesPositionManager:
                 size_in_coins = abs(size)
                 position_value = size_in_coins * current_price
                 logger.warning(
-                    f"⚠️ Fallback расчет для {symbol}: size_in_coins={size_in_coins:.6f}, position_value={position_value:.2f} USD"
+                    f"⚠️ [POSITION_VALUE] {symbol}: Fallback расчет | "
+                    f"size_in_coins={size_in_coins:.6f} (предполагаем size уже в монетах), "
+                    f"current_price={current_price:.2f}, position_value=${position_value:.2f} USD"
                 )
 
             # ✅ ИСПРАВЛЕНО: Получаем режим рынка для адаптивного safety_threshold
@@ -1315,11 +1442,41 @@ class FuturesPositionManager:
 
                     # ✅ Проверяем SL
                     if pnl_percent_from_margin <= -sl_percent:
+                        # ✅ НОВОЕ: Проверяем разворот перед закрытием по SL
+                        reversal_detected = False
+                        if hasattr(self, "orchestrator") and self.orchestrator:
+                            if (
+                                hasattr(self.orchestrator, "exit_analyzer")
+                                and self.orchestrator.exit_analyzer
+                            ):
+                                position_side = position.get("posSide", "long").lower()
+                                try:
+                                    reversal_detected = await self.orchestrator.exit_analyzer._check_reversal_signals(
+                                        symbol, position_side
+                                    )
+                                    if reversal_detected:
+                                        logger.info(
+                                            f"🔄 SL: Обнаружен разворот для {symbol} {position_side.upper()}, "
+                                            f"но PnL={pnl_percent_from_margin:.2f}% <= -{sl_percent:.2f}% - "
+                                            f"закрываем по SL (разворот подтверждает закрытие)"
+                                        )
+                                    else:
+                                        logger.debug(
+                                            f"🔄 SL: Разворота не обнаружено для {symbol}, "
+                                            f"закрываем по SL (PnL={pnl_percent_from_margin:.2f}% <= -{sl_percent:.2f}%)"
+                                        )
+                                except Exception as e:
+                                    logger.debug(
+                                        f"⚠️ Ошибка проверки разворота для {symbol}: {e}, "
+                                        f"продолжаем закрытие по SL"
+                                    )
+
                         logger.warning(
                             f"🚨 SL сработал для {symbol}: "
                             f"PnL={pnl_percent_from_margin:.2f}% от маржи <= -{sl_percent:.2f}% "
                             f"(margin=${margin_used:.2f}, PnL=${unrealized_pnl:.2f}, "
-                            f"время в позиции: {minutes_in_position:.2f} мин, regime={regime or 'N/A'})"
+                            f"время в позиции: {minutes_in_position:.2f} мин, regime={regime or 'N/A'}, "
+                            f"разворот={'да' if reversal_detected else 'нет'})"
                         )
                         await self._close_position_by_reason(position, "sl")
                         return True
@@ -1343,8 +1500,11 @@ class FuturesPositionManager:
 
     async def _check_tp_sl(self, position: Dict[str, Any]):
         """Проверка Take Profit и Stop Loss (DEPRECATED - используется _check_tp_only)"""
-        # Этот метод оставлен для совместимости, но теперь используется _check_tp_only
-        await self._check_tp_only(position)
+        # ✅ РЕФАКТОРИНГ: Используем новый модуль TakeProfitManager
+        if self.take_profit_manager:
+            await self.take_profit_manager.check_tp(position)
+        else:
+            await self._check_tp_only(position)  # Fallback на старый метод
 
     async def _check_profit_harvesting(self, position: Dict[str, Any]) -> bool:
         """
@@ -1948,7 +2108,13 @@ class FuturesPositionManager:
                 # Продолжаем проверку TP, если не удалось получить время
 
             # ✅ НОВОЕ: Проверка адаптивного SL (ПЕРЕД loss_cut - более строгий стоп)
-            sl_should_close = await self._check_sl(position)
+            # ✅ РЕФАКТОРИНГ: Используем новый модуль StopLossManager
+            if self.stop_loss_manager:
+                sl_should_close = await self.stop_loss_manager.check_sl(position)
+            else:
+                sl_should_close = await self._check_sl(
+                    position
+                )  # Fallback на старый метод
             if sl_should_close:
                 return  # Закрыли по SL, выходим
 
@@ -2091,17 +2257,51 @@ class FuturesPositionManager:
                     logger.debug(
                         f"⚠️ Ошибка проверки loss_cut в position_manager для {symbol}: {e}"
                     )
-            # ✅ ИСПРАВЛЕНИЕ: Используем leverage из конфига, а не из позиции на бирже
-            # На бирже может быть установлен старый leverage (3x), но расчеты должны использовать leverage из конфига (5x)
-            leverage_from_position = int(position.get("lever", "0"))
+            # ✅ ИСПРАВЛЕНИЕ #2: Правильное чтение leverage с биржи - проверяем разные поля
+            leverage_from_position = None
+
+            # Пробуем получить leverage из поля "lever"
+            if "lever" in position and position.get("lever"):
+                try:
+                    lever_value = position.get("lever", "0")
+                    leverage_from_position = int(lever_value) if lever_value else None
+                    if leverage_from_position and leverage_from_position > 0:
+                        # Leverage найден и валиден
+                        pass
+                    else:
+                        leverage_from_position = None
+                except (ValueError, TypeError):
+                    leverage_from_position = None
+
+            # Если не получили из "lever", пробуем другие поля
+            if not leverage_from_position:
+                if "leverage" in position and position.get("leverage"):
+                    try:
+                        leverage_value = position.get("leverage", "0")
+                        leverage_from_position = (
+                            int(leverage_value) if leverage_value else None
+                        )
+                        if leverage_from_position and leverage_from_position > 0:
+                            pass
+                        else:
+                            leverage_from_position = None
+                    except (ValueError, TypeError):
+                        leverage_from_position = None
+
+            # Определяем итоговый leverage: приоритет конфиг → позиция → fallback
             leverage = (
                 getattr(self.scalping_config, "leverage", None)
                 or leverage_from_position
                 or 3
             )
-            if leverage_from_position != leverage:
+
+            if leverage_from_position and leverage_from_position != leverage:
                 logger.debug(
                     f"📊 Leverage: биржа={leverage_from_position}x, конфиг={leverage}x, используем {leverage}x для расчетов"
+                )
+            elif not leverage_from_position:
+                logger.debug(
+                    f"⚠️ Leverage не найден на бирже для {symbol}, используем конфиг: {leverage}x"
                 )
 
             if size == 0:
@@ -2672,6 +2872,33 @@ class FuturesPositionManager:
                 # ✅ ИСПРАВЛЕНО: Учитываем комиссию от маржи при закрытии
                 net_pnl_percent = pnl_percent - commission_pct_from_margin
                 if net_pnl_percent > 0:
+                    # ✅ НОВОЕ: Проверка peak_profit - не закрывать если текущая прибыль < 70% от peak
+                    if pnl_percent > 0:  # Только для прибыльных позиций
+                        metadata = None
+                        if (
+                            hasattr(self, "position_registry")
+                            and self.position_registry
+                        ):
+                            metadata = await self.position_registry.get_metadata(symbol)
+
+                        if metadata:
+                            peak_profit_usd = 0.0
+                            if hasattr(metadata, "peak_profit_usd"):
+                                peak_profit_usd = metadata.peak_profit_usd
+                            elif isinstance(metadata, dict):
+                                peak_profit_usd = metadata.get("peak_profit_usd", 0.0)
+
+                            if peak_profit_usd > 0 and margin_used > 0:
+                                peak_profit_pct = (peak_profit_usd / margin_used) * 100
+                                # Не закрывать если текущая прибыль < 70% от peak
+                                if pnl_percent < peak_profit_pct * 0.7:
+                                    logger.info(
+                                        f"🛡️ TP: Не закрываем {symbol} - "
+                                        f"текущая прибыль {pnl_percent:.2f}% < 70% от peak {peak_profit_pct:.2f}% "
+                                        f"(peak_profit_usd=${peak_profit_usd:.2f}, margin=${margin_used:.2f})"
+                                    )
+                                    return  # Не закрываем
+
                     logger.info(
                         f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}% "
                         f"(TP={tp_percent:.2f}%, net после комиссии: {net_pnl_percent:.2f}%, "
@@ -3871,18 +4098,25 @@ class FuturesPositionManager:
             net_pnl = gross_pnl - commission - funding_fee
 
             # Рассчитываем duration в секундах
-            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC (aware)
             if isinstance(entry_time, datetime):
                 if entry_time.tzinfo is None:
                     entry_time = entry_time.replace(tzinfo=timezone.utc)
                 elif entry_time.tzinfo != timezone.utc:
                     entry_time = entry_time.astimezone(timezone.utc)
-            duration_sec = (datetime.now(timezone.utc) - entry_time).total_seconds()
+            else:
+                # Если entry_time не datetime, используем текущее время
+                entry_time = datetime.now(timezone.utc)
+
+            # ✅ ИСПРАВЛЕНИЕ: Убеждаемся что оба datetime в UTC (aware)
+            now_utc = datetime.now(timezone.utc)
+            duration_sec = (now_utc - entry_time).total_seconds()
             duration_min = duration_sec / 60.0
             duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
 
             # ✅ ЗАДАЧА #8: Улучшенное логирование закрытия позиции
-            close_time = datetime.now()
+            # ✅ ИСПРАВЛЕНИЕ: close_time должен быть aware (UTC)
+            close_time = datetime.now(timezone.utc)
 
             # ✅ НОВОЕ: Логируем размер позиции ДО закрытия
             size_before_close = abs(size)
@@ -3936,6 +4170,23 @@ class FuturesPositionManager:
                 size_in_contracts=True,  # size из API уже в контрактах
                 reduce_only=True,  # ✅ КРИТИЧЕСКОЕ: Только закрытие, не открытие новой позиции
             )
+
+            # ✅ ИСПРАВЛЕНИЕ: Обработка ошибки 51169 (позиция уже закрыта)
+            if result.get("code") != "0":
+                error_data = result.get("data", [])
+                if error_data and isinstance(error_data, list):
+                    error_msg = error_data[0].get("sMsg", "") if error_data else ""
+                    error_code = error_data[0].get("sCode", "") if error_data else ""
+                    if (
+                        error_code == "51169"
+                        or "don't have any positions" in error_msg.lower()
+                    ):
+                        logger.warning(
+                            f"⚠️ Позиция {symbol} уже закрыта на бирже (ошибка 51169), "
+                            f"продолжаем обработку как успешное закрытие"
+                        )
+                        # Продолжаем как успешное закрытие, т.к. позиция уже закрыта
+                        result = {"code": "0", "msg": "Position already closed"}
 
             if result.get("code") == "0":
                 # ✅ ИСПРАВЛЕНО: funding_fee уже получен выше и учтен в net_pnl
@@ -5811,6 +6062,56 @@ class FuturesPositionManager:
             entry_price = float(pos_data.get("avgPx", "0"))
             current_price = float(pos_data.get("markPx", entry_price))
 
+            # ✅ ИСПРАВЛЕНИЕ #5: Проверка минимальной стоимости для Partial TP
+            # Рассчитываем стоимость закрываемой части позиции
+            close_value_usd = close_size_coins * current_price
+
+            # Получаем баланс для определения профиля
+            try:
+                balance = await self.client.get_balance()
+                balance_profile = None
+                if hasattr(self, "config_manager") and self.config_manager:
+                    balance_profile = self.config_manager.get_balance_profile(balance)
+
+                # Адаптивный минимум по профилю баланса
+                if balance_profile:
+                    profile_name = balance_profile.get("name", "small")
+                    if profile_name == "small":
+                        min_partial_tp_value_usd = 3.0  # $3 для малого баланса
+                    elif profile_name == "medium":
+                        min_partial_tp_value_usd = 5.0  # $5 для среднего баланса
+                    else:  # large
+                        min_partial_tp_value_usd = 10.0  # $10 для большого баланса
+                else:
+                    min_partial_tp_value_usd = 5.0  # Fallback: $5
+
+                logger.debug(
+                    f"🔍 [PARTIAL_TP_MIN_VALUE] {symbol}: "
+                    f"close_value=${close_value_usd:.2f}, "
+                    f"min_value=${min_partial_tp_value_usd:.2f}, "
+                    f"profile={balance_profile.get('name', 'unknown') if balance_profile else 'unknown'}"
+                )
+
+                # Если стоимость закрываемой части меньше минимума - не закрываем
+                if close_value_usd < min_partial_tp_value_usd:
+                    logger.warning(
+                        f"⚠️ [PARTIAL_TP_BLOCKED] {symbol}: Стоимость частичного закрытия ${close_value_usd:.2f} "
+                        f"меньше минимума ${min_partial_tp_value_usd:.2f} (profile={balance_profile.get('name', 'unknown') if balance_profile else 'unknown'}). "
+                        f"Частичное закрытие отменено (комиссии съедят прибыль)."
+                    )
+                    return {
+                        "success": False,
+                        "error": f"Стоимость частичного закрытия ${close_value_usd:.2f} < минимум ${min_partial_tp_value_usd:.2f}",
+                        "close_value_usd": close_value_usd,
+                        "min_value_usd": min_partial_tp_value_usd,
+                    }
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Ошибка проверки минимальной стоимости для Partial TP {symbol}: {e}. "
+                    f"Продолжаем без проверки."
+                )
+                # Продолжаем выполнение без проверки минимума
+
             # Размещаем ордер на частичное закрытие (MARKET, reduceOnly)
             result = await self.client.place_futures_order(
                 symbol=symbol,
@@ -6125,9 +6426,15 @@ class FuturesPositionManager:
                                         )
 
                     if position_data:
-                        await self._update_peak_profit(position_data)
+                        # ✅ РЕФАКТОРИНГ: Используем новый модуль PeakProfitTracker
+                        if self.peak_profit_tracker:
+                            await self.peak_profit_tracker.update_peak_profit(
+                                position_data
+                            )
+                        else:
+                            await self._update_peak_profit(position_data)  # Fallback
                         logger.debug(
-                            f"✅ [PARTIAL_CLOSE] {symbol}: _update_peak_profit вызван после partial_close"
+                            f"✅ [PARTIAL_CLOSE] {symbol}: peak_profit обновлен после partial_close"
                         )
                     else:
                         logger.warning(

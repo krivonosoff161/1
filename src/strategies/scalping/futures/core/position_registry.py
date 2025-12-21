@@ -9,7 +9,7 @@ import asyncio
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -41,6 +41,9 @@ class PositionMetadata:
     peak_profit_price: Optional[float] = None  # Цена при максимуме прибыли
     tp_extension_count: int = 0  # Количество продлений TP
     partial_tp_executed: bool = False  # ✅ ИСПРАВЛЕНО: Флаг выполнения partial_tp
+    scaling_history: Optional[
+        List[Dict[str, Any]]
+    ] = None  # ✅ НОВОЕ: История добавлений к позиции
 
     def to_dict(self) -> Dict[str, Any]:
         """Конвертация в словарь для сериализации"""
@@ -67,6 +70,7 @@ class PositionMetadata:
             "peak_profit_price": self.peak_profit_price,
             "tp_extension_count": self.tp_extension_count,
             "partial_tp_executed": self.partial_tp_executed,  # ✅ ИСПРАВЛЕНО
+            "scaling_history": self.scaling_history,  # ✅ НОВОЕ: История добавлений
         }
 
     @classmethod
@@ -146,6 +150,9 @@ class PositionMetadata:
             partial_tp_executed=data.get(
                 "partial_tp_executed", False
             ),  # ✅ ИСПРАВЛЕНО: bool - не нужен deepcopy
+            scaling_history=deepcopy(
+                data.get("scaling_history")
+            ),  # ✅ НОВОЕ: История добавлений (список dict)
         )
 
 

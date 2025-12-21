@@ -26,8 +26,10 @@ from src.strategies.modules.volume_profile_filter import VolumeProfileFilter
 from .adaptivity.regime_manager import AdaptiveRegimeManager
 from .filters import (FundingRateFilter, LiquidityFilter, MomentumFilter,
                       OrderFlowFilter, VolatilityRegimeFilter)
-# ✅ РЕФАКТОРИНГ: Импортируем FilterManager
+# ✅ РЕФАКТОРИНГ: Импортируем FilterManager и новые генераторы сигналов
 from .signals.filter_manager import FilterManager
+from .signals.macd_signal_generator import MACDSignalGenerator
+from .signals.rsi_signal_generator import RSISignalGenerator
 
 
 class FuturesSignalGenerator:
@@ -191,6 +193,10 @@ class FuturesSignalGenerator:
         self.mtf_filter = None
         self.pivot_filter = None
         self.volume_filter = None
+
+        # ✅ РЕФАКТОРИНГ: Генераторы сигналов (будут инициализированы в initialize)
+        self.rsi_signal_generator = None
+        self.macd_signal_generator = None
         self.funding_filter = None
         self.liquidity_filter = None
         self.order_flow_filter = None
@@ -1239,6 +1245,27 @@ class FuturesSignalGenerator:
                     self.filter_manager.set_volatility_filter(self.volatility_filter)
                 logger.info("✅ FilterManager: Все фильтры подключены")
 
+            # ✅ РЕФАКТОРИНГ: Инициализируем новые генераторы сигналов
+            self.rsi_signal_generator = RSISignalGenerator(
+                regime_managers=self.regime_managers,
+                regime_manager=self.regime_manager,
+                get_current_market_price_callback=self._get_current_market_price,
+                get_regime_indicators_params_callback=self._get_regime_indicators_params,
+                scalping_config=self.scalping_config,  # ✅ Передаем scalping_config для confidence_config
+            )
+
+            self.macd_signal_generator = MACDSignalGenerator(
+                regime_managers=self.regime_managers,
+                regime_manager=self.regime_manager,
+                get_current_market_price_callback=self._get_current_market_price,
+                get_regime_indicators_params_callback=self._get_regime_indicators_params,
+                scalping_config=self.scalping_config,  # ✅ Передаем scalping_config для confidence_config
+            )
+
+            logger.info(
+                "✅ Рефакторированные генераторы сигналов инициализированы: RSISignalGenerator, MACDSignalGenerator"
+            )
+
             self.is_initialized = True
             logger.info("✅ FuturesSignalGenerator инициализирован")
 
@@ -1734,23 +1761,32 @@ class FuturesSignalGenerator:
                         f"сигналы будут генерироваться без учета ADX"
                     )
 
+            # ✅ РЕФАКТОРИНГ: Используем новые модули генерации сигналов
             # RSI сигналы
-            rsi_signals = await self._generate_rsi_signals(
-                symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
-            )
-            # ✅ ОПТИМИЗАЦИЯ: Логирование через INFO уровень при наличии сигналов
-            # if rsi_signals:
-            #     logger.debug(f"✅ RSI дал {len(rsi_signals)} сигнал(ов) для {symbol}")
-            signals.extend(rsi_signals)
+            if self.rsi_signal_generator:
+                rsi_signals = await self.rsi_signal_generator.generate_signals(
+                    symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
+                )
+                signals.extend(rsi_signals)
+            else:
+                # Fallback на старый метод
+                rsi_signals = await self._generate_rsi_signals(
+                    symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
+                )
+                signals.extend(rsi_signals)
 
             # MACD сигналы
-            macd_signals = await self._generate_macd_signals(
-                symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
-            )
-            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
-            # if macd_signals:
-            #     logger.debug(f"✅ MACD дал {len(macd_signals)} сигнал(ов) для {symbol}")
-            signals.extend(macd_signals)
+            if self.macd_signal_generator:
+                macd_signals = await self.macd_signal_generator.generate_signals(
+                    symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
+                )
+                signals.extend(macd_signals)
+            else:
+                # Fallback на старый метод
+                macd_signals = await self._generate_macd_signals(
+                    symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
+                )
+                signals.extend(macd_signals)
 
             # Bollinger Bands сигналы
             bb_signals = await self._generate_bollinger_signals(
