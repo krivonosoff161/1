@@ -1596,17 +1596,27 @@ class FuturesPositionManager:
                     # ✅ ИСПРАВЛЕНИЕ: Работаем как со словарями, так и с объектами
                     if isinstance(regime_config, dict):
                         ph_enabled = regime_config.get("ph_enabled", False)
-                        ph_threshold_type = regime_config.get("ph_threshold_type", "fixed")
-                        ph_threshold_percent = float(regime_config.get("ph_threshold_percent", 0.0))
-                        ph_threshold = float(regime_config.get("ph_threshold", 0.0))  # Fallback для fixed
+                        ph_threshold_type = regime_config.get(
+                            "ph_threshold_type", "fixed"
+                        )
+                        ph_threshold_percent = float(
+                            regime_config.get("ph_threshold_percent", 0.0)
+                        )
+                        ph_threshold = float(
+                            regime_config.get("ph_threshold", 0.0)
+                        )  # Fallback для fixed
                         ph_time_limit = int(regime_config.get("ph_time_limit", 0))
                         config_min_holding = regime_config.get(
                             "min_holding_minutes", None
                         )
                     else:
                         ph_enabled = getattr(regime_config, "ph_enabled", False)
-                        ph_threshold_type = getattr(regime_config, "ph_threshold_type", "fixed")
-                        ph_threshold_percent = float(getattr(regime_config, "ph_threshold_percent", 0.0))
+                        ph_threshold_type = getattr(
+                            regime_config, "ph_threshold_type", "fixed"
+                        )
+                        ph_threshold_percent = float(
+                            getattr(regime_config, "ph_threshold_percent", 0.0)
+                        )
                         ph_threshold = float(
                             getattr(regime_config, "ph_threshold", 0.0)
                         )  # Fallback для fixed
@@ -1617,17 +1627,26 @@ class FuturesPositionManager:
 
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (21.12.2025): Адаптивный PH на основе процента от маржи
                     # Если ph_threshold_type = "margin_percent", рассчитываем ph_threshold от маржи
-                    if ph_threshold_type == "margin_percent" and ph_threshold_percent > 0:
+                    if (
+                        ph_threshold_type == "margin_percent"
+                        and ph_threshold_percent > 0
+                    ):
                         # Получаем margin_used из позиции или metadata
                         margin_used = float(position.get("margin", "0") or "0")
                         if margin_used <= 0:
                             # Пробуем получить из metadata
                             if hasattr(self, "orchestrator") and self.orchestrator:
                                 if hasattr(self.orchestrator, "position_registry"):
-                                    metadata = await self.orchestrator.position_registry.get_metadata(symbol)
-                                    if metadata and hasattr(metadata, "margin_used") and metadata.margin_used:
+                                    metadata = await self.orchestrator.position_registry.get_metadata(
+                                        symbol
+                                    )
+                                    if (
+                                        metadata
+                                        and hasattr(metadata, "margin_used")
+                                        and metadata.margin_used
+                                    ):
                                         margin_used = float(metadata.margin_used)
-                        
+
                         if margin_used > 0:
                             ph_threshold = margin_used * (ph_threshold_percent / 100.0)
                             logger.debug(
@@ -3698,13 +3717,17 @@ class FuturesPositionManager:
             # ✅ УЛУЧШЕНИЕ: Проверка перед закрытием - позиция существует на бирже
             if actual_position is None:
                 # 🔴 КРИТИЧНО: Детальное логирование race condition (от Грока)
-                logger.warning("="*80)
-                logger.warning(f"⚠️ [RACE_CONDITION] {symbol}: Попытка закрыть позицию, но она уже закрыта на бирже!")
+                logger.warning("=" * 80)
+                logger.warning(
+                    f"⚠️ [RACE_CONDITION] {symbol}: Попытка закрыть позицию, но она уже закрыта на бирже!"
+                )
                 logger.warning(f"   Причина закрытия: {reason}")
                 logger.warning(f"   Статус: Позиция отсутствует на бирже (size=0)")
-                logger.warning(f"   Действие: Удаляем из активных позиций и PositionRegistry")
-                logger.warning("="*80)
-                
+                logger.warning(
+                    f"   Действие: Удаляем из активных позиций и PositionRegistry"
+                )
+                logger.warning("=" * 80)
+
                 logger.info(
                     f"⚠️ Позиция {symbol} уже закрыта на бирже, удаляем из активных (reason={reason})"
                 )
@@ -3792,7 +3815,7 @@ class FuturesPositionManager:
             try:
                 unrealized_pnl = float(actual_position.get("upl", "0") or 0)
                 margin_used = float(actual_position.get("margin", "0") or 0)
-                
+
                 # Получаем комиссию из конфига
                 commission_config = getattr(self.scalping_config, "commission", None)
                 if commission_config is None:
@@ -3800,14 +3823,20 @@ class FuturesPositionManager:
                 if isinstance(commission_config, dict):
                     commission_rate = commission_config.get("trading_fee_rate", 0.001)
                 else:
-                    commission_rate = getattr(commission_config, "trading_fee_rate", 0.001)
-                
+                    commission_rate = getattr(
+                        commission_config, "trading_fee_rate", 0.001
+                    )
+
                 # Рассчитываем комиссию (вход + выход)
                 position_value = abs(size) * entry_price
                 total_commission = position_value * commission_rate * 2  # Вход + выход
-                
+
                 # Проверяем: если PnL < комиссия, не закрываем (кроме SL)
-                if unrealized_pnl < total_commission and reason not in ["sl", "sl_reached", "trailing_sl"]:
+                if unrealized_pnl < total_commission and reason not in [
+                    "sl",
+                    "sl_reached",
+                    "trailing_sl",
+                ]:
                     logger.warning(
                         f"⚠️ [PNL_COMMISSION_CHECK] {symbol}: Отмена закрытия | "
                         f"PnL=${unrealized_pnl:.4f} < комиссия=${total_commission:.4f} | "
@@ -3815,8 +3844,10 @@ class FuturesPositionManager:
                     )
                     return None
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка проверки PnL/комиссия для {symbol}: {e}, продолжаем закрытие")
-            
+                logger.debug(
+                    f"⚠️ Ошибка проверки PnL/комиссия для {symbol}: {e}, продолжаем закрытие"
+                )
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем актуальную цену из стакана перед закрытием
             # Проблема: markPx может быть устаревшим (как и best_bid при открытии)
             # Решение: получаем актуальную цену из стакана/тикера для точного логирования
@@ -5169,24 +5200,59 @@ class FuturesPositionManager:
                         self.scalping_config, "profit_drawdown", {}
                     )
                     if isinstance(profit_drawdown_config, dict):
-                        min_profit_to_activate_type = profit_drawdown_config.get("min_profit_to_activate_type", "fixed")
-                        min_profit_to_activate_percent = float(profit_drawdown_config.get("min_profit_to_activate_percent", 0.0))
-                        min_profit_to_activate_usd = float(profit_drawdown_config.get("min_profit_to_activate_usd", 0.5))
+                        min_profit_to_activate_type = profit_drawdown_config.get(
+                            "min_profit_to_activate_type", "fixed"
+                        )
+                        min_profit_to_activate_percent = float(
+                            profit_drawdown_config.get(
+                                "min_profit_to_activate_percent", 0.0
+                            )
+                        )
+                        min_profit_to_activate_usd = float(
+                            profit_drawdown_config.get(
+                                "min_profit_to_activate_usd", 0.5
+                            )
+                        )
                     else:
-                        min_profit_to_activate_type = getattr(profit_drawdown_config, "min_profit_to_activate_type", "fixed")
-                        min_profit_to_activate_percent = float(getattr(profit_drawdown_config, "min_profit_to_activate_percent", 0.0))
-                        min_profit_to_activate_usd = float(getattr(profit_drawdown_config, "min_profit_to_activate_usd", 0.5))
-                    
+                        min_profit_to_activate_type = getattr(
+                            profit_drawdown_config,
+                            "min_profit_to_activate_type",
+                            "fixed",
+                        )
+                        min_profit_to_activate_percent = float(
+                            getattr(
+                                profit_drawdown_config,
+                                "min_profit_to_activate_percent",
+                                0.0,
+                            )
+                        )
+                        min_profit_to_activate_usd = float(
+                            getattr(
+                                profit_drawdown_config,
+                                "min_profit_to_activate_usd",
+                                0.5,
+                            )
+                        )
+
                     # ✅ Адаптивный min_profit_to_activate на основе процента от маржи
-                    if min_profit_to_activate_type == "margin_percent" and min_profit_to_activate_percent > 0:
+                    if (
+                        min_profit_to_activate_type == "margin_percent"
+                        and min_profit_to_activate_percent > 0
+                    ):
                         margin_used = float(position.get("margin", "0") or "0")
                         if margin_used <= 0:
                             # Пробуем получить из metadata
-                            if metadata and hasattr(metadata, "margin_used") and metadata.margin_used:
+                            if (
+                                metadata
+                                and hasattr(metadata, "margin_used")
+                                and metadata.margin_used
+                            ):
                                 margin_used = float(metadata.margin_used)
-                        
+
                         if margin_used > 0:
-                            min_profit_to_activate_usd = margin_used * (min_profit_to_activate_percent / 100.0)
+                            min_profit_to_activate_usd = margin_used * (
+                                min_profit_to_activate_percent / 100.0
+                            )
                             logger.debug(
                                 f"✅ [ADAPTIVE_PROFIT_DRAWDOWN] {symbol}: min_profit_to_activate рассчитан от маржи | "
                                 f"margin=${margin_used:.2f}, percent={min_profit_to_activate_percent:.2f}%, "
@@ -5207,7 +5273,7 @@ class FuturesPositionManager:
                         f"⚠️ [PROFIT_DRAWDOWN] {symbol}: Ошибка получения min_profit_to_activate из конфига: {e}, "
                         f"используем fallback=${min_profit_to_activate_usd:.2f}"
                     )
-                
+
                 # ✅ Проверка: Profit Drawdown активируется только если peak_profit >= min_profit_to_activate
                 if peak_profit < min_profit_to_activate_usd:
                     logger.debug(
@@ -5674,17 +5740,21 @@ class FuturesPositionManager:
                 size = float(pos_data.get("pos", "0"))
                 if size == 0:
                     # 🔴 КРИТИЧНО: Детальное логирование race condition (от Грока)
-                    logger.warning("="*80)
-                    logger.warning(f"⚠️ [RACE_CONDITION] {symbol}: Попытка закрыть позицию с size=0!")
+                    logger.warning("=" * 80)
+                    logger.warning(
+                        f"⚠️ [RACE_CONDITION] {symbol}: Попытка закрыть позицию с size=0!"
+                    )
                     logger.warning(f"   Причина закрытия: {reason}")
                     logger.warning(f"   Статус: Позиция уже закрыта на бирже")
-                    logger.warning(f"   Действие: Пропускаем закрытие, синхронизируем состояние")
-                    logger.warning("="*80)
-                    
+                    logger.warning(
+                        f"   Действие: Пропускаем закрытие, синхронизируем состояние"
+                    )
+                    logger.warning("=" * 80)
+
                     # Синхронизируем состояние - удаляем из active_positions
                     if symbol in self.active_positions:
                         del self.active_positions[symbol]
-                    
+
                     # Удаляем из PositionRegistry
                     position_registry = None
                     if hasattr(self, "position_registry") and self.position_registry:
@@ -5692,14 +5762,18 @@ class FuturesPositionManager:
                     elif hasattr(self, "orchestrator") and self.orchestrator:
                         if hasattr(self.orchestrator, "position_registry"):
                             position_registry = self.orchestrator.position_registry
-                    
+
                     if position_registry:
                         try:
                             await position_registry.unregister_position(symbol)
-                            logger.debug(f"✅ {symbol} удален из PositionRegistry после обнаружения size=0")
+                            logger.debug(
+                                f"✅ {symbol} удален из PositionRegistry после обнаружения size=0"
+                            )
                         except Exception as e:
-                            logger.warning(f"⚠️ Ошибка удаления {symbol} из PositionRegistry: {e}")
-                    
+                            logger.warning(
+                                f"⚠️ Ошибка удаления {symbol} из PositionRegistry: {e}"
+                            )
+
                     return None
 
                 side = pos_data.get("posSide", "long")
@@ -6237,13 +6311,21 @@ class FuturesPositionManager:
                 if balance_profile:
                     profile_name = balance_profile.get("name", "small")
                     if profile_name == "small":
-                        min_partial_tp_value_usd = 1.5  # ✅ ИСПРАВЛЕНО: $1.5 для малого баланса (было $3.0)
+                        min_partial_tp_value_usd = (
+                            1.5  # ✅ ИСПРАВЛЕНО: $1.5 для малого баланса (было $3.0)
+                        )
                     elif profile_name == "medium":
-                        min_partial_tp_value_usd = 2.5  # ✅ ИСПРАВЛЕНО: $2.5 для среднего баланса (было $5.0)
+                        min_partial_tp_value_usd = (
+                            2.5  # ✅ ИСПРАВЛЕНО: $2.5 для среднего баланса (было $5.0)
+                        )
                     else:  # large
-                        min_partial_tp_value_usd = 3.0  # ✅ ИСПРАВЛЕНО: $3.0 для большого баланса (было $10.0)
+                        min_partial_tp_value_usd = (
+                            3.0  # ✅ ИСПРАВЛЕНО: $3.0 для большого баланса (было $10.0)
+                        )
                 else:
-                    min_partial_tp_value_usd = 2.5  # ✅ ИСПРАВЛЕНО: Fallback: $2.5 (было $5.0)
+                    min_partial_tp_value_usd = (
+                        2.5  # ✅ ИСПРАВЛЕНО: Fallback: $2.5 (было $5.0)
+                    )
 
                 logger.debug(
                     f"🔍 [PARTIAL_TP_MIN_VALUE] {symbol}: "
@@ -6265,35 +6347,47 @@ class FuturesPositionManager:
                         "close_value_usd": close_value_usd,
                         "min_value_usd": min_partial_tp_value_usd,
                     }
-                
+
                 # ✅ ГРОК РЕКОМЕНДАЦИЯ: Проверка минимальной чистой прибыли после комиссии
                 try:
                     # Получаем min_profit_after_commission из конфига
                     partial_tp_config = getattr(self.scalping_config, "partial_tp", {})
                     if isinstance(partial_tp_config, dict):
-                        min_profit_after_commission = partial_tp_config.get("min_profit_after_commission", 0.5)
+                        min_profit_after_commission = partial_tp_config.get(
+                            "min_profit_after_commission", 0.5
+                        )
                     else:
-                        min_profit_after_commission = getattr(partial_tp_config, "min_profit_after_commission", 0.5)
-                    
+                        min_profit_after_commission = getattr(
+                            partial_tp_config, "min_profit_after_commission", 0.5
+                        )
+
                     # Рассчитываем чистую прибыль partial закрытия
                     if side.lower() == "long":
                         partial_pnl = close_size_coins * (current_price - entry_price)
                     else:  # short
                         partial_pnl = close_size_coins * (entry_price - current_price)
-                    
+
                     # Получаем комиссию из конфига
-                    commission_config = getattr(self.scalping_config, "commission", None)
+                    commission_config = getattr(
+                        self.scalping_config, "commission", None
+                    )
                     if commission_config is None:
                         commission_config = getattr(self.config, "commission", {})
                     if isinstance(commission_config, dict):
-                        commission_rate = commission_config.get("trading_fee_rate", 0.001)
+                        commission_rate = commission_config.get(
+                            "trading_fee_rate", 0.001
+                        )
                     else:
-                        commission_rate = getattr(commission_config, "trading_fee_rate", 0.001)
-                    
+                        commission_rate = getattr(
+                            commission_config, "trading_fee_rate", 0.001
+                        )
+
                     # Комиссия за вход + выход для частичного закрытия
-                    partial_commission = close_size_coins * current_price * commission_rate * 2
+                    partial_commission = (
+                        close_size_coins * current_price * commission_rate * 2
+                    )
                     net_partial_pnl = partial_pnl - partial_commission
-                    
+
                     if net_partial_pnl < min_profit_after_commission:
                         logger.warning(
                             f"⚠️ [PARTIAL_TP_BLOCKED] {symbol}: Чистая прибыль ${net_partial_pnl:.2f} "
@@ -6306,7 +6400,7 @@ class FuturesPositionManager:
                             "net_partial_pnl": net_partial_pnl,
                             "min_profit_after_commission": min_profit_after_commission,
                         }
-                    
+
                     logger.debug(
                         f"✅ [PARTIAL_TP_PROFIT_CHECK] {symbol}: Чистая прибыль ${net_partial_pnl:.2f} >= "
                         f"минимум ${min_profit_after_commission:.2f} (gross=${partial_pnl:.2f}, commission=${partial_commission:.2f})"
@@ -6493,7 +6587,7 @@ class FuturesPositionManager:
                 # 🔴 КРИТИЧНО: Детальное логирование Partial TP (от Грока)
                 partial_pct = fraction * 100
                 remaining_pct = (1.0 - fraction) * 100
-                
+
                 # Получаем entry_time для расчета длительности
                 entry_time_for_log = None
                 if symbol in self.active_positions:
@@ -6505,15 +6599,19 @@ class FuturesPositionManager:
                         position_registry_for_log = self.position_registry
                     elif hasattr(self, "orchestrator") and self.orchestrator:
                         if hasattr(self.orchestrator, "position_registry"):
-                            position_registry_for_log = self.orchestrator.position_registry
+                            position_registry_for_log = (
+                                self.orchestrator.position_registry
+                            )
                     if position_registry_for_log:
                         try:
-                            metadata = await position_registry_for_log.get_metadata(symbol)
+                            metadata = await position_registry_for_log.get_metadata(
+                                symbol
+                            )
                             if metadata and getattr(metadata, "entry_time", None):
                                 entry_time_for_log = metadata.entry_time
                         except:
                             pass
-                
+
                 # Рассчитываем длительность
                 duration_str = "N/A"
                 duration_sec_partial = 0.0
@@ -6521,30 +6619,44 @@ class FuturesPositionManager:
                     try:
                         if isinstance(entry_time_for_log, datetime):
                             if entry_time_for_log.tzinfo is None:
-                                entry_time_for_log = entry_time_for_log.replace(tzinfo=timezone.utc)
+                                entry_time_for_log = entry_time_for_log.replace(
+                                    tzinfo=timezone.utc
+                                )
                             elif entry_time_for_log.tzinfo != timezone.utc:
-                                entry_time_for_log = entry_time_for_log.astimezone(timezone.utc)
-                            duration_sec_partial = (datetime.now(timezone.utc) - entry_time_for_log).total_seconds()
+                                entry_time_for_log = entry_time_for_log.astimezone(
+                                    timezone.utc
+                                )
+                            duration_sec_partial = (
+                                datetime.now(timezone.utc) - entry_time_for_log
+                            ).total_seconds()
                             duration_min = duration_sec_partial / 60.0
                             duration_str = f"{duration_sec_partial:.0f} сек ({duration_min:.2f} мин)"
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка расчета длительности для Partial TP: {e}")
-                
-                logger.info("="*80)
+                        logger.debug(
+                            f"⚠️ Ошибка расчета длительности для Partial TP: {e}"
+                        )
+
+                logger.info("=" * 80)
                 logger.info(f"📊 PARTIAL TP: {symbol} {side.upper()}")
-                logger.info("="*80)
-                logger.info(f"   ✂️ Закрыто: {close_size_coins:.8f} монет ({close_size_contracts:.6f} контрактов) = {partial_pct:.1f}%")
-                logger.info(f"   📦 Осталось: {remaining_size_coins:.8f} монет ({remaining_size_contracts:.6f} контрактов) = {remaining_pct:.1f}%")
-                logger.info(f"   💵 PnL закрытой части: ${net_partial_pnl:+.4f} USDT (gross=${partial_pnl:+.4f}, commission=${commission:.4f})")
+                logger.info("=" * 80)
+                logger.info(
+                    f"   ✂️ Закрыто: {close_size_coins:.8f} монет ({close_size_contracts:.6f} контрактов) = {partial_pct:.1f}%"
+                )
+                logger.info(
+                    f"   📦 Осталось: {remaining_size_coins:.8f} монет ({remaining_size_contracts:.6f} контрактов) = {remaining_pct:.1f}%"
+                )
+                logger.info(
+                    f"   💵 PnL закрытой части: ${net_partial_pnl:+.4f} USDT (gross=${partial_pnl:+.4f}, commission=${commission:.4f})"
+                )
                 logger.info(f"   📊 Entry price: ${entry_price:.6f}")
                 logger.info(f"   📊 Exit price: ${current_price:.6f}")
                 logger.info(f"   ⏱️  Длительность: {duration_str}")
-                logger.info("="*80)
-                
+                logger.info("=" * 80)
+
                 # 🔴 JSON-логирование Partial TP
                 try:
                     import json
-                    
+
                     partial_tp_data = {
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "event": "partial_tp",
@@ -6564,7 +6676,7 @@ class FuturesPositionManager:
                         "duration_sec": duration_sec_partial,
                         "reason": reason,
                     }
-                    
+
                     partial_tp_file = f"logs/futures/structured/partial_tp_{datetime.now().strftime('%Y-%m-%d')}.jsonl"
                     os.makedirs(os.path.dirname(partial_tp_file), exist_ok=True)
                     with open(partial_tp_file, "a", encoding="utf-8") as f:
@@ -6572,7 +6684,7 @@ class FuturesPositionManager:
                     logger.debug(f"✅ Partial TP залогировано в JSON: {partial_tp_file}")
                 except Exception as e:
                     logger.error(f"❌ Ошибка JSON-логирования Partial TP: {e}")
-                
+
                 logger.info(
                     f"💰 Частичное закрытие {symbol}: "
                     f"PnL={net_partial_pnl:+.2f} USDT, "

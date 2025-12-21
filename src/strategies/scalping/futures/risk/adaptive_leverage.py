@@ -135,12 +135,16 @@ class AdaptiveLeverage:
 
                     if leverage != original_leverage:
                         # 🔴 КРИТИЧНО: Детальное логирование изменения leverage (от Грока)
-                        logger.warning("="*60)
-                        logger.warning(f"⚠️ [ADAPTIVE_LEVERAGE] {symbol}: Леверидж изменен биржей!")
+                        logger.warning("=" * 60)
+                        logger.warning(
+                            f"⚠️ [ADAPTIVE_LEVERAGE] {symbol}: Леверидж изменен биржей!"
+                        )
                         logger.warning(f"   Заявленный: {original_leverage}x")
                         logger.warning(f"   Фактический: {leverage}x")
-                        logger.warning(f"   Причина: Округление до ближайшего доступного на OKX")
-                        logger.warning("="*60)
+                        logger.warning(
+                            f"   Причина: Округление до ближайшего доступного на OKX"
+                        )
+                        logger.warning("=" * 60)
                     else:
                         logger.info(
                             f"✅ [ADAPTIVE_LEVERAGE] {symbol}: Округление не требуется | "

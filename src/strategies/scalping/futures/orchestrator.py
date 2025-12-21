@@ -2086,13 +2086,13 @@ class FuturesScalpingOrchestrator:
                 # ✅ FIX: DRIFT_REMOVE log — позиция в реестре, но нет на бирже
                 # 🔴 КРИТИЧНО: Exchange-side closure detection (от Грока)
                 local_position = self.active_positions.get(symbol, {})
-                
+
                 # Получаем детали позиции для логирования
                 entry_price = local_position.get("entry_price", 0)
                 size = local_position.get("size", 0)
                 side = local_position.get("position_side", "unknown")
                 entry_time = local_position.get("entry_time")
-                
+
                 # Рассчитываем время в позиции
                 duration_sec = 0.0
                 if entry_time:
@@ -2101,17 +2101,19 @@ class FuturesScalpingOrchestrator:
                             entry_time = entry_time.replace(tzinfo=timezone.utc)
                         elif entry_time.tzinfo != timezone.utc:
                             entry_time = entry_time.astimezone(timezone.utc)
-                        duration_sec = (datetime.now(timezone.utc) - entry_time).total_seconds()
+                        duration_sec = (
+                            datetime.now(timezone.utc) - entry_time
+                        ).total_seconds()
                     elif isinstance(entry_time, (int, float)):
                         duration_sec = time.time() - entry_time
-                
+
                 duration_min = duration_sec / 60.0
                 duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
-                
+
                 # 🔴 КРИТИЧНОЕ ЛОГИРОВАНИЕ: Exchange-side closure
-                logger.critical("="*80)
+                logger.critical("=" * 80)
                 logger.critical(f"🚨 ОБНАРУЖЕНО ЗАКРЫТИЕ НА БИРЖЕ: {symbol}")
-                logger.critical("="*80)
+                logger.critical("=" * 80)
                 logger.critical(f"   ⚠️ Позиция закрыта на бирже, но НЕ через бота!")
                 logger.critical(f"   📊 Локальная позиция:")
                 logger.critical(f"      Side: {side.upper()}")
@@ -2125,13 +2127,13 @@ class FuturesScalpingOrchestrator:
                 logger.critical(f"      - ADL (Auto-Deleveraging)")
                 logger.critical(f"      - Manual close (пользователь закрыл вручную)")
                 logger.critical(f"   📝 Статус: Синхронизируем локальное состояние...")
-                logger.critical("="*80)
-                
+                logger.critical("=" * 80)
+
                 # 🔴 JSON-логирование exchange-side closure
                 try:
                     import json
                     from datetime import datetime, timezone
-                    
+
                     closure_data = {
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "event": "exchange_side_closure",
@@ -2139,20 +2141,26 @@ class FuturesScalpingOrchestrator:
                         "side": side.upper(),
                         "size": size,
                         "entry_price": entry_price,
-                        "entry_time": entry_time.isoformat() if isinstance(entry_time, datetime) else str(entry_time),
+                        "entry_time": entry_time.isoformat()
+                        if isinstance(entry_time, datetime)
+                        else str(entry_time),
                         "duration_sec": duration_sec,
                         "reason": "exchange_side",
                         "possible_causes": ["TSL", "Liquidation", "ADL", "Manual"],
                     }
-                    
+
                     closures_file = f"logs/futures/structured/position_closures_{datetime.now().strftime('%Y-%m-%d')}.jsonl"
                     os.makedirs(os.path.dirname(closures_file), exist_ok=True)
                     with open(closures_file, "a", encoding="utf-8") as f:
                         f.write(json.dumps(closure_data, ensure_ascii=False) + "\n")
-                    logger.debug(f"✅ Exchange-side closure залогировано в JSON: {closures_file}")
+                    logger.debug(
+                        f"✅ Exchange-side closure залогировано в JSON: {closures_file}"
+                    )
                 except Exception as e:
-                    logger.error(f"❌ Ошибка JSON-логирования exchange-side closure: {e}")
-                
+                    logger.error(
+                        f"❌ Ошибка JSON-логирования exchange-side closure: {e}"
+                    )
+
                 logger.info(
                     f"♻️ Позиция {symbol} отсутствует на бирже, очищаем локальное состояние"
                 )
@@ -3925,7 +3933,7 @@ class FuturesScalpingOrchestrator:
                 regime = "unknown"
                 leverage = "unknown"
                 signal_strength = 0.0
-                
+
                 try:
                     # Получаем актуальную позицию с биржи для PnL
                     positions = await self.position_manager.client.get_positions(symbol)
@@ -3950,8 +3958,10 @@ class FuturesScalpingOrchestrator:
                                         leverage = f"{int(leverage_raw)}x"
                                     break
                 except Exception as e:
-                    logger.debug(f"⚠️ Ошибка получения деталей позиции для {symbol}: {e}")
-                
+                    logger.debug(
+                        f"⚠️ Ошибка получения деталей позиции для {symbol}: {e}"
+                    )
+
                 # ✅ ИСПРАВЛЕНИЕ (от Грока): Получаем regime, leverage и signal_strength из metadata
                 try:
                     if hasattr(self, "position_registry") and self.position_registry:
@@ -3962,16 +3972,18 @@ class FuturesScalpingOrchestrator:
                             if metadata.leverage:
                                 leverage = f"{metadata.leverage}x"
                             # signal_strength может быть в metadata или в position
-                            signal_strength = getattr(metadata, "signal_strength", None) or position.get("signal_strength", 0.0)
+                            signal_strength = getattr(
+                                metadata, "signal_strength", None
+                            ) or position.get("signal_strength", 0.0)
                 except Exception as e:
                     logger.debug(f"⚠️ Ошибка получения metadata для {symbol}: {e}")
                     # Fallback к position
                     regime = position.get("regime", regime)
                     signal_strength = position.get("signal_strength", 0.0)
-                
-                logger.info("="*80)
+
+                logger.info("=" * 80)
                 logger.info(f"📊 [PRE_CLOSE] {symbol}: Принято решение закрыть")
-                logger.info("="*80)
+                logger.info("=" * 80)
                 logger.info(f"   Причина: {reason}")
                 logger.info(f"   Side: {side.upper()}")
                 logger.info(f"   Size: {size} контрактов")
@@ -3982,8 +3994,8 @@ class FuturesScalpingOrchestrator:
                 logger.info(f"   Regime: {regime}")
                 logger.info(f"   Leverage: {leverage}")
                 logger.info(f"   Signal strength: {signal_strength:.2f}")
-                logger.info("="*80)
-                
+                logger.info("=" * 80)
+
                 logger.info(
                     f"🛑 Закрытие позиции {symbol}: {reason} "
                     f"(side={side}, size={size}, entry={entry_price}, time={minutes_in_position:.2f} мин)"

@@ -422,7 +422,9 @@ class OKXFuturesClient:
                         "ctVal": float(inst.get("ctVal", 0.01)),  # Contract value
                         "lotSz": float(inst.get("lotSz", 0.01)),  # Lot size
                         "minSz": float(inst.get("minSz", 0.01)),  # Minimum size
-                        "tickSz": float(inst.get("tickSz", 0.1)),  # ✅ НОВОЕ (КИМИ): Tick size для округления цены
+                        "tickSz": float(
+                            inst.get("tickSz", 0.1)
+                        ),  # ✅ НОВОЕ (КИМИ): Tick size для округления цены
                         "max_leverage": leverage_info[
                             "max_leverage"
                         ],  # ✅ НОВОЕ: Максимальный leverage
@@ -1093,15 +1095,17 @@ class OKXFuturesClient:
 
         if price:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (КИМИ): Округляем цену до tickSize OKX вместо 2 знаков
-            tick_sz = instrument_details.get("tickSz", 0.1)  # Получаем tickSize из деталей инструмента
+            tick_sz = instrument_details.get(
+                "tickSz", 0.1
+            )  # Получаем tickSize из деталей инструмента
             rounded_price = round_to_step(price, tick_sz)  # Округляем до tickSize
-            
+
             if rounded_price != price:
                 logger.debug(
                     f"📊 Цена округлена для {symbol}: {price:.8f} → {rounded_price:.8f} "
                     f"(tickSz={tick_sz})"
                 )
-            
+
             payload["px"] = str(rounded_price)
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавляем clOrdId для предотвращения дубликатов

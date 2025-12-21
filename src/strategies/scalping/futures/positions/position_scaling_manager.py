@@ -93,7 +93,9 @@ class PositionScalingManager:
                             profile_config, "min_interval_seconds", 30
                         ),
                         "max_loss_for_addition": getattr(
-                            profile_config, "max_loss_for_addition", -5.0  # ✅ ИСПРАВЛЕНО (КИМИ): -5.0% по умолчанию
+                            profile_config,
+                            "max_loss_for_addition",
+                            -5.0,  # ✅ ИСПРАВЛЕНО (КИМИ): -5.0% по умолчанию
                         ),
                         "ladder": getattr(
                             profile_config,

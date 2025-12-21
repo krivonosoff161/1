@@ -386,4 +386,3 @@ class RSISignalGenerator:
             )
 
         return signals
-

@@ -1,0 +1,1 @@
+{"timestamp": "2025-12-21T11:15:11.643074+00:00", "event": "exchange_side_closure", "symbol": "BTC-USDT", "side": "SHORT", "size": 0.0028000000000000004, "entry_price": 88603.6, "entry_time": "None", "duration_sec": 0.0, "reason": "exchange_side", "possible_causes": ["TSL", "Liquidation", "ADL", "Manual"]}

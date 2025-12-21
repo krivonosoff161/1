@@ -1789,10 +1789,16 @@ class ExitAnalyzer:
             # 5. Проверка partial_tp с учетом adaptive_min_holding
             partial_tp_params = self._get_partial_tp_params("ranging")
             # ✅ ИСПРАВЛЕНИЕ (21.12.2025): Определяем trigger_percent до блока if для использования в логировании
-            trigger_percent = partial_tp_params.get("trigger_percent", 0.6) if partial_tp_params.get("enabled", False) else None
+            trigger_percent = (
+                partial_tp_params.get("trigger_percent", 0.6)
+                if partial_tp_params.get("enabled", False)
+                else None
+            )
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: partial_tp enabled={partial_tp_params.get('enabled', False)}, "
-                f"trigger_percent={trigger_percent:.2f}%" if trigger_percent is not None else f"trigger_percent=N/A"
+                f"trigger_percent={trigger_percent:.2f}%"
+                if trigger_percent is not None
+                else f"trigger_percent=N/A"
             )
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.6)
@@ -2035,14 +2041,15 @@ class ExitAnalyzer:
                     "minutes_in_position": minutes_in_position,
                     "max_holding_minutes": actual_max_holding,
                 }
-            elif (
-                minutes_in_position is not None
-                and isinstance(minutes_in_position, (int, float))
+            elif minutes_in_position is not None and isinstance(
+                minutes_in_position, (int, float)
             ):
                 # ✅ ИСПРАВЛЕНО: Конвертируем max_holding_minutes в float перед сравнением
                 try:
                     max_holding_minutes_float = (
-                        float(max_holding_minutes) if max_holding_minutes is not None else 0.0
+                        float(max_holding_minutes)
+                        if max_holding_minutes is not None
+                        else 0.0
                     )
                 except (TypeError, ValueError):
                     logger.warning(
@@ -2050,7 +2057,7 @@ class ExitAnalyzer:
                         f"используем actual_max_holding_float={actual_max_holding_float}"
                     )
                     max_holding_minutes_float = actual_max_holding_float
-                
+
                 if float(minutes_in_position) >= max_holding_minutes_float:
                     # Базовое время превышено, но есть продление - проверяем прибыль
                     if (
@@ -2076,9 +2083,9 @@ class ExitAnalyzer:
 
             # ✅ ИСПРАВЛЕНИЕ (21.12.2025): Используем правильное значение trigger_percent в логировании
             partial_tp_status = (
-                f"partial_tp={trigger_percent:.2f}% (не достигнут)" 
+                f"partial_tp={trigger_percent:.2f}% (не достигнут)"
                 if trigger_percent is not None and pnl_percent < trigger_percent
-                else f"partial_tp={trigger_percent:.2f}% (достигнут, но блокируется)" 
+                else f"partial_tp={trigger_percent:.2f}% (достигнут, но блокируется)"
                 if trigger_percent is not None
                 else "partial_tp=disabled"
             )

@@ -172,13 +172,15 @@ class PositionSync:
 
                         # ✅ ИСПРАВЛЕНО: Создаем словарь position и PositionMetadata
                         from .position_registry import PositionMetadata
-                        
+
                         # Создаем словарь position с данными из биржи
                         position_dict = pos.copy()
-                        
+
                         # Создаем метаданные
                         metadata = PositionMetadata(
-                            entry_time=datetime.now(timezone.utc),  # Используем текущее время, т.к. точное время входа неизвестно
+                            entry_time=datetime.now(
+                                timezone.utc
+                            ),  # Используем текущее время, т.к. точное время входа неизвестно
                             position_side=pos_side,
                             entry_price=entry_price if entry_price > 0 else None,
                             size_in_coins=size_in_coins,
