@@ -1835,27 +1835,37 @@ class FuturesPositionManager:
                 # Для позиции с комиссией commission, чтобы достичь net_pnl >= ph_threshold,
                 # нужно gross_pnl >= ph_threshold + commission
                 ph_threshold_adjusted = ph_threshold + commission
-                
+
                 # ✅ ГРОК ФИКС: Добавляем абсолютный минимум и comm buffer (1.5x комиссии)
                 ph_min_absolute_usd = 0.05  # Default
                 ph_comm_buffer_multiplier = 1.5  # Default
                 try:
                     if isinstance(regime_config, dict):
-                        ph_min_absolute_usd = float(regime_config.get("ph_min_absolute_usd", 0.05))
-                        ph_comm_buffer_multiplier = float(regime_config.get("ph_comm_buffer_multiplier", 1.5))
+                        ph_min_absolute_usd = float(
+                            regime_config.get("ph_min_absolute_usd", 0.05)
+                        )
+                        ph_comm_buffer_multiplier = float(
+                            regime_config.get("ph_comm_buffer_multiplier", 1.5)
+                        )
                     else:
-                        ph_min_absolute_usd = float(getattr(regime_config, "ph_min_absolute_usd", 0.05))
-                        ph_comm_buffer_multiplier = float(getattr(regime_config, "ph_comm_buffer_multiplier", 1.5))
+                        ph_min_absolute_usd = float(
+                            getattr(regime_config, "ph_min_absolute_usd", 0.05)
+                        )
+                        ph_comm_buffer_multiplier = float(
+                            getattr(regime_config, "ph_comm_buffer_multiplier", 1.5)
+                        )
                 except Exception:
                     pass
-                
+
                 # ✅ ГРОК ФИКС: Buffer 1.5x комиссии для PH (early PH с защитой от проскальзывания)
                 expected_comm = commission  # Уже рассчитана выше
                 comm_buffer = expected_comm * ph_comm_buffer_multiplier
-                
+
                 # ✅ ГРОК ФИКС: Используем максимум из процентного порога, абсолютного минимума и comm buffer
-                ph_threshold_adjusted = max(ph_threshold_adjusted, ph_min_absolute_usd, comm_buffer)
-                
+                ph_threshold_adjusted = max(
+                    ph_threshold_adjusted, ph_min_absolute_usd, comm_buffer
+                )
+
                 logger.debug(
                     f"🔍 PH для {symbol}: Порог скорректирован с учетом комиссий, абсолютного минимума и comm buffer | "
                     f"original=${ph_threshold:.2f}, commission=${commission:.4f}, "
@@ -4996,16 +5006,24 @@ class FuturesPositionManager:
                         )
 
                     # ✅ ГРОК КОМПРОМИСС: Получаем множитель по режиму (для ranging = 0.25 → 20%)
-                    multiplier = 0.25 if regime == "ranging" else (2.0 if regime == "trending" else 1.0)  # Default по режиму
+                    multiplier = (
+                        0.25
+                        if regime == "ranging"
+                        else (2.0 if regime == "trending" else 1.0)
+                    )  # Default по режиму
                     if isinstance(profit_drawdown_config, dict):
                         by_regime = profit_drawdown_config.get("by_regime", {})
                         regime_config = by_regime.get(regime, {})
-                        multiplier = regime_config.get("multiplier", multiplier)  # Используем default если нет в конфиге
+                        multiplier = regime_config.get(
+                            "multiplier", multiplier
+                        )  # Используем default если нет в конфиге
                     else:
                         by_regime = getattr(profit_drawdown_config, "by_regime", {})
                         if hasattr(by_regime, regime):
                             regime_config = getattr(by_regime, regime)
-                            multiplier = getattr(regime_config, "multiplier", multiplier)  # Используем default если нет в конфиге
+                            multiplier = getattr(
+                                regime_config, "multiplier", multiplier
+                            )  # Используем default если нет в конфиге
 
                     drawdown_threshold = base_drawdown * multiplier
                     logger.debug(

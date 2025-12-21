@@ -59,27 +59,31 @@ class FuturesSignalGenerator:
 
         # Менеджер индикаторов
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Используем TA-Lib обертки для ускорения на 70-85%
-        from src.indicators import (
-            TALibRSI, TALibEMA, TALibATR, TALibMACD, TALibSMA, TALibBollingerBands,
-            TALIB_AVAILABLE
-        )
-        
+        from src.indicators import (TALIB_AVAILABLE, TALibATR,
+                                    TALibBollingerBands, TALibEMA, TALibMACD,
+                                    TALibRSI, TALibSMA)
+
         if TALIB_AVAILABLE:
             from loguru import logger
-            logger.info("✅ TA-Lib индикаторы доступны - используется оптимизированная версия (ускорение 70-85%)")
+
+            logger.info(
+                "✅ TA-Lib индикаторы доступны - используется оптимизированная версия (ускорение 70-85%)"
+            )
         else:
             # Fallback на обычные индикаторы
             from loguru import logger
+
             logger.warning(
                 "⚠️ TA-Lib недоступен - используется fallback на обычные индикаторы. "
                 "Производительность может быть ниже на 70-85%. "
                 "Рекомендуется установить TA-Lib: pip install TA-Lib"
             )
-            from src.indicators import (
-                RSI as TALibRSI, ExponentialMovingAverage as TALibEMA,
-                ATR as TALibATR, MACD as TALibMACD,
-                SimpleMovingAverage as TALibSMA, BollingerBands as TALibBollingerBands
-            )
+            from src.indicators import ATR as TALibATR
+            from src.indicators import MACD as TALibMACD
+            from src.indicators import RSI as TALibRSI
+            from src.indicators import BollingerBands as TALibBollingerBands
+            from src.indicators import ExponentialMovingAverage as TALibEMA
+            from src.indicators import SimpleMovingAverage as TALibSMA
 
         self.indicator_manager = IndicatorManager()
 
@@ -171,12 +175,12 @@ class FuturesSignalGenerator:
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Используем TA-Lib обертки для ускорения на 70-85%
         self.indicator_manager.add_indicator(
             "RSI",
-            TALibRSI(period=rsi_period, overbought=rsi_overbought, oversold=rsi_oversold),
+            TALibRSI(
+                period=rsi_period, overbought=rsi_overbought, oversold=rsi_oversold
+            ),
         )
         self.indicator_manager.add_indicator("ATR", TALibATR(period=atr_period))
-        self.indicator_manager.add_indicator(
-            "SMA", TALibSMA(period=sma_period)
-        )
+        self.indicator_manager.add_indicator("SMA", TALibSMA(period=sma_period))
         # ✅ Добавляем индикаторы, которые используются в генерации сигналов
         self.indicator_manager.add_indicator(
             "MACD",
@@ -189,12 +193,8 @@ class FuturesSignalGenerator:
             "BollingerBands",
             TALibBollingerBands(period=bb_period, std_multiplier=bb_std_multiplier),
         )
-        self.indicator_manager.add_indicator(
-            "EMA_12", TALibEMA(period=ema_fast)
-        )
-        self.indicator_manager.add_indicator(
-            "EMA_26", TALibEMA(period=ema_slow)
-        )
+        self.indicator_manager.add_indicator("EMA_12", TALibEMA(period=ema_fast))
+        self.indicator_manager.add_indicator("EMA_26", TALibEMA(period=ema_slow))
 
         logger.debug(
             f"📊 Инициализированы индикаторы с параметрами из конфига: "

@@ -64,7 +64,9 @@ class OKXFuturesClient:
         self._leverage_info_cache: dict = (
             {}
         )  # Кэш: {symbol: {'max': 125, 'avail': [1,2,..], 'ts': now}}
-        self._leverage_info_cache_ttl: float = 300.0  # TTL 5 минут (leverage меняется редко)
+        self._leverage_info_cache_ttl: float = (
+            300.0  # TTL 5 минут (leverage меняется редко)
+        )
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Кэш результатов round_leverage_to_available
         self._leverage_round_cache: dict = (
             {}
@@ -74,7 +76,9 @@ class OKXFuturesClient:
         self._instrument_info_cache: dict = (
             {}
         )  # Кэш: {inst_type: {'data': [...], 'ts': now}}
-        self._instrument_info_cache_ttl: float = 300.0  # TTL 5 минут (instrument info меняется редко)
+        self._instrument_info_cache_ttl: float = (
+            300.0  # TTL 5 минут (instrument info меняется редко)
+        )
 
     async def close(self):
         """Корректное закрытие клиента и сессии"""
@@ -378,7 +382,7 @@ class OKXFuturesClient:
             cached_data = self._instrument_info_cache[cache_key]
             now = time.time()
             cache_age = now - cached_data.get("ts", 0)
-            
+
             if cache_age < self._instrument_info_cache_ttl:
                 # Кэш актуален
                 logger.debug(
@@ -388,7 +392,9 @@ class OKXFuturesClient:
                 return cached_data
             else:
                 # Кэш устарел - удаляем
-                logger.debug(f"📊 [INSTRUMENT_INFO] {inst_type}: Кэш устарел ({cache_age:.1f}s > {self._instrument_info_cache_ttl}s), обновляем")
+                logger.debug(
+                    f"📊 [INSTRUMENT_INFO] {inst_type}: Кэш устарел ({cache_age:.1f}s > {self._instrument_info_cache_ttl}s), обновляем"
+                )
                 del self._instrument_info_cache[cache_key]
 
         # Запрашиваем с API
@@ -396,7 +402,7 @@ class OKXFuturesClient:
         data = await self._make_request(
             "GET", "/api/v5/public/instruments", params={"instType": inst_type}
         )
-        
+
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Сохраняем в кэш с timestamp
         if data and data.get("code") == "0":
             self._instrument_info_cache[cache_key] = {
@@ -408,7 +414,7 @@ class OKXFuturesClient:
                 f"📊 [INSTRUMENT_INFO] {inst_type}: Сохранено в кэш | "
                 f"{len(data.get('data', []))} инструментов"
             )
-        
+
         return data
 
     async def get_lot_size(self, symbol: str) -> float:
@@ -545,7 +551,7 @@ class OKXFuturesClient:
             cached_info = self._leverage_info_cache[symbol]
             now = time.time()
             cache_age = now - cached_info.get("ts", 0)
-            
+
             if cache_age < self._leverage_info_cache_ttl:
                 # Кэш актуален
                 logger.debug(
@@ -559,7 +565,9 @@ class OKXFuturesClient:
                 }
             else:
                 # Кэш устарел - удаляем
-                logger.debug(f"📊 [LEVERAGE_INFO] {symbol}: Кэш устарел ({cache_age:.1f}s > {self._leverage_info_cache_ttl}s), обновляем")
+                logger.debug(
+                    f"📊 [LEVERAGE_INFO] {symbol}: Кэш устарел ({cache_age:.1f}s > {self._leverage_info_cache_ttl}s), обновляем"
+                )
                 del self._leverage_info_cache[symbol]
 
         try:
@@ -672,7 +680,7 @@ class OKXFuturesClient:
                 cached_result = self._leverage_round_cache[cache_key]
                 now = time.time()
                 cache_age = now - cached_result.get("ts", 0)
-                
+
                 if cache_age < self._leverage_round_cache_ttl:
                     # Кэш актуален
                     rounded_leverage = cached_result["rounded"]

@@ -15,7 +15,8 @@ TradingControlCenter - Центральный координатор торго�
 import asyncio
 import os
 import time
-from datetime import datetime as dt, timezone
+from datetime import datetime as dt
+from datetime import timezone
 from typing import Any, Dict, Optional
 
 from loguru import logger
@@ -196,7 +197,7 @@ class TradingControlCenter:
                 if not hasattr(self, "_cycle_count"):
                     self._cycle_count = 0
                 self._cycle_count += 1
-                
+
                 if cycle_time > 10000 or self._cycle_count % 10 == 0:
                     logger.info(
                         f"⏱️ TCC Performance: cycle={cycle_time:.1f}ms, "
@@ -473,9 +474,7 @@ class TradingControlCenter:
                         try:
                             entry_timestamp_ms = int(entry_time_str)
                             entry_timestamp_sec = entry_timestamp_ms / 1000.0
-                            entry_time_from_api = dt.fromtimestamp(
-                                entry_timestamp_sec
-                            )
+                            entry_time_from_api = dt.fromtimestamp(entry_timestamp_sec)
                         except (ValueError, TypeError):
                             pass
 

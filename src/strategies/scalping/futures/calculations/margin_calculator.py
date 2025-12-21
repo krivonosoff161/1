@@ -280,23 +280,37 @@ class MarginCalculator:
                                 # - ADX низкий (шаткий рынок)
                                 # - открыто >3 позиций
                                 base_safety = safety_threshold
-                                safety_threshold_dynamic = regime_config.get("safety_threshold_dynamic", False) if isinstance(regime_config, dict) else getattr(regime_config, "safety_threshold_dynamic", False)
-                                safety_threshold_max = regime_config.get("safety_threshold_max", 2.0) if isinstance(regime_config, dict) else getattr(regime_config, "safety_threshold_max", 2.0)
-                                
+                                safety_threshold_dynamic = (
+                                    regime_config.get("safety_threshold_dynamic", False)
+                                    if isinstance(regime_config, dict)
+                                    else getattr(
+                                        regime_config, "safety_threshold_dynamic", False
+                                    )
+                                )
+                                safety_threshold_max = (
+                                    regime_config.get("safety_threshold_max", 2.0)
+                                    if isinstance(regime_config, dict)
+                                    else getattr(
+                                        regime_config, "safety_threshold_max", 2.0
+                                    )
+                                )
+
                                 if safety_threshold_dynamic:
                                     # Получаем equity и количество открытых позиций (если доступны)
                                     # Для упрощения используем переданный equity
                                     equity_threshold = 100.0
                                     positions_threshold = 3
-                                    
+
                                     # Усиление при equity < 100
                                     if equity < equity_threshold:
-                                        safety_threshold = min(safety_threshold_max, base_safety * 1.2)  # +20% до макс
+                                        safety_threshold = min(
+                                            safety_threshold_max, base_safety * 1.2
+                                        )  # +20% до макс
                                         logger.debug(
                                             f"✅ Динамическое усиление safety_threshold: {base_safety:.2f} → {safety_threshold:.2f} "
                                             f"(equity=${equity:.2f} < ${equity_threshold:.2f})"
                                         )
-                                
+
                                 logger.info(
                                     f"✅ Загружен safety_threshold={safety_threshold:.2f} из конфига (regime={regime_to_use}{' (fallback)' if not regime else ''}, "
                                     f"base={base_safety:.2f}, dynamic={safety_threshold_dynamic})"
@@ -554,7 +568,7 @@ class MarginCalculator:
             risk_status = "DANGER"
         else:
             risk_status = "CRITICAL"
-        
+
         # 🔴 КРИТИЧНО: Детальное логирование margin ratio (от Грока)
         logger.info(
             f"📊 [MARGIN_RATIO] Проверка безопасности позиции: safe={is_safe} | "

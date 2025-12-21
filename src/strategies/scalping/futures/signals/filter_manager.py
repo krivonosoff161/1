@@ -52,7 +52,9 @@ class FilterManager:
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Кэш фильтров для снижения времени signals на 50-60%
         # Кэш: {symbol: {'adx': val, 'mtf': val, 'pivot': val, 'volume_profile': val, 'liquidity': val, 'order_flow': val, 'ts': now}}
         self.filter_cache: Dict[str, Dict[str, Any]] = {}
-        self.filter_cache_ttl_fast: float = 20.0  # TTL 20 секунд (ADX/MTF/Pivot меняются медленно)
+        self.filter_cache_ttl_fast: float = (
+            20.0  # TTL 20 секунд (ADX/MTF/Pivot меняются медленно)
+        )
         self.filter_cache_ttl_slow: float = 60.0  # ✅ ГРОК: TTL 60 секунд (VolumeProfile/OrderFlow/Liquidity - тяжелые фильтры с historical data)
 
         logger.info("✅ FilterManager инициализирован (с кэшированием фильтров)")
@@ -102,7 +104,9 @@ class FilterManager:
         self.volatility_filter = volatility_filter
         logger.debug("✅ FilterManager: Volatility фильтр установлен")
 
-    def _get_cached_filter_result(self, symbol: str, filter_name: str, use_slow_ttl: bool = False) -> Optional[Any]:
+    def _get_cached_filter_result(
+        self, symbol: str, filter_name: str, use_slow_ttl: bool = False
+    ) -> Optional[Any]:
         """
         ✅ ГРОК ОПТИМИЗАЦИЯ: Получить результат фильтра из кэша.
 
@@ -206,7 +210,9 @@ class FilterManager:
                 if cached_adx_result is not None:
                     # Используем кэш - ADX меняется медленно
                     if not cached_adx_result:
-                        logger.debug(f"🔍 Сигнал {symbol} отфильтрован: ADX Filter (из кэша)")
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} отфильтрован: ADX Filter (из кэша)"
+                        )
                         return None
                     else:
                         # ADX прошел - добавляем в список пройденных фильтров
@@ -301,7 +307,9 @@ class FilterManager:
                     # Используем кэш - MTF меняется медленно
                     if not cached_mtf_result:
                         signal_type = signal.get("type", "unknown")
-                        logger.debug(f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: MTF Filter (из кэша)")
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: MTF Filter (из кэша)"
+                        )
                         return None
                     else:
                         if "filters_passed" not in signal:
@@ -317,7 +325,9 @@ class FilterManager:
                     self._set_cached_filter_result(symbol, "mtf", mtf_result)
                     if not mtf_result:
                         signal_type = signal.get("type", "unknown")
-                        logger.debug(f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: MTF Filter")
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: MTF Filter"
+                        )
                         return None
                     else:
                         if "filters_passed" not in signal:
@@ -358,7 +368,9 @@ class FilterManager:
                     # Используем кэш - Pivot Points меняются медленно (раз в день)
                     if not cached_pivot_result:
                         signal_type = signal.get("type", "unknown")
-                        logger.debug(f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Pivot Points Filter (из кэша)")
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Pivot Points Filter (из кэша)"
+                        )
                         return None
                     else:
                         if "filters_passed" not in signal:
@@ -374,7 +386,9 @@ class FilterManager:
                     self._set_cached_filter_result(symbol, "pivot", pivot_result)
                     if not pivot_result:
                         signal_type = signal.get("type", "unknown")
-                        logger.debug(f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Pivot Points Filter")
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Pivot Points Filter"
+                        )
                         return None
                     else:
                         if "filters_passed" not in signal:
@@ -388,12 +402,16 @@ class FilterManager:
         if self.volume_profile_filter:
             try:
                 # Пытаемся получить из кэша (используем медленный TTL 60s)
-                cached_vp_result = self._get_cached_filter_result(symbol, "volume_profile", use_slow_ttl=True)
+                cached_vp_result = self._get_cached_filter_result(
+                    symbol, "volume_profile", use_slow_ttl=True
+                )
                 if cached_vp_result is not None:
                     # Используем кэш - Volume Profile меняется медленно (historical data)
                     if not cached_vp_result:
                         signal_type = signal.get("type", "unknown")
-                        logger.debug(f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Volume Profile Filter (из кэша, TTL 60s)")
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Volume Profile Filter (из кэша, TTL 60s)"
+                        )
                         return None
                     else:
                         if "filters_passed" not in signal:
@@ -409,7 +427,9 @@ class FilterManager:
                     self._set_cached_filter_result(symbol, "volume_profile", vp_result)
                     if not vp_result:
                         signal_type = signal.get("type", "unknown")
-                        logger.debug(f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Volume Profile Filter")
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Volume Profile Filter"
+                        )
                         return None
                     else:
                         if "filters_passed" not in signal:
@@ -426,12 +446,16 @@ class FilterManager:
         if self.liquidity_filter:
             try:
                 # Пытаемся получить из кэша (используем медленный TTL 60s)
-                cached_liquidity_result = self._get_cached_filter_result(symbol, "liquidity", use_slow_ttl=True)
+                cached_liquidity_result = self._get_cached_filter_result(
+                    symbol, "liquidity", use_slow_ttl=True
+                )
                 if cached_liquidity_result is not None:
                     # Используем кэш - Liquidity меняется медленно (API calls)
                     if not cached_liquidity_result:
                         signal_type = signal.get("type", "unknown")
-                        logger.debug(f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Liquidity Filter (из кэша, TTL 60s)")
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Liquidity Filter (из кэша, TTL 60s)"
+                        )
                         return None
                     else:
                         if "filters_passed" not in signal:
@@ -444,7 +468,9 @@ class FilterManager:
                         symbol, signal, market_data, liquidity_params, liquidity_relax
                     )
                     # Сохраняем в кэш
-                    self._set_cached_filter_result(symbol, "liquidity", liquidity_result)
+                    self._set_cached_filter_result(
+                        symbol, "liquidity", liquidity_result
+                    )
                     if not liquidity_result:
                         signal_type = signal.get("type", "unknown")
                         logger.debug(
@@ -468,12 +494,16 @@ class FilterManager:
         if self.order_flow_filter:
             try:
                 # Пытаемся получить из кэша (используем медленный TTL 60s)
-                cached_of_result = self._get_cached_filter_result(symbol, "order_flow", use_slow_ttl=True)
+                cached_of_result = self._get_cached_filter_result(
+                    symbol, "order_flow", use_slow_ttl=True
+                )
                 if cached_of_result is not None:
                     # Используем кэш - Order Flow меняется медленно (API calls)
                     if not cached_of_result:
                         signal_type = signal.get("type", "unknown")
-                        logger.debug(f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Order Flow Filter (из кэша, TTL 60s)")
+                        logger.debug(
+                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Order Flow Filter (из кэша, TTL 60s)"
+                        )
                         return None
                     else:
                         if "filters_passed" not in signal:

@@ -31,10 +31,16 @@ class TALibRSI(BaseIndicator):
             rsi_values = talib.RSI(prices, timeperiod=self.period)
 
             # Берем последнее значение
-            rsi_value = float(rsi_values[-1]) if len(rsi_values) > 0 and not np.isnan(rsi_values[-1]) else 50.0
+            rsi_value = (
+                float(rsi_values[-1])
+                if len(rsi_values) > 0 and not np.isnan(rsi_values[-1])
+                else 50.0
+            )
         except Exception as e:
             # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(f"⚠️ TALibRSI: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback")
+            logger.warning(
+                f"⚠️ TALibRSI: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            )
             # Fallback на простое среднее (не идеально, но лучше чем ошибка)
             rsi_value = 50.0
 
@@ -74,12 +80,18 @@ class TALibEMA(BaseIndicator):
             ema_values = talib.EMA(prices, timeperiod=self.period)
 
             # Берем последнее значение
-            ema = float(ema_values[-1]) if len(ema_values) > 0 and not np.isnan(ema_values[-1]) else float(data[-1])
+            ema = (
+                float(ema_values[-1])
+                if len(ema_values) > 0 and not np.isnan(ema_values[-1])
+                else float(data[-1])
+            )
         except Exception as e:
             # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(f"⚠️ TALibEMA: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback")
+            logger.warning(
+                f"⚠️ TALibEMA: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            )
             # Fallback на простое среднее
-            ema = float(np.mean(data[-self.period:]))
+            ema = float(np.mean(data[-self.period :]))
 
         # Generate signal
         signal = "NEUTRAL"
@@ -123,10 +135,16 @@ class TALibATR(BaseIndicator):
             atr_values = talib.ATR(highs, lows, closes, timeperiod=self.period)
 
             # Берем последнее значение
-            atr_value = float(atr_values[-1]) if len(atr_values) > 0 and not np.isnan(atr_values[-1]) else 0.0
+            atr_value = (
+                float(atr_values[-1])
+                if len(atr_values) > 0 and not np.isnan(atr_values[-1])
+                else 0.0
+            )
         except Exception as e:
             # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(f"⚠️ TALibATR: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback")
+            logger.warning(
+                f"⚠️ TALibATR: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            )
             # Fallback на простое среднее True Range
             atr_value = 0.0
             if len(close_data) > 1:
@@ -135,11 +153,11 @@ class TALibATR(BaseIndicator):
                     tr = max(
                         high_data[i] - low_data[i],
                         abs(high_data[i] - close_data[i - 1]),
-                        abs(low_data[i] - close_data[i - 1])
+                        abs(low_data[i] - close_data[i - 1]),
                     )
                     true_ranges.append(tr)
                 if len(true_ranges) >= self.period:
-                    atr_value = float(np.mean(true_ranges[-self.period:]))
+                    atr_value = float(np.mean(true_ranges[-self.period :]))
 
         return IndicatorResult(
             name=f"ATR_{self.period}",
@@ -175,11 +193,21 @@ class TALibMACD(BaseIndicator):
             )
 
             # Берем последние значения
-            macd_value = float(macd_line[-1]) if len(macd_line) > 0 and not np.isnan(macd_line[-1]) else 0.0
-            signal_value = float(signal_line[-1]) if len(signal_line) > 0 and not np.isnan(signal_line[-1]) else 0.0
+            macd_value = (
+                float(macd_line[-1])
+                if len(macd_line) > 0 and not np.isnan(macd_line[-1])
+                else 0.0
+            )
+            signal_value = (
+                float(signal_line[-1])
+                if len(signal_line) > 0 and not np.isnan(signal_line[-1])
+                else 0.0
+            )
         except Exception as e:
             # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(f"⚠️ TALibMACD: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback")
+            logger.warning(
+                f"⚠️ TALibMACD: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            )
             # Fallback на нулевые значения
             macd_value = 0.0
             signal_value = 0.0
@@ -221,12 +249,18 @@ class TALibSMA(BaseIndicator):
             sma_values = talib.SMA(prices, timeperiod=self.period)
 
             # Берем последнее значение
-            sma_value = float(sma_values[-1]) if len(sma_values) > 0 and not np.isnan(sma_values[-1]) else float(np.mean(data[-self.period:]))
+            sma_value = (
+                float(sma_values[-1])
+                if len(sma_values) > 0 and not np.isnan(sma_values[-1])
+                else float(np.mean(data[-self.period :]))
+            )
         except Exception as e:
             # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(f"⚠️ TALibSMA: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback")
+            logger.warning(
+                f"⚠️ TALibSMA: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            )
             # Fallback на numpy.mean
-            sma_value = float(np.mean(data[-self.period:]))
+            sma_value = float(np.mean(data[-self.period :]))
 
         # Generate signal
         signal = "NEUTRAL"
@@ -268,14 +302,28 @@ class TALibBollingerBands(BaseIndicator):
             )
 
             # Берем последние значения
-            sma = float(middle_band[-1]) if len(middle_band) > 0 and not np.isnan(middle_band[-1]) else float(np.mean(data[-self.period:]))
-            upper = float(upper_band[-1]) if len(upper_band) > 0 and not np.isnan(upper_band[-1]) else sma
-            lower = float(lower_band[-1]) if len(lower_band) > 0 and not np.isnan(lower_band[-1]) else sma
+            sma = (
+                float(middle_band[-1])
+                if len(middle_band) > 0 and not np.isnan(middle_band[-1])
+                else float(np.mean(data[-self.period :]))
+            )
+            upper = (
+                float(upper_band[-1])
+                if len(upper_band) > 0 and not np.isnan(upper_band[-1])
+                else sma
+            )
+            lower = (
+                float(lower_band[-1])
+                if len(lower_band) > 0 and not np.isnan(lower_band[-1])
+                else sma
+            )
         except Exception as e:
             # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(f"⚠️ TALibBollingerBands: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback")
+            logger.warning(
+                f"⚠️ TALibBollingerBands: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            )
             # Fallback на numpy расчет
-            recent_data = data[-self.period:]
+            recent_data = data[-self.period :]
             sma = float(np.mean(recent_data))
             std = float(np.std(recent_data))
             upper = sma + (std * self.std_multiplier)
@@ -302,4 +350,3 @@ class TALibBollingerBands(BaseIndicator):
                 "current_price": current_price,
             },
         )
-
