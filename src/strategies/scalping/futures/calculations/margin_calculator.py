@@ -515,10 +515,13 @@ class MarginCalculator:
             * 100,
         }
 
+        # 🔴 КРИТИЧНО: Детальное логирование margin ratio (от Грока)
         logger.info(
-            f"Проверка безопасности позиции: safe={is_safe}, "
-            f"margin_ratio={margin_ratio:.2f}, pnl={pnl:.2f}, "
-            f"liq_price={liquidation_price:.4f}"
+            f"📊 [MARGIN_RATIO] Проверка безопасности позиции: safe={is_safe} | "
+            f"margin_ratio={margin_ratio:.2f} (threshold={safety_threshold:.2f}) | "
+            f"available_margin=${available_margin:.2f}, margin_used=${margin_used:.2f} | "
+            f"equity=${equity:.2f}, pnl=${pnl:.2f} | "
+            f"liq_price=${liquidation_price:.4f} (distance={details.get('distance_to_liquidation', 0):.2f}%)"
         )
 
         return is_safe, details

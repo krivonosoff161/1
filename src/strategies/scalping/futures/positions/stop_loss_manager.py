@@ -178,3 +178,4 @@ class StopLossManager:
             return 1.0  # Fallback
         except Exception:
             return 1.0  # Fallback
+

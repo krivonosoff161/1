@@ -73,7 +73,7 @@ class PositionScalingManager:
             default_config = {
                 "max_additions": 7,
                 "min_interval_seconds": 30,
-                "max_loss_for_addition": -3.0,
+                "max_loss_for_addition": -5.0,  # ✅ ИСПРАВЛЕНО (КИМИ): -5.0% (было -3.0%) - больше возможностей для добавления
                 "ladder": [1.0, 0.8, 0.6, 0.4, 0.3, 0.2, 0.15],
             }
             logger.info(
@@ -93,7 +93,7 @@ class PositionScalingManager:
                             profile_config, "min_interval_seconds", 30
                         ),
                         "max_loss_for_addition": getattr(
-                            profile_config, "max_loss_for_addition", -3.0
+                            profile_config, "max_loss_for_addition", -5.0  # ✅ ИСПРАВЛЕНО (КИМИ): -5.0% по умолчанию
                         ),
                         "ladder": getattr(
                             profile_config,

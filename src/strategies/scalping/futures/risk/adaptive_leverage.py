@@ -114,12 +114,15 @@ class AdaptiveLeverage:
 
             symbol = signal.get("symbol", "N/A")
 
-            logger.debug(
-                f"📊 [ADAPTIVE_LEVERAGE] {symbol}: Расчет | "
+            # 🔴 КРИТИЧНО: Детальное логирование leverage (от Грока)
+            logger.info(
+                f"📊 [ADAPTIVE_LEVERAGE] {symbol}: Расчет leverage | "
                 f"strength={signal_strength:.2f}, regime={regime}, "
                 f"volatility={volatility_str}, "
-                f"adjusted={adjusted_strength:.2f}, category={category}, "
-                f"leverage={leverage}x (до округления)"
+                f"regime_multiplier={regime_multiplier:.2f}, "
+                f"volatility_multiplier={volatility_multiplier:.2f}, "
+                f"adjusted_strength={adjusted_strength:.2f}, category={category}, "
+                f"requested_leverage={leverage}x (до округления)"
             )
 
             # ✅ ИСПРАВЛЕНИЕ #4: Округляем leverage до доступного на бирже
@@ -131,13 +134,16 @@ class AdaptiveLeverage:
                     )
 
                     if leverage != original_leverage:
-                        logger.info(
-                            f"📊 [ADAPTIVE_LEVERAGE] {symbol}: Округление | "
-                            f"{original_leverage}x → {leverage}x (до ближайшего доступного на бирже)"
-                        )
+                        # 🔴 КРИТИЧНО: Детальное логирование изменения leverage (от Грока)
+                        logger.warning("="*60)
+                        logger.warning(f"⚠️ [ADAPTIVE_LEVERAGE] {symbol}: Леверидж изменен биржей!")
+                        logger.warning(f"   Заявленный: {original_leverage}x")
+                        logger.warning(f"   Фактический: {leverage}x")
+                        logger.warning(f"   Причина: Округление до ближайшего доступного на OKX")
+                        logger.warning("="*60)
                     else:
-                        logger.debug(
-                            f"📊 [ADAPTIVE_LEVERAGE] {symbol}: Округление не требуется | "
+                        logger.info(
+                            f"✅ [ADAPTIVE_LEVERAGE] {symbol}: Округление не требуется | "
                             f"{leverage}x уже доступен на бирже"
                         )
                 except Exception as e:
@@ -146,8 +152,10 @@ class AdaptiveLeverage:
                         f"используем рассчитанный leverage={leverage}x"
                     )
 
-            logger.debug(
-                f"📊 [ADAPTIVE_LEVERAGE] {symbol}: Финальный leverage={leverage}x"
+            # 🔴 КРИТИЧНО: Детальное логирование финального leverage (от Грока)
+            logger.info(
+                f"✅ [ADAPTIVE_LEVERAGE] {symbol}: ФИНАЛЬНЫЙ leverage={leverage}x | "
+                f"category={category}, adjusted_strength={adjusted_strength:.2f}"
             )
 
             return leverage

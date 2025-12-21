@@ -625,6 +625,36 @@ class TrailingSLCoordinator:
                     f"⚠️ TrailingSLCoordinator: Ошибка получения margin/upl для {symbol}: {e}"
                 )
 
+            # ✅ ГРОК РЕКОМЕНДАЦИЯ: Проверка min_profit_to_activate перед обновлением trailing stop
+            try:
+                # Получаем параметры trailing_sl из конфига
+                trailing_sl_config = getattr(self.scalping_config, "trailing_sl", {})
+                if isinstance(trailing_sl_config, dict):
+                    min_profit_to_activate = trailing_sl_config.get("min_profit_to_activate", 0.008)
+                else:
+                    min_profit_to_activate = getattr(trailing_sl_config, "min_profit_to_activate", 0.008)
+                
+                # Рассчитываем текущий PnL%
+                if entry_price > 0:
+                    pos_side = position.get("posSide") or position.get("position_side", "long")
+                    if pos_side.lower() == "long":
+                        pnl_percent = (current_price - entry_price) / entry_price
+                    else:  # short
+                        pnl_percent = (entry_price - current_price) / entry_price
+                    
+                    # Если прибыль меньше минимума - не обновляем trailing stop
+                    if pnl_percent < min_profit_to_activate:
+                        logger.debug(
+                            f"⏸️ Trailing SL не активирован для {symbol}: "
+                            f"PnL {pnl_percent:.2%} < минимум {min_profit_to_activate:.2%}"
+                        )
+                        return  # Не обновляем trailing до достижения минимума
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Ошибка проверки min_profit_to_activate для {symbol}: {e}, продолжаем обновление"
+                )
+                # Продолжаем обновление при ошибке
+            
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем margin и unrealizedPnl в update() для правильного расчета от маржи
             tsl.update(
                 current_price,

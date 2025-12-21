@@ -1788,9 +1788,11 @@ class ExitAnalyzer:
 
             # 5. Проверка partial_tp с учетом adaptive_min_holding
             partial_tp_params = self._get_partial_tp_params("ranging")
+            # ✅ ИСПРАВЛЕНИЕ (21.12.2025): Определяем trigger_percent до блока if для использования в логировании
+            trigger_percent = partial_tp_params.get("trigger_percent", 0.6) if partial_tp_params.get("enabled", False) else None
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: partial_tp enabled={partial_tp_params.get('enabled', False)}, "
-                f"trigger_percent={partial_tp_params.get('trigger_percent', 0.6):.2f}%"
+                f"trigger_percent={trigger_percent:.2f}%" if trigger_percent is not None else f"trigger_percent=N/A"
             )
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.6)
@@ -1849,9 +1851,10 @@ class ExitAnalyzer:
                                 "min_holding_info": min_holding_info,
                             }
                         else:
-                            logger.debug(
-                                f"⏱️ ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol}, "
-                                f"но min_holding не пройден ({min_holding_info}), ждем..."
+                            # ✅ ИСПРАВЛЕНИЕ (21.12.2025): Логируем, почему Partial TP блокируется
+                            logger.warning(
+                                f"⚠️ ExitAnalyzer RANGING: Partial TP триггер достигнут для {symbol} "
+                                f"({pnl_percent:.2f}% >= {trigger_percent:.2f}%), но блокируется: {min_holding_info}"
                             )
                             return {
                                 "action": "hold",
@@ -2034,19 +2037,32 @@ class ExitAnalyzer:
                 }
             elif (
                 minutes_in_position is not None
-                and minutes_in_position >= max_holding_minutes
+                and isinstance(minutes_in_position, (int, float))
             ):
-                # Базовое время превышено, но есть продление - проверяем прибыль
-                if (
-                    extend_time_if_profitable
-                    and pnl_percent >= min_profit_for_extension
-                ):
-                    logger.debug(
-                        f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
-                        f"но прибыль {pnl_percent:.2f}% >= {min_profit_for_extension:.2f}% - продлеваем до {actual_max_holding:.1f} мин"
+                # ✅ ИСПРАВЛЕНО: Конвертируем max_holding_minutes в float перед сравнением
+                try:
+                    max_holding_minutes_float = (
+                        float(max_holding_minutes) if max_holding_minutes is not None else 0.0
                     )
-                    # Продлеваем, но не закрываем пока
-                    return None
+                except (TypeError, ValueError):
+                    logger.warning(
+                        f"⚠️ ExitAnalyzer: Не удалось преобразовать max_holding_minutes={max_holding_minutes} в float, "
+                        f"используем actual_max_holding_float={actual_max_holding_float}"
+                    )
+                    max_holding_minutes_float = actual_max_holding_float
+                
+                if float(minutes_in_position) >= max_holding_minutes_float:
+                    # Базовое время превышено, но есть продление - проверяем прибыль
+                    if (
+                        extend_time_if_profitable
+                        and pnl_percent >= min_profit_for_extension
+                    ):
+                        logger.debug(
+                            f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes_float:.1f} мин, "
+                            f"но прибыль {pnl_percent:.2f}% >= {min_profit_for_extension:.2f}% - продлеваем до {actual_max_holding:.1f} мин"
+                        )
+                        # Продлеваем, но не закрываем пока
+                        return None
 
             # В ranging режиме не продлеваем TP - более консервативный подход
             time_info = "N/A"
@@ -2058,10 +2074,18 @@ class ExitAnalyzer:
                 else:
                     time_info = f"{minutes_in_position:.1f} мин"
 
+            # ✅ ИСПРАВЛЕНИЕ (21.12.2025): Используем правильное значение trigger_percent в логировании
+            partial_tp_status = (
+                f"partial_tp={trigger_percent:.2f}% (не достигнут)" 
+                if trigger_percent is not None and pnl_percent < trigger_percent
+                else f"partial_tp={trigger_percent:.2f}% (достигнут, но блокируется)" 
+                if trigger_percent is not None
+                else "partial_tp=disabled"
+            )
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: Нет причин для закрытия - "
                 f"TP={tp_percent:.2f}% (не достигнут), big_profit={big_profit_exit_percent:.2f}% (не достигнут), "
-                f"partial_tp={partial_tp_params.get('trigger_percent', 0.6):.2f}% (не достигнут), "
+                f"{partial_tp_status}, "
                 f"текущий PnL%={pnl_percent:.2f}%, время: {time_info}"
             )
             return None

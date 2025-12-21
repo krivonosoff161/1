@@ -422,6 +422,7 @@ class OKXFuturesClient:
                         "ctVal": float(inst.get("ctVal", 0.01)),  # Contract value
                         "lotSz": float(inst.get("lotSz", 0.01)),  # Lot size
                         "minSz": float(inst.get("minSz", 0.01)),  # Minimum size
+                        "tickSz": float(inst.get("tickSz", 0.1)),  # ✅ НОВОЕ (КИМИ): Tick size для округления цены
                         "max_leverage": leverage_info[
                             "max_leverage"
                         ],  # ✅ НОВОЕ: Максимальный leverage
@@ -449,6 +450,7 @@ class OKXFuturesClient:
                 "ctVal": 0.01,
                 "lotSz": 0.01,
                 "minSz": 0.01,
+                "tickSz": 0.1,  # ✅ НОВОЕ (КИМИ): BTC tick size обычно 0.1
                 "max_leverage": leverage_info["max_leverage"],
                 "available_leverages": leverage_info["available_leverages"],
             }
@@ -457,6 +459,7 @@ class OKXFuturesClient:
                 "ctVal": 0.1,
                 "lotSz": 0.01,
                 "minSz": 0.01,
+                "tickSz": 0.01,  # ✅ НОВОЕ (КИМИ): ETH tick size обычно 0.01
                 "max_leverage": leverage_info["max_leverage"],
                 "available_leverages": leverage_info["available_leverages"],
             }
@@ -465,6 +468,7 @@ class OKXFuturesClient:
                 "ctVal": 0.01,
                 "lotSz": 0.01,
                 "minSz": 0.01,
+                "tickSz": 0.01,  # ✅ НОВОЕ (КИМИ): Fallback tick size
                 "max_leverage": leverage_info["max_leverage"],
                 "available_leverages": leverage_info["available_leverages"],
             }
@@ -1088,7 +1092,17 @@ class OKXFuturesClient:
                 payload["posSide"] = "short"
 
         if price:
-            payload["px"] = str(price)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (КИМИ): Округляем цену до tickSize OKX вместо 2 знаков
+            tick_sz = instrument_details.get("tickSz", 0.1)  # Получаем tickSize из деталей инструмента
+            rounded_price = round_to_step(price, tick_sz)  # Округляем до tickSize
+            
+            if rounded_price != price:
+                logger.debug(
+                    f"📊 Цена округлена для {symbol}: {price:.8f} → {rounded_price:.8f} "
+                    f"(tickSz={tick_sz})"
+                )
+            
+            payload["px"] = str(rounded_price)
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавляем clOrdId для предотвращения дубликатов
         # OKX требует уникальный clOrdId (макс 32 символа)
