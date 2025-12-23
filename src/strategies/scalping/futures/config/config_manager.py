@@ -158,30 +158,36 @@ class ConfigManager:
         except Exception as e:
             logger.critical(f"❌ Ошибка валидации adaptive_regime: {e}")
             raise
-    
+
     def _validate_config_structure(self) -> None:
         """
         ✅ ПРАВКА #20: Валидация структуры конфигурации.
-        
+
         Проверяет наличие обязательных секций и параметров.
         """
         try:
             # Проверяем наличие scalping конфига
             if not self.scalping_config:
                 raise ValueError("scalping конфигурация отсутствует")
-            
+
             # Проверяем наличие exit_params
-            exit_params = self.get_config_value(self.scalping_config, "exit_params", None)
+            exit_params = self.get_config_value(
+                self.scalping_config, "exit_params", None
+            )
             if not exit_params:
-                logger.warning("⚠️ exit_params не найден в конфиге, будут использованы значения по умолчанию")
-            
+                logger.warning(
+                    "⚠️ exit_params не найден в конфиге, будут использованы значения по умолчанию"
+                )
+
             # Проверяем наличие balance_profiles
-            balance_profiles = self.get_config_value(self.scalping_config, "balance_profiles", None)
+            balance_profiles = self.get_config_value(
+                self.scalping_config, "balance_profiles", None
+            )
             if not balance_profiles:
                 raise ValueError("balance_profiles обязателен в конфиге")
-            
+
             logger.debug("✅ Валидация структуры конфигурации пройдена")
-            
+
         except Exception as e:
             logger.error(f"❌ Ошибка валидации структуры конфигурации: {e}")
             # Не падаем, только логируем ошибку

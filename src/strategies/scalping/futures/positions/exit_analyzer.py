@@ -29,17 +29,17 @@ class ExitAnalyzer:
     - extend_tp: Продлить TP при сильном тренде
     - close: Закрыть позицию
     """
-    
+
     def _to_float(self, value: Any, name: str, default: float = 0.0) -> float:
         """
         Helper функция для безопасной конвертации значений в float.
         # ИСПРАВЛЕНО: Helper функция для безопасной конвертации значений в float.
-        
+
         Args:
             value: Значение для конвертации (может быть str, int, float, None)
             name: Имя переменной для логирования
             default: Значение по умолчанию при ошибке
-            
+
         Returns:
             float: Конвертированное значение или default
         """
@@ -333,7 +333,12 @@ class ExitAnalyzer:
             else:
                 # Fallback на ranging
                 decision = await self._generate_exit_for_ranging(
-                    symbol, position, metadata, market_data, current_price, regime or "ranging"
+                    symbol,
+                    position,
+                    metadata,
+                    market_data,
+                    current_price,
+                    regime or "ranging",
                 )
 
             # ✅ INFO-логи для отслеживания решений
@@ -813,7 +818,9 @@ class ExitAnalyzer:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Fallback на adaptive_regime (правильная структура конфига)
                 if sl_percent == 2.0:  # Если не нашли в symbol_profiles
                     # Пробуем получить из adaptive_regime.{regime}.sl_percent
-                    adaptive_regime = getattr(self.scalping_config, "adaptive_regime", None)
+                    adaptive_regime = getattr(
+                        self.scalping_config, "adaptive_regime", None
+                    )
                     if adaptive_regime:
                         adaptive_dict = self.config_manager.to_dict(adaptive_regime)
                         if regime in adaptive_dict:
@@ -825,7 +832,9 @@ class ExitAnalyzer:
                                 # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float для предотвращения str vs int ошибок
                                 try:
                                     sl_percent = float(regime_config["sl_percent"])
-                                    sl_atr_based = regime_config.get("sl_atr_based", False)
+                                    sl_atr_based = regime_config.get(
+                                        "sl_atr_based", False
+                                    )
                                     sl_atr_multiplier = float(
                                         regime_config.get("sl_atr_multiplier", 1.0)
                                     )
@@ -840,7 +849,7 @@ class ExitAnalyzer:
                                         f"⚠️ ExitAnalyzer: Не удалось преобразовать sl_percent={regime_config.get('sl_percent')} "
                                         f"в float для {symbol}: {e}, используем fallback"
                                     )
-                    
+
                     # ✅ ДОПОЛНИТЕЛЬНЫЙ FALLBACK: Пробуем by_regime (для обратной совместимости)
                     if sl_percent == 2.0:
                         by_regime = self.config_manager.to_dict(
@@ -856,7 +865,9 @@ class ExitAnalyzer:
                             ):
                                 try:
                                     sl_percent = float(regime_config["sl_percent"])
-                                    sl_atr_based = regime_config.get("sl_atr_based", False)
+                                    sl_atr_based = regime_config.get(
+                                        "sl_atr_based", False
+                                    )
                                     sl_atr_multiplier = float(
                                         regime_config.get("sl_atr_multiplier", 1.0)
                                     )
@@ -1103,7 +1114,7 @@ class ExitAnalyzer:
     def _get_max_holding_minutes(self, regime: str) -> float:
         """
         Получение max_holding_minutes из конфига по режиму.
-        
+
         Приоритет:
         1. exit_params.regime.max_holding_minutes
         2. adaptive_regime.regime.max_holding_minutes
@@ -1117,18 +1128,23 @@ class ExitAnalyzer:
             max_holding_minutes или 120.0 по умолчанию
         """
         max_holding_minutes = 120.0  # Default 2 часа
-        
+
         # ✅ ПРИОРИТЕТ 1: exit_params.regime.max_holding_minutes
         if self.config_manager:
             try:
                 exit_params = self.config_manager.get("exit_params", {})
                 if isinstance(exit_params, dict) and regime in exit_params:
                     regime_config = exit_params.get(regime, {})
-                    if isinstance(regime_config, dict) and "max_holding_minutes" in regime_config:
+                    if (
+                        isinstance(regime_config, dict)
+                        and "max_holding_minutes" in regime_config
+                    ):
                         return float(regime_config["max_holding_minutes"])
             except Exception as e:
-                logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения exit_params.max_holding_minutes: {e}")
-        
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Ошибка получения exit_params.max_holding_minutes: {e}"
+                )
+
         # ✅ ПРИОРИТЕТ 2: adaptive_regime.regime.max_holding_minutes (старая логика)
         if self.scalping_config:
             try:
@@ -1628,9 +1644,11 @@ class ExitAnalyzer:
             try:
                 pnl_percent = float(pnl_percent)
             except (TypeError, ValueError) as e:
-                logger.error(f"❌ ExitAnalyzer TRENDING: Ошибка приведения pnl_percent для {symbol}: {e}")
+                logger.error(
+                    f"❌ ExitAnalyzer TRENDING: Ошибка приведения pnl_percent для {symbol}: {e}"
+                )
                 return None
-            
+
             # ✅ ПРАВКА #13: Защита от больших убытков
             if pnl_percent < -2.0:
                 logger.warning(
@@ -1653,7 +1671,9 @@ class ExitAnalyzer:
             try:
                 tp_percent = float(tp_percent) if tp_percent is not None else 2.4
             except (TypeError, ValueError) as e:
-                logger.error(f"❌ ExitAnalyzer TRENDING: Ошибка приведения tp_percent для {symbol}: {e}")
+                logger.error(
+                    f"❌ ExitAnalyzer TRENDING: Ошибка приведения tp_percent для {symbol}: {e}"
+                )
                 tp_percent = 2.4
             if pnl_percent >= tp_percent:
                 # Проверяем силу тренда перед закрытием по TP
@@ -1691,9 +1711,15 @@ class ExitAnalyzer:
             # 4. Проверка big_profit_exit
             big_profit_exit_percent = self._get_big_profit_exit_percent(symbol)
             try:
-                big_profit_exit_percent = float(big_profit_exit_percent) if big_profit_exit_percent is not None else 1.5
+                big_profit_exit_percent = (
+                    float(big_profit_exit_percent)
+                    if big_profit_exit_percent is not None
+                    else 1.5
+                )
             except (TypeError, ValueError) as e:
-                logger.error(f"❌ ExitAnalyzer TRENDING: Ошибка приведения big_profit_exit_percent для {symbol}: {e}")
+                logger.error(
+                    f"❌ ExitAnalyzer TRENDING: Ошибка приведения big_profit_exit_percent для {symbol}: {e}"
+                )
                 big_profit_exit_percent = 1.5
             if pnl_percent >= big_profit_exit_percent:
                 logger.info(
@@ -1993,9 +2019,11 @@ class ExitAnalyzer:
             )
 
             # ✅ ИСПРАВЛЕНО: Используем helper функцию для безопасной конвертации всех значений
-            gross_pnl_percent = self._to_float(gross_pnl_percent, "gross_pnl_percent", 0.0)
+            gross_pnl_percent = self._to_float(
+                gross_pnl_percent, "gross_pnl_percent", 0.0
+            )
             net_pnl_percent = self._to_float(net_pnl_percent, "net_pnl_percent", 0.0)
-            
+
             # ✅ ПРАВКА #13: Защита от больших убытков
             if net_pnl_percent < -2.0:
                 logger.warning(
@@ -2174,7 +2202,9 @@ class ExitAnalyzer:
             # ✅ ИСПРАВЛЕНО: Для big_profit_exit используем Net PnL (реальная прибыль после комиссий)
             big_profit_exit_percent = self._get_big_profit_exit_percent(symbol)
             # ✅ ИСПРАВЛЕНО: Используем helper функцию для безопасной конвертации
-            big_profit_exit_percent = self._to_float(big_profit_exit_percent, "big_profit_exit_percent", 1.5)
+            big_profit_exit_percent = self._to_float(
+                big_profit_exit_percent, "big_profit_exit_percent", 1.5
+            )
             net_format_bp = (
                 f"{net_pnl_percent:.4f}"
                 if abs(net_pnl_percent) < 0.1
@@ -2215,7 +2245,9 @@ class ExitAnalyzer:
             if partial_tp_params.get("enabled", False):
                 trigger_percent = partial_tp_params.get("trigger_percent", 0.6)
                 # ✅ ИСПРАВЛЕНО: Используем helper функцию для безопасной конвертации
-                trigger_percent = self._to_float(trigger_percent, "trigger_percent", 0.6)
+                trigger_percent = self._to_float(
+                    trigger_percent, "trigger_percent", 0.6
+                )
                 # ✅ ИСПРАВЛЕНО: Для partial_tp используем Net PnL (реальная прибыль после комиссий)
                 net_format_ptp = (
                     f"{net_pnl_percent:.4f}"
@@ -2610,18 +2642,23 @@ class ExitAnalyzer:
             # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки partial_tp (реальная прибыль после комиссий)
             # ✅ ИСПРАВЛЕНО: Конвертируем trigger_percent и net_pnl_percent в float перед сравнением
             try:
-                trigger_percent_float = float(trigger_percent) if trigger_percent is not None else None
-                net_pnl_percent_float = float(net_pnl_percent) if net_pnl_percent is not None else 0.0
+                trigger_percent_float = (
+                    float(trigger_percent) if trigger_percent is not None else None
+                )
+                net_pnl_percent_float = (
+                    float(net_pnl_percent) if net_pnl_percent is not None else 0.0
+                )
             except (TypeError, ValueError) as e:
                 logger.warning(
                     f"⚠️ ExitAnalyzer: Ошибка конвертации trigger_percent={trigger_percent} или net_pnl_percent={net_pnl_percent}: {e}"
                 )
                 trigger_percent_float = None
                 net_pnl_percent_float = 0.0
-            
+
             partial_tp_status = (
                 f"partial_tp={trigger_percent_float:.2f}% (не достигнут)"
-                if trigger_percent_float is not None and net_pnl_percent_float < trigger_percent_float
+                if trigger_percent_float is not None
+                and net_pnl_percent_float < trigger_percent_float
                 else f"partial_tp={trigger_percent_float:.2f}% (достигнут, но блокируется)"
                 if trigger_percent_float is not None
                 else "partial_tp=disabled"
@@ -2704,9 +2741,11 @@ class ExitAnalyzer:
             try:
                 pnl_percent = float(pnl_percent)
             except (TypeError, ValueError) as e:
-                logger.error(f"❌ ExitAnalyzer CHOPPY: Ошибка приведения pnl_percent для {symbol}: {e}")
+                logger.error(
+                    f"❌ ExitAnalyzer CHOPPY: Ошибка приведения pnl_percent для {symbol}: {e}"
+                )
                 return None
-            
+
             # ✅ ПРАВКА #13: Защита от больших убытков
             if pnl_percent < -2.0:
                 logger.warning(
@@ -2769,7 +2808,9 @@ class ExitAnalyzer:
             try:
                 tp_percent = float(tp_percent) if tp_percent is not None else 2.4
             except (TypeError, ValueError) as e:
-                logger.error(f"❌ ExitAnalyzer CHOPPY: Ошибка приведения tp_percent для {symbol}: {e}")
+                logger.error(
+                    f"❌ ExitAnalyzer CHOPPY: Ошибка приведения tp_percent для {symbol}: {e}"
+                )
                 tp_percent = 2.4
             if pnl_percent >= tp_percent:
                 logger.info(

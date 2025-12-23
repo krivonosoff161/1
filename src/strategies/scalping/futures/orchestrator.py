@@ -415,7 +415,7 @@ class FuturesScalpingOrchestrator:
             signal_locks_ref=self.signal_locks,  # ✅ FIX: Передаём signal_locks для race condition
         )
         logger.info("✅ ExitAnalyzer инициализирован в orchestrator")
-        
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем ExitAnalyzer в position_manager
         if hasattr(self.position_manager, "set_exit_analyzer"):
             self.position_manager.set_exit_analyzer(self.exit_analyzer)

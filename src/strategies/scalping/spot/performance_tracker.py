@@ -59,20 +59,23 @@ class PerformanceTracker:
 
         # ✅ ИСПРАВЛЕНО: Один объединенный CSV файл для всех данных
         self.unified_csv_path = f"logs/all_data_{today}.csv"
-        
+
         # Для обратной совместимости сохраняем старые пути
         self.csv_path = self.unified_csv_path
         self.positions_open_csv_path = self.unified_csv_path
         self.orders_csv_path = self.unified_csv_path
         self.signals_csv_path = self.unified_csv_path
-        
+
         # Инициализируем объединенный CSV файл
         try:
             file_exists = Path(self.unified_csv_path).exists()
             self.csv_file = open(
-                self.unified_csv_path, "a" if file_exists else "w", newline="", encoding="utf-8"
+                self.unified_csv_path,
+                "a" if file_exists else "w",
+                newline="",
+                encoding="utf-8",
             )
-            
+
             # Универсальные поля для всех типов данных
             fieldnames = [
                 "record_type",  # trades, positions_open, orders, signals, debug
@@ -103,15 +106,15 @@ class PerformanceTracker:
                 "event_type",  # Для debug логов
                 "data",  # Для debug логов
             ]
-            
+
             self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=fieldnames)
-            
+
             if not file_exists:
                 self.csv_writer.writeheader()
                 logger.info(f"📊 Created new unified CSV: {self.unified_csv_path}")
             else:
                 logger.debug(f"📊 Using existing unified CSV: {self.unified_csv_path}")
-                
+
         except Exception as e:
             logger.error(f"❌ Failed to initialize unified CSV: {e}")
             self.csv_file = None
@@ -122,13 +125,13 @@ class PerformanceTracker:
     def _init_csv_file(self, filepath: str, fieldnames: list, file_type: str):
         """
         Инициализация CSV файла с заголовками (deprecated - используется unified CSV).
-        
+
         Оставлен для обратной совместимости, но больше не используется.
         Все данные записываются в объединенный CSV файл all_data_YYYY-MM-DD.csv
         """
         # ✅ ИСПРАВЛЕНО: Этот метод больше не используется, все идет в unified CSV
         pass
-    
+
     def __del__(self):
         """Закрытие CSV файла при удалении объекта."""
         if self.csv_file:
@@ -341,7 +344,9 @@ class PerformanceTracker:
         """
         try:
             if not self.csv_writer or not self.csv_file:
-                logger.warning("⚠️ CSV writer not initialized, skipping position open export")
+                logger.warning(
+                    "⚠️ CSV writer not initialized, skipping position open export"
+                )
                 return
 
             # ✅ ИСПРАВЛЕНО: Записываем в объединенный CSV с record_type
@@ -441,7 +446,9 @@ class PerformanceTracker:
                     "status": status,
                     "fill_price": f"{fill_price:.8f}" if fill_price else "",
                     "fill_size": f"{fill_size:.8f}" if fill_size else "",
-                    "execution_time_ms": f"{execution_time_ms:.2f}" if execution_time_ms else "",
+                    "execution_time_ms": f"{execution_time_ms:.2f}"
+                    if execution_time_ms
+                    else "",
                     "slippage": f"{slippage:.4f}" if slippage else "",
                     "event_type": "",
                     "data": "",
@@ -501,7 +508,9 @@ class PerformanceTracker:
                     "order_type": "",
                     "price": f"{price:.8f}",
                     "strength": f"{strength:.4f}",
-                    "filters_passed": ",".join(filters_passed) if filters_passed else "",
+                    "filters_passed": ",".join(filters_passed)
+                    if filters_passed
+                    else "",
                     "executed": "1" if executed else "0",
                     "status": "",
                     "fill_price": "",

@@ -83,13 +83,16 @@ class DebugLogger:
         if self.csv_export:
             unified_csv_path = Path(f"logs/all_data_{today}.csv")
             unified_csv_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             # Открываем объединенный CSV файл в режиме append
             file_exists = unified_csv_path.exists()
             self.csv_file = open(
-                unified_csv_path, "a" if file_exists else "w", newline="", encoding="utf-8"
+                unified_csv_path,
+                "a" if file_exists else "w",
+                newline="",
+                encoding="utf-8",
             )  # noqa: SIM115
-            
+
             # Универсальные поля для объединенного CSV
             fieldnames = [
                 "record_type",  # debug, trades, positions_open, orders, signals
@@ -120,16 +123,20 @@ class DebugLogger:
                 "event_type",  # Для debug логов
                 "data",  # Для debug логов
             ]
-            
+
             self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=fieldnames)
-            
+
             if not file_exists:
                 self.csv_writer.writeheader()
                 logger.info(f"✅ DebugLogger: Created unified CSV: {unified_csv_path}")
             else:
-                logger.debug(f"✅ DebugLogger: Using existing unified CSV: {unified_csv_path}")
+                logger.debug(
+                    f"✅ DebugLogger: Using existing unified CSV: {unified_csv_path}"
+                )
 
-        logger.info(f"✅ DebugLogger инициализирован: CSV в объединенном файле logs/all_data_{today}.csv")
+        logger.info(
+            f"✅ DebugLogger инициализирован: CSV в объединенном файле logs/all_data_{today}.csv"
+        )
 
     def __del__(self):
         """Закрытие CSV файла при удалении объекта."""

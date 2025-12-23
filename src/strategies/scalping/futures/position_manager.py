@@ -112,7 +112,7 @@ class FuturesPositionManager:
 
         # ✅ РЕФАКТОРИНГ: Инициализируем новые менеджеры после установки orchestrator
         self._init_refactored_managers()
-    
+
     def set_exit_analyzer(self, exit_analyzer):
         """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливает ExitAnalyzer для анализа позиций"""
         self.exit_analyzer = exit_analyzer
@@ -1264,7 +1264,9 @@ class FuturesPositionManager:
                         if isinstance(position_open_time, datetime):
                             # ✅ ИСПРАВЛЕНО: Используем timezone.utc для консистентности
                             if position_open_time.tzinfo is None:
-                                position_open_time = position_open_time.replace(tzinfo=timezone.utc)
+                                position_open_time = position_open_time.replace(
+                                    tzinfo=timezone.utc
+                                )
                             time_since_open = (
                                 datetime.now(timezone.utc) - position_open_time
                             ).total_seconds()
@@ -5781,8 +5783,10 @@ class FuturesPositionManager:
                     position = self.position_registry.get_position(symbol)
                 elif hasattr(self, "orchestrator") and self.orchestrator:
                     if hasattr(self.orchestrator, "position_registry"):
-                        position = self.orchestrator.position_registry.get_position(symbol)
-                
+                        position = self.orchestrator.position_registry.get_position(
+                            symbol
+                        )
+
                 entry_time = None
                 if position:
                     if hasattr(position, "entry_time"):
@@ -5793,27 +5797,33 @@ class FuturesPositionManager:
                         metadata = position.metadata
                         if hasattr(metadata, "entry_time"):
                             entry_time = metadata.entry_time
-                
+
                 if entry_time:
                     # ✅ ИСПРАВЛЕНО: Используем глобальный импорт datetime, не локальный
                     exit_time = datetime.now(timezone.utc)
                     if isinstance(entry_time, str):
-                        entry_time = datetime.fromisoformat(entry_time.replace("Z", "+00:00"))
+                        entry_time = datetime.fromisoformat(
+                            entry_time.replace("Z", "+00:00")
+                        )
                     if isinstance(entry_time, datetime):
                         if entry_time.tzinfo is None:
                             entry_time = entry_time.replace(tzinfo=timezone.utc)
                         duration_sec = (exit_time - entry_time).total_seconds()
                         if duration_sec < 30:  # Минимум 30 сек
-                            logger.warning(f"⚠️ Too fast close: {symbol}, {duration_sec:.1f}s < 30s")
+                            logger.warning(
+                                f"⚠️ Too fast close: {symbol}, {duration_sec:.1f}s < 30s"
+                            )
                             return None
-                
+
                 # Получаем информацию о позиции с биржи
                 # ⚠️ ИСПРАВЛЕНИЕ: get_positions() возвращает СПИСОК, не dict!
                 positions = await self.client.get_positions(symbol)
 
                 # Проверяем, что positions это список
                 if not isinstance(positions, list) or len(positions) == 0:
-                    logger.warning(f"Позиция {symbol} не найдена на бирже (список пустой)")
+                    logger.warning(
+                        f"Позиция {symbol} не найдена на бирже (список пустой)"
+                    )
                     return None
 
                 # Ищем нужную позицию в списке
@@ -5848,7 +5858,10 @@ class FuturesPositionManager:
 
                         # Удаляем из PositionRegistry
                         position_registry = None
-                        if hasattr(self, "position_registry") and self.position_registry:
+                        if (
+                            hasattr(self, "position_registry")
+                            and self.position_registry
+                        ):
                             position_registry = self.position_registry
                         elif hasattr(self, "orchestrator") and self.orchestrator:
                             if hasattr(self.orchestrator, "position_registry"):
@@ -5877,7 +5890,9 @@ class FuturesPositionManager:
                             final_pnl = float(pos_data["upl"])
                         elif "uPnl" in pos_data and pos_data.get("uPnl"):
                             final_pnl = float(pos_data["uPnl"])
-                        elif "unrealizedPnl" in pos_data and pos_data.get("unrealizedPnl"):
+                        elif "unrealizedPnl" in pos_data and pos_data.get(
+                            "unrealizedPnl"
+                        ):
                             final_pnl = float(pos_data["unrealizedPnl"])
                     except (ValueError, TypeError):
                         pass
@@ -5939,7 +5954,9 @@ class FuturesPositionManager:
                                     metadata = await self.orchestrator.position_registry.get_metadata(
                                         symbol
                                     )
-                                    if metadata and getattr(metadata, "entry_time", None):
+                                    if metadata and getattr(
+                                        metadata, "entry_time", None
+                                    ):
                                         entry_time = metadata.entry_time
                             except Exception:
                                 pass
@@ -5997,7 +6014,9 @@ class FuturesPositionManager:
                                 entry_order_type = stored_position.get(
                                     "order_type", "market"
                                 )
-                                entry_post_only = stored_position.get("post_only", False)
+                                entry_post_only = stored_position.get(
+                                    "post_only", False
+                                )
 
                         # ✅ ЗАДАЧА #10: Определяем комиссию entry: если limit с post_only - maker, иначе taker
                         if entry_order_type == "limit" and entry_post_only:
@@ -6068,7 +6087,9 @@ class FuturesPositionManager:
                             datetime.now(timezone.utc) - entry_time
                         ).total_seconds()
                         duration_min = duration_sec / 60.0
-                        duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
+                        duration_str = (
+                            f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
+                        )
 
                         # ✅ ЗАДАЧА #8: Улучшенное логирование закрытия позиции
                         close_time = datetime.now(timezone.utc)
@@ -6081,8 +6102,8 @@ class FuturesPositionManager:
                                 regime = stored_position.get("regime", "unknown")
                         elif hasattr(self, "orchestrator") and self.orchestrator:
                             if symbol in self.orchestrator.active_positions:
-                                stored_position = self.orchestrator.active_positions.get(
-                                    symbol, {}
+                                stored_position = (
+                                    self.orchestrator.active_positions.get(symbol, {})
                                 )
                                 if isinstance(stored_position, dict):
                                     regime = stored_position.get("regime", "unknown")
@@ -6145,7 +6166,9 @@ class FuturesPositionManager:
                             f"   💵 Net PnL: ${net_pnl:+.4f} USDT (Gross - Commission - Funding){pnl_percent_from_margin_str}"
                         )
                         if margin_used > 0:
-                            logger.info(f"   📈 Маржа использована: ${margin_used:.4f} USDT")
+                            logger.info(
+                                f"   📈 Маржа использована: ${margin_used:.4f} USDT"
+                            )
                         logger.info(f"   🎯 Причина закрытия: {reason}")
                         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
@@ -6158,13 +6181,13 @@ class FuturesPositionManager:
                                 and hasattr(self.orchestrator, "position_registry")
                                 and self.orchestrator.position_registry
                             ):
-                                meta = (
-                                    await self.orchestrator.position_registry.get_metadata(
-                                        symbol
-                                    )
+                                meta = await self.orchestrator.position_registry.get_metadata(
+                                    symbol
                                 )
                                 if meta and getattr(meta, "position_id", None):
-                                    position_id = str(getattr(meta, "position_id") or "")
+                                    position_id = str(
+                                        getattr(meta, "position_id") or ""
+                                    )
                         except Exception:
                             position_id = ""
 
@@ -6189,7 +6212,9 @@ class FuturesPositionManager:
                         # ✅ Метрики: суммарное время удержания и счётчики закрытий
                         try:
                             self.management_stats.setdefault("sum_duration_sec", 0.0)
-                            self.management_stats["sum_duration_sec"] += float(duration_sec)
+                            self.management_stats["sum_duration_sec"] += float(
+                                duration_sec
+                            )
                             self._update_close_stats(
                                 reason
                             )  # ✅ ИСПРАВЛЕНО: Используем переданный reason

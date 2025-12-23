@@ -203,7 +203,9 @@ class AdaptiveRegimeManager:
         # История для подтверждений
         self.regime_confirmations: List[RegimeType] = []
         # ✅ ПРАВКА #18: Кэширование regime для оптимизации
-        self._regime_cache: Dict[str, Tuple[RegimeType, datetime]] = {}  # {symbol: (regime, timestamp)}
+        self._regime_cache: Dict[
+            str, Tuple[RegimeType, datetime]
+        ] = {}  # {symbol: (regime, timestamp)}
         self._cache_ttl_seconds = 30  # Кэш действителен 30 секунд
         # Статистика
         self.regime_switches: Dict[str, int] = {}
@@ -491,6 +493,7 @@ class AdaptiveRegimeManager:
         """
         # ✅ ПРАВКА #18: Проверяем кэш перед расчетом
         from datetime import timedelta
+
         cache_key = f"{len(candles)}_{current_price:.2f}"
         if cache_key in self._regime_cache:
             cached_regime, cache_time = self._regime_cache[cache_key]
@@ -503,16 +506,17 @@ class AdaptiveRegimeManager:
                 # Возвращаем None если режим не изменился, иначе возвращаем cached_regime
                 if cached_regime == self.current_regime:
                     return None
-        
+
         # Определяем новый режим
         detection = self.detect_regime(candles, current_price)
-        
+
         # ✅ ПРАВКА #18: Сохраняем в кэш
         self._regime_cache[cache_key] = (detection.regime, datetime.utcnow())
         # Очищаем старые записи из кэша (старше 5 минут)
         current_time = datetime.utcnow()
         self._regime_cache = {
-            k: v for k, v in self._regime_cache.items()
+            k: v
+            for k, v in self._regime_cache.items()
             if (current_time - v[1]).total_seconds() < 300
         }
 

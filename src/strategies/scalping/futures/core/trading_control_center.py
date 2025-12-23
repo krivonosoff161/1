@@ -197,7 +197,7 @@ class TradingControlCenter:
                 if not hasattr(self, "_cycle_count"):
                     self._cycle_count = 0
                 self._cycle_count += 1
-                
+
                 # ✅ ПРАВКА #17: Если цикл слишком долгий (>5 сек), логируем предупреждение
                 if cycle_time > 5000:
                     logger.warning(

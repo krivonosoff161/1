@@ -268,7 +268,9 @@ class FuturesSignalGenerator:
         # ✅ НОВОЕ: Модуль статистики для динамической адаптации
         self.trading_statistics = None
         self.config_manager = None  # ✅ НОВОЕ: ConfigManager для адаптивных параметров
-        self.adaptive_filter_params = None  # ✅ НОВОЕ: Адаптивная система параметров фильтров
+        self.adaptive_filter_params = (
+            None  # ✅ НОВОЕ: Адаптивная система параметров фильтров
+        )
 
         logger.info("FuturesSignalGenerator инициализирован")
 
@@ -309,11 +311,11 @@ class FuturesSignalGenerator:
             config_manager: Экземпляр ConfigManager
         """
         self.config_manager = config_manager
-        
+
         # ✅ НОВОЕ: Инициализируем AdaptiveFilterParameters после установки всех зависимостей
         if self.config_manager and self.regime_manager and self.data_registry:
             from .adaptivity.filter_parameters import AdaptiveFilterParameters
-            
+
             self.adaptive_filter_params = AdaptiveFilterParameters(
                 config_manager=self.config_manager,
                 regime_manager=self.regime_manager,
@@ -321,7 +323,7 @@ class FuturesSignalGenerator:
                 trading_statistics=self.trading_statistics,
             )
             logger.info("✅ AdaptiveFilterParameters инициализирован в SignalGenerator")
-    
+
     def set_trading_statistics(self, trading_statistics):
         """
         ✅ НОВОЕ: Установить модуль статистики для динамической адаптации
@@ -337,7 +339,7 @@ class FuturesSignalGenerator:
         for symbol, manager in self.regime_managers.items():
             if hasattr(manager, "trading_statistics"):
                 manager.trading_statistics = trading_statistics
-        
+
         # ✅ НОВОЕ: Обновляем AdaptiveFilterParameters если уже инициализирован
         if self.adaptive_filter_params:
             self.adaptive_filter_params.trading_statistics = trading_statistics
@@ -499,13 +501,15 @@ class FuturesSignalGenerator:
 
                         # ✅ АДАПТИВНО: Получаем correlation_threshold через AdaptiveFilterParameters
                         if self.adaptive_filter_params:
-                            corr_threshold = self.adaptive_filter_params.get_correlation_threshold(
-                                symbol="",  # Глобальный параметр
-                                regime=None,
+                            corr_threshold = (
+                                self.adaptive_filter_params.get_correlation_threshold(
+                                    symbol="",  # Глобальный параметр
+                                    regime=None,
+                                )
                             )
                         else:
                             corr_threshold = corr_dict.get("correlation_threshold", 0.7)
-                        
+
                         modules = ModuleParameters(
                             mtf_block_opposite=mtf_dict.get("block_opposite", True),
                             mtf_score_bonus=mtf_dict.get("score_bonus", 2),
@@ -681,18 +685,25 @@ class FuturesSignalGenerator:
                         f"✅ Adaptive Regime Manager инициализирован: "
                         f"общий + {len(self.regime_managers)} для символов"
                     )
-                    
+
                     # ✅ НОВОЕ: Инициализируем AdaptiveFilterParameters после установки всех зависимостей
-                    if self.config_manager and self.regime_manager and self.data_registry:
-                        from .adaptivity.filter_parameters import AdaptiveFilterParameters
-                        
+                    if (
+                        self.config_manager
+                        and self.regime_manager
+                        and self.data_registry
+                    ):
+                        from .adaptivity.filter_parameters import \
+                            AdaptiveFilterParameters
+
                         self.adaptive_filter_params = AdaptiveFilterParameters(
                             config_manager=self.config_manager,
                             regime_manager=self.regime_manager,
                             data_registry=self.data_registry,
                             trading_statistics=self.trading_statistics,
                         )
-                        logger.info("✅ AdaptiveFilterParameters инициализирован в SignalGenerator.initialize()")
+                        logger.info(
+                            "✅ AdaptiveFilterParameters инициализирован в SignalGenerator.initialize()"
+                        )
                 except Exception as e:
                     logger.warning(f"⚠️ ARM инициализация не удалась: {e}")
                     self.regime_manager = None
@@ -878,9 +889,11 @@ class FuturesSignalGenerator:
 
                 # ✅ АДАПТИВНО: Получаем correlation_threshold через AdaptiveFilterParameters
                 if self.adaptive_filter_params:
-                    corr_threshold = self.adaptive_filter_params.get_correlation_threshold(
-                        symbol="",  # Глобальный параметр
-                        regime=None,
+                    corr_threshold = (
+                        self.adaptive_filter_params.get_correlation_threshold(
+                            symbol="",  # Глобальный параметр
+                            regime=None,
+                        )
                     )
                 else:
                     corr_threshold = (
@@ -1381,7 +1394,9 @@ class FuturesSignalGenerator:
 
             # ✅ ОПТИМИЗАЦИЯ: Параллельная обработка символов (вместо последовательной)
             # Создаем задачи для всех символов одновременно
-            async def _generate_symbol_signals_task(symbol: str) -> List[Dict[str, Any]]:
+            async def _generate_symbol_signals_task(
+                symbol: str,
+            ) -> List[Dict[str, Any]]:
                 """Внутренняя функция для генерации сигналов одного символа"""
                 try:
                     # Получаем данные один раз для символа
@@ -1391,7 +1406,9 @@ class FuturesSignalGenerator:
 
                     # ✅ ОПТИМИЗАЦИЯ: Определяем режим один раз и передаем как параметр
                     current_regime = "ranging"  # Fallback
-                    regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+                    regime_manager = (
+                        self.regime_managers.get(symbol) or self.regime_manager
+                    )
 
                     if (
                         regime_manager
@@ -1402,7 +1419,10 @@ class FuturesSignalGenerator:
                             # Берем последнюю цену закрытия как current_price
                             current_price = market_data.ohlcv_data[-1].close
                             # ✅ ВАЖНО: Проверяем что current_price это число
-                            if not isinstance(current_price, (int, float)) or current_price <= 0:
+                            if (
+                                not isinstance(current_price, (int, float))
+                                or current_price <= 0
+                            ):
                                 current_price = 0.0
 
                             # Обновляем режим на основе свежих данных (detect_regime не async)
@@ -1423,7 +1443,10 @@ class FuturesSignalGenerator:
 
                     # Генерируем сигналы для текущего символа (передаем уже полученные данные и режим)
                     symbol_signals = await self._generate_symbol_signals(
-                        symbol, market_data, current_positions=current_positions, regime=current_regime
+                        symbol,
+                        market_data,
+                        current_positions=current_positions,
+                        regime=current_regime,
                     )
                     return symbol_signals if isinstance(symbol_signals, list) else []
                 except Exception as e:
@@ -1432,17 +1455,22 @@ class FuturesSignalGenerator:
 
             # ✅ ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА: Обрабатываем все символы одновременно
             import asyncio
+
             tasks = [_generate_symbol_signals_task(symbol) for symbol in symbols]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Собираем сигналы из всех результатов
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
-                    logger.error(f"❌ Ошибка генерации сигналов для {symbols[i]}: {result}")
+                    logger.error(
+                        f"❌ Ошибка генерации сигналов для {symbols[i]}: {result}"
+                    )
                 elif isinstance(result, list):
                     signals.extend(result)
                 else:
-                    logger.warning(f"⚠️ Неожиданный тип результата для {symbols[i]}: {type(result)}")
+                    logger.warning(
+                        f"⚠️ Неожиданный тип результата для {symbols[i]}: {type(result)}"
+                    )
 
             # Фильтрация и ранжирование сигналов
             filtered_signals = await self._filter_and_rank_signals(signals)
@@ -1542,7 +1570,11 @@ class FuturesSignalGenerator:
             if self.data_registry:
                 price = await self.data_registry.get_price(symbol)
                 # ✅ ВАЖНО: Проверяем что price это float и > 0
-                if price is not None and isinstance(price, (int, float)) and float(price) > 0:
+                if (
+                    price is not None
+                    and isinstance(price, (int, float))
+                    and float(price) > 0
+                ):
                     return float(price)
         except Exception as e:
             logger.debug(
@@ -1550,7 +1582,11 @@ class FuturesSignalGenerator:
             )
 
         # ✅ ПРИОРИТЕТ 2: Цена из свечи (fallback_price) - быстро, но может быть устаревшей
-        if fallback_price and isinstance(fallback_price, (int, float)) and float(fallback_price) > 0:
+        if (
+            fallback_price
+            and isinstance(fallback_price, (int, float))
+            and float(fallback_price) > 0
+        ):
             return float(fallback_price)
 
         # ✅ ПРИОРИТЕТ 3: API запрос (только если нет других источников) - МЕДЛЕННО
@@ -1560,15 +1596,17 @@ class FuturesSignalGenerator:
                 if price_limits and isinstance(price_limits, dict):
                     current_price = price_limits.get("current_price", 0)
                     # ✅ ВАЖНО: Проверяем тип и значение
-                    if current_price and isinstance(current_price, (int, float)) and float(current_price) > 0:
+                    if (
+                        current_price
+                        and isinstance(current_price, (int, float))
+                        and float(current_price) > 0
+                    ):
                         logger.debug(
                             f"💰 Получена цена через API для {symbol}: {current_price:.2f}"
                         )
                         return float(current_price)
         except Exception as e:
-            logger.debug(
-                f"⚠️ Не удалось получить цену через API для {symbol}: {e}"
-            )
+            logger.debug(f"⚠️ Не удалось получить цену через API для {symbol}: {e}")
 
         # ✅ ФИНАЛЬНЫЙ FALLBACK: Возвращаем fallback_price или 0.0
         # Всегда возвращаем float, никогда None
@@ -2968,13 +3006,17 @@ class FuturesSignalGenerator:
 
                 # ✅ АДАПТИВНО: Получаем reversal_threshold через AdaptiveFilterParameters
                 if self.adaptive_filter_params:
-                    reversal_threshold = await self.adaptive_filter_params.get_reversal_threshold(
-                        symbol=symbol,
-                        regime=regime_name_ma,
+                    reversal_threshold = (
+                        await self.adaptive_filter_params.get_reversal_threshold(
+                            symbol=symbol,
+                            regime=regime_name_ma,
+                        )
                     )
                 else:
                     # Fallback: старая логика (для обратной совместимости)
-                    reversal_threshold = 0.0015  # Fallback: 0.15% для обнаружения разворота
+                    reversal_threshold = (
+                        0.0015  # Fallback: 0.15% для обнаружения разворота
+                    )
                     try:
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала проверяем per-symbol overrides из symbol_profiles
                         symbol_profile_found = False
@@ -3004,7 +3046,9 @@ class FuturesSignalGenerator:
                                         else {}
                                     )
                                 )
-                                regime_profile = symbol_profile_dict.get(regime_name_ma, {})
+                                regime_profile = symbol_profile_dict.get(
+                                    regime_name_ma, {}
+                                )
                                 regime_profile_dict = (
                                     regime_profile
                                     if isinstance(regime_profile, dict)
@@ -3029,7 +3073,9 @@ class FuturesSignalGenerator:
 
                                 if "v_reversal_threshold" in reversal_config_dict:
                                     reversal_threshold = (
-                                        float(reversal_config_dict["v_reversal_threshold"])
+                                        float(
+                                            reversal_config_dict["v_reversal_threshold"]
+                                        )
                                         / 100.0
                                     )  # Конвертируем из процентов в доли
                                     symbol_profile_found = True
@@ -3085,7 +3131,9 @@ class FuturesSignalGenerator:
 
                                 if "v_reversal_threshold" in reversal_config_dict:
                                     reversal_threshold = (
-                                        float(reversal_config_dict["v_reversal_threshold"])
+                                        float(
+                                            reversal_config_dict["v_reversal_threshold"]
+                                        )
                                         / 100.0
                                     )  # Конвертируем из процентов в доли
                                     logger.debug(
@@ -4830,13 +4878,16 @@ class FuturesSignalGenerator:
         try:
             # ✅ ПРАВКА #14: Ограничение частоты сигналов (минимум 60 сек между сигналами)
             import time
+
             current_time = time.time()
             filtered_by_time = []
             for signal in signals:
                 symbol = signal.get("symbol", "")
                 if symbol:
                     last_signal_time = self.signal_cache.get(symbol, 0)
-                    if current_time - last_signal_time < 20:  # ✅ ИСПРАВЛЕНО: 20 секунд вместо 60 (скальпинг требует частой торговли)
+                    if (
+                        current_time - last_signal_time < 20
+                    ):  # ✅ ИСПРАВЛЕНО: 20 секунд вместо 60 (скальпинг требует частой торговли)
                         logger.debug(
                             f"🔍 Сигнал для {symbol} отфильтрован по времени: "
                             f"прошло {current_time - last_signal_time:.1f}с < 20с"
@@ -4846,7 +4897,7 @@ class FuturesSignalGenerator:
                     self.signal_cache[symbol] = current_time
                 filtered_by_time.append(signal)
             signals = filtered_by_time
-            
+
             # Фильтрация по минимальной силе
             # ✅ АДАПТИВНО: min_signal_strength из конфига по режиму
             regime_name_min_strength = "ranging"  # Fallback
