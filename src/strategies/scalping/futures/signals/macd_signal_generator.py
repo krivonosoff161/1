@@ -283,3 +283,6 @@ class MACDSignalGenerator:
             )
 
         return signals
+
+
+

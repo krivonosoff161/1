@@ -263,8 +263,12 @@ class FuturesSignalGenerator:
         self.is_initialized = False
         self.last_signals = {}
         self.signal_history = []
+        # ✅ ПРАВКА #14: Кэш для ограничения частоты сигналов (минимум 60 сек между сигналами)
+        self.signal_cache = {}  # {symbol: last_signal_timestamp}
         # ✅ НОВОЕ: Модуль статистики для динамической адаптации
         self.trading_statistics = None
+        self.config_manager = None  # ✅ НОВОЕ: ConfigManager для адаптивных параметров
+        self.adaptive_filter_params = None  # ✅ НОВОЕ: Адаптивная система параметров фильтров
 
         logger.info("FuturesSignalGenerator инициализирован")
 
@@ -297,6 +301,27 @@ class FuturesSignalGenerator:
         self.performance_tracker = performance_tracker
         logger.debug("✅ FuturesSignalGenerator: PerformanceTracker установлен")
 
+    def set_config_manager(self, config_manager):
+        """
+        ✅ НОВОЕ: Установить ConfigManager для адаптивных параметров фильтров
+
+        Args:
+            config_manager: Экземпляр ConfigManager
+        """
+        self.config_manager = config_manager
+        
+        # ✅ НОВОЕ: Инициализируем AdaptiveFilterParameters после установки всех зависимостей
+        if self.config_manager and self.regime_manager and self.data_registry:
+            from .adaptivity.filter_parameters import AdaptiveFilterParameters
+            
+            self.adaptive_filter_params = AdaptiveFilterParameters(
+                config_manager=self.config_manager,
+                regime_manager=self.regime_manager,
+                data_registry=self.data_registry,
+                trading_statistics=self.trading_statistics,
+            )
+            logger.info("✅ AdaptiveFilterParameters инициализирован в SignalGenerator")
+    
     def set_trading_statistics(self, trading_statistics):
         """
         ✅ НОВОЕ: Установить модуль статистики для динамической адаптации
@@ -312,6 +337,10 @@ class FuturesSignalGenerator:
         for symbol, manager in self.regime_managers.items():
             if hasattr(manager, "trading_statistics"):
                 manager.trading_statistics = trading_statistics
+        
+        # ✅ НОВОЕ: Обновляем AdaptiveFilterParameters если уже инициализирован
+        if self.adaptive_filter_params:
+            self.adaptive_filter_params.trading_statistics = trading_statistics
 
     @staticmethod
     def _to_dict(raw: Any) -> Dict[str, Any]:
@@ -468,15 +497,22 @@ class FuturesSignalGenerator:
                         vp_dict = modules_dict.get("volume_profile", {})
                         adx_dict = modules_dict.get("adx_filter", {})
 
+                        # ✅ АДАПТИВНО: Получаем correlation_threshold через AdaptiveFilterParameters
+                        if self.adaptive_filter_params:
+                            corr_threshold = self.adaptive_filter_params.get_correlation_threshold(
+                                symbol="",  # Глобальный параметр
+                                regime=None,
+                            )
+                        else:
+                            corr_threshold = corr_dict.get("correlation_threshold", 0.7)
+                        
                         modules = ModuleParameters(
                             mtf_block_opposite=mtf_dict.get("block_opposite", True),
                             mtf_score_bonus=mtf_dict.get("score_bonus", 2),
                             mtf_confirmation_timeframe=mtf_dict.get(
                                 "confirmation_timeframe", "15m"
                             ),
-                            correlation_threshold=corr_dict.get(
-                                "correlation_threshold", 0.7
-                            ),
+                            correlation_threshold=corr_threshold,
                             max_correlated_positions=corr_dict.get(
                                 "max_correlated_positions", 2
                             ),
@@ -645,6 +681,18 @@ class FuturesSignalGenerator:
                         f"✅ Adaptive Regime Manager инициализирован: "
                         f"общий + {len(self.regime_managers)} для символов"
                     )
+                    
+                    # ✅ НОВОЕ: Инициализируем AdaptiveFilterParameters после установки всех зависимостей
+                    if self.config_manager and self.regime_manager and self.data_registry:
+                        from .adaptivity.filter_parameters import AdaptiveFilterParameters
+                        
+                        self.adaptive_filter_params = AdaptiveFilterParameters(
+                            config_manager=self.config_manager,
+                            regime_manager=self.regime_manager,
+                            data_registry=self.data_registry,
+                            trading_statistics=self.trading_statistics,
+                        )
+                        logger.info("✅ AdaptiveFilterParameters инициализирован в SignalGenerator.initialize()")
                 except Exception as e:
                     logger.warning(f"⚠️ ARM инициализация не удалась: {e}")
                     self.regime_manager = None
@@ -828,11 +876,18 @@ class FuturesSignalGenerator:
                         if not thresholds_config:
                             thresholds_config = thresholds_obj  # Fallback на базовые
 
-                corr_threshold = (
-                    thresholds_config.get("correlation_threshold", 0.7)
-                    if isinstance(thresholds_config, dict)
-                    else getattr(thresholds_config, "correlation_threshold", 0.7)
-                )
+                # ✅ АДАПТИВНО: Получаем correlation_threshold через AdaptiveFilterParameters
+                if self.adaptive_filter_params:
+                    corr_threshold = self.adaptive_filter_params.get_correlation_threshold(
+                        symbol="",  # Глобальный параметр
+                        regime=None,
+                    )
+                else:
+                    corr_threshold = (
+                        thresholds_config.get("correlation_threshold", 0.7)
+                        if isinstance(thresholds_config, dict)
+                        else getattr(thresholds_config, "correlation_threshold", 0.7)
+                    )
                 corr_max_positions = 2
                 corr_block_same_direction = True
 
@@ -1322,44 +1377,72 @@ class FuturesSignalGenerator:
 
         try:
             signals = []
+            symbols = self.scalping_config.symbols
 
-            # Генерация сигналов для каждой торговой пары
-            # ✅ Детекция режима для каждого символа отдельно
-            for symbol in self.scalping_config.symbols:
-                # Получаем данные один раз для символа (оптимизация)
-                market_data = await self._get_market_data(symbol)
-                if not market_data:
-                    continue
+            # ✅ ОПТИМИЗАЦИЯ: Параллельная обработка символов (вместо последовательной)
+            # Создаем задачи для всех символов одновременно
+            async def _generate_symbol_signals_task(symbol: str) -> List[Dict[str, Any]]:
+                """Внутренняя функция для генерации сигналов одного символа"""
+                try:
+                    # Получаем данные один раз для символа
+                    market_data = await self._get_market_data(symbol)
+                    if not market_data:
+                        return []
 
-                # Обновляем режим ARM для текущего символа (используем персональный ARM если есть)
-                regime_manager = self.regime_managers.get(symbol) or self.regime_manager
+                    # ✅ ОПТИМИЗАЦИЯ: Определяем режим один раз и передаем как параметр
+                    current_regime = "ranging"  # Fallback
+                    regime_manager = self.regime_managers.get(symbol) or self.regime_manager
 
-                if (
-                    regime_manager
-                    and market_data.ohlcv_data
-                    and len(market_data.ohlcv_data) >= 50
-                ):
-                    try:
-                        # Берем последнюю цену закрытия как current_price
-                        current_price = market_data.ohlcv_data[-1].close
+                    if (
+                        regime_manager
+                        and market_data.ohlcv_data
+                        and len(market_data.ohlcv_data) >= 50
+                    ):
+                        try:
+                            # Берем последнюю цену закрытия как current_price
+                            current_price = market_data.ohlcv_data[-1].close
+                            # ✅ ВАЖНО: Проверяем что current_price это число
+                            if not isinstance(current_price, (int, float)) or current_price <= 0:
+                                current_price = 0.0
 
-                        # Обновляем режим на основе свежих данных (detect_regime не async)
-                        detection_result = regime_manager.detect_regime(
-                            market_data.ohlcv_data, current_price
-                        )
-                        current_regime = regime_manager.get_current_regime()
-                        # ✅ ОПТИМИЗАЦИЯ: Логируем режим только при изменении или раз в N минут
-                        # logger.debug(f"🧠 ARM режим для {symbol}: {current_regime}")
-                    except Exception as e:
-                        logger.warning(
-                            f"⚠️ Ошибка обновления режима ARM для {symbol}: {e}"
-                        )
+                            # Обновляем режим на основе свежих данных (detect_regime не async)
+                            detection_result = regime_manager.detect_regime(
+                                market_data.ohlcv_data, current_price
+                            )
+                            regime_obj = regime_manager.get_current_regime()
+                            if regime_obj:
+                                current_regime = (
+                                    regime_obj.lower()
+                                    if isinstance(regime_obj, str)
+                                    else str(regime_obj).lower()
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                f"⚠️ Ошибка обновления режима ARM для {symbol}: {e}"
+                            )
 
-                # Генерируем сигналы для текущего символа (передаем уже полученные данные)
-                symbol_signals = await self._generate_symbol_signals(
-                    symbol, market_data, current_positions=current_positions
-                )
-                signals.extend(symbol_signals)
+                    # Генерируем сигналы для текущего символа (передаем уже полученные данные и режим)
+                    symbol_signals = await self._generate_symbol_signals(
+                        symbol, market_data, current_positions=current_positions, regime=current_regime
+                    )
+                    return symbol_signals if isinstance(symbol_signals, list) else []
+                except Exception as e:
+                    logger.error(f"❌ Ошибка генерации сигналов для {symbol}: {e}")
+                    return []
+
+            # ✅ ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА: Обрабатываем все символы одновременно
+            import asyncio
+            tasks = [_generate_symbol_signals_task(symbol) for symbol in symbols]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Собираем сигналы из всех результатов
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"❌ Ошибка генерации сигналов для {symbols[i]}: {result}")
+                elif isinstance(result, list):
+                    signals.extend(result)
+                else:
+                    logger.warning(f"⚠️ Неожиданный тип результата для {symbols[i]}: {type(result)}")
 
             # Фильтрация и ранжирование сигналов
             filtered_signals = await self._filter_and_rank_signals(signals)
@@ -1405,6 +1488,7 @@ class FuturesSignalGenerator:
         symbol: str,
         market_data: Optional[MarketData] = None,
         current_positions: Dict = None,
+        regime: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Генерация сигналов для конкретной торговой пары
 
@@ -1412,6 +1496,7 @@ class FuturesSignalGenerator:
             symbol: Торговая пара
             market_data: Рыночные данные (если не переданы - получим сами)
             current_positions: Текущие открытые позиции для CorrelationFilter
+            regime: Режим рынка (trending/ranging/choppy) - если не передан, определяется автоматически
         """
         try:
             # Получение рыночных данных (если не переданы)
@@ -1438,37 +1523,56 @@ class FuturesSignalGenerator:
         self, symbol: str, fallback_price: float = 0.0
     ) -> float:
         """
-        ✅ НОВОЕ: Получение текущей цены из стакана для актуальной цены сигнала.
+        ✅ ОПТИМИЗИРОВАНО: Получение текущей цены с приоритетом DataRegistry (кэш из WebSocket).
 
-        Используется для синхронизации цены сигнала с текущей рыночной ценой,
-        чтобы избежать рассинхронизации между генерацией сигнала и размещением ордера.
+        Приоритет источников:
+        1. DataRegistry (обновляется через WebSocket) - БЫСТРО, без API запросов
+        2. Цена закрытия свечи (fallback_price) - БЫСТРО, но может быть устаревшей
+        3. API запрос (get_price_limits) - МЕДЛЕННО, только если нет других источников
 
         Args:
             symbol: Торговый символ
-            fallback_price: Цена закрытия свечи как fallback если не удалось получить текущую цену
+            fallback_price: Цена закрытия свечи как fallback (float)
 
         Returns:
-            Текущая цена из стакана или fallback_price
+            Текущая цена (float) - всегда возвращает float, никогда None
         """
+        # ✅ ПРИОРИТЕТ 1: Цена из DataRegistry (обновляется через WebSocket, БЕЗ API запросов)
+        try:
+            if self.data_registry:
+                price = await self.data_registry.get_price(symbol)
+                # ✅ ВАЖНО: Проверяем что price это float и > 0
+                if price is not None and isinstance(price, (int, float)) and float(price) > 0:
+                    return float(price)
+        except Exception as e:
+            logger.debug(
+                f"⚠️ Не удалось получить цену из DataRegistry для {symbol}: {e}"
+            )
+
+        # ✅ ПРИОРИТЕТ 2: Цена из свечи (fallback_price) - быстро, но может быть устаревшей
+        if fallback_price and isinstance(fallback_price, (int, float)) and float(fallback_price) > 0:
+            return float(fallback_price)
+
+        # ✅ ПРИОРИТЕТ 3: API запрос (только если нет других источников) - МЕДЛЕННО
         try:
             if self.client and hasattr(self.client, "get_price_limits"):
                 price_limits = await self.client.get_price_limits(symbol)
-                if price_limits:
+                if price_limits and isinstance(price_limits, dict):
                     current_price = price_limits.get("current_price", 0)
-                    if current_price > 0:
+                    # ✅ ВАЖНО: Проверяем тип и значение
+                    if current_price and isinstance(current_price, (int, float)) and float(current_price) > 0:
                         logger.debug(
-                            f"💰 Получена актуальная цена из стакана для {symbol}: {current_price:.2f} "
-                            f"(fallback был: {fallback_price:.2f})"
+                            f"💰 Получена цена через API для {symbol}: {current_price:.2f}"
                         )
-                        return current_price
+                        return float(current_price)
         except Exception as e:
             logger.debug(
-                f"⚠️ Не удалось получить актуальную цену из стакана для {symbol}: {e}, "
-                f"используем fallback: {fallback_price:.2f}"
+                f"⚠️ Не удалось получить цену через API для {symbol}: {e}"
             )
 
-        # Fallback: возвращаем цену закрытия свечи если не удалось получить текущую цену
-        return fallback_price
+        # ✅ ФИНАЛЬНЫЙ FALLBACK: Возвращаем fallback_price или 0.0
+        # Всегда возвращаем float, никогда None
+        return float(fallback_price) if fallback_price else 0.0
 
     async def _get_market_data(self, symbol: str) -> Optional[MarketData]:
         """
@@ -2862,76 +2966,18 @@ class FuturesSignalGenerator:
                 # V-образный разворот: сначала рост до максимума, потом падение
                 # Или наоборот: сначала падение до минимума, потом рост
 
-                # ✅ АДАПТИВНО: Получаем reversal_threshold из конфига (ПРИОРИТЕТ: per-symbol > режим > fallback)
-                reversal_threshold = 0.0015  # Fallback: 0.15% для обнаружения разворота
-                try:
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала проверяем per-symbol overrides из symbol_profiles
-                    symbol_profile_found = False
+                # ✅ АДАПТИВНО: Получаем reversal_threshold через AdaptiveFilterParameters
+                if self.adaptive_filter_params:
+                    reversal_threshold = await self.adaptive_filter_params.get_reversal_threshold(
+                        symbol=symbol,
+                        regime=regime_name_ma,
+                    )
+                else:
+                    # Fallback: старая логика (для обратной совместимости)
+                    reversal_threshold = 0.0015  # Fallback: 0.15% для обнаружения разворота
                     try:
-                        adaptive_regime = getattr(
-                            self.scalping_config, "adaptive_regime", {}
-                        )
-                        adaptive_dict = (
-                            adaptive_regime
-                            if isinstance(adaptive_regime, dict)
-                            else (
-                                adaptive_regime.__dict__
-                                if hasattr(adaptive_regime, "__dict__")
-                                else {}
-                            )
-                        )
-                        symbol_profiles = adaptive_dict.get("symbol_profiles", {})
-
-                        if symbol and symbol_profiles and symbol in symbol_profiles:
-                            symbol_profile = symbol_profiles[symbol]
-                            symbol_profile_dict = (
-                                symbol_profile
-                                if isinstance(symbol_profile, dict)
-                                else (
-                                    symbol_profile.__dict__
-                                    if hasattr(symbol_profile, "__dict__")
-                                    else {}
-                                )
-                            )
-                            regime_profile = symbol_profile_dict.get(regime_name_ma, {})
-                            regime_profile_dict = (
-                                regime_profile
-                                if isinstance(regime_profile, dict)
-                                else (
-                                    regime_profile.__dict__
-                                    if hasattr(regime_profile, "__dict__")
-                                    else {}
-                                )
-                            )
-                            reversal_config = regime_profile_dict.get(
-                                "reversal_detection", {}
-                            )
-                            reversal_config_dict = (
-                                reversal_config
-                                if isinstance(reversal_config, dict)
-                                else (
-                                    reversal_config.__dict__
-                                    if hasattr(reversal_config, "__dict__")
-                                    else {}
-                                )
-                            )
-
-                            if "v_reversal_threshold" in reversal_config_dict:
-                                reversal_threshold = (
-                                    float(reversal_config_dict["v_reversal_threshold"])
-                                    / 100.0
-                                )  # Конвертируем из процентов в доли
-                                symbol_profile_found = True
-                                logger.debug(
-                                    f"✅ PER-SYMBOL: v_reversal_threshold для {symbol} ({regime_name_ma}): {reversal_threshold:.4f} ({reversal_threshold*100:.2f}%)"
-                                )
-                    except Exception as e:
-                        logger.debug(
-                            f"⚠️ Не удалось получить per-symbol v_reversal_threshold для {symbol}: {e}"
-                        )
-
-                    # ✅ Если per-symbol не найден - используем глобальный порог режима
-                    if not symbol_profile_found:
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала проверяем per-symbol overrides из symbol_profiles
+                        symbol_profile_found = False
                         try:
                             adaptive_regime = getattr(
                                 self.scalping_config, "adaptive_regime", {}
@@ -2945,49 +2991,114 @@ class FuturesSignalGenerator:
                                     else {}
                                 )
                             )
+                            symbol_profiles = adaptive_dict.get("symbol_profiles", {})
 
-                            # Ищем режим в конфиге
-                            regime_config = adaptive_dict.get(regime_name_ma, {})
-                            regime_config_dict = (
-                                regime_config
-                                if isinstance(regime_config, dict)
-                                else (
-                                    regime_config.__dict__
-                                    if hasattr(regime_config, "__dict__")
-                                    else {}
+                            if symbol and symbol_profiles and symbol in symbol_profiles:
+                                symbol_profile = symbol_profiles[symbol]
+                                symbol_profile_dict = (
+                                    symbol_profile
+                                    if isinstance(symbol_profile, dict)
+                                    else (
+                                        symbol_profile.__dict__
+                                        if hasattr(symbol_profile, "__dict__")
+                                        else {}
+                                    )
                                 )
-                            )
+                                regime_profile = symbol_profile_dict.get(regime_name_ma, {})
+                                regime_profile_dict = (
+                                    regime_profile
+                                    if isinstance(regime_profile, dict)
+                                    else (
+                                        regime_profile.__dict__
+                                        if hasattr(regime_profile, "__dict__")
+                                        else {}
+                                    )
+                                )
+                                reversal_config = regime_profile_dict.get(
+                                    "reversal_detection", {}
+                                )
+                                reversal_config_dict = (
+                                    reversal_config
+                                    if isinstance(reversal_config, dict)
+                                    else (
+                                        reversal_config.__dict__
+                                        if hasattr(reversal_config, "__dict__")
+                                        else {}
+                                    )
+                                )
 
-                            # Получаем reversal_detection из режима
-                            reversal_config = regime_config_dict.get(
-                                "reversal_detection", {}
-                            )
-                            reversal_config_dict = (
-                                reversal_config
-                                if isinstance(reversal_config, dict)
-                                else (
-                                    reversal_config.__dict__
-                                    if hasattr(reversal_config, "__dict__")
-                                    else {}
-                                )
-                            )
-
-                            if "v_reversal_threshold" in reversal_config_dict:
-                                reversal_threshold = (
-                                    float(reversal_config_dict["v_reversal_threshold"])
-                                    / 100.0
-                                )  # Конвертируем из процентов в доли
-                                logger.debug(
-                                    f"✅ ГЛОБАЛЬНЫЙ: v_reversal_threshold для {regime_name_ma}: {reversal_threshold:.4f} ({reversal_threshold*100:.2f}%)"
-                                )
+                                if "v_reversal_threshold" in reversal_config_dict:
+                                    reversal_threshold = (
+                                        float(reversal_config_dict["v_reversal_threshold"])
+                                        / 100.0
+                                    )  # Конвертируем из процентов в доли
+                                    symbol_profile_found = True
+                                    logger.debug(
+                                        f"✅ PER-SYMBOL: v_reversal_threshold для {symbol} ({regime_name_ma}): {reversal_threshold:.4f} ({reversal_threshold*100:.2f}%)"
+                                    )
                         except Exception as e:
                             logger.debug(
-                                f"⚠️ Не удалось получить глобальный v_reversal_threshold для {regime_name_ma}: {e}"
+                                f"⚠️ Не удалось получить per-symbol v_reversal_threshold для {symbol}: {e}"
                             )
-                except Exception as e:
-                    logger.debug(
-                        f"⚠️ Не удалось получить адаптивный v_reversal_threshold: {e}, используем fallback 0.15%"
-                    )
+
+                        # ✅ Если per-symbol не найден - используем глобальный порог режима
+                        if not symbol_profile_found:
+                            try:
+                                adaptive_regime = getattr(
+                                    self.scalping_config, "adaptive_regime", {}
+                                )
+                                adaptive_dict = (
+                                    adaptive_regime
+                                    if isinstance(adaptive_regime, dict)
+                                    else (
+                                        adaptive_regime.__dict__
+                                        if hasattr(adaptive_regime, "__dict__")
+                                        else {}
+                                    )
+                                )
+
+                                # Ищем режим в конфиге
+                                regime_config = adaptive_dict.get(regime_name_ma, {})
+                                regime_config_dict = (
+                                    regime_config
+                                    if isinstance(regime_config, dict)
+                                    else (
+                                        regime_config.__dict__
+                                        if hasattr(regime_config, "__dict__")
+                                        else {}
+                                    )
+                                )
+
+                                # Получаем reversal_detection из режима
+                                reversal_config = regime_config_dict.get(
+                                    "reversal_detection", {}
+                                )
+                                reversal_config_dict = (
+                                    reversal_config
+                                    if isinstance(reversal_config, dict)
+                                    else (
+                                        reversal_config.__dict__
+                                        if hasattr(reversal_config, "__dict__")
+                                        else {}
+                                    )
+                                )
+
+                                if "v_reversal_threshold" in reversal_config_dict:
+                                    reversal_threshold = (
+                                        float(reversal_config_dict["v_reversal_threshold"])
+                                        / 100.0
+                                    )  # Конвертируем из процентов в доли
+                                    logger.debug(
+                                        f"✅ ГЛОБАЛЬНЫЙ: v_reversal_threshold для {regime_name_ma}: {reversal_threshold:.4f} ({reversal_threshold*100:.2f}%)"
+                                    )
+                            except Exception as e:
+                                logger.debug(
+                                    f"⚠️ Не удалось получить глобальный v_reversal_threshold для {regime_name_ma}: {e}"
+                                )
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Не удалось получить адаптивный v_reversal_threshold: {e}, используем fallback 0.15%"
+                        )
 
                 # Проверка 1: Рост → Падение (V-образный разворот вниз)
                 if (
@@ -4717,6 +4828,25 @@ class FuturesSignalGenerator:
     ) -> List[Dict[str, Any]]:
         """Фильтрация и ранжирование сигналов"""
         try:
+            # ✅ ПРАВКА #14: Ограничение частоты сигналов (минимум 60 сек между сигналами)
+            import time
+            current_time = time.time()
+            filtered_by_time = []
+            for signal in signals:
+                symbol = signal.get("symbol", "")
+                if symbol:
+                    last_signal_time = self.signal_cache.get(symbol, 0)
+                    if current_time - last_signal_time < 20:  # ✅ ИСПРАВЛЕНО: 20 секунд вместо 60 (скальпинг требует частой торговли)
+                        logger.debug(
+                            f"🔍 Сигнал для {symbol} отфильтрован по времени: "
+                            f"прошло {current_time - last_signal_time:.1f}с < 20с"
+                        )
+                        continue
+                    # Обновляем кэш
+                    self.signal_cache[symbol] = current_time
+                filtered_by_time.append(signal)
+            signals = filtered_by_time
+            
             # Фильтрация по минимальной силе
             # ✅ АДАПТИВНО: min_signal_strength из конфига по режиму
             regime_name_min_strength = "ranging"  # Fallback

@@ -277,6 +277,9 @@ class FuturesScalpingOrchestrator:
         # ✅ НОВОЕ: Передаем structured_logger в signal_generator для логирования свечей
         if hasattr(self.signal_generator, "set_structured_logger"):
             self.signal_generator.set_structured_logger(self.structured_logger)
+        # ✅ НОВОЕ: Передаем config_manager в signal_generator для адаптивных параметров фильтров
+        if hasattr(self.signal_generator, "set_config_manager"):
+            self.signal_generator.set_config_manager(self.config_manager)
         self.order_executor = FuturesOrderExecutor(
             config, self.client, self.slippage_guard
         )
@@ -412,6 +415,11 @@ class FuturesScalpingOrchestrator:
             signal_locks_ref=self.signal_locks,  # ✅ FIX: Передаём signal_locks для race condition
         )
         logger.info("✅ ExitAnalyzer инициализирован в orchestrator")
+        
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем ExitAnalyzer в position_manager
+        if hasattr(self.position_manager, "set_exit_analyzer"):
+            self.position_manager.set_exit_analyzer(self.exit_analyzer)
+            logger.info("✅ ExitAnalyzer установлен в FuturesPositionManager")
 
         # ✅ НОВОЕ: Инициализация PositionMonitor для периодического мониторинга позиций
         # PositionMonitor будет вызывать ExitAnalyzer для всех открытых позиций

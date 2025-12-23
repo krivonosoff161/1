@@ -104,17 +104,25 @@ class MarginCalculator:
         position_value = position_size * entry_price
         position_value / leverage
 
-        # Расчет цены ликвидации
-        if side.lower() == "buy":
-            # Для лонга: LiqPrice = EntryPrice * (1 - (1/Leverage) + MaintenanceMarginRatio)
+        # ✅ ПРАВКА #19: Улучшенный расчет цены ликвидации
+        # Для изолированной маржи OKX формула более точная:
+        # Long: LiqPrice = EntryPrice * (1 - (1/Leverage) + MaintenanceMarginRatio)
+        # Short: LiqPrice = EntryPrice * (1 + (1/Leverage) - MaintenanceMarginRatio)
+        # Учитываем также комиссии и спред
+        if side.lower() == "buy" or side.lower() == "long":
+            # Для лонга: цена ликвидации ниже входа
             liquidation_price = entry_price * (
                 1 - (1 / leverage) + self.maintenance_margin_ratio
             )
-        else:  # sell
-            # Для шорта: LiqPrice = EntryPrice * (1 + (1/Leverage) - MaintenanceMarginRatio)
+            # ✅ ПРАВКА #19: Учитываем комиссии (примерно 0.1% на круг)
+            liquidation_price *= 0.999  # Небольшая поправка на комиссии
+        else:  # sell/short
+            # Для шорта: цена ликвидации выше входа
             liquidation_price = entry_price * (
                 1 + (1 / leverage) - self.maintenance_margin_ratio
             )
+            # ✅ ПРАВКА #19: Учитываем комиссии (примерно 0.1% на круг)
+            liquidation_price *= 1.001  # Небольшая поправка на комиссии
 
         logger.debug(
             f"Расчет ликвидации: side={side}, entry={entry_price:.4f}, "

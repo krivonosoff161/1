@@ -63,14 +63,18 @@ set "SKIPPED=0"
 
 call :move_pattern logs\futures\*.log
 call :move_pattern logs\futures\*.zip
-call :move_pattern logs\futures\debug\*.csv
-call :move_pattern logs\futures\structured\*.json
 
+REM ✅ ИСПРАВЛЕНО: Переносим папки debug и structured полностью (со всеми подпапками и файлами)
+call :move_folder logs\futures\debug logs_futures_debug
+call :move_folder logs\futures\structured logs_futures_structured
+
+REM ✅ ИСПРАВЛЕНО: Переносим все CSV файлы (включая объединенный)
 call :move_pattern logs\trades_*.csv
 call :move_pattern logs\trades_*.json
 call :move_pattern logs\orders_*.csv
 call :move_pattern logs\positions_open_*.csv
 call :move_pattern logs\signals_*.csv
+call :move_pattern logs\all_data_*.csv
 call :move_pattern logs\*.log
 call :move_pattern logs\*.zip
 

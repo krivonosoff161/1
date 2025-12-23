@@ -12,6 +12,7 @@
 import csv
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 from typing import Dict
 
 from loguru import logger
@@ -39,7 +40,11 @@ class PerformanceTracker:
         self.daily_pnl = 0.0
         self.start_balance = 0.0
 
-        # Для CSV экспорта
+        # ✅ ИСПРАВЛЕНО: Объединенный CSV файл для всех данных
+        self.unified_csv_path = None
+        self.csv_writer = None
+        self.csv_file = None
+        # Для обратной совместимости (старые пути)
         self.csv_path = None
         self.positions_open_csv_path = None
         self.orders_csv_path = None
@@ -49,14 +54,28 @@ class PerformanceTracker:
         logger.info("✅ PerformanceTracker initialized")
 
     def _init_csv(self):
-        """Инициализация CSV файлов для сделок, позиций, ордеров и сигналов"""
+        """Инициализация объединенного CSV файла для всех данных"""
         today = datetime.utcnow().strftime("%Y-%m-%d")
 
-        # CSV для закрытых сделок
-        self.csv_path = f"logs/trades_{today}.csv"
-        self._init_csv_file(
-            self.csv_path,
-            [
+        # ✅ ИСПРАВЛЕНО: Один объединенный CSV файл для всех данных
+        self.unified_csv_path = f"logs/all_data_{today}.csv"
+        
+        # Для обратной совместимости сохраняем старые пути
+        self.csv_path = self.unified_csv_path
+        self.positions_open_csv_path = self.unified_csv_path
+        self.orders_csv_path = self.unified_csv_path
+        self.signals_csv_path = self.unified_csv_path
+        
+        # Инициализируем объединенный CSV файл
+        try:
+            file_exists = Path(self.unified_csv_path).exists()
+            self.csv_file = open(
+                self.unified_csv_path, "a" if file_exists else "w", newline="", encoding="utf-8"
+            )
+            
+            # Универсальные поля для всех типов данных
+            fieldnames = [
+                "record_type",  # trades, positions_open, orders, signals, debug
                 "timestamp",
                 "symbol",
                 "side",
@@ -69,75 +88,54 @@ class PerformanceTracker:
                 "duration_sec",
                 "reason",
                 "win_rate",
-            ],
-            "trades",
-        )
-
-        # CSV для открытия позиций
-        self.positions_open_csv_path = f"logs/positions_open_{today}.csv"
-        self._init_csv_file(
-            self.positions_open_csv_path,
-            [
-                "timestamp",
-                "symbol",
-                "side",
-                "entry_price",
-                "size",
                 "regime",
                 "order_id",
                 "order_type",
-            ],
-            "positions_open",
-        )
-
-        # CSV для ордеров
-        self.orders_csv_path = f"logs/orders_{today}.csv"
-        self._init_csv_file(
-            self.orders_csv_path,
-            [
-                "timestamp",
-                "symbol",
-                "side",
-                "order_type",
-                "order_id",
-                "size",
                 "price",
+                "strength",
+                "filters_passed",
+                "executed",
                 "status",
                 "fill_price",
                 "fill_size",
                 "execution_time_ms",
                 "slippage",
-            ],
-            "orders",
-        )
+                "event_type",  # Для debug логов
+                "data",  # Для debug логов
+            ]
+            
+            self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=fieldnames)
+            
+            if not file_exists:
+                self.csv_writer.writeheader()
+                logger.info(f"📊 Created new unified CSV: {self.unified_csv_path}")
+            else:
+                logger.debug(f"📊 Using existing unified CSV: {self.unified_csv_path}")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize unified CSV: {e}")
+            self.csv_file = None
+            self.csv_writer = None
 
-        # CSV для сигналов
-        self.signals_csv_path = f"logs/signals_{today}.csv"
-        self._init_csv_file(
-            self.signals_csv_path,
-            [
-                "timestamp",
-                "symbol",
-                "side",
-                "price",
-                "strength",
-                "regime",
-                "filters_passed",
-                "executed",
-                "order_id",
-            ],
-            "signals",
-        )
+        # Старые CSV файлы больше не создаются - все идет в unified CSV
 
     def _init_csv_file(self, filepath: str, fieldnames: list, file_type: str):
-        """Инициализация CSV файла с заголовками"""
-        try:
-            with open(filepath, "x", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                logger.info(f"📊 Created new {file_type} CSV: {filepath}")
-        except FileExistsError:
-            logger.debug(f"📊 Using existing {file_type} CSV: {filepath}")
+        """
+        Инициализация CSV файла с заголовками (deprecated - используется unified CSV).
+        
+        Оставлен для обратной совместимости, но больше не используется.
+        Все данные записываются в объединенный CSV файл all_data_YYYY-MM-DD.csv
+        """
+        # ✅ ИСПРАВЛЕНО: Этот метод больше не используется, все идет в unified CSV
+        pass
+    
+    def __del__(self):
+        """Закрытие CSV файла при удалении объекта."""
+        if self.csv_file:
+            try:
+                self.csv_file.close()
+            except:
+                pass
 
     def record_trade(self, trade_result: TradeResult):
         """
@@ -173,52 +171,49 @@ class PerformanceTracker:
 
     def _export_trade_to_csv(self, trade: TradeResult):
         """
-        Экспорт сделки в CSV.
+        Экспорт сделки в объединенный CSV.
 
         Args:
             trade: Результат сделки
         """
         try:
-            # 🔥 ИСПРАВЛЕНО: PnL теперь считается правильно!
-            # Формула: (exit_price - entry_price) * size - commission
-            # LONG: (exit - entry) * size
-            # SHORT: (entry - exit) * size
+            if not self.csv_writer or not self.csv_file:
+                logger.warning("⚠️ CSV writer not initialized, skipping trade export")
+                return
 
-            with open(self.csv_path, "a", newline="") as f:
-                writer = csv.DictWriter(
-                    f,
-                    fieldnames=[
-                        "timestamp",
-                        "symbol",
-                        "side",
-                        "entry_price",
-                        "exit_price",
-                        "size",
-                        "gross_pnl",
-                        "commission",
-                        "net_pnl",
-                        "duration_sec",
-                        "reason",
-                        "win_rate",
-                    ],
-                )
-
-                writer.writerow(
-                    {
-                        "timestamp": trade.timestamp.isoformat(),
-                        "symbol": trade.symbol,
-                        "side": trade.side,
-                        "entry_price": f"{trade.entry_price:.4f}",
-                        "exit_price": f"{trade.exit_price:.4f}",
-                        "size": f"{trade.size:.8f}",
-                        "gross_pnl": f"{trade.gross_pnl:.4f}",
-                        "commission": f"{trade.commission:.4f}",
-                        "net_pnl": f"{trade.net_pnl:.4f}",  # ✅ Уже правильный из position_manager!
-                        "duration_sec": trade.duration_sec,
-                        "reason": trade.reason,
-                        "win_rate": f"{self.calculate_win_rate():.2f}",
-                    }
-                )
+            # ✅ ИСПРАВЛЕНО: Записываем в объединенный CSV с record_type
+            self.csv_writer.writerow(
+                {
+                    "record_type": "trades",
+                    "timestamp": trade.timestamp.isoformat(),
+                    "symbol": trade.symbol,
+                    "side": trade.side,
+                    "entry_price": f"{trade.entry_price:.4f}",
+                    "exit_price": f"{trade.exit_price:.4f}",
+                    "size": f"{trade.size:.8f}",
+                    "gross_pnl": f"{trade.gross_pnl:.4f}",
+                    "commission": f"{trade.commission:.4f}",
+                    "net_pnl": f"{trade.net_pnl:.4f}",
+                    "duration_sec": trade.duration_sec,
+                    "reason": trade.reason,
+                    "win_rate": f"{self.calculate_win_rate():.2f}",
+                    "regime": "",
+                    "order_id": "",
+                    "order_type": "",
+                    "price": "",
+                    "strength": "",
+                    "filters_passed": "",
+                    "executed": "",
+                    "status": "",
+                    "fill_price": "",
+                    "fill_size": "",
+                    "execution_time_ms": "",
+                    "slippage": "",
+                    "event_type": "",
+                    "data": "",
+                }
+            )
+            self.csv_file.flush()
 
         except Exception as e:
             logger.error(f"❌ Failed to export trade to CSV: {e}")
@@ -333,7 +328,7 @@ class PerformanceTracker:
         order_type: str = None,
     ) -> None:
         """
-        Записать открытие позиции в CSV.
+        Записать открытие позиции в объединенный CSV.
 
         Args:
             symbol: Торговый символ
@@ -345,34 +340,43 @@ class PerformanceTracker:
             order_type: Тип ордера (limit/market)
         """
         try:
-            with open(
-                self.positions_open_csv_path, "a", newline="", encoding="utf-8"
-            ) as f:
-                writer = csv.DictWriter(
-                    f,
-                    fieldnames=[
-                        "timestamp",
-                        "symbol",
-                        "side",
-                        "entry_price",
-                        "size",
-                        "regime",
-                        "order_id",
-                        "order_type",
-                    ],
-                )
-                writer.writerow(
-                    {
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "symbol": symbol,
-                        "side": side,
-                        "entry_price": f"{entry_price:.8f}",
-                        "size": f"{size:.8f}",
-                        "regime": regime,
-                        "order_id": order_id or "",
-                        "order_type": order_type or "",
-                    }
-                )
+            if not self.csv_writer or not self.csv_file:
+                logger.warning("⚠️ CSV writer not initialized, skipping position open export")
+                return
+
+            # ✅ ИСПРАВЛЕНО: Записываем в объединенный CSV с record_type
+            self.csv_writer.writerow(
+                {
+                    "record_type": "positions_open",
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "symbol": symbol,
+                    "side": side,
+                    "entry_price": f"{entry_price:.8f}",
+                    "exit_price": "",
+                    "size": f"{size:.8f}",
+                    "gross_pnl": "",
+                    "commission": "",
+                    "net_pnl": "",
+                    "duration_sec": "",
+                    "reason": "",
+                    "win_rate": "",
+                    "regime": regime,
+                    "order_id": order_id or "",
+                    "order_type": order_type or "",
+                    "price": "",
+                    "strength": "",
+                    "filters_passed": "",
+                    "executed": "",
+                    "status": "",
+                    "fill_price": "",
+                    "fill_size": "",
+                    "execution_time_ms": "",
+                    "slippage": "",
+                    "event_type": "",
+                    "data": "",
+                }
+            )
+            self.csv_file.flush()
         except Exception as e:
             logger.error(f"❌ Failed to export position open to CSV: {e}")
 
@@ -391,7 +395,7 @@ class PerformanceTracker:
         slippage: float = None,
     ) -> None:
         """
-        Записать ордер в CSV.
+        Записать ордер в объединенный CSV.
 
         Args:
             symbol: Торговый символ
@@ -407,42 +411,43 @@ class PerformanceTracker:
             slippage: Проскальзывание в процентах
         """
         try:
-            with open(self.orders_csv_path, "a", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(
-                    f,
-                    fieldnames=[
-                        "timestamp",
-                        "symbol",
-                        "side",
-                        "order_type",
-                        "order_id",
-                        "size",
-                        "price",
-                        "status",
-                        "fill_price",
-                        "fill_size",
-                        "execution_time_ms",
-                        "slippage",
-                    ],
-                )
-                writer.writerow(
-                    {
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "symbol": symbol,
-                        "side": side,
-                        "order_type": order_type,
-                        "order_id": order_id or "",
-                        "size": f"{size:.8f}",
-                        "price": f"{price:.8f}" if price else "",
-                        "status": status,
-                        "fill_price": f"{fill_price:.8f}" if fill_price else "",
-                        "fill_size": f"{fill_size:.8f}" if fill_size else "",
-                        "execution_time_ms": f"{execution_time_ms:.2f}"
-                        if execution_time_ms
-                        else "",
-                        "slippage": f"{slippage:.4f}" if slippage else "",
-                    }
-                )
+            if not self.csv_writer or not self.csv_file:
+                logger.warning("⚠️ CSV writer not initialized, skipping order export")
+                return
+
+            # ✅ ИСПРАВЛЕНО: Записываем в объединенный CSV с record_type
+            self.csv_writer.writerow(
+                {
+                    "record_type": "orders",
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "symbol": symbol,
+                    "side": side,
+                    "entry_price": "",
+                    "exit_price": "",
+                    "size": f"{size:.8f}",
+                    "gross_pnl": "",
+                    "commission": "",
+                    "net_pnl": "",
+                    "duration_sec": "",
+                    "reason": "",
+                    "win_rate": "",
+                    "regime": "",
+                    "order_id": order_id or "",
+                    "order_type": order_type,
+                    "price": f"{price:.8f}" if price else "",
+                    "strength": "",
+                    "filters_passed": "",
+                    "executed": "",
+                    "status": status,
+                    "fill_price": f"{fill_price:.8f}" if fill_price else "",
+                    "fill_size": f"{fill_size:.8f}" if fill_size else "",
+                    "execution_time_ms": f"{execution_time_ms:.2f}" if execution_time_ms else "",
+                    "slippage": f"{slippage:.4f}" if slippage else "",
+                    "event_type": "",
+                    "data": "",
+                }
+            )
+            self.csv_file.flush()
         except Exception as e:
             logger.error(f"❌ Failed to export order to CSV: {e}")
 
@@ -458,7 +463,7 @@ class PerformanceTracker:
         order_id: str = None,
     ) -> None:
         """
-        Записать сигнал в CSV.
+        Записать сигнал в объединенный CSV.
 
         Args:
             symbol: Торговый символ
@@ -471,35 +476,42 @@ class PerformanceTracker:
             order_id: ID ордера (если исполнен)
         """
         try:
-            with open(self.signals_csv_path, "a", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(
-                    f,
-                    fieldnames=[
-                        "timestamp",
-                        "symbol",
-                        "side",
-                        "price",
-                        "strength",
-                        "regime",
-                        "filters_passed",
-                        "executed",
-                        "order_id",
-                    ],
-                )
-                writer.writerow(
-                    {
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "symbol": symbol,
-                        "side": side,
-                        "price": f"{price:.8f}",
-                        "strength": f"{strength:.4f}",
-                        "regime": regime or "",
-                        "filters_passed": ",".join(filters_passed)
-                        if filters_passed
-                        else "",
-                        "executed": "1" if executed else "0",
-                        "order_id": order_id or "",
-                    }
-                )
+            if not self.csv_writer or not self.csv_file:
+                logger.warning("⚠️ CSV writer not initialized, skipping signal export")
+                return
+
+            # ✅ ИСПРАВЛЕНО: Записываем в объединенный CSV с record_type
+            self.csv_writer.writerow(
+                {
+                    "record_type": "signals",
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "symbol": symbol,
+                    "side": side,
+                    "entry_price": "",
+                    "exit_price": "",
+                    "size": "",
+                    "gross_pnl": "",
+                    "commission": "",
+                    "net_pnl": "",
+                    "duration_sec": "",
+                    "reason": "",
+                    "win_rate": "",
+                    "regime": regime or "",
+                    "order_id": order_id or "",
+                    "order_type": "",
+                    "price": f"{price:.8f}",
+                    "strength": f"{strength:.4f}",
+                    "filters_passed": ",".join(filters_passed) if filters_passed else "",
+                    "executed": "1" if executed else "0",
+                    "status": "",
+                    "fill_price": "",
+                    "fill_size": "",
+                    "execution_time_ms": "",
+                    "slippage": "",
+                    "event_type": "",
+                    "data": "",
+                }
+            )
+            self.csv_file.flush()
         except Exception as e:
             logger.error(f"❌ Failed to export signal to CSV: {e}")

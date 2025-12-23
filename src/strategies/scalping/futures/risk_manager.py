@@ -992,11 +992,11 @@ class FuturesRiskManager:
             # ✅ ИСПРАВЛЕНО: Строгая проверка max_position_size с логированием до/после
             base_usd_size_before_cap = base_usd_size
             if base_usd_size > max_usd_size:
+                base_usd_size = max_usd_size * 0.95  # ✅ ПРАВКА #7: 5% запас
                 logger.warning(
-                    f"⚠️ Размер позиции ${base_usd_size:.2f} превышает max_position_size ${max_usd_size:.2f} для {symbol}! "
-                    f"Ограничиваем до ${max_usd_size:.2f} (сигнал был сильный: strength_multiplier={strength_multiplier:.2f}x)"
+                    f"⚠️ Размер позиции ${base_usd_size_before_cap:.2f} превышает max_position_size ${max_usd_size:.2f} для {symbol}! "
+                    f"Ограничиваем до ${base_usd_size:.2f} (5% запас, сигнал был сильный: strength_multiplier={strength_multiplier:.2f}x)"
                 )
-                base_usd_size = max_usd_size
             logger.info(
                 f"💰 Position size: ${base_usd_size_before_cap:.2f} → ${base_usd_size:.2f} USD after cap "
                 f"(max=${max_usd_size:.2f}, progressive={is_progressive}, multiplier={strength_multiplier:.2f})"

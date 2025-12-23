@@ -62,6 +62,10 @@ class AdaptiveLeverage:
             Оптимальный леверидж (3, 5, 10, 20, 30), округленный до доступного на бирже
         """
         try:
+            # ✅ ИСПРАВЛЕНО: Инициализируем leverage дефолтным значением в начале
+            # Используем средний леверидж по умолчанию (из профиля символа или 5)
+            leverage = 5  # Дефолтное значение
+            
             # Получаем силу сигнала
             signal_strength = signal.get("strength", 0.5)
             if signal_strength < 0:
@@ -73,6 +77,8 @@ class AdaptiveLeverage:
             regime_multiplier = 1.0
             if regime == "trending":
                 regime_multiplier = 1.2  # В тренде можно больше левериджа
+            elif regime == "ranging":
+                regime_multiplier = 0.8  # В боковике меньше левериджа
             elif regime == "choppy":
                 regime_multiplier = 0.8  # В хаосе меньше левериджа
 
@@ -105,6 +111,10 @@ class AdaptiveLeverage:
                 category = "very_strong"
 
             leverage = self.leverage_map.get(category, 5)
+            
+            # ✅ ПРАВКА #12: Снижаем леверидж для ranging (максимум 10x) - ПЕРЕМЕЩЕНО ПОСЛЕ ИНИЦИАЛИЗАЦИИ
+            if regime == "ranging":
+                leverage = min(leverage, 10)  # Максимум 10x для ranging
 
             # Ограничиваем минимальным и максимальным значением
             leverage = max(self.min_leverage, min(self.max_leverage, leverage))
@@ -129,6 +139,17 @@ class AdaptiveLeverage:
             if client and symbol != "N/A":
                 try:
                     original_leverage = leverage
+                    
+                    # ✅ ПРАВКА #8: Получить доступные левериджи и не превышать максимальный
+                    leverage_info = await client.get_instrument_leverage_info(symbol)
+                    available_leverages = leverage_info.get("available_leverages", [])
+                    max_available = leverage_info.get("max_leverage", 20)
+                    
+                    if available_leverages:
+                        logger.info(f"📊 [ADAPTIVE_LEVERAGE] {symbol}: Available leverages: {available_leverages}, max={max_available}x")
+                        # Не превышать доступный максимум
+                        leverage = min(leverage, max_available)
+                    
                     leverage = await client.round_leverage_to_available(
                         symbol, leverage
                     )

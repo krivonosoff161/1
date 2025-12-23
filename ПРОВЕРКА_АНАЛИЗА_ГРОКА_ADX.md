@@ -273,3 +273,6 @@ CHOPPY: adx_threshold=12.0, di_difference=1.0    (более мягкие тре
 
 **Конец проверки**
 
+
+
+

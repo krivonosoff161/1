@@ -78,28 +78,58 @@ class DebugLogger:
         if not self.enabled:
             return
 
-        # Создаем директорию для CSV (logs/futures/debug/)
+        # ✅ ИСПРАВЛЕНО: Используем объединенный CSV файл (all_data_YYYY-MM-DD.csv)
+        today = self.session_start.strftime("%Y-%m-%d")
         if self.csv_export:
-            self.csv_dir.mkdir(parents=True, exist_ok=True)
-            csv_filename = (
-                self.csv_dir
-                / f"debug_{self.session_start.strftime('%Y%m%d_%H%M%S')}.csv"
-            )
+            unified_csv_path = Path(f"logs/all_data_{today}.csv")
+            unified_csv_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Открываем объединенный CSV файл в режиме append
+            file_exists = unified_csv_path.exists()
             self.csv_file = open(
-                csv_filename, "w", newline="", encoding="utf-8"
+                unified_csv_path, "a" if file_exists else "w", newline="", encoding="utf-8"
             )  # noqa: SIM115
-            self.csv_writer = csv.DictWriter(
-                self.csv_file,
-                fieldnames=[
-                    "timestamp",
-                    "event_type",
-                    "symbol",
-                    "data",
-                ],
-            )
-            self.csv_writer.writeheader()
+            
+            # Универсальные поля для объединенного CSV
+            fieldnames = [
+                "record_type",  # debug, trades, positions_open, orders, signals
+                "timestamp",
+                "symbol",
+                "side",
+                "entry_price",
+                "exit_price",
+                "size",
+                "gross_pnl",
+                "commission",
+                "net_pnl",
+                "duration_sec",
+                "reason",
+                "win_rate",
+                "regime",
+                "order_id",
+                "order_type",
+                "price",
+                "strength",
+                "filters_passed",
+                "executed",
+                "status",
+                "fill_price",
+                "fill_size",
+                "execution_time_ms",
+                "slippage",
+                "event_type",  # Для debug логов
+                "data",  # Для debug логов
+            ]
+            
+            self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=fieldnames)
+            
+            if not file_exists:
+                self.csv_writer.writeheader()
+                logger.info(f"✅ DebugLogger: Created unified CSV: {unified_csv_path}")
+            else:
+                logger.debug(f"✅ DebugLogger: Using existing unified CSV: {unified_csv_path}")
 
-        logger.info(f"✅ DebugLogger инициализирован: CSV в {self.csv_dir}")
+        logger.info(f"✅ DebugLogger инициализирован: CSV в объединенном файле logs/all_data_{today}.csv")
 
     def __del__(self):
         """Закрытие CSV файла при удалении объекта."""
@@ -154,13 +184,36 @@ class DebugLogger:
         elif level == "error":
             logger.error(message)
 
-        # Экспортируем в CSV
+        # ✅ ИСПРАВЛЕНО: Экспортируем в объединенный CSV с record_type
         if self.csv_export and self.csv_writer:
             self.csv_writer.writerow(
                 {
-                    "timestamp": timestamp_str,
-                    "event_type": event_type,
+                    "record_type": "debug",
+                    "timestamp": timestamp.isoformat(),  # Полная ISO дата для совместимости
                     "symbol": symbol,
+                    "side": "",
+                    "entry_price": "",
+                    "exit_price": "",
+                    "size": "",
+                    "gross_pnl": "",
+                    "commission": "",
+                    "net_pnl": "",
+                    "duration_sec": "",
+                    "reason": "",
+                    "win_rate": "",
+                    "regime": "",
+                    "order_id": "",
+                    "order_type": "",
+                    "price": "",
+                    "strength": "",
+                    "filters_passed": "",
+                    "executed": "",
+                    "status": "",
+                    "fill_price": "",
+                    "fill_size": "",
+                    "execution_time_ms": "",
+                    "slippage": "",
+                    "event_type": event_type,
                     "data": data_str,
                 }
             )

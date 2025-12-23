@@ -7,7 +7,7 @@ Adaptive Regime Manager - динамическое переключение па
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
 
@@ -202,6 +202,9 @@ class AdaptiveRegimeManager:
         self.last_regime_check: datetime = datetime.utcnow()
         # История для подтверждений
         self.regime_confirmations: List[RegimeType] = []
+        # ✅ ПРАВКА #18: Кэширование regime для оптимизации
+        self._regime_cache: Dict[str, Tuple[RegimeType, datetime]] = {}  # {symbol: (regime, timestamp)}
+        self._cache_ttl_seconds = 30  # Кэш действителен 30 секунд
         # Статистика
         self.regime_switches: Dict[str, int] = {}
         # ✅ НОВОЕ: Модуль статистики для динамической адаптации
@@ -486,8 +489,32 @@ class AdaptiveRegimeManager:
         Returns:
             Новый режим если произошло переключение, иначе None
         """
+        # ✅ ПРАВКА #18: Проверяем кэш перед расчетом
+        from datetime import timedelta
+        cache_key = f"{len(candles)}_{current_price:.2f}"
+        if cache_key in self._regime_cache:
+            cached_regime, cache_time = self._regime_cache[cache_key]
+            time_since_cache = (datetime.utcnow() - cache_time).total_seconds()
+            if time_since_cache < self._cache_ttl_seconds:
+                logger.debug(
+                    f"✅ RegimeManager: Используем кэшированный режим {cached_regime.value} "
+                    f"(кэш {time_since_cache:.1f}с назад)"
+                )
+                # Возвращаем None если режим не изменился, иначе возвращаем cached_regime
+                if cached_regime == self.current_regime:
+                    return None
+        
         # Определяем новый режим
         detection = self.detect_regime(candles, current_price)
+        
+        # ✅ ПРАВКА #18: Сохраняем в кэш
+        self._regime_cache[cache_key] = (detection.regime, datetime.utcnow())
+        # Очищаем старые записи из кэша (старше 5 минут)
+        current_time = datetime.utcnow()
+        self._regime_cache = {
+            k: v for k, v in self._regime_cache.items()
+            if (current_time - v[1]).total_seconds() < 300
+        }
 
         # Добавляем в историю подтверждений
         self.regime_confirmations.append(detection.regime)

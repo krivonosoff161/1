@@ -94,6 +94,9 @@ class FuturesPositionManager:
             "total_pnl": 0.0,
         }
 
+        # ✅ ПРАВКА #3: Блокировка для предотвращения race condition при закрытии позиций
+        self._close_lock = asyncio.Lock()
+
         logger.info("FuturesPositionManager инициализирован")
 
     def set_symbol_profiles(self, symbol_profiles: Dict[str, Dict[str, Any]]):
@@ -109,6 +112,11 @@ class FuturesPositionManager:
 
         # ✅ РЕФАКТОРИНГ: Инициализируем новые менеджеры после установки orchestrator
         self._init_refactored_managers()
+    
+    def set_exit_analyzer(self, exit_analyzer):
+        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливает ExitAnalyzer для анализа позиций"""
+        self.exit_analyzer = exit_analyzer
+        logger.info("✅ ExitAnalyzer установлен в FuturesPositionManager")
 
     def _init_refactored_managers(self):
         """✅ РЕФАКТОРИНГ: Инициализация новых менеджеров TP/SL/PeakProfit"""
@@ -1254,8 +1262,11 @@ class FuturesPositionManager:
                     time_since_open = 0.0
                     if position_open_time:
                         if isinstance(position_open_time, datetime):
+                            # ✅ ИСПРАВЛЕНО: Используем timezone.utc для консистентности
+                            if position_open_time.tzinfo is None:
+                                position_open_time = position_open_time.replace(tzinfo=timezone.utc)
                             time_since_open = (
-                                datetime.now() - position_open_time
+                                datetime.now(timezone.utc) - position_open_time
                             ).total_seconds()
                         else:
                             try:
@@ -4640,7 +4651,7 @@ class FuturesPositionManager:
                     {
                         "symbol": symbol,
                         "position": position,
-                        "close_time": datetime.now(),
+                        "close_time": datetime.now(timezone.utc),
                         "close_reason": "manual",
                     }
                 )
@@ -5761,123 +5772,385 @@ class FuturesPositionManager:
         Returns:
             TradeResult если позиция успешно закрыта, None в противном случае
         """
-        try:
-            # Получаем информацию о позиции с биржи
-            # ⚠️ ИСПРАВЛЕНИЕ: get_positions() возвращает СПИСОК, не dict!
-            positions = await self.client.get_positions(symbol)
+        # ✅ ПРАВКА #3: Блокировка для предотвращения race condition
+        async with self._close_lock:
+            try:
+                # ✅ ПРАВКА #5: Проверка entry_time и duration_sec перед закрытием
+                position = None
+                if hasattr(self, "position_registry") and self.position_registry:
+                    position = self.position_registry.get_position(symbol)
+                elif hasattr(self, "orchestrator") and self.orchestrator:
+                    if hasattr(self.orchestrator, "position_registry"):
+                        position = self.orchestrator.position_registry.get_position(symbol)
+                
+                entry_time = None
+                if position:
+                    if hasattr(position, "entry_time"):
+                        entry_time = position.entry_time
+                    elif isinstance(position, dict):
+                        entry_time = position.get("entry_time")
+                    elif hasattr(position, "metadata"):
+                        metadata = position.metadata
+                        if hasattr(metadata, "entry_time"):
+                            entry_time = metadata.entry_time
+                
+                if entry_time:
+                    # ✅ ИСПРАВЛЕНО: Используем глобальный импорт datetime, не локальный
+                    exit_time = datetime.now(timezone.utc)
+                    if isinstance(entry_time, str):
+                        entry_time = datetime.fromisoformat(entry_time.replace("Z", "+00:00"))
+                    if isinstance(entry_time, datetime):
+                        if entry_time.tzinfo is None:
+                            entry_time = entry_time.replace(tzinfo=timezone.utc)
+                        duration_sec = (exit_time - entry_time).total_seconds()
+                        if duration_sec < 30:  # Минимум 30 сек
+                            logger.warning(f"⚠️ Too fast close: {symbol}, {duration_sec:.1f}s < 30s")
+                            return None
+                
+                # Получаем информацию о позиции с биржи
+                # ⚠️ ИСПРАВЛЕНИЕ: get_positions() возвращает СПИСОК, не dict!
+                positions = await self.client.get_positions(symbol)
 
-            # Проверяем, что positions это список
-            if not isinstance(positions, list) or len(positions) == 0:
-                logger.warning(f"Позиция {symbol} не найдена на бирже (список пустой)")
-                return None
-
-            # Ищем нужную позицию в списке
-            for pos_data in positions:
-                inst_id = pos_data.get("instId", "").replace("-SWAP", "")
-                if inst_id != symbol:
-                    continue
-
-                size = float(pos_data.get("pos", "0"))
-                if size == 0:
-                    # 🔴 КРИТИЧНО: Детальное логирование race condition (от Грока)
-                    logger.warning("=" * 80)
-                    logger.warning(
-                        f"⚠️ [RACE_CONDITION] {symbol}: Попытка закрыть позицию с size=0!"
-                    )
-                    logger.warning(f"   Причина закрытия: {reason}")
-                    logger.warning(f"   Статус: Позиция уже закрыта на бирже")
-                    logger.warning(
-                        f"   Действие: Пропускаем закрытие, синхронизируем состояние"
-                    )
-                    logger.warning("=" * 80)
-
-                    # Синхронизируем состояние - удаляем из active_positions
-                    if symbol in self.active_positions:
-                        del self.active_positions[symbol]
-
-                    # Удаляем из PositionRegistry
-                    position_registry = None
-                    if hasattr(self, "position_registry") and self.position_registry:
-                        position_registry = self.position_registry
-                    elif hasattr(self, "orchestrator") and self.orchestrator:
-                        if hasattr(self.orchestrator, "position_registry"):
-                            position_registry = self.orchestrator.position_registry
-
-                    if position_registry:
-                        try:
-                            await position_registry.unregister_position(symbol)
-                            logger.debug(
-                                f"✅ {symbol} удален из PositionRegistry после обнаружения size=0"
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                f"⚠️ Ошибка удаления {symbol} из PositionRegistry: {e}"
-                            )
-
+                # Проверяем, что positions это список
+                if not isinstance(positions, list) or len(positions) == 0:
+                    logger.warning(f"Позиция {symbol} не найдена на бирже (список пустой)")
                     return None
 
-                side = pos_data.get("posSide", "long")
+                # Ищем нужную позицию в списке
+                for pos_data in positions:
+                    inst_id = pos_data.get("instId", "").replace("-SWAP", "")
+                    if inst_id != symbol:
+                        continue
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем финальный PnL перед закрытием
-                final_pnl = 0.0
-                try:
-                    # Пробуем разные варианты названий полей для unrealized PnL
-                    if "upl" in pos_data and pos_data.get("upl"):
-                        final_pnl = float(pos_data["upl"])
-                    elif "uPnl" in pos_data and pos_data.get("uPnl"):
-                        final_pnl = float(pos_data["uPnl"])
-                    elif "unrealizedPnl" in pos_data and pos_data.get("unrealizedPnl"):
-                        final_pnl = float(pos_data["unrealizedPnl"])
-                except (ValueError, TypeError):
-                    pass
+                    size = float(pos_data.get("pos", "0"))
+                    # ✅ ПРАВКА #16: Проверка размера позиции перед закрытием
+                    if abs(size) < 0.000001:  # Позиция слишком мала или равна нулю
+                        logger.debug(
+                            f"🔍 {symbol}: Размер позиции {size:.8f} слишком мал, пропускаем закрытие"
+                        )
+                        continue  # Продолжаем поиск следующей позиции
+                    if size == 0:
+                        # 🔴 КРИТИЧНО: Детальное логирование race condition (от Грока)
+                        logger.warning("=" * 80)
+                        logger.warning(
+                            f"⚠️ [RACE_CONDITION] {symbol}: Попытка закрыть позицию с size=0!"
+                        )
+                        logger.warning(f"   Причина закрытия: {reason}")
+                        logger.warning(f"   Статус: Позиция уже закрыта на бирже")
+                        logger.warning(
+                            f"   Действие: Пропускаем закрытие, синхронизируем состояние"
+                        )
+                        logger.warning("=" * 80)
 
-                logger.info(
-                    f"🔄 Закрытие позиции {symbol} {side} размер={size} контрактов, PnL={final_pnl:.2f} USDT"
-                )
+                        # Синхронизируем состояние - удаляем из active_positions
+                        if symbol in self.active_positions:
+                            del self.active_positions[symbol]
 
-                # Определение стороны закрытия
-                close_side = "sell" if side.lower() == "long" else "buy"
+                        # Удаляем из PositionRegistry
+                        position_registry = None
+                        if hasattr(self, "position_registry") and self.position_registry:
+                            position_registry = self.position_registry
+                        elif hasattr(self, "orchestrator") and self.orchestrator:
+                            if hasattr(self.orchestrator, "position_registry"):
+                                position_registry = self.orchestrator.position_registry
 
-                # ✅ Размещаем рыночный ордер на закрытие
-                # ⚠️ size из API уже в контрактах, поэтому size_in_contracts=True
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для закрытия позиции используем reduceOnly=True
-                # Это гарантирует, что ордер не откроет новую позицию, а только закроет существующую
-                result = await self.client.place_futures_order(
-                    symbol=symbol,
-                    side=close_side,
-                    size=abs(size),
-                    order_type="market",
-                    size_in_contracts=True,  # size из API уже в контрактах
-                    reduce_only=True,  # ✅ КРИТИЧЕСКОЕ: Только закрытие, не открытие новой позиции
-                )
+                        if position_registry:
+                            try:
+                                await position_registry.unregister_position(symbol)
+                                logger.debug(
+                                    f"✅ {symbol} удален из PositionRegistry после обнаружения size=0"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"⚠️ Ошибка удаления {symbol} из PositionRegistry: {e}"
+                                )
 
-                if result.get("code") == "0":
-                    # ✅ ЗАДАЧА #8: Детальное логирование уже сделано выше перед закрытием
-                    logger.info(f"✅ Позиция {symbol} успешно закрыта через API")
+                        return None
 
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
-                    entry_price = float(pos_data.get("avgPx", "0"))
-                    exit_price = float(pos_data.get("markPx", "0"))
+                    side = pos_data.get("posSide", "long")
 
-                    # Получаем время открытия позиции
-                    entry_time = None
-                    if symbol in self.active_positions:
-                        stored_position = self.active_positions[symbol]
-                        if isinstance(stored_position, dict):
-                            entry_time = stored_position.get("entry_time")
-                            if isinstance(entry_time, str):
-                                try:
-                                    entry_time = datetime.fromisoformat(
-                                        entry_time.replace("Z", "+00:00")
-                                    )
-                                except (ValueError, TypeError):
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем финальный PnL перед закрытием
+                    final_pnl = 0.0
+                    try:
+                        # Пробуем разные варианты названий полей для unrealized PnL
+                        if "upl" in pos_data and pos_data.get("upl"):
+                            final_pnl = float(pos_data["upl"])
+                        elif "uPnl" in pos_data and pos_data.get("uPnl"):
+                            final_pnl = float(pos_data["uPnl"])
+                        elif "unrealizedPnl" in pos_data and pos_data.get("unrealizedPnl"):
+                            final_pnl = float(pos_data["unrealizedPnl"])
+                    except (ValueError, TypeError):
+                        pass
+
+                    logger.info(
+                        f"🔄 Закрытие позиции {symbol} {side} размер={size} контрактов, PnL={final_pnl:.2f} USDT"
+                    )
+
+                    # Определение стороны закрытия
+                    close_side = "sell" if side.lower() == "long" else "buy"
+
+                    # ✅ Размещаем рыночный ордер на закрытие
+                    # ⚠️ size из API уже в контрактах, поэтому size_in_contracts=True
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для закрытия позиции используем reduceOnly=True
+                    # Это гарантирует, что ордер не откроет новую позицию, а только закроет существующую
+                    result = await self.client.place_futures_order(
+                        symbol=symbol,
+                        side=close_side,
+                        size=abs(size),
+                        order_type="market",
+                        size_in_contracts=True,  # size из API уже в контрактах
+                        reduce_only=True,  # ✅ КРИТИЧЕСКОЕ: Только закрытие, не открытие новой позиции
+                    )
+
+                    if result.get("code") == "0":
+                        # ✅ ЗАДАЧА #8: Детальное логирование уже сделано выше перед закрытием
+                        logger.info(f"✅ Позиция {symbol} успешно закрыта через API")
+
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
+                        entry_price = float(pos_data.get("avgPx", "0"))
+                        exit_price = float(pos_data.get("markPx", "0"))
+
+                        # Получаем время открытия позиции
+                        entry_time = None
+                        if symbol in self.active_positions:
+                            stored_position = self.active_positions[symbol]
+                            if isinstance(stored_position, dict):
+                                entry_time = stored_position.get("entry_time")
+                                if isinstance(entry_time, str):
+                                    try:
+                                        entry_time = datetime.fromisoformat(
+                                            entry_time.replace("Z", "+00:00")
+                                        )
+                                    except (ValueError, TypeError):
+                                        entry_time = None
+                                elif not isinstance(entry_time, datetime):
                                     entry_time = None
-                            elif not isinstance(entry_time, datetime):
-                                entry_time = None
 
-                    # ✅ FIX: если entry_time не найден в локальном active_positions,
-                    # пробуем взять из PositionRegistry.metadata (источник истины)
-                    if entry_time is None:
+                        # ✅ FIX: если entry_time не найден в локальном active_positions,
+                        # пробуем взять из PositionRegistry.metadata (источник истины)
+                        if entry_time is None:
+                            try:
+                                if (
+                                    hasattr(self, "orchestrator")
+                                    and self.orchestrator
+                                    and hasattr(self.orchestrator, "position_registry")
+                                    and self.orchestrator.position_registry
+                                ):
+                                    metadata = await self.orchestrator.position_registry.get_metadata(
+                                        symbol
+                                    )
+                                    if metadata and getattr(metadata, "entry_time", None):
+                                        entry_time = metadata.entry_time
+                            except Exception:
+                                pass
+
+                        if entry_time is None:
+                            entry_time = datetime.now(timezone.utc)
+
+                        # ✅ ЗАДАЧА #10: Комиссия из конфига (может быть в scalping или на верхнем уровне)
+                        commission_config = getattr(
+                            self.scalping_config, "commission", None
+                        )
+                        if commission_config is None:
+                            # Пробуем получить с верхнего уровня конфига
+                            commission_config = getattr(self.config, "commission", {})
+                        if not commission_config:
+                            commission_config = {}
+                        # ✅ ЗАДАЧА #10: Получаем maker_fee_rate и taker_fee_rate из конфига
+                        if isinstance(commission_config, dict):
+                            maker_fee_rate = commission_config.get("maker_fee_rate")
+                            taker_fee_rate = commission_config.get("taker_fee_rate")
+                            trading_fee_rate = commission_config.get(
+                                "trading_fee_rate"
+                            )  # Fallback
+                        else:
+                            maker_fee_rate = getattr(
+                                commission_config, "maker_fee_rate", None
+                            )
+                            taker_fee_rate = getattr(
+                                commission_config, "taker_fee_rate", None
+                            )
+                            trading_fee_rate = getattr(
+                                commission_config, "trading_fee_rate", None
+                            )
+
+                        # ✅ ЗАДАЧА #10: Если не указаны отдельные ставки, используем trading_fee_rate как fallback
+                        if maker_fee_rate is None or taker_fee_rate is None:
+                            if trading_fee_rate is None:
+                                raise ValueError(
+                                    "❌ КРИТИЧЕСКАЯ ОШИБКА: maker_fee_rate, taker_fee_rate или trading_fee_rate не найдены в конфиге! "
+                                    "Добавьте в config_futures.yaml: scalping.commission.maker_fee_rate и taker_fee_rate"
+                                )
+                            # Используем trading_fee_rate / 2 как fallback для каждого ордера
+                            maker_fee_rate = trading_fee_rate / 2.0
+                            taker_fee_rate = trading_fee_rate / 2.0
+                            logger.warning(
+                                f"⚠️ Используется trading_fee_rate как fallback: maker={maker_fee_rate:.4f}, taker={taker_fee_rate:.4f}"
+                            )
+
+                        # ✅ ЗАДАЧА #10: Определяем тип entry ордера из active_positions
+                        entry_order_type = "market"  # По умолчанию taker (MARKET)
+                        entry_post_only = False
+                        if symbol in self.active_positions:
+                            stored_position = self.active_positions[symbol]
+                            if isinstance(stored_position, dict):
+                                entry_order_type = stored_position.get(
+                                    "order_type", "market"
+                                )
+                                entry_post_only = stored_position.get("post_only", False)
+
+                        # ✅ ЗАДАЧА #10: Определяем комиссию entry: если limit с post_only - maker, иначе taker
+                        if entry_order_type == "limit" and entry_post_only:
+                            entry_commission_rate = maker_fee_rate  # Maker: 0.02%
+                            entry_order_type_str = "POST-ONLY/LIMIT (Maker)"
+                        else:
+                            entry_commission_rate = taker_fee_rate  # Taker: 0.05%
+                            entry_order_type_str = f"{entry_order_type.upper()} (Taker)"
+
+                        # ✅ ЗАДАЧА #10: Exit ордер обычно MARKET (taker), но может быть LIMIT с post_only
+                        # По умолчанию используем taker для exit, так как закрытие обычно через MARKET ордер
+                        exit_commission_rate = taker_fee_rate  # По умолчанию taker
+                        exit_order_type_str = "MARKET (Taker)"
+
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Конвертируем size из контрактов в монеты через ctVal
+                        try:
+                            details = await self.client.get_instrument_details(symbol)
+                            ct_val = float(details.get("ctVal", "0.01"))
+                            size_in_coins = abs(size) * ct_val
+                            logger.debug(
+                                f"✅ Конвертация размера для {symbol} (close_position_manually): "
+                                f"size={size} контрактов, ctVal={ct_val}, size_in_coins={size_in_coins:.6f} монет"
+                            )
+                        except Exception as e:
+                            raise ValueError(
+                                f"❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось получить ctVal для {symbol}: {e}. "
+                                f"Невозможно рассчитать size_in_coins без ctVal!"
+                            )
+
+                        # ✅ ЗАДАЧА #10: Рассчитываем комиссию отдельно для entry и exit
+                        notional_entry = size_in_coins * entry_price
+                        notional_exit = size_in_coins * exit_price
+                        commission_entry = notional_entry * entry_commission_rate
+                        commission_exit = notional_exit * exit_commission_rate
+                        commission = commission_entry + commission_exit
+
+                        # Рассчитываем gross PnL
+                        if side.lower() == "long":
+                            gross_pnl = (exit_price - entry_price) * size_in_coins
+                        else:
+                            gross_pnl = (entry_price - exit_price) * size_in_coins
+
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем funding fee из позиции
+                        funding_fee = 0.0
+                        try:
+                            # Пробуем получить funding fee из позиции (используем pos_data вместо actual_position)
+                            if "fundingFee" in pos_data:
+                                funding_fee = float(pos_data.get("fundingFee", 0) or 0)
+                            elif "funding_fee" in pos_data:
+                                funding_fee = float(pos_data.get("funding_fee", 0) or 0)
+                            elif "fee" in pos_data:
+                                # OKX может возвращать fee, который включает funding
+                                fee_value = pos_data.get("fee", 0)
+                                if fee_value:
+                                    funding_fee = float(fee_value) or 0.0
+                        except (ValueError, TypeError):
+                            funding_fee = 0.0
+
+                        # ✅ Учитываем funding fee в net PnL
+                        net_pnl = gross_pnl - commission - funding_fee
+                        # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
+                        if isinstance(entry_time, datetime):
+                            if entry_time.tzinfo is None:
+                                entry_time = entry_time.replace(tzinfo=timezone.utc)
+                            elif entry_time.tzinfo != timezone.utc:
+                                entry_time = entry_time.astimezone(timezone.utc)
+                        duration_sec = (
+                            datetime.now(timezone.utc) - entry_time
+                        ).total_seconds()
+                        duration_min = duration_sec / 60.0
+                        duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
+
+                        # ✅ ЗАДАЧА #8: Улучшенное логирование закрытия позиции
+                        close_time = datetime.now(timezone.utc)
+
+                        # ✅ НОВОЕ: Получаем режим рынка из позиции
+                        regime = "unknown"
+                        if symbol in self.active_positions:
+                            stored_position = self.active_positions.get(symbol, {})
+                            if isinstance(stored_position, dict):
+                                regime = stored_position.get("regime", "unknown")
+                        elif hasattr(self, "orchestrator") and self.orchestrator:
+                            if symbol in self.orchestrator.active_positions:
+                                stored_position = self.orchestrator.active_positions.get(
+                                    symbol, {}
+                                )
+                                if isinstance(stored_position, dict):
+                                    regime = stored_position.get("regime", "unknown")
+
+                        # ✅ НОВОЕ: Получаем margin для расчета PnL% от маржи
+                        margin_used = 0.0
+                        try:
+                            margin_str = (
+                                pos_data.get("margin") or pos_data.get("imr") or "0"
+                            )
+                            if (
+                                margin_str
+                                and str(margin_str).strip()
+                                and str(margin_str) != "0"
+                            ):
+                                margin_used = float(margin_str)
+                        except (ValueError, TypeError):
+                            pass
+
+                        pnl_percent_from_price = (
+                            ((exit_price - entry_price) / entry_price * 100)
+                            if side.lower() == "long"
+                            else ((entry_price - exit_price) / entry_price * 100)
+                        )
+                        pnl_percent_from_margin_str = ""
+                        if margin_used > 0:
+                            pnl_percent_from_margin = (net_pnl / margin_used) * 100
+                            pnl_percent_from_margin_str = (
+                                f" ({pnl_percent_from_margin:+.2f}% от маржи)"
+                            )
+
+                        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        logger.info(f"💰 ПОЗИЦИЯ ЗАКРЫТА: {symbol} {side.upper()}")
+                        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        logger.info(
+                            f"   ⏰ Время закрытия: {close_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                        )
+                        logger.info(f"   📊 Режим рынка: {regime}")
+                        logger.info(f"   📊 Entry price: ${entry_price:.6f}")
+                        logger.info(
+                            f"   📊 Exit price: ${exit_price:.6f} (изменение: {pnl_percent_from_price:+.2f}%)"
+                        )
+                        logger.info(
+                            f"   📦 Size: {size_in_coins:.8f} монет ({size} контрактов)"
+                        )
+                        logger.info(f"   ⏱️  Длительность удержания: {duration_str}")
+                        logger.info(f"   💵 Gross PnL: ${gross_pnl:+.4f} USDT")
+                        logger.info(
+                            f"   💵 Net PnL: ${net_pnl:+.4f} USDT{pnl_percent_from_margin_str}"
+                        )
+                        logger.info(
+                            f"   💸 Комиссия вход ({entry_order_type_str}): ${commission_entry:.4f} USDT ({entry_commission_rate*100:.2f}%)"
+                        )
+                        logger.info(
+                            f"   💸 Комиссия выход ({exit_order_type_str}): ${commission_exit:.4f} USDT ({exit_commission_rate*100:.2f}%)"
+                        )
+                        logger.info(f"   💸 Комиссия общая: ${commission:.4f} USDT")
+                        logger.info(f"   💸 Funding Fee: ${funding_fee:.4f} USDT")
+                        logger.info(
+                            f"   💵 Net PnL: ${net_pnl:+.4f} USDT (Gross - Commission - Funding){pnl_percent_from_margin_str}"
+                        )
+                        if margin_used > 0:
+                            logger.info(f"   📈 Маржа использована: ${margin_used:.4f} USDT")
+                        logger.info(f"   🎯 Причина закрытия: {reason}")
+                        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+                        # ✅ Трассировка: пробуем проставить position_id из PositionRegistry
+                        position_id = ""
                         try:
                             if (
                                 hasattr(self, "orchestrator")
@@ -5885,270 +6158,48 @@ class FuturesPositionManager:
                                 and hasattr(self.orchestrator, "position_registry")
                                 and self.orchestrator.position_registry
                             ):
-                                metadata = await self.orchestrator.position_registry.get_metadata(
-                                    symbol
+                                meta = (
+                                    await self.orchestrator.position_registry.get_metadata(
+                                        symbol
+                                    )
                                 )
-                                if metadata and getattr(metadata, "entry_time", None):
-                                    entry_time = metadata.entry_time
+                                if meta and getattr(meta, "position_id", None):
+                                    position_id = str(getattr(meta, "position_id") or "")
+                        except Exception:
+                            position_id = ""
+
+                        trade_id = f"{position_id or symbol}:{int(datetime.now(timezone.utc).timestamp()*1000)}:{reason}"
+
+                        trade_result = TradeResult(
+                            symbol=symbol,
+                            side=side.lower(),
+                            entry_price=entry_price,
+                            exit_price=exit_price,
+                            size=size_in_coins,
+                            gross_pnl=gross_pnl,
+                            commission=commission,
+                            net_pnl=net_pnl,
+                            duration_sec=duration_sec,
+                            reason=reason,  # ✅ ИСПРАВЛЕНО: Используем переданный reason вместо "manual"
+                            timestamp=datetime.now(timezone.utc),
+                            funding_fee=funding_fee,  # ✅ КРИТИЧЕСКОЕ: Учитываем funding fee
+                            trade_id=trade_id,
+                            position_id=position_id,
+                        )
+                        # ✅ Метрики: суммарное время удержания и счётчики закрытий
+                        try:
+                            self.management_stats.setdefault("sum_duration_sec", 0.0)
+                            self.management_stats["sum_duration_sec"] += float(duration_sec)
+                            self._update_close_stats(
+                                reason
+                            )  # ✅ ИСПРАВЛЕНО: Используем переданный reason
                         except Exception:
                             pass
 
-                    if entry_time is None:
-                        entry_time = datetime.now(timezone.utc)
-
-                    # ✅ ЗАДАЧА #10: Комиссия из конфига (может быть в scalping или на верхнем уровне)
-                    commission_config = getattr(
-                        self.scalping_config, "commission", None
-                    )
-                    if commission_config is None:
-                        # Пробуем получить с верхнего уровня конфига
-                        commission_config = getattr(self.config, "commission", {})
-                    if not commission_config:
-                        commission_config = {}
-                    # ✅ ЗАДАЧА #10: Получаем maker_fee_rate и taker_fee_rate из конфига
-                    if isinstance(commission_config, dict):
-                        maker_fee_rate = commission_config.get("maker_fee_rate")
-                        taker_fee_rate = commission_config.get("taker_fee_rate")
-                        trading_fee_rate = commission_config.get(
-                            "trading_fee_rate"
-                        )  # Fallback
-                    else:
-                        maker_fee_rate = getattr(
-                            commission_config, "maker_fee_rate", None
-                        )
-                        taker_fee_rate = getattr(
-                            commission_config, "taker_fee_rate", None
-                        )
-                        trading_fee_rate = getattr(
-                            commission_config, "trading_fee_rate", None
-                        )
-
-                    # ✅ ЗАДАЧА #10: Если не указаны отдельные ставки, используем trading_fee_rate как fallback
-                    if maker_fee_rate is None or taker_fee_rate is None:
-                        if trading_fee_rate is None:
-                            raise ValueError(
-                                "❌ КРИТИЧЕСКАЯ ОШИБКА: maker_fee_rate, taker_fee_rate или trading_fee_rate не найдены в конфиге! "
-                                "Добавьте в config_futures.yaml: scalping.commission.maker_fee_rate и taker_fee_rate"
-                            )
-                        # Используем trading_fee_rate / 2 как fallback для каждого ордера
-                        maker_fee_rate = trading_fee_rate / 2.0
-                        taker_fee_rate = trading_fee_rate / 2.0
-                        logger.warning(
-                            f"⚠️ Используется trading_fee_rate как fallback: maker={maker_fee_rate:.4f}, taker={taker_fee_rate:.4f}"
-                        )
-
-                    # ✅ ЗАДАЧА #10: Определяем тип entry ордера из active_positions
-                    entry_order_type = "market"  # По умолчанию taker (MARKET)
-                    entry_post_only = False
-                    if symbol in self.active_positions:
-                        stored_position = self.active_positions[symbol]
-                        if isinstance(stored_position, dict):
-                            entry_order_type = stored_position.get(
-                                "order_type", "market"
-                            )
-                            entry_post_only = stored_position.get("post_only", False)
-
-                    # ✅ ЗАДАЧА #10: Определяем комиссию entry: если limit с post_only - maker, иначе taker
-                    if entry_order_type == "limit" and entry_post_only:
-                        entry_commission_rate = maker_fee_rate  # Maker: 0.02%
-                        entry_order_type_str = "POST-ONLY/LIMIT (Maker)"
-                    else:
-                        entry_commission_rate = taker_fee_rate  # Taker: 0.05%
-                        entry_order_type_str = f"{entry_order_type.upper()} (Taker)"
-
-                    # ✅ ЗАДАЧА #10: Exit ордер обычно MARKET (taker), но может быть LIMIT с post_only
-                    # По умолчанию используем taker для exit, так как закрытие обычно через MARKET ордер
-                    exit_commission_rate = taker_fee_rate  # По умолчанию taker
-                    exit_order_type_str = "MARKET (Taker)"
-
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Конвертируем size из контрактов в монеты через ctVal
-                    try:
-                        details = await self.client.get_instrument_details(symbol)
-                        ct_val = float(details.get("ctVal", "0.01"))
-                        size_in_coins = abs(size) * ct_val
-                        logger.debug(
-                            f"✅ Конвертация размера для {symbol} (close_position_manually): "
-                            f"size={size} контрактов, ctVal={ct_val}, size_in_coins={size_in_coins:.6f} монет"
-                        )
-                    except Exception as e:
-                        raise ValueError(
-                            f"❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось получить ctVal для {symbol}: {e}. "
-                            f"Невозможно рассчитать size_in_coins без ctVal!"
-                        )
-
-                    # ✅ ЗАДАЧА #10: Рассчитываем комиссию отдельно для entry и exit
-                    notional_entry = size_in_coins * entry_price
-                    notional_exit = size_in_coins * exit_price
-                    commission_entry = notional_entry * entry_commission_rate
-                    commission_exit = notional_exit * exit_commission_rate
-                    commission = commission_entry + commission_exit
-
-                    # Рассчитываем gross PnL
-                    if side.lower() == "long":
-                        gross_pnl = (exit_price - entry_price) * size_in_coins
-                    else:
-                        gross_pnl = (entry_price - exit_price) * size_in_coins
-
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем funding fee из позиции
-                    funding_fee = 0.0
-                    try:
-                        # Пробуем получить funding fee из позиции (используем pos_data вместо actual_position)
-                        if "fundingFee" in pos_data:
-                            funding_fee = float(pos_data.get("fundingFee", 0) or 0)
-                        elif "funding_fee" in pos_data:
-                            funding_fee = float(pos_data.get("funding_fee", 0) or 0)
-                        elif "fee" in pos_data:
-                            # OKX может возвращать fee, который включает funding
-                            fee_value = pos_data.get("fee", 0)
-                            if fee_value:
-                                funding_fee = float(fee_value) or 0.0
-                    except (ValueError, TypeError):
-                        funding_fee = 0.0
-
-                    # ✅ Учитываем funding fee в net PnL
-                    net_pnl = gross_pnl - commission - funding_fee
-                    # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
-                    if isinstance(entry_time, datetime):
-                        if entry_time.tzinfo is None:
-                            entry_time = entry_time.replace(tzinfo=timezone.utc)
-                        elif entry_time.tzinfo != timezone.utc:
-                            entry_time = entry_time.astimezone(timezone.utc)
-                    duration_sec = (
-                        datetime.now(timezone.utc) - entry_time
-                    ).total_seconds()
-                    duration_min = duration_sec / 60.0
-                    duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
-
-                    # ✅ ЗАДАЧА #8: Улучшенное логирование закрытия позиции
-                    close_time = datetime.now()
-
-                    # ✅ НОВОЕ: Получаем режим рынка из позиции
-                    regime = "unknown"
-                    if symbol in self.active_positions:
-                        stored_position = self.active_positions.get(symbol, {})
-                        if isinstance(stored_position, dict):
-                            regime = stored_position.get("regime", "unknown")
-                    elif hasattr(self, "orchestrator") and self.orchestrator:
-                        if symbol in self.orchestrator.active_positions:
-                            stored_position = self.orchestrator.active_positions.get(
-                                symbol, {}
-                            )
-                            if isinstance(stored_position, dict):
-                                regime = stored_position.get("regime", "unknown")
-
-                    # ✅ НОВОЕ: Получаем margin для расчета PnL% от маржи
-                    margin_used = 0.0
-                    try:
-                        margin_str = (
-                            pos_data.get("margin") or pos_data.get("imr") or "0"
-                        )
-                        if (
-                            margin_str
-                            and str(margin_str).strip()
-                            and str(margin_str) != "0"
-                        ):
-                            margin_used = float(margin_str)
-                    except (ValueError, TypeError):
-                        pass
-
-                    pnl_percent_from_price = (
-                        ((exit_price - entry_price) / entry_price * 100)
-                        if side.lower() == "long"
-                        else ((entry_price - exit_price) / entry_price * 100)
-                    )
-                    pnl_percent_from_margin_str = ""
-                    if margin_used > 0:
-                        pnl_percent_from_margin = (net_pnl / margin_used) * 100
-                        pnl_percent_from_margin_str = (
-                            f" ({pnl_percent_from_margin:+.2f}% от маржи)"
-                        )
-
-                    logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                    logger.info(f"💰 ПОЗИЦИЯ ЗАКРЫТА: {symbol} {side.upper()}")
-                    logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                    logger.info(
-                        f"   ⏰ Время закрытия: {close_time.strftime('%Y-%m-%d %H:%M:%S')}"
-                    )
-                    logger.info(f"   📊 Режим рынка: {regime}")
-                    logger.info(f"   📊 Entry price: ${entry_price:.6f}")
-                    logger.info(
-                        f"   📊 Exit price: ${exit_price:.6f} (изменение: {pnl_percent_from_price:+.2f}%)"
-                    )
-                    logger.info(
-                        f"   📦 Size: {size_in_coins:.8f} монет ({size} контрактов)"
-                    )
-                    logger.info(f"   ⏱️  Длительность удержания: {duration_str}")
-                    logger.info(f"   💵 Gross PnL: ${gross_pnl:+.4f} USDT")
-                    logger.info(
-                        f"   💵 Net PnL: ${net_pnl:+.4f} USDT{pnl_percent_from_margin_str}"
-                    )
-                    logger.info(
-                        f"   💸 Комиссия вход ({entry_order_type_str}): ${commission_entry:.4f} USDT ({entry_commission_rate*100:.2f}%)"
-                    )
-                    logger.info(
-                        f"   💸 Комиссия выход ({exit_order_type_str}): ${commission_exit:.4f} USDT ({exit_commission_rate*100:.2f}%)"
-                    )
-                    logger.info(f"   💸 Комиссия общая: ${commission:.4f} USDT")
-                    logger.info(f"   💸 Funding Fee: ${funding_fee:.4f} USDT")
-                    logger.info(
-                        f"   💵 Net PnL: ${net_pnl:+.4f} USDT (Gross - Commission - Funding){pnl_percent_from_margin_str}"
-                    )
-                    if margin_used > 0:
-                        logger.info(f"   📈 Маржа использована: ${margin_used:.4f} USDT")
-                    logger.info(f"   🎯 Причина закрытия: {reason}")
-                    logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-                    # ✅ Трассировка: пробуем проставить position_id из PositionRegistry
-                    position_id = ""
-                    try:
-                        if (
-                            hasattr(self, "orchestrator")
-                            and self.orchestrator
-                            and hasattr(self.orchestrator, "position_registry")
-                            and self.orchestrator.position_registry
-                        ):
-                            meta = (
-                                await self.orchestrator.position_registry.get_metadata(
-                                    symbol
-                                )
-                            )
-                            if meta and getattr(meta, "position_id", None):
-                                position_id = str(getattr(meta, "position_id") or "")
-                    except Exception:
-                        position_id = ""
-
-                    trade_id = f"{position_id or symbol}:{int(datetime.now(timezone.utc).timestamp()*1000)}:{reason}"
-
-                    trade_result = TradeResult(
-                        symbol=symbol,
-                        side=side.lower(),
-                        entry_price=entry_price,
-                        exit_price=exit_price,
-                        size=size_in_coins,
-                        gross_pnl=gross_pnl,
-                        commission=commission,
-                        net_pnl=net_pnl,
-                        duration_sec=duration_sec,
-                        reason=reason,  # ✅ ИСПРАВЛЕНО: Используем переданный reason вместо "manual"
-                        timestamp=datetime.now(),
-                        funding_fee=funding_fee,  # ✅ КРИТИЧЕСКОЕ: Учитываем funding fee
-                        trade_id=trade_id,
-                        position_id=position_id,
-                    )
-                    # ✅ Метрики: суммарное время удержания и счётчики закрытий
-                    try:
-                        self.management_stats.setdefault("sum_duration_sec", 0.0)
-                        self.management_stats["sum_duration_sec"] += float(duration_sec)
-                        self._update_close_stats(
-                            reason
-                        )  # ✅ ИСПРАВЛЕНО: Используем переданный reason
-                    except Exception:
-                        pass
-
-                    # Удаляем из активных позиций
-                    if symbol in self.active_positions:
-                        del self.active_positions[symbol]
-                    return trade_result
+                        # Удаляем из активных позиций
+                        if symbol in self.active_positions:
+                            del self.active_positions[symbol]
+                        return trade_result
                 else:
                     error_msg = result.get("msg", "Неизвестная ошибка")
                     error_code = result.get("data", [{}])[0].get("sCode", "")
@@ -6184,11 +6235,11 @@ class FuturesPositionManager:
                     )
                     return {"success": False, "error": error_msg}
 
-            return {"success": False, "error": "Позиция не найдена в списке"}
+                return {"success": False, "error": "Позиция не найдена в списке"}
 
-        except Exception as e:
-            logger.error(f"Ошибка ручного закрытия позиции: {e}")
-            return {"success": False, "error": str(e)}
+            except Exception as e:
+                logger.error(f"Ошибка ручного закрытия позиции: {e}")
+                return {"success": False, "error": str(e)}
 
     async def close_partial_position(
         self, symbol: str, fraction: float, reason: str = "partial_tp"
@@ -6717,7 +6768,7 @@ class FuturesPositionManager:
                         "reason": reason,
                     }
 
-                    partial_tp_file = f"logs/futures/structured/partial_tp_{datetime.now().strftime('%Y-%m-%d')}.jsonl"
+                    partial_tp_file = f"logs/futures/structured/partial_tp_{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.jsonl"
                     os.makedirs(os.path.dirname(partial_tp_file), exist_ok=True)
                     with open(partial_tp_file, "a", encoding="utf-8") as f:
                         f.write(json.dumps(partial_tp_data, ensure_ascii=False) + "\n")
@@ -7000,7 +7051,7 @@ class FuturesPositionManager:
                 "active_positions_count": len(self.active_positions),
                 "total_pnl": total_pnl,
                 "positions": position_details,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:

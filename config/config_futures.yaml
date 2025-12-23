@@ -31,8 +31,9 @@ scalping:
   check_interval: 1.0  # ✅ ОПТИМИЗИРОВАНО: 1.0 сек для быстрого анализа позиций (было 5.0 по умолчанию)
   
   # Параметры скальпинга (адаптированы для Futures)
-  min_signal_strength: 0.7  # ✅ ГРОК: Поднято с 0.25 до 0.7 для улучшения winrate
-  min_signal_strength_ranging: 0.8  # ✅ ГРОК ФИКС: Строже для ranging (0.8 вместо 0.7)
+  min_signal_strength: 0.7  # ✅ ПРАВКА #9: Ужесточено до 0.7 для улучшения winrate
+  min_signal_strength_ranging: 0.8  # ✅ ПРАВКА #9: Строже для ranging (0.8 вместо 0.7)
+  min_adx: 25.0  # ✅ ПРАВКА #9: Ужесточено до 25.0 (было 20.0) для фильтрации слабых трендов
   max_concurrent_signals: 3  # Меньше одновременных сигналов
   max_positions_per_symbol: 1  # ✅ По одной позиции на символ (предотвращаем «сложение» ордеров)
   allow_concurrent_positions: true  # ✅ ИЗМЕНЕНО: true - разрешаем суммирование ордеров (до 5 в одном направлении) и LONG/SHORT одновременно
@@ -251,7 +252,7 @@ scalping:
       
       # Индикаторы для тренда
       indicators:
-        rsi_overbought: 75
+        rsi_overbought: 85  # ✅ ИСПРАВЛЕНО: Увеличено с 75 до 85
         rsi_oversold: 25
         volume_threshold: 1.05  # ✅ PHASE 1: Снижено с 1.15 до 1.05 (-9%)
         sma_fast: 8
@@ -326,8 +327,8 @@ scalping:
       min_holding_minutes: 0.5  # ✅ ГРОК: Уменьшено с 1 до 0.5 минуты (30 сек) для быстрого Partial TP
       
       indicators:
-        rsi_overbought: 70
-        rsi_oversold: 30
+        rsi_overbought: 85  # ✅ ИСПРАВЛЕНО: Увеличено с 70 до 85
+        rsi_oversold: 25  # ✅ ИСПРАВЛЕНО: Уменьшено с 30 до 25
         volume_threshold: 1.05  # ✅ PHASE 1: Снижено с 1.1 до 1.05 (-5%)
         sma_fast: 10
         sma_slow: 25
@@ -387,8 +388,8 @@ scalping:
       ph_time_limit: 60
       
       indicators:
-        rsi_overbought: 65
-        rsi_oversold: 35
+        rsi_overbought: 85  # ✅ ИСПРАВЛЕНО: Увеличено с 65 до 85
+        rsi_oversold: 25  # ✅ ИСПРАВЛЕНО: Уменьшено с 35 до 25
         volume_threshold: 1.1  # ✅ PHASE 1: Снижено с 1.2 до 1.1 (-8%)
         sma_fast: 12
         sma_slow: 30
@@ -1161,8 +1162,8 @@ scalping:
   
   # RSI параметры (адаптированы для Futures)
   rsi_period: 14
-  rsi_oversold: 25  # Более строгие уровни
-  rsi_overbought: 75
+  rsi_oversold: 25  # ✅ ИСПРАВЛЕНО: Оставлено 25 (было 30)
+  rsi_overbought: 85  # ✅ ИСПРАВЛЕНО: Увеличено с 75 до 85 (для крипты часто торгуется в экстремальных зонах)
   
   # MACD параметры
   macd_fast: 12
@@ -1325,6 +1326,24 @@ risk:
       max_margin_safety_percent: 80.0  # 80% безопасности (строже для очень большого баланса)
       min_balance_usd: 50.0  # Минимум $50 баланса (больше для очень большого баланса)
       min_time_between_orders_seconds: 40  # Медленнее для очень большого баланса (40 секунд вместо 30)
+
+# ✅ ПРАВКА #2: Адаптивные параметры выхода по режимам
+exit_params:
+  ranging:
+    max_holding_minutes: 15  # Для ranging
+    sl_percent: 0.8  # ✅ ПРАВКА #11: Адаптивный SL для ranging
+    tp_percent: 2.5  # ✅ ПРАВКА #11: Адаптивный TP для ranging
+    spread_buffer: 0.15  # ✅ ПРАВКА #10: Увеличен для ranging
+  trending:
+    max_holding_minutes: 45  # Для trending
+    sl_percent: 2.0  # ✅ ПРАВКА #11: Адаптивный SL для trending
+    tp_percent: 8.0  # ✅ ПРАВКА #11: Адаптивный TP для trending
+    spread_buffer: 0.05
+  choppy:
+    max_holding_minutes: 10  # Для choppy
+    sl_percent: 1.5
+    tp_percent: 3.0
+    spread_buffer: 0.10
 
 # Параметры Futures-специфичных модулей
 futures_modules:
@@ -1880,14 +1899,14 @@ futures_modules:
   # ✅ НОВОЕ: FastADX - параметры быстрого ADX
   fast_adx:
     period: 9  # Период ADX
-    threshold: 20.0  # Порог ADX для определения тренда
+    threshold: 25.0  # ✅ ПРАВКА #9: Ужесточено до 25.0 (было 20.0) для фильтрации слабых трендов
     
     # Адаптивные пороги по режимам
     by_regime:
       trending:
         threshold: 25.0  # Более строго в тренде
       ranging:
-        threshold: 20.0  # Стандартный порог
+        threshold: 25.0  # ✅ ПРАВКА #9: Ужесточено до 25.0 для ranging
       choppy:
         threshold: 15.0  # Менее строго в хаосе
 
