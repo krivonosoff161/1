@@ -14,6 +14,8 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
 
+# ✅ Импорт Dict уже есть в typing
+
 from src.models import OHLCV
 
 
@@ -58,6 +60,7 @@ class WebSocketCoordinator:
         smart_exit_coordinator=None,  # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
         performance_tracker=None,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
         signal_generator=None,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): SignalGenerator для проверки готовности
+        orchestrator=None,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Orchestrator для проверки готовности модулей
     ):
         """
         Инициализация WebSocketCoordinator.
@@ -112,8 +115,12 @@ class WebSocketCoordinator:
         self.performance_tracker = performance_tracker
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): SignalGenerator для проверки готовности
         self.signal_generator = signal_generator
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Orchestrator для проверки готовности модулей
+        self.orchestrator = orchestrator
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Callback для синхронизации позиций
         self.sync_positions_with_exchange = None  # Будет установлен из orchestrator
+        # ✅ Дедупликация тикеров: кэш последних цен
+        self.last_prices: Dict[str, float] = {}  # symbol -> price
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Отслеживание последнего timestamp для каждого символа и таймфрейма
         # Формат: "symbol_timeframe" -> timestamp последней обработанной свечи (в секундах)
@@ -204,12 +211,35 @@ class WebSocketCoordinator:
                         f"⚠️ SignalGenerator еще не инициализирован, пропускаем обработку тикера для {symbol}"
                     )
                     return
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Блокировка торговли до готовности всех модулей
+            # Проверяем флаг готовности orchestrator перед обработкой тикера
+            if self.orchestrator and hasattr(self.orchestrator, "all_modules_ready"):
+                if not self.orchestrator.all_modules_ready:
+                    # Извлекаем цену для логирования
+                    price = None
+                    if "data" in data and len(data["data"]) > 0:
+                        ticker = data["data"][0]
+                        if "last" in ticker:
+                            price = float(ticker["last"])
+                    # ✅ ИСПРАВЛЕНИЕ: Правильное форматирование цены в f-string
+                    price_str = f"{price:.2f}" if price is not None else "N/A"
+                    logger.debug(
+                        f"⚠️ Тикер пропущен (инициализация): {symbol} price={price_str}"
+                    )
+                    return
             # Извлекаем данные из ответа WebSocket
             if "data" in data and len(data["data"]) > 0:
                 ticker = data["data"][0]
 
                 if "last" in ticker:
                     price = float(ticker["last"])
+                    
+                    # ✅ Дедупликация тикеров: пропускаем дубликаты
+                    if price == self.last_prices.get(symbol):
+                        logger.debug(f"⏭️ Тикер пропущен (дубликат): {symbol} price={price:.2f}")
+                        return
+                    self.last_prices[symbol] = price
 
                     # ✅ НОВОЕ: Обновляем свечи в DataRegistry (инкрементально)
                     if self.data_registry:

@@ -712,6 +712,12 @@ class FuturesScalpingOrchestrator:
             )
         self._delays_config = delays_config  # Сохраняем для адаптации по режимам
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Флаг готовности всех модулей для предотвращения race conditions
+        # Блокирует торговлю до полной инициализации всех критичных модулей (candles, индикаторы, ATR, pivots, volume profile, regime)
+        self.initialization_complete = asyncio.Event()  # Event для синхронизации готовности
+        self.all_modules_ready = False  # Флаг готовности всех модулей
+        self.skipped_signals_due_init = 0  # Счётчик пропущенных сигналов из-за неготовности
+        
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Кэш последних ордеров и задержки между сигналами
         # Кэш последних ордеров: {symbol: {order_id, timestamp, status}}
         self.last_orders_cache = {}
@@ -807,6 +813,7 @@ class FuturesScalpingOrchestrator:
             data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
             position_scaling_manager=self.position_scaling_manager,  # ✅ НОВОЕ: PositionScalingManager для лестничного добавления
             adaptive_leverage=self.adaptive_leverage,  # ✅ ИСПРАВЛЕНИЕ #3: AdaptiveLeverage для адаптивного левериджа
+            orchestrator=self,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Передаем orchestrator для проверки готовности
         )
         # Обновляем ссылку на total_margin_used для синхронизации
         self._total_margin_used_ref = total_margin_used_ref
@@ -914,6 +921,7 @@ class FuturesScalpingOrchestrator:
             smart_exit_coordinator=self.smart_exit_coordinator,  # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
             performance_tracker=self.performance_tracker,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
             signal_generator=self.signal_generator,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Для проверки готовности перед обработкой тикеров
+            orchestrator=self,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Передаем orchestrator для проверки готовности
         )
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Устанавливаем callback для синхронизации позиций
         self.websocket_coordinator.sync_positions_with_exchange = (
@@ -972,6 +980,19 @@ class FuturesScalpingOrchestrator:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Проверяем готовность всех модулей перед началом торговли
             await self._verify_readiness()
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Устанавливаем флаг готовности после всех проверок
+            # Это блокирует торговлю до полной инициализации всех модулей (candles, индикаторы, ATR, pivots, volume profile, regime)
+            self.all_modules_ready = True
+            self.initialization_complete.set()  # Сигнал: всё готово
+            
+            # Логируем статистику пропущенных сигналов (если были)
+            if self.skipped_signals_due_init > 0:
+                logger.info(
+                    f"📊 Пропущено сигналов из-за инициализации: {self.skipped_signals_due_init}"
+                )
+            
+            logger.info("🟢 Все модули инициализированы — торговля разрешена")
 
             # ✅ РЕФАКТОРИНГ: Основной торговый цикл делегирован в TradingControlCenter
             self.is_running = True
@@ -1962,10 +1983,33 @@ class FuturesScalpingOrchestrator:
         if not force and (now - self._last_positions_sync) < sync_interval:
             return
 
-        try:
-            exchange_positions = await self.client.get_positions()
-        except Exception as e:
-            logger.debug(f"⚠️ Не удалось синхронизировать позиции с биржей: {e}")
+        # ✅ НОВОЕ (28.12.2025): Retry логика для обработки временных ошибок API
+        max_retries = 4  # 0-3 = 4 попытки
+        retry_delays = [0.2, 0.4, 0.8, 1.6]  # Exponential backoff в секундах
+        synced = False
+        exchange_positions = None
+
+        for attempt in range(max_retries):
+            try:
+                exchange_positions = await self.client.get_positions()
+                synced = True
+                break  # Успешно получили позиции
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    delay = retry_delays[attempt]
+                    logger.debug(
+                        f"⚠️ Sync retry {attempt+1}/{max_retries} для позиций, "
+                        f"sleep {delay:.1f}s: {e}"
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.warning(
+                        f"❌ Sync failed после {max_retries} попыток — используем fallback: {e}"
+                    )
+                    return  # Выходим без синхронизации
+
+        if not synced or exchange_positions is None:
+            logger.warning("❌ Sync failed после retry — используем fallback prices")
             return
 
         self._last_positions_sync = time.time()

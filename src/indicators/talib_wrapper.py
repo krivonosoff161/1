@@ -86,9 +86,9 @@ class TALibEMA(BaseIndicator):
                 else float(data[-1])
             )
         except Exception as e:
-            # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(
-                f"⚠️ TALibEMA: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            # ✅ ИСПРАВЛЕНО (28.12.2025): Silent fallback без warning (только debug для диагностики)
+            logger.debug(
+                f"TALibEMA fallback: {type(e).__name__}: {e}"
             )
             # Fallback на простое среднее
             ema = float(np.mean(data[-self.period :]))
@@ -119,14 +119,20 @@ class TALibATR(BaseIndicator):
     def calculate(
         self, high_data: List[float], low_data: List[float], close_data: List[float]
     ) -> IndicatorResult:
-        if (
-            len(high_data) < self.period
-            or len(low_data) < self.period
-            or len(close_data) < self.period
-        ):
-            return IndicatorResult(self.name, 0.0)
+        """
+        ✅ ГИБРИДНЫЙ ATR: TA-Lib (Wilder's) с fallback на простой расчёт.
+        
+        TA-Lib требует "разогрева" (burn-in period) и может возвращать NaN для последних значений.
+        Если TA-Lib не дал валидное значение → используем простой расчёт (как в regime_manager).
+        """
+        # ✅ ИСПРАВЛЕНО: Проверяем минимум period + 1 свечей (TA-Lib требует больше данных)
+        if len(close_data) < self.period + 1:
+            logger.debug(
+                f"ATR: мало данных ({len(close_data)} < {self.period + 1}), fallback простой расчёт"
+            )
+            return self._fallback_simple_atr(high_data, low_data, close_data)
 
-        # ✅ ГРОК ОПТИМИЗАЦИЯ: Используем TA-Lib для быстрого расчета
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Используем TA-Lib для быстрого расчета (Wilder's ATR)
         try:
             highs = np.array(high_data, dtype=np.float64)
             lows = np.array(low_data, dtype=np.float64)
@@ -134,36 +140,69 @@ class TALibATR(BaseIndicator):
 
             atr_values = talib.ATR(highs, lows, closes, timeperiod=self.period)
 
-            # Берем последнее значение
-            atr_value = (
-                float(atr_values[-1])
-                if len(atr_values) > 0 and not np.isnan(atr_values[-1])
-                else 0.0
-            )
-        except Exception as e:
-            # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(
-                f"⚠️ TALibATR: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
-            )
-            # Fallback на простое среднее True Range
+            # ✅ ИСПРАВЛЕНО: Ищем последнее валидное значение (не NaN)
+            # TA-Lib может возвращать NaN для последних значений из-за "разогрева" или дизайна библиотеки
             atr_value = 0.0
-            if len(close_data) > 1:
-                true_ranges = []
-                for i in range(1, len(close_data)):
-                    tr = max(
-                        high_data[i] - low_data[i],
-                        abs(high_data[i] - close_data[i - 1]),
-                        abs(low_data[i] - close_data[i - 1]),
-                    )
-                    true_ranges.append(tr)
-                if len(true_ranges) >= self.period:
-                    atr_value = float(np.mean(true_ranges[-self.period :]))
+            for i in range(len(atr_values) - 1, -1, -1):
+                if not np.isnan(atr_values[i]) and atr_values[i] > 0:
+                    atr_value = float(atr_values[i])
+                    break
 
+            # ✅ КРИТИЧЕСКОЕ: Если TA-Lib вернул 0.0 или все NaN → используем fallback
+            if atr_value > 0:
+                return IndicatorResult(
+                    name=f"ATR_{self.period}",
+                    value=atr_value,
+                    signal="NEUTRAL",
+                    metadata={"period": self.period, "source": "talib"},
+                )
+            else:
+                raise ValueError("TA-Lib вернул 0.0 или все NaN")
+
+        except Exception as e:
+            # ✅ ИСПРАВЛЕНО: Silent fallback без warning (только debug для диагностики)
+            logger.debug(f"ATR TA-Lib ошибка: {type(e).__name__}: {e}, fallback на простой расчёт")
+
+        # ✅ Fallback на простой расчёт (как в regime_manager)
+        return self._fallback_simple_atr(high_data, low_data, close_data)
+
+    def _fallback_simple_atr(
+        self, highs: List[float], lows: List[float], closes: List[float]
+    ) -> IndicatorResult:
+        """
+        Простой расчёт ATR (среднее арифметическое True Range за период).
+        Используется как fallback, когда TA-Lib не дал валидное значение.
+        """
+        if len(closes) < 2:
+            return IndicatorResult(
+                name=f"ATR_{self.period}",
+                value=0.0,
+                signal="NEUTRAL",
+                metadata={"period": self.period, "source": "fallback_zero"},
+            )
+
+        # Рассчитываем True Range для каждой свечи
+        tr_list = []
+        for i in range(1, len(closes)):
+            tr = max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            )
+            tr_list.append(tr)
+
+        # Берём последние N (period) значений и считаем среднее
+        recent_tr = tr_list[-self.period :] if len(tr_list) >= self.period else tr_list
+        atr = sum(recent_tr) / len(recent_tr) if recent_tr else 0.0
+
+        logger.debug(
+            f"ATR fallback простой: {atr:.4f} (из {len(recent_tr)} TR, period={self.period})"
+        )
         return IndicatorResult(
             name=f"ATR_{self.period}",
-            value=atr_value,
+            value=float(atr),
             signal="NEUTRAL",
-            metadata={"period": self.period},
+            metadata={"period": self.period, "source": "simple_fallback"},
         )
 
 
@@ -204,9 +243,9 @@ class TALibMACD(BaseIndicator):
                 else 0.0
             )
         except Exception as e:
-            # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(
-                f"⚠️ TALibMACD: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            # ✅ ИСПРАВЛЕНО (28.12.2025): Silent fallback без warning (только debug для диагностики)
+            logger.debug(
+                f"TALibMACD fallback: {type(e).__name__}: {e}"
             )
             # Fallback на нулевые значения
             macd_value = 0.0
@@ -255,9 +294,9 @@ class TALibSMA(BaseIndicator):
                 else float(np.mean(data[-self.period :]))
             )
         except Exception as e:
-            # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(
-                f"⚠️ TALibSMA: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            # ✅ ИСПРАВЛЕНО (28.12.2025): Silent fallback без warning (только debug для диагностики)
+            logger.debug(
+                f"TALibSMA fallback: {type(e).__name__}: {e}"
             )
             # Fallback на numpy.mean
             sma_value = float(np.mean(data[-self.period :]))
@@ -318,9 +357,9 @@ class TALibBollingerBands(BaseIndicator):
                 else sma
             )
         except Exception as e:
-            # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(
-                f"⚠️ TALibBollingerBands: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            # ✅ ИСПРАВЛЕНО (28.12.2025): Silent fallback без warning (только debug для диагностики)
+            logger.debug(
+                f"TALibBollingerBands fallback: {type(e).__name__}: {e}"
             )
             # Fallback на numpy расчет
             recent_data = data[-self.period :]

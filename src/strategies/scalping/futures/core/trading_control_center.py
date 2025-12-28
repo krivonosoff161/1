@@ -140,6 +140,32 @@ class TradingControlCenter:
         """
         logger.info("🔄 TCC: Запуск основного торгового цикла")
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Ожидание готовности всех модулей перед началом торговли
+        # Проверяем, есть ли доступ к orchestrator через signal_coordinator
+        if (
+            hasattr(self, "signal_coordinator")
+            and self.signal_coordinator
+            and hasattr(self.signal_coordinator, "orchestrator")
+            and self.signal_coordinator.orchestrator
+        ):
+            orchestrator = self.signal_coordinator.orchestrator
+            if hasattr(orchestrator, "initialization_complete"):
+                logger.info("⏳ Ожидание готовности всех модулей перед началом торговли...")
+                try:
+                    # Ждём готовности с таймаутом 60 секунд (на случай проблем)
+                    await asyncio.wait_for(orchestrator.initialization_complete.wait(), timeout=60.0)
+                    logger.info("✅ Все модули готовы, торговый цикл начинается")
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "⚠️ Таймаут ожидания готовности модулей (60 сек), продолжаем с предупреждением"
+                    )
+            elif hasattr(orchestrator, "all_modules_ready"):
+                # Fallback: проверяем флаг напрямую
+                if not orchestrator.all_modules_ready:
+                    logger.warning(
+                        "⚠️ Модули еще не готовы (all_modules_ready=False), продолжаем с предупреждением"
+                    )
+
         self.is_running = True
         loop_start_time = time.time()
 
@@ -167,6 +193,47 @@ class TradingControlCenter:
                 ):
                     await self._check_metrics_and_alerts()
                     self._last_metrics_check_time = current_time
+
+                # ✅ НОВОЕ (28.12.2025): Периодическое логирование статистики блокировок сигналов
+                if not hasattr(self, '_last_block_stats_log_time'):
+                    self._last_block_stats_log_time = time.time()
+                    self._block_stats_log_interval = 300.0  # Каждые 5 минут
+
+                if (
+                    current_time - self._last_block_stats_log_time
+                    >= self._block_stats_log_interval
+                ):
+                    if hasattr(self, 'signal_coordinator') and self.signal_coordinator:
+                        if hasattr(self.signal_coordinator, '_log_block_stats'):
+                            # Проверяем, async или sync метод
+                            if asyncio.iscoroutinefunction(self.signal_coordinator._log_block_stats):
+                                await self.signal_coordinator._log_block_stats()
+                            else:
+                                self.signal_coordinator._log_block_stats()
+                    self._last_block_stats_log_time = current_time
+
+                # ✅ ФИНАЛЬНОЕ ДОПОЛНЕНИЕ (Grok): Reset статистики блокировок каждые 1 час
+                if (
+                    hasattr(self, 'signal_coordinator')
+                    and self.signal_coordinator
+                    and hasattr(self.signal_coordinator, '_block_stats_reset_time')
+                ):
+                    if (
+                        current_time - self.signal_coordinator._block_stats_reset_time
+                        >= 3600.0  # 1 час
+                    ):
+                        logger.info(
+                            f"🔄 Reset block stats (hourly): {self.signal_coordinator._block_stats}"
+                        )
+                        self.signal_coordinator._block_stats = {
+                            "circuit_breaker": 0,
+                            "side_blocked": 0,
+                            "low_strength": 0,
+                            "existing_position": 0,
+                            "margin_unsafe": 0,
+                            "other": 0,
+                        }
+                        self.signal_coordinator._block_stats_reset_time = current_time
 
                 # Обновление состояния
                 state_start = time.perf_counter()
@@ -783,30 +850,29 @@ class TradingControlCenter:
             conversion_rate = self.conversion_metrics.get_conversion_rate(
                 period_hours=24
             )
-            win_rate = self.conversion_metrics.get_win_rate(period_hours=24)
-            emergency_close_rate = self.conversion_metrics.get_emergency_close_rate(
-                period_hours=24
-            )
+            
+            # ✅ ИСПРАВЛЕНО: ConversionMetrics не имеет get_win_rate() и get_emergency_close_rate()
+            # Используем доступные методы
+            summary = self.conversion_metrics.get_summary(period_hours=24)
 
             # Логируем метрики
             logger.info(
                 f"📊 Метрики за 24 часа: "
-                f"конверсия сигналов={conversion_rate.get('signal_to_position', 0):.1%}, "
-                f"win_rate={win_rate:.1%}, "
-                f"emergency_close_rate={emergency_close_rate:.1%}"
+                f"конверсия сигналов={conversion_rate.get('executed_to_generated', 0):.1%}, "
+                f"сгенерировано={conversion_rate.get('generated', 0)}, "
+                f"отфильтровано={conversion_rate.get('filtered', 0)}, "
+                f"исполнено={conversion_rate.get('executed', 0)}"
             )
 
-            # Проверяем критические пороги и отправляем алерты
-            if win_rate < 0.3:
-                self.alert_manager.send_alert(
-                    f"⚠️ КРИТИЧНО: Win Rate ниже 30%: {win_rate:.1%}", level="warning"
-                )
+            # Проверяем критические пороги и отправляем алерты (используем conversion_rate вместо win_rate)
+            conversion_percent = conversion_rate.get('executed_to_generated', 0)
+            if conversion_percent < 30:
+                if self.alert_manager:
+                    self.alert_manager.send_alert(
+                        f"⚠️ КРИТИЧНО: Конверсия сигналов ниже 30%: {conversion_percent:.1%}", level="warning"
+                    )
 
-            if emergency_close_rate > 0.5:
-                self.alert_manager.send_alert(
-                    f"⚠️ КРИТИЧНО: Emergency Close Rate выше 50%: {emergency_close_rate:.1%}",
-                    level="warning",
-                )
+            # ✅ ИСПРАВЛЕНО: Удалена проверка emergency_close_rate (метод не существует в ConversionMetrics)
 
             # Проверяем конверсию сигналов
             signal_to_position = conversion_rate.get("signal_to_position", 0)

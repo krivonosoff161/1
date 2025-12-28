@@ -58,6 +58,7 @@ class SignalCoordinator:
         adaptive_leverage=None,  # ✅ ИСПРАВЛЕНИЕ #3: AdaptiveLeverage для адаптивного левериджа
         position_scaling_manager=None,  # ✅ НОВОЕ: PositionScalingManager для лестничного добавления
         parameter_provider=None,  # ✅ НОВОЕ (26.12.2025): ParameterProvider для единого доступа к параметрам
+        orchestrator=None,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Orchestrator для проверки готовности модулей
     ):
         """
         Инициализация SignalCoordinator.
@@ -119,6 +120,8 @@ class SignalCoordinator:
         self.adaptive_leverage = adaptive_leverage
         # ✅ НОВОЕ: PositionScalingManager для лестничного добавления
         self.position_scaling_manager = position_scaling_manager
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Orchestrator для проверки готовности модулей
+        self.orchestrator = orchestrator
 
         # ✅ НОВОЕ (26.12.2025): ConversionMetrics для отслеживания конверсии
         self.conversion_metrics = None
@@ -142,6 +145,8 @@ class SignalCoordinator:
             "margin_unsafe": 0,
             "other": 0,
         }
+        # ✅ ФИНАЛЬНОЕ ДОПОЛНЕНИЕ (Grok): Время последнего reset статистики
+        self._block_stats_reset_time = time.time()
 
         logger.info("✅ SignalCoordinator initialized")
 
@@ -1093,6 +1098,20 @@ class SignalCoordinator:
     async def check_for_signals(self, symbol: str, price: float):
         """✅ РЕАЛЬНАЯ генерация сигналов на основе индикаторов"""
         try:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Блокировка торговли до готовности всех модулей
+            # Ждём готовности всех модулей перед генерацией сигналов
+            if self.orchestrator and hasattr(self.orchestrator, "initialization_complete"):
+                await self.orchestrator.initialization_complete.wait()
+            elif self.orchestrator and hasattr(self.orchestrator, "all_modules_ready"):
+                if not self.orchestrator.all_modules_ready:
+                    # Увеличиваем счётчик пропущенных сигналов
+                    if hasattr(self.orchestrator, "skipped_signals_due_init"):
+                        self.orchestrator.skipped_signals_due_init += 1
+                    logger.debug(
+                        f"⚠️ Торговля заблокирована: инициализация не завершена ({symbol} price={price:.2f})"
+                    )
+                    return
+            
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Нормализуем символ для блокировки
             # Это предотвращает race condition при разных форматах ("BTC-USDT" vs "BTCUSDT")
             normalized_symbol = (
@@ -1807,6 +1826,11 @@ class SignalCoordinator:
 
         except Exception as e:
             logger.error(f"❌ Ошибка проверки сигналов: {e}")
+        finally:
+            # ✅ НОВОЕ (28.12.2025): Логируем статистику блокировок после обработки сигналов
+            # Логируем только если были блокировки (не каждый раз, чтобы не засорять логи)
+            if sum(self._block_stats.values()) > 0:
+                self._log_block_stats()
 
     async def execute_signal_from_price(
         self, symbol: str, price: float, signal=None

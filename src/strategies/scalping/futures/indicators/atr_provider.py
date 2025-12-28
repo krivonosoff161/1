@@ -67,6 +67,12 @@ class ATRProvider:
                 if hasattr(self.data_registry, "_indicators"):
                     indicators = self.data_registry._indicators.get(symbol, {})
                     if indicators:
+                        # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Проверяем доступные ключи
+                        available_keys = list(indicators.keys())
+                        logger.debug(
+                            f"🔍 ATRProvider: Проверка ATR для {symbol}, доступные ключи: {available_keys}"
+                        )
+                        
                         # Пробуем разные ключи для ATR
                         atr_value = (
                             indicators.get("atr")
@@ -78,15 +84,31 @@ class ATRProvider:
                         if atr_value is not None:
                             try:
                                 atr_float = float(atr_value)
-                                # Обновляем кэш
-                                self._atr_cache[symbol] = atr_float
-                                self._cache_timestamps[symbol] = time.time()
+                                if atr_float > 0:
+                                    # Обновляем кэш
+                                    self._atr_cache[symbol] = atr_float
+                                    self._cache_timestamps[symbol] = time.time()
+                                    logger.debug(
+                                        f"✅ ATRProvider: ATR получен из DataRegistry для {symbol}: {atr_float:.6f}"
+                                    )
+                                    return atr_float
+                                else:
+                                    logger.debug(
+                                        f"⚠️ ATRProvider: ATR найден для {symbol}, но равен 0 или отрицательный: {atr_float}"
+                                    )
+                            except (ValueError, TypeError) as e:
                                 logger.debug(
-                                    f"✅ ATRProvider: ATR получен из DataRegistry для {symbol}: {atr_float:.6f}"
+                                    f"⚠️ ATRProvider: Ошибка конвертации ATR для {symbol}: {e}, value={atr_value}"
                                 )
-                                return atr_float
-                            except (ValueError, TypeError):
-                                pass
+                        else:
+                            logger.debug(
+                                f"⚠️ ATRProvider: ATR не найден в доступных ключах для {symbol}, "
+                                f"проверенные ключи: ['atr', 'ATR', 'atr_1m', 'atr_14']"
+                            )
+                    else:
+                        logger.debug(
+                            f"⚠️ ATRProvider: Нет индикаторов для {symbol} в DataRegistry"
+                        )
             except Exception as e:
                 logger.debug(
                     f"⚠️ ATRProvider: Ошибка получения ATR из DataRegistry для {symbol}: {e}"

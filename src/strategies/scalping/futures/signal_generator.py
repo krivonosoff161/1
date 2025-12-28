@@ -1944,11 +1944,38 @@ class FuturesSignalGenerator:
                     indicators_for_registry = {}
 
                     # Простые индикаторы (RSI, ATR)
+                    # ✅ ИСПРАВЛЕНО: ATR может быть сохранен как "atr_14" вместо "atr"
                     for key in ["rsi", "atr", "sma_20", "ema_12", "ema_26"]:
+                        # Проверяем основное имя и варианты с периодом
+                        value = None
                         if key in indicators:
                             value = indicators[key]
-                            if isinstance(value, (int, float)):
+                        elif key == "atr":
+                            # Ищем ATR с периодом (atr_14, atr_1m и т.д.)
+                            for atr_key in ["atr_14", "atr_1m", "atr"]:
+                                if atr_key in indicators:
+                                    value = indicators[atr_key]
+                                    break
+                        
+                        if value is not None and isinstance(value, (int, float)):
+                            # ✅ ИСПРАВЛЕНО: Для ATR разрешаем сохранение даже если value = 0.0
+                            # (но логируем предупреждение для диагностики)
+                            if key == "atr" and value == 0.0:
+                                logger.debug(
+                                    f"⚠️ ATR для {symbol} равен 0.0 (возможно, недостаточно данных для расчета), "
+                                    f"не сохраняем в DataRegistry (будет использован fallback)"
+                                )
+                            elif value > 0:
                                 indicators_for_registry[key] = value
+                                if key == "atr":
+                                    found_key = atr_key if 'atr_key' in locals() else key
+                                    logger.debug(f"📊 Сохранение ATR для {symbol}: {value:.6f} (найден по ключу: {found_key})")
+                        elif key == "atr":
+                            # Логируем, почему ATR не сохранился
+                            logger.debug(
+                                f"⚠️ ATR для {symbol} не сохранен: value={value}, "
+                                f"type={type(value)}, indicators keys={list(indicators.keys())}"
+                            )
 
                     # MACD (сложный индикатор - сохраняем как отдельные значения)
                     if "macd" in indicators:

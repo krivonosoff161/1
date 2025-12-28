@@ -206,6 +206,93 @@ class ParameterProvider:
             )
             return {}
 
+    def get_smart_close_params(
+        self, regime: str, symbol: Optional[str] = None
+    ) -> Dict[str, float]:
+        """
+        Получить адаптивные параметры Smart Close для режима.
+        
+        Приоритет:
+        1. by_symbol.{symbol}.smart_close.{regime}
+        2. exit_params.smart_close.{regime}
+        3. Default значения
+        
+        Args:
+            regime: Режим рынка (trending, ranging, choppy)
+            symbol: Торговый символ (опционально, для per-symbol параметров)
+            
+        Returns:
+            {
+                'reversal_score_threshold': float,
+                'trend_against_threshold': float
+            }
+        """
+        defaults = {
+            'reversal_score_threshold': 2.0,
+            'trend_against_threshold': 0.7
+        }
+        
+        try:
+            # ✅ ПРИОРИТЕТ 1: by_symbol.{symbol}.smart_close.{regime}
+            if symbol and hasattr(self.config_manager, "_raw_config_dict"):
+                config_dict = self.config_manager._raw_config_dict
+                by_symbol = config_dict.get("by_symbol", {})
+                symbol_config = by_symbol.get(symbol, {})
+                if isinstance(symbol_config, dict):
+                    smart_close_config = symbol_config.get("smart_close", {})
+                    if isinstance(smart_close_config, dict):
+                        regime_config = smart_close_config.get(regime, {})
+                        if isinstance(regime_config, dict):
+                            reversal_threshold = regime_config.get("reversal_score_threshold")
+                            trend_threshold = regime_config.get("trend_against_threshold")
+                            if reversal_threshold is not None or trend_threshold is not None:
+                                params = defaults.copy()
+                                if reversal_threshold is not None:
+                                    params['reversal_score_threshold'] = float(reversal_threshold)
+                                if trend_threshold is not None:
+                                    params['trend_against_threshold'] = float(trend_threshold)
+                                logger.debug(
+                                    f"✅ ParameterProvider: Smart Close параметры для {symbol} ({regime}) "
+                                    f"получены из by_symbol: reversal={params['reversal_score_threshold']}, "
+                                    f"trend={params['trend_against_threshold']}"
+                                )
+                                return params
+            
+            # ✅ ПРИОРИТЕТ 2: exit_params.smart_close.{regime}
+            if hasattr(self.config_manager, "_raw_config_dict"):
+                config_dict = self.config_manager._raw_config_dict
+                exit_params = config_dict.get("exit_params", {})
+                if isinstance(exit_params, dict):
+                    smart_close_config = exit_params.get("smart_close", {})
+                    if isinstance(smart_close_config, dict):
+                        regime_config = smart_close_config.get(regime, {})
+                        if isinstance(regime_config, dict):
+                            reversal_threshold = regime_config.get("reversal_score_threshold")
+                            trend_threshold = regime_config.get("trend_against_threshold")
+                            if reversal_threshold is not None or trend_threshold is not None:
+                                params = defaults.copy()
+                                if reversal_threshold is not None:
+                                    params['reversal_score_threshold'] = float(reversal_threshold)
+                                if trend_threshold is not None:
+                                    params['trend_against_threshold'] = float(trend_threshold)
+                                logger.debug(
+                                    f"✅ ParameterProvider: Smart Close параметры для {regime} "
+                                    f"получены из exit_params: reversal={params['reversal_score_threshold']}, "
+                                    f"trend={params['trend_against_threshold']}"
+                                )
+                                return params
+        except Exception as e:
+            logger.debug(
+                f"⚠️ ParameterProvider: Ошибка получения Smart Close параметров для {symbol or 'default'} ({regime}): {e}"
+            )
+        
+        # По умолчанию возвращаем стандартные значения
+        logger.debug(
+            f"✅ ParameterProvider: Smart Close параметры для {regime} - используются default: "
+            f"reversal={defaults['reversal_score_threshold']}, trend={defaults['trend_against_threshold']}"
+        )
+        return defaults
+
     def get_symbol_params(self, symbol: str) -> Dict[str, Any]:
         """
         Получить параметры для конкретного символа.
