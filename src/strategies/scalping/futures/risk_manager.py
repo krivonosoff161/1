@@ -1723,10 +1723,10 @@ class FuturesRiskManager:
         try:
             # ✅ ИСПРАВЛЕНО (28.12.2025): Передаем orchestrator и data_registry для доступа к балансу
             return await self.margin_monitor.check_safety(
-                position_size_usd, 
+                position_size_usd,
                 current_positions,
                 orchestrator=self.orchestrator,  # ✅ Передаем orchestrator
-                data_registry=self.data_registry  # ✅ Передаем data_registry
+                data_registry=self.data_registry,  # ✅ Передаем data_registry
             )
         except Exception as e:
             logger.error(f"❌ Error checking margin safety: {e}")

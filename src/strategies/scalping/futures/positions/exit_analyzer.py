@@ -1513,9 +1513,7 @@ class ExitAnalyzer:
                         # ✅ ИСПРАВЛЕНО (28.12.2025): Используем _to_float() вместо float() напрямую
                         max_holding_minutes_raw = regime_config["max_holding_minutes"]
                         max_holding_minutes = self._to_float(
-                            max_holding_minutes_raw, 
-                            "max_holding_minutes", 
-                            120.0
+                            max_holding_minutes_raw, "max_holding_minutes", 120.0
                         )
                         return max_holding_minutes
             except Exception as e:
@@ -1543,19 +1541,19 @@ class ExitAnalyzer:
                 if regime_config:
                     if isinstance(regime_config, dict):
                         # ✅ ИСПРАВЛЕНО (28.12.2025): Используем _to_float() вместо float() напрямую
-                        max_holding_minutes_raw = regime_config.get("max_holding_minutes", 120.0)
+                        max_holding_minutes_raw = regime_config.get(
+                            "max_holding_minutes", 120.0
+                        )
                         max_holding_minutes = self._to_float(
-                            max_holding_minutes_raw, 
-                            "max_holding_minutes", 
-                            120.0
+                            max_holding_minutes_raw, "max_holding_minutes", 120.0
                         )
                     else:
                         # ✅ ИСПРАВЛЕНО (28.12.2025): Используем _to_float() вместо float() напрямую
-                        max_holding_minutes_raw = getattr(regime_config, "max_holding_minutes", 120.0)
+                        max_holding_minutes_raw = getattr(
+                            regime_config, "max_holding_minutes", 120.0
+                        )
                         max_holding_minutes = self._to_float(
-                            max_holding_minutes_raw, 
-                            "max_holding_minutes", 
-                            120.0
+                            max_holding_minutes_raw, "max_holding_minutes", 120.0
                         )
             except Exception as e:
                 logger.debug(

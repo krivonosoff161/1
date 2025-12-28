@@ -552,7 +552,7 @@ class WebSocketCoordinator:
         """
         try:
             position_closed = False  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Флаг для отслеживания закрытий
-            
+
             for position_data in positions_data:
                 symbol = position_data.get("instId", "").replace("-SWAP", "")
                 pos_size = float(position_data.get("pos", "0"))
@@ -597,14 +597,22 @@ class WebSocketCoordinator:
                     saved_position_side = self.active_positions_ref[symbol].get(
                         "position_side"
                     )
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Немедленная синхронизация при закрытии позиций
-            if position_closed and hasattr(self, 'sync_positions_with_exchange') and self.sync_positions_with_exchange:
+            if (
+                position_closed
+                and hasattr(self, "sync_positions_with_exchange")
+                and self.sync_positions_with_exchange
+            ):
                 try:
-                    logger.info("🔄 Private WS: Обнаружено закрытие позиции, синхронизируем немедленно...")
+                    logger.info(
+                        "🔄 Private WS: Обнаружено закрытие позиции, синхронизируем немедленно..."
+                    )
                     await self.sync_positions_with_exchange(force=True)
                 except Exception as e:
-                    logger.error(f"❌ Ошибка синхронизации позиций после закрытия через WS: {e}")
+                    logger.error(
+                        f"❌ Ошибка синхронизации позиций после закрытия через WS: {e}"
+                    )
                     saved_time_extended = self.active_positions_ref[symbol].get(
                         "time_extended", False
                     )
@@ -632,14 +640,18 @@ class WebSocketCoordinator:
                         ] = saved_order_type
                     if saved_post_only is not None:
                         self.active_positions_ref[symbol]["post_only"] = saved_post_only
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Немедленная синхронизация при закрытии позиций
             if position_closed and self.sync_positions_with_exchange:
                 try:
-                    logger.info("🔄 Private WS: Обнаружено закрытие позиции, синхронизируем немедленно...")
+                    logger.info(
+                        "🔄 Private WS: Обнаружено закрытие позиции, синхронизируем немедленно..."
+                    )
                     await self.sync_positions_with_exchange(force=True)
                 except Exception as e:
-                    logger.error(f"❌ Ошибка синхронизации позиций после закрытия через WS: {e}")
+                    logger.error(
+                        f"❌ Ошибка синхронизации позиций после закрытия через WS: {e}"
+                    )
 
                     # ✅ НОВОЕ: Логируем ADL при обновлении позиции (если доступно)
                     if "adl_rank" in update_data:

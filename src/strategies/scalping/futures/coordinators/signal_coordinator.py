@@ -617,7 +617,11 @@ class SignalCoordinator:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Логирование статистики обработки сигналов
             if total_signals > 0:
-                conversion_rate = (processed_count / total_signals) * 100 if total_signals > 0 else 0.0
+                conversion_rate = (
+                    (processed_count / total_signals) * 100
+                    if total_signals > 0
+                    else 0.0
+                )
                 logger.info(
                     f"📊 Статистика обработки сигналов: "
                     f"всего={total_signals}, заблокировано={blocked_count}, "

@@ -171,10 +171,14 @@ class DirectionAnalyzer:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Блокировка контр-тренда в режиме trending
             # Если режим trending и направление сигнала противоположно тренду ADX - блокируем
-            if regime and regime.lower() == "trending" and adx_value >= self.ADX_STRONG_THRESHOLD:
+            if (
+                regime
+                and regime.lower() == "trending"
+                and adx_value >= self.ADX_STRONG_THRESHOLD
+            ):
                 # Определяем направление тренда по ADX
                 trend_direction = adx_direction  # "bullish" или "bearish" из ADX
-                
+
                 # Если финальное направление противоположно тренду ADX - блокируем
                 if trend_direction == "bullish" and direction == "bearish":
                     logger.debug(

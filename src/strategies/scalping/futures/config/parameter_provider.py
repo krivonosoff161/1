@@ -166,38 +166,36 @@ class ParameterProvider:
                         )
                         return default
                 return default
-            
+
             # Конвертируем ключевые параметры
             if exit_params:
-                exit_params['max_holding_minutes'] = _to_float(
-                    exit_params.get('max_holding_minutes'), 
-                    'max_holding_minutes', 
-                    25.0 if regime and regime.lower() == 'ranging' else 120.0  # Default для ranging: 25.0, иначе 120.0
+                exit_params["max_holding_minutes"] = _to_float(
+                    exit_params.get("max_holding_minutes"),
+                    "max_holding_minutes",
+                    25.0
+                    if regime and regime.lower() == "ranging"
+                    else 120.0,  # Default для ranging: 25.0, иначе 120.0
                 )
-                exit_params['sl_atr_multiplier'] = _to_float(
-                    exit_params.get('sl_atr_multiplier'), 
-                    'sl_atr_multiplier', 
-                    2.0  # ✅ Default увеличен с 1.5 до 2.0
+                exit_params["sl_atr_multiplier"] = _to_float(
+                    exit_params.get("sl_atr_multiplier"),
+                    "sl_atr_multiplier",
+                    2.0,  # ✅ Default увеличен с 1.5 до 2.0
                 )
-                exit_params['tp_atr_multiplier'] = _to_float(
-                    exit_params.get('tp_atr_multiplier'), 
-                    'tp_atr_multiplier', 
-                    1.0
+                exit_params["tp_atr_multiplier"] = _to_float(
+                    exit_params.get("tp_atr_multiplier"), "tp_atr_multiplier", 1.0
                 )
-                exit_params['min_profit_for_extension'] = _to_float(
-                    exit_params.get('min_profit_for_extension'), 
-                    'min_profit_for_extension', 
-                    0.4
+                exit_params["min_profit_for_extension"] = _to_float(
+                    exit_params.get("min_profit_for_extension"),
+                    "min_profit_for_extension",
+                    0.4,
                 )
-                exit_params['extension_percent'] = _to_float(
-                    exit_params.get('extension_percent'), 
-                    'extension_percent', 
-                    100.0
+                exit_params["extension_percent"] = _to_float(
+                    exit_params.get("extension_percent"), "extension_percent", 100.0
                 )
-                exit_params['min_holding_minutes'] = _to_float(
-                    exit_params.get('min_holding_minutes'), 
-                    'min_holding_minutes', 
-                    0.5  # ✅ Default для ranging: 0.5 минуты
+                exit_params["min_holding_minutes"] = _to_float(
+                    exit_params.get("min_holding_minutes"),
+                    "min_holding_minutes",
+                    0.5,  # ✅ Default для ranging: 0.5 минуты
                 )
 
             return exit_params or {}

@@ -2210,14 +2210,22 @@ class FuturesSignalGenerator:
                         # Анализируем направление рынка
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Передаем regime для блокировки контр-тренда
                         current_regime = None
-                        if hasattr(self, 'regime_manager') and self.regime_manager:
+                        if hasattr(self, "regime_manager") and self.regime_manager:
                             try:
-                                current_regime = self.regime_manager.get_current_regime()
+                                current_regime = (
+                                    self.regime_manager.get_current_regime()
+                                )
                                 if current_regime:
-                                    current_regime = current_regime.lower() if isinstance(current_regime, str) else str(current_regime).lower()
+                                    current_regime = (
+                                        current_regime.lower()
+                                        if isinstance(current_regime, str)
+                                        else str(current_regime).lower()
+                                    )
                             except Exception as e:
-                                logger.debug(f"⚠️ Не удалось получить regime для DirectionAnalyzer: {e}")
-                        
+                                logger.debug(
+                                    f"⚠️ Не удалось получить regime для DirectionAnalyzer: {e}"
+                                )
+
                         direction_result = self.direction_analyzer.analyze_direction(
                             candles=market_data.ohlcv_data,
                             current_price=current_price,
