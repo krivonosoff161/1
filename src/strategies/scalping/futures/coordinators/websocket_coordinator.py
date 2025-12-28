@@ -14,9 +14,10 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
 
+from src.models import OHLCV
+
 # ✅ Импорт Dict уже есть в typing
 
-from src.models import OHLCV
 
 
 class WebSocketCoordinator:
@@ -211,7 +212,7 @@ class WebSocketCoordinator:
                         f"⚠️ SignalGenerator еще не инициализирован, пропускаем обработку тикера для {symbol}"
                     )
                     return
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Блокировка торговли до готовности всех модулей
             # Проверяем флаг готовности orchestrator перед обработкой тикера
             if self.orchestrator and hasattr(self.orchestrator, "all_modules_ready"):
@@ -234,10 +235,12 @@ class WebSocketCoordinator:
 
                 if "last" in ticker:
                     price = float(ticker["last"])
-                    
+
                     # ✅ Дедупликация тикеров: пропускаем дубликаты
                     if price == self.last_prices.get(symbol):
-                        logger.debug(f"⏭️ Тикер пропущен (дубликат): {symbol} price={price:.2f}")
+                        logger.debug(
+                            f"⏭️ Тикер пропущен (дубликат): {symbol} price={price:.2f}"
+                        )
                         return
                     self.last_prices[symbol] = price
 

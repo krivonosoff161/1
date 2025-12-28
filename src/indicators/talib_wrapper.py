@@ -87,9 +87,7 @@ class TALibEMA(BaseIndicator):
             )
         except Exception as e:
             # ✅ ИСПРАВЛЕНО (28.12.2025): Silent fallback без warning (только debug для диагностики)
-            logger.debug(
-                f"TALibEMA fallback: {type(e).__name__}: {e}"
-            )
+            logger.debug(f"TALibEMA fallback: {type(e).__name__}: {e}")
             # Fallback на простое среднее
             ema = float(np.mean(data[-self.period :]))
 
@@ -121,7 +119,7 @@ class TALibATR(BaseIndicator):
     ) -> IndicatorResult:
         """
         ✅ ГИБРИДНЫЙ ATR: TA-Lib (Wilder's) с fallback на простой расчёт.
-        
+
         TA-Lib требует "разогрева" (burn-in period) и может возвращать NaN для последних значений.
         Если TA-Lib не дал валидное значение → используем простой расчёт (как в regime_manager).
         """
@@ -161,7 +159,9 @@ class TALibATR(BaseIndicator):
 
         except Exception as e:
             # ✅ ИСПРАВЛЕНО: Silent fallback без warning (только debug для диагностики)
-            logger.debug(f"ATR TA-Lib ошибка: {type(e).__name__}: {e}, fallback на простой расчёт")
+            logger.debug(
+                f"ATR TA-Lib ошибка: {type(e).__name__}: {e}, fallback на простой расчёт"
+            )
 
         # ✅ Fallback на простой расчёт (как в regime_manager)
         return self._fallback_simple_atr(high_data, low_data, close_data)
@@ -244,9 +244,7 @@ class TALibMACD(BaseIndicator):
             )
         except Exception as e:
             # ✅ ИСПРАВЛЕНО (28.12.2025): Silent fallback без warning (только debug для диагностики)
-            logger.debug(
-                f"TALibMACD fallback: {type(e).__name__}: {e}"
-            )
+            logger.debug(f"TALibMACD fallback: {type(e).__name__}: {e}")
             # Fallback на нулевые значения
             macd_value = 0.0
             signal_value = 0.0
@@ -295,9 +293,7 @@ class TALibSMA(BaseIndicator):
             )
         except Exception as e:
             # ✅ ИСПРАВЛЕНО (28.12.2025): Silent fallback без warning (только debug для диагностики)
-            logger.debug(
-                f"TALibSMA fallback: {type(e).__name__}: {e}"
-            )
+            logger.debug(f"TALibSMA fallback: {type(e).__name__}: {e}")
             # Fallback на numpy.mean
             sma_value = float(np.mean(data[-self.period :]))
 
@@ -358,9 +354,7 @@ class TALibBollingerBands(BaseIndicator):
             )
         except Exception as e:
             # ✅ ИСПРАВЛЕНО (28.12.2025): Silent fallback без warning (только debug для диагностики)
-            logger.debug(
-                f"TALibBollingerBands fallback: {type(e).__name__}: {e}"
-            )
+            logger.debug(f"TALibBollingerBands fallback: {type(e).__name__}: {e}")
             # Fallback на numpy расчет
             recent_data = data[-self.period :]
             sma = float(np.mean(recent_data))

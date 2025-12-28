@@ -714,10 +714,14 @@ class FuturesScalpingOrchestrator:
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Флаг готовности всех модулей для предотвращения race conditions
         # Блокирует торговлю до полной инициализации всех критичных модулей (candles, индикаторы, ATR, pivots, volume profile, regime)
-        self.initialization_complete = asyncio.Event()  # Event для синхронизации готовности
+        self.initialization_complete = (
+            asyncio.Event()
+        )  # Event для синхронизации готовности
         self.all_modules_ready = False  # Флаг готовности всех модулей
-        self.skipped_signals_due_init = 0  # Счётчик пропущенных сигналов из-за неготовности
-        
+        self.skipped_signals_due_init = (
+            0  # Счётчик пропущенных сигналов из-за неготовности
+        )
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Кэш последних ордеров и задержки между сигналами
         # Кэш последних ордеров: {symbol: {order_id, timestamp, status}}
         self.last_orders_cache = {}
@@ -985,13 +989,13 @@ class FuturesScalpingOrchestrator:
             # Это блокирует торговлю до полной инициализации всех модулей (candles, индикаторы, ATR, pivots, volume profile, regime)
             self.all_modules_ready = True
             self.initialization_complete.set()  # Сигнал: всё готово
-            
+
             # Логируем статистику пропущенных сигналов (если были)
             if self.skipped_signals_due_init > 0:
                 logger.info(
                     f"📊 Пропущено сигналов из-за инициализации: {self.skipped_signals_due_init}"
                 )
-            
+
             logger.info("🟢 Все модули инициализированы — торговля разрешена")
 
             # ✅ РЕФАКТОРИНГ: Основной торговый цикл делегирован в TradingControlCenter
@@ -2655,7 +2659,7 @@ class FuturesScalpingOrchestrator:
                             total_pnl = self.performance_tracker.total_pnl
                             daily_pnl = self.performance_tracker.daily_pnl
                             winning_trades = self.performance_tracker.winning_trades
-                            
+
                             logger.info(
                                 f"📊 МЕТРИКИ ПРОИЗВОДИТЕЛЬНОСТИ (каждые 5 мин):\n"
                                 f"   - Всего сделок: {total_trades}\n"
@@ -2666,7 +2670,9 @@ class FuturesScalpingOrchestrator:
                             )
                             self._last_performance_log_time = time.time()
                         except Exception as e:
-                            logger.debug(f"⚠️ Ошибка получения метрик производительности: {e}")
+                            logger.debug(
+                                f"⚠️ Ошибка получения метрик производительности: {e}"
+                            )
 
                 if not self.is_running:
                     break

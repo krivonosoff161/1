@@ -652,7 +652,7 @@ class SignalCoordinator:
     def _log_block_stats(self):
         """
         ✅ НОВОЕ (28.12.2025): Периодическое логирование статистики блокировок сигналов.
-        
+
         Вызывается после обработки сигналов для диагностики причин низкой конверсии.
         """
         total_blocked = sum(self._block_stats.values())
@@ -1100,7 +1100,9 @@ class SignalCoordinator:
         try:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Блокировка торговли до готовности всех модулей
             # Ждём готовности всех модулей перед генерацией сигналов
-            if self.orchestrator and hasattr(self.orchestrator, "initialization_complete"):
+            if self.orchestrator and hasattr(
+                self.orchestrator, "initialization_complete"
+            ):
                 await self.orchestrator.initialization_complete.wait()
             elif self.orchestrator and hasattr(self.orchestrator, "all_modules_ready"):
                 if not self.orchestrator.all_modules_ready:
@@ -1111,7 +1113,7 @@ class SignalCoordinator:
                         f"⚠️ Торговля заблокирована: инициализация не завершена ({symbol} price={price:.2f})"
                     )
                     return
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Нормализуем символ для блокировки
             # Это предотвращает race condition при разных форматах ("BTC-USDT" vs "BTCUSDT")
             normalized_symbol = (

@@ -150,10 +150,14 @@ class TradingControlCenter:
         ):
             orchestrator = self.signal_coordinator.orchestrator
             if hasattr(orchestrator, "initialization_complete"):
-                logger.info("⏳ Ожидание готовности всех модулей перед началом торговли...")
+                logger.info(
+                    "⏳ Ожидание готовности всех модулей перед началом торговли..."
+                )
                 try:
                     # Ждём готовности с таймаутом 60 секунд (на случай проблем)
-                    await asyncio.wait_for(orchestrator.initialization_complete.wait(), timeout=60.0)
+                    await asyncio.wait_for(
+                        orchestrator.initialization_complete.wait(), timeout=60.0
+                    )
                     logger.info("✅ Все модули готовы, торговый цикл начинается")
                 except asyncio.TimeoutError:
                     logger.warning(
@@ -195,7 +199,7 @@ class TradingControlCenter:
                     self._last_metrics_check_time = current_time
 
                 # ✅ НОВОЕ (28.12.2025): Периодическое логирование статистики блокировок сигналов
-                if not hasattr(self, '_last_block_stats_log_time'):
+                if not hasattr(self, "_last_block_stats_log_time"):
                     self._last_block_stats_log_time = time.time()
                     self._block_stats_log_interval = 300.0  # Каждые 5 минут
 
@@ -203,10 +207,12 @@ class TradingControlCenter:
                     current_time - self._last_block_stats_log_time
                     >= self._block_stats_log_interval
                 ):
-                    if hasattr(self, 'signal_coordinator') and self.signal_coordinator:
-                        if hasattr(self.signal_coordinator, '_log_block_stats'):
+                    if hasattr(self, "signal_coordinator") and self.signal_coordinator:
+                        if hasattr(self.signal_coordinator, "_log_block_stats"):
                             # Проверяем, async или sync метод
-                            if asyncio.iscoroutinefunction(self.signal_coordinator._log_block_stats):
+                            if asyncio.iscoroutinefunction(
+                                self.signal_coordinator._log_block_stats
+                            ):
                                 await self.signal_coordinator._log_block_stats()
                             else:
                                 self.signal_coordinator._log_block_stats()
@@ -214,9 +220,9 @@ class TradingControlCenter:
 
                 # ✅ ФИНАЛЬНОЕ ДОПОЛНЕНИЕ (Grok): Reset статистики блокировок каждые 1 час
                 if (
-                    hasattr(self, 'signal_coordinator')
+                    hasattr(self, "signal_coordinator")
                     and self.signal_coordinator
-                    and hasattr(self.signal_coordinator, '_block_stats_reset_time')
+                    and hasattr(self.signal_coordinator, "_block_stats_reset_time")
                 ):
                     if (
                         current_time - self.signal_coordinator._block_stats_reset_time
@@ -850,7 +856,7 @@ class TradingControlCenter:
             conversion_rate = self.conversion_metrics.get_conversion_rate(
                 period_hours=24
             )
-            
+
             # ✅ ИСПРАВЛЕНО: ConversionMetrics не имеет get_win_rate() и get_emergency_close_rate()
             # Используем доступные методы
             summary = self.conversion_metrics.get_summary(period_hours=24)
@@ -865,11 +871,12 @@ class TradingControlCenter:
             )
 
             # Проверяем критические пороги и отправляем алерты (используем conversion_rate вместо win_rate)
-            conversion_percent = conversion_rate.get('executed_to_generated', 0)
+            conversion_percent = conversion_rate.get("executed_to_generated", 0)
             if conversion_percent < 30:
                 if self.alert_manager:
                     self.alert_manager.send_alert(
-                        f"⚠️ КРИТИЧНО: Конверсия сигналов ниже 30%: {conversion_percent:.1%}", level="warning"
+                        f"⚠️ КРИТИЧНО: Конверсия сигналов ниже 30%: {conversion_percent:.1%}",
+                        level="warning",
                     )
 
             # ✅ ИСПРАВЛЕНО: Удалена проверка emergency_close_rate (метод не существует в ConversionMetrics)

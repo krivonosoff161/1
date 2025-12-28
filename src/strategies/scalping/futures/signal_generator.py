@@ -1740,28 +1740,30 @@ class FuturesSignalGenerator:
     def _adjust_price_for_slippage(self, symbol: str, price: float, side: str) -> float:
         """
         ✅ НОВОЕ (28.12.2025): Корректировка цены сигнала с учетом slippage.
-        
+
         Args:
             symbol: Торговый символ
             price: Базовая цена сигнала
             side: Направление сигнала ("buy" или "sell")
-        
+
         Returns:
             Скорректированная цена с учетом slippage
         """
         if not price or price <= 0:
             return price
-        
+
         try:
             # Получаем slippage из конфига
             slippage_pct = 0.1  # Fallback: 0.1%
-            
+
             # Пробуем получить из scalping_config
             if hasattr(self.scalping_config, "slippage_percent"):
-                slippage_pct = float(getattr(self.scalping_config, "slippage_percent", 0.1))
+                slippage_pct = float(
+                    getattr(self.scalping_config, "slippage_percent", 0.1)
+                )
             elif isinstance(self.scalping_config, dict):
                 slippage_pct = float(self.scalping_config.get("slippage_percent", 0.1))
-            
+
             # Корректируем цену в зависимости от направления
             if side.lower() == "buy":
                 # Для LONG: увеличиваем цену входа (покупаем дороже из-за slippage)
@@ -1769,7 +1771,7 @@ class FuturesSignalGenerator:
             else:  # sell
                 # Для SHORT: уменьшаем цену входа (продаем дешевле из-за slippage)
                 adjusted_price = price * (1 - slippage_pct / 100)
-            
+
             logger.debug(
                 f"💰 {symbol}: Цена сигнала скорректирована на slippage {slippage_pct:.3f}% "
                 f"({side.upper()}): {price:.6f} → {adjusted_price:.6f}"
@@ -1956,7 +1958,7 @@ class FuturesSignalGenerator:
                                 if atr_key in indicators:
                                     value = indicators[atr_key]
                                     break
-                        
+
                         if value is not None and isinstance(value, (int, float)):
                             # ✅ ИСПРАВЛЕНО: Для ATR разрешаем сохранение даже если value = 0.0
                             # (но логируем предупреждение для диагностики)
@@ -1968,8 +1970,12 @@ class FuturesSignalGenerator:
                             elif value > 0:
                                 indicators_for_registry[key] = value
                                 if key == "atr":
-                                    found_key = atr_key if 'atr_key' in locals() else key
-                                    logger.debug(f"📊 Сохранение ATR для {symbol}: {value:.6f} (найден по ключу: {found_key})")
+                                    found_key = (
+                                        atr_key if "atr_key" in locals() else key
+                                    )
+                                    logger.debug(
+                                        f"📊 Сохранение ATR для {symbol}: {value:.6f} (найден по ключу: {found_key})"
+                                    )
                         elif key == "atr":
                             # Логируем, почему ATR не сохранился
                             logger.debug(
@@ -3170,7 +3176,9 @@ class FuturesSignalGenerator:
                     )
                 else:
                     # ✅ НОВОЕ (28.12.2025): Учитываем slippage при установке цены сигнала
-                    adjusted_price = self._adjust_price_for_slippage(symbol, current_price, "buy")
+                    adjusted_price = self._adjust_price_for_slippage(
+                        symbol, current_price, "buy"
+                    )
                     signals.append(
                         {
                             "symbol": symbol,
@@ -3261,7 +3269,9 @@ class FuturesSignalGenerator:
                             "side": "sell",
                             "type": "rsi_overbought",
                             "strength": strength,
-                            "price": self._adjust_price_for_slippage(symbol, current_price, "sell"),  # ✅ НОВОЕ (28.12.2025): Учет slippage
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "sell"
+                            ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
                             "timestamp": datetime.now(),
                             "indicator_value": rsi,
                             "confidence": confidence,
@@ -3535,7 +3545,9 @@ class FuturesSignalGenerator:
                             "side": "buy",
                             "type": "macd_bullish",
                             "strength": base_strength,
-                            "price": self._adjust_price_for_slippage(symbol, current_price, "buy"),  # ✅ НОВОЕ (28.12.2025): Учет slippage
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "buy"
+                            ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
                             "timestamp": datetime.now(),
                             "indicator_value": histogram,
                             "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
@@ -3636,7 +3648,9 @@ class FuturesSignalGenerator:
                             "side": "sell",
                             "type": "macd_bearish",
                             "strength": base_strength,
-                            "price": self._adjust_price_for_slippage(symbol, current_price, "sell"),  # ✅ НОВОЕ (28.12.2025): Учет slippage
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "sell"
+                            ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
                             "timestamp": datetime.now(),
                             "indicator_value": histogram,
                             "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
@@ -3846,7 +3860,9 @@ class FuturesSignalGenerator:
                             "side": "buy",
                             "type": "bb_oversold",
                             "strength": base_strength,
-                            "price": self._adjust_price_for_slippage(symbol, current_price, "buy"),  # ✅ НОВОЕ (28.12.2025): Учет slippage
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "buy"
+                            ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
                             "timestamp": datetime.now(),
                             "indicator_value": current_price,
                             "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
@@ -3964,7 +3980,9 @@ class FuturesSignalGenerator:
                             "side": "sell",
                             "type": "bb_overbought",
                             "strength": base_strength,
-                            "price": self._adjust_price_for_slippage(symbol, current_price, "sell"),  # ✅ НОВОЕ (28.12.2025): Учет slippage
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "sell"
+                            ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
                             "timestamp": datetime.now(),
                             "indicator_value": current_price,
                             "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
@@ -4643,7 +4661,9 @@ class FuturesSignalGenerator:
                             "side": "buy",
                             "type": "ma_bullish",
                             "strength": strength,
-                            "price": self._adjust_price_for_slippage(symbol, current_price, "buy"),  # ✅ НОВОЕ (28.12.2025): Учет slippage
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "buy"
+                            ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
                             "timestamp": datetime.now(),
                             "indicator_value": ma_fast,
                             "confidence": confidence_config.get("bullish_strong", 0.7)
@@ -4710,7 +4730,9 @@ class FuturesSignalGenerator:
                             "side": "sell",
                             "type": "ma_bearish",
                             "strength": strength,
-                            "price": self._adjust_price_for_slippage(symbol, current_price, "sell"),  # ✅ НОВОЕ (28.12.2025): Учет slippage
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "sell"
+                            ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
                             "timestamp": datetime.now(),
                             "indicator_value": ma_fast,
                             "confidence": confidence_config.get("bearish_strong", 0.7)

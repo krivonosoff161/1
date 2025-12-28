@@ -72,7 +72,7 @@ class ATRProvider:
                         logger.debug(
                             f"🔍 ATRProvider: Проверка ATR для {symbol}, доступные ключи: {available_keys}"
                         )
-                        
+
                         # Пробуем разные ключи для ATR
                         atr_value = (
                             indicators.get("atr")

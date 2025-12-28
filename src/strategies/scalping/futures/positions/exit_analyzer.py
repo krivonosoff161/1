@@ -1427,16 +1427,16 @@ class ExitAnalyzer:
     ) -> Optional[float]:
         """
         Получение min_holding_minutes из конфига по режиму.
-        
+
         Приоритет:
         1. exit_params.regime.min_holding_minutes (через ParameterProvider)
         2. adaptive_regime.regime.min_holding_minutes
         3. per-symbol min_holding_minutes
-        
+
         Args:
             regime: Режим рынка (trending, ranging, choppy)
             symbol: Торговый символ (опционально, для per-symbol параметров)
-            
+
         Returns:
             min_holding_minutes или None если не задано
         """
@@ -1460,7 +1460,7 @@ class ExitAnalyzer:
                 logger.debug(
                     f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes через ParameterProvider: {e}"
                 )
-        
+
         # ✅ ПРИОРИТЕТ 2: adaptive_regime.regime.min_holding_minutes
         if self.config_manager:
             try:
@@ -1470,7 +1470,9 @@ class ExitAnalyzer:
                     regime_config = adaptive_regime.get(regime, {})
                     if "min_holding_minutes" in regime_config:
                         min_holding_minutes = self._to_float(
-                            regime_config["min_holding_minutes"], "min_holding_minutes", None
+                            regime_config["min_holding_minutes"],
+                            "min_holding_minutes",
+                            None,
                         )
                         if min_holding_minutes is not None:
                             logger.debug(
@@ -1482,7 +1484,7 @@ class ExitAnalyzer:
                 logger.debug(
                     f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes из adaptive_regime: {e}"
                 )
-        
+
         # ✅ ПРИОРИТЕТ 3: per-symbol min_holding_minutes
         if symbol and self.config_manager:
             try:
@@ -1494,9 +1496,14 @@ class ExitAnalyzer:
                     if isinstance(symbol_config, dict):
                         # Сначала проверяем режим-специфичный параметр
                         regime_config = symbol_config.get(regime, {})
-                        if isinstance(regime_config, dict) and "min_holding_minutes" in regime_config:
+                        if (
+                            isinstance(regime_config, dict)
+                            and "min_holding_minutes" in regime_config
+                        ):
                             min_holding_minutes = self._to_float(
-                                regime_config["min_holding_minutes"], "min_holding_minutes", None
+                                regime_config["min_holding_minutes"],
+                                "min_holding_minutes",
+                                None,
                             )
                             if min_holding_minutes is not None:
                                 logger.debug(
@@ -1507,7 +1514,9 @@ class ExitAnalyzer:
                         # Затем проверяем общий параметр для символа
                         if "min_holding_minutes" in symbol_config:
                             min_holding_minutes = self._to_float(
-                                symbol_config["min_holding_minutes"], "min_holding_minutes", None
+                                symbol_config["min_holding_minutes"],
+                                "min_holding_minutes",
+                                None,
                             )
                             if min_holding_minutes is not None:
                                 logger.debug(
@@ -1519,7 +1528,7 @@ class ExitAnalyzer:
                 logger.debug(
                     f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes из by_symbol: {e}"
                 )
-        
+
         # По умолчанию возвращаем None (нет защиты)
         return None
 
@@ -2400,18 +2409,27 @@ class ExitAnalyzer:
                         min_holding_minutes = None
                         if self.parameter_provider:
                             try:
-                                exit_params = self.parameter_provider.get_exit_params(symbol, regime)
-                                min_holding_minutes = exit_params.get("min_holding_minutes", 1.5)
+                                exit_params = self.parameter_provider.get_exit_params(
+                                    symbol, regime
+                                )
+                                min_holding_minutes = exit_params.get(
+                                    "min_holding_minutes", 1.5
+                                )
                                 if min_holding_minutes is not None:
                                     min_holding_minutes = float(min_holding_minutes)
                             except Exception as e:
-                                logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes: {e}")
-                        
+                                logger.debug(
+                                    f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes: {e}"
+                                )
+
                         if min_holding_minutes is None:
                             min_holding_minutes = 1.5  # Fallback для trending
-                        
+
                         # Не закрываем по SL если позиция открыта меньше min_holding_minutes
-                        if minutes_in_position is not None and minutes_in_position < min_holding_minutes:
+                        if (
+                            minutes_in_position is not None
+                            and minutes_in_position < min_holding_minutes
+                        ):
                             # ✅ ФИНАЛЬНОЕ ДОПОЛНЕНИЕ (Grok): Улучшенное логирование при ignore SL
                             logger.info(
                                 f"⏳ ExitAnalyzer {regime.upper()}: Ignore SL для {symbol} - "
@@ -2426,7 +2444,7 @@ class ExitAnalyzer:
                                 "min_holding_minutes": min_holding_minutes,
                                 "regime": regime,
                             }
-                        
+
                         # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
                         # Вызывается только если pnl_percent < 0 и |убыток| >= 1.5 * SL
                         sl_percent = self._get_sl_percent(
@@ -2436,7 +2454,13 @@ class ExitAnalyzer:
                         if pnl_percent <= -sl_percent * 1.5 - spread_buffer:
                             smart_close = (
                                 await self._should_force_close_by_smart_analysis(
-                                    symbol, position_side, pnl_percent, sl_percent, regime, metadata, position
+                                    symbol,
+                                    position_side,
+                                    pnl_percent,
+                                    sl_percent,
+                                    regime,
+                                    metadata,
+                                    position,
                                 )
                             )
                             if smart_close:
@@ -2813,8 +2837,13 @@ class ExitAnalyzer:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Проверяем min_holding_minutes перед закрытием по SL
                 min_holding_minutes = self._get_min_holding_minutes("ranging", symbol)
                 if min_holding_minutes is not None:
-                    minutes_in_position = self._get_time_in_position_minutes(metadata, position)
-                    if minutes_in_position is not None and minutes_in_position < min_holding_minutes:
+                    minutes_in_position = self._get_time_in_position_minutes(
+                        metadata, position
+                    )
+                    if (
+                        minutes_in_position is not None
+                        and minutes_in_position < min_holding_minutes
+                    ):
                         logger.info(
                             f"⏳ ExitAnalyzer RANGING: SL заблокирован для {symbol} - "
                             f"время удержания {minutes_in_position:.1f} мин < минимум {min_holding_minutes:.1f} мин "
@@ -2832,7 +2861,7 @@ class ExitAnalyzer:
                             "sl_threshold": sl_threshold,
                             "regime": regime,
                         }
-                
+
                 logger.warning(
                     f"🛑 ExitAnalyzer RANGING: SL достигнут для {symbol}: "
                     f"Gross PnL {gross_pnl_percent:.2f}% <= SL threshold {sl_threshold:.2f}% "
@@ -3321,18 +3350,27 @@ class ExitAnalyzer:
                         min_holding_minutes = None
                         if self.parameter_provider:
                             try:
-                                exit_params = self.parameter_provider.get_exit_params(symbol, regime)
-                                min_holding_minutes = exit_params.get("min_holding_minutes", 0.5)
+                                exit_params = self.parameter_provider.get_exit_params(
+                                    symbol, regime
+                                )
+                                min_holding_minutes = exit_params.get(
+                                    "min_holding_minutes", 0.5
+                                )
                                 if min_holding_minutes is not None:
                                     min_holding_minutes = float(min_holding_minutes)
                             except Exception as e:
-                                logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes: {e}")
-                        
+                                logger.debug(
+                                    f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes: {e}"
+                                )
+
                         if min_holding_minutes is None:
                             min_holding_minutes = 0.5  # Fallback
-                        
+
                         # Не закрываем по SL если позиция открыта меньше min_holding_minutes
-                        if minutes_in_position is not None and minutes_in_position < min_holding_minutes:
+                        if (
+                            minutes_in_position is not None
+                            and minutes_in_position < min_holding_minutes
+                        ):
                             # ✅ ФИНАЛЬНОЕ ДОПОЛНЕНИЕ (Grok): Улучшенное логирование при ignore SL
                             logger.info(
                                 f"⏳ ExitAnalyzer {regime.upper()}: Ignore SL для {symbol} - "
@@ -3347,7 +3385,7 @@ class ExitAnalyzer:
                                 "min_holding_minutes": min_holding_minutes,
                                 "regime": regime,
                             }
-                        
+
                         # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
                         # Вызывается только если gross_pnl_percent < 0 и |убыток| >= 1.5 * SL
                         # ✅ ИСПРАВЛЕНО: Учитываем спред для предотвращения дергания
@@ -3359,7 +3397,13 @@ class ExitAnalyzer:
                         if gross_pnl_percent <= smart_close_threshold:
                             smart_close = (
                                 await self._should_force_close_by_smart_analysis(
-                                    symbol, position_side, gross_pnl_percent, sl_percent, regime, metadata, position
+                                    symbol,
+                                    position_side,
+                                    gross_pnl_percent,
+                                    sl_percent,
+                                    regime,
+                                    metadata,
+                                    position,
                                 )
                             )
                             if smart_close:
@@ -3859,7 +3903,13 @@ class ExitAnalyzer:
                     smart_close_threshold = -sl_percent * 1.5 - spread_buffer
                     if pnl_percent <= smart_close_threshold:
                         smart_close = await self._should_force_close_by_smart_analysis(
-                            symbol, position_side, pnl_percent, sl_percent, regime, metadata, position
+                            symbol,
+                            position_side,
+                            pnl_percent,
+                            sl_percent,
+                            regime,
+                            metadata,
+                            position,
                         )
                         if smart_close:
                             logger.warning(
@@ -4313,7 +4363,10 @@ class ExitAnalyzer:
         min_holding_minutes = self._get_min_holding_minutes(regime, symbol)
         if min_holding_minutes is not None:
             minutes_in_position = self._get_time_in_position_minutes(metadata, position)
-            if minutes_in_position is not None and minutes_in_position < min_holding_minutes:
+            if (
+                minutes_in_position is not None
+                and minutes_in_position < min_holding_minutes
+            ):
                 logger.debug(
                     f"⏳ Smart Close заблокирован для {symbol} - "
                     f"время удержания {minutes_in_position:.1f} мин < минимум {min_holding_minutes:.1f} мин "
@@ -4387,14 +4440,18 @@ class ExitAnalyzer:
                 trend_against = ts
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Используем адаптивные пороги по режиму
-        smart_close_params = self.parameter_provider.get_smart_close_params(regime, symbol)
-        score_threshold = smart_close_params['reversal_score_threshold']
-        trend_threshold = smart_close_params['trend_against_threshold']
-        
+        smart_close_params = self.parameter_provider.get_smart_close_params(
+            regime, symbol
+        )
+        score_threshold = smart_close_params["reversal_score_threshold"]
+        trend_threshold = smart_close_params["trend_against_threshold"]
+
         # Принудительное закрытие с адаптивными порогами:
         # 1. нет признаков разворота (score <= threshold по режиму)
         # 2. тренд против нас усиливается (>= threshold по режиму)
-        should_close = reversal_score <= score_threshold and trend_against >= trend_threshold
+        should_close = (
+            reversal_score <= score_threshold and trend_against >= trend_threshold
+        )
 
         logger.info(
             f"Smart Close Analysis {symbol} ({position_side}, режим={regime}): "
