@@ -27,12 +27,13 @@ class DirectionAnalyzer:
 
     # Веса индикаторов для определения направления
     # Большее число = большее влияние
+    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличен вес ADX для более точного определения направления
     INDICATOR_WEIGHTS = {
-        "adx": 0.40,  # ADX - самый важный индикатор (40%)
+        "adx": 0.50,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличено с 0.40 до 0.50 (50%) - ADX самый важный индикатор
         "ema": 0.25,  # EMA - важный индикатор (25%)
         "sma": 0.15,  # SMA - средний вес (15%)
-        "price_action": 0.10,  # Price action (10%)
-        "volume": 0.10,  # Volume analysis (10%)
+        "price_action": 0.05,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Уменьшено с 0.10 до 0.05 (5%)
+        "volume": 0.05,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Уменьшено с 0.10 до 0.05 (5%)
     }
 
     # Пороги для определения направления
@@ -167,6 +168,52 @@ class DirectionAnalyzer:
                 direction = "neutral"
                 confidence = max(bullish_score, bearish_score)
                 reason = f"Neutral: недостаточная уверенность (bullish={bullish_score:.2f}, bearish={bearish_score:.2f})"
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Блокировка контр-тренда в режиме trending
+            # Если режим trending и направление сигнала противоположно тренду ADX - блокируем
+            if regime and regime.lower() == "trending" and adx_value >= self.ADX_STRONG_THRESHOLD:
+                # Определяем направление тренда по ADX
+                trend_direction = adx_direction  # "bullish" или "bearish" из ADX
+                
+                # Если финальное направление противоположно тренду ADX - блокируем
+                if trend_direction == "bullish" and direction == "bearish":
+                    logger.debug(
+                        f"🚫 DirectionAnalyzer: Блокировка контр-тренда в режиме TRENDING - "
+                        f"ADX тренд={trend_direction}, сигнал={direction}, ADX={adx_value:.2f}"
+                    )
+                    return {
+                        "direction": "neutral",
+                        "confidence": 0.0,
+                        "adx_value": adx_value,
+                        "adx_direction": adx_direction,
+                        "ema_direction": ema_direction,
+                        "sma_direction": sma_direction,
+                        "price_action_direction": price_action_direction,
+                        "volume_signal": volume_signal,
+                        "weighted_score": bearish_score,
+                        "bullish_score": bullish_score,
+                        "bearish_score": bearish_score,
+                        "reason": f"Blocked counter-trend: ADX trend={trend_direction}, signal={direction}",
+                    }
+                elif trend_direction == "bearish" and direction == "bullish":
+                    logger.debug(
+                        f"🚫 DirectionAnalyzer: Блокировка контр-тренда в режиме TRENDING - "
+                        f"ADX тренд={trend_direction}, сигнал={direction}, ADX={adx_value:.2f}"
+                    )
+                    return {
+                        "direction": "neutral",
+                        "confidence": 0.0,
+                        "adx_value": adx_value,
+                        "adx_direction": adx_direction,
+                        "ema_direction": ema_direction,
+                        "sma_direction": sma_direction,
+                        "price_action_direction": price_action_direction,
+                        "volume_signal": volume_signal,
+                        "weighted_score": bullish_score,
+                        "bullish_score": bullish_score,
+                        "bearish_score": bearish_score,
+                        "reason": f"Blocked counter-trend: ADX trend={trend_direction}, signal={direction}",
+                    }
 
             return {
                 "direction": direction,

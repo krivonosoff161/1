@@ -1987,11 +1987,26 @@ class FuturesPositionManager:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем MIN_HOLDING перед Profit Harvesting
             # Защита от шума должна работать - адаптивный min_holding по режиму
             # ✅ НОВОЕ: Игнорируем MIN_HOLDING для экстремально больших прибылей (> 2x порога)
-            min_holding_minutes = 0.2  # ✅ СКАЛЬПИНГ: 0.2 мин (12 сек) - не блокирует фиксацию прибыли (было 3.0!)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Используем ParameterProvider для получения min_holding_minutes
+            min_holding_minutes = None
             try:
-                # Получаем режим рынка
+                # ✅ Приоритет 1: ParameterProvider
+                if hasattr(self, "parameter_provider") and self.parameter_provider:
+                    try:
+                        exit_params = self.parameter_provider.get_exit_params(symbol)
+                        min_holding_minutes = exit_params.get("min_holding_minutes", None)
+                        if min_holding_minutes is not None:
+                            min_holding_minutes = float(min_holding_minutes)
+                            logger.debug(
+                                f"✅ [PH] {symbol}: min_holding_minutes={min_holding_minutes:.2f} мин "
+                                f"получен из ParameterProvider"
+                            )
+                    except Exception as e:
+                        logger.debug(f"⚠️ [PH] {symbol}: Ошибка получения min_holding_minutes из ParameterProvider: {e}")
+                
+                # Получаем режим рынка для fallback
                 market_regime = None
-                if hasattr(self, "orchestrator") and self.orchestrator:
+                if min_holding_minutes is None and hasattr(self, "orchestrator") and self.orchestrator:
                     if (
                         hasattr(self.orchestrator, "signal_generator")
                         and self.orchestrator.signal_generator
@@ -2008,18 +2023,18 @@ class FuturesPositionManager:
                                     else str(regime_obj).lower()
                                 )
 
-                # Адаптивный min_holding по режиму
-                # ✅ НОВОЕ: Используем min_holding из конфига если есть, иначе fallback
-                if config_min_holding is not None:
-                    min_holding_minutes = float(config_min_holding)
-                    logger.debug(
-                        f"📊 Используется min_holding_minutes={min_holding_minutes:.1f} из конфига для {symbol} (regime={market_regime})"
-                    )
-                elif market_regime == "trending":
-                    min_holding_minutes = 5.0  # 5 минут в тренде
-                elif market_regime == "choppy":
-                    min_holding_minutes = 1.0  # 1 минута в хаосе
-                else:  # ranging
+                # ✅ Fallback: Используем min_holding из конфига если есть, иначе режим-специфичные значения
+                if min_holding_minutes is None:
+                    if config_min_holding is not None:
+                        min_holding_minutes = float(config_min_holding)
+                        logger.debug(
+                            f"📊 [PH] Используется min_holding_minutes={min_holding_minutes:.1f} из конфига для {symbol} (regime={market_regime})"
+                        )
+                    elif market_regime == "trending":
+                        min_holding_minutes = 5.0  # 5 минут в тренде
+                    elif market_regime == "choppy":
+                        min_holding_minutes = 1.0  # 1 минута в хаосе
+                    else:  # ranging
                     min_holding_minutes = (
                         1.0  # ✅ ИСПРАВЛЕНО: 1 минута в боковике (было 3.0)
                     )
@@ -2263,8 +2278,23 @@ class FuturesPositionManager:
                         current_timestamp = datetime.now(timezone.utc).timestamp()
                         time_since_open = current_timestamp - entry_timestamp
 
-                        min_holding_minutes = 0.2  # ✅ СКАЛЬПИНГ: 0.2 мин (12 сек) - не блокирует фиксацию прибыли (было 35.0!)
-                        if hasattr(self, "orchestrator") and self.orchestrator:
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Используем ParameterProvider для получения min_holding_minutes из конфига
+                        min_holding_minutes = None
+                        if hasattr(self, "parameter_provider") and self.parameter_provider:
+                            try:
+                                exit_params = self.parameter_provider.get_exit_params(symbol)
+                                min_holding_minutes = exit_params.get("min_holding_minutes", None)
+                                if min_holding_minutes is not None:
+                                    min_holding_minutes = float(min_holding_minutes)
+                                    logger.debug(
+                                        f"✅ [TP_ONLY] {symbol}: min_holding_minutes={min_holding_minutes:.2f} мин "
+                                        f"получен из ParameterProvider"
+                                    )
+                            except Exception as e:
+                                logger.debug(f"⚠️ [TP_ONLY] {symbol}: Ошибка получения min_holding_minutes из ParameterProvider: {e}")
+                        
+                        # Fallback: пробуем получить из regime_manager
+                        if min_holding_minutes is None and hasattr(self, "orchestrator") and self.orchestrator:
                             if (
                                 hasattr(self.orchestrator, "signal_generator")
                                 and self.orchestrator.signal_generator
@@ -2274,8 +2304,15 @@ class FuturesPositionManager:
                                 )
                                 if regime_params:
                                     min_holding_minutes = getattr(
-                                        regime_params, "min_holding_minutes", 0.2
+                                        regime_params, "min_holding_minutes", None
                                     )
+                        
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Fallback на значение из конфига (0.5 для ranging)
+                        if min_holding_minutes is None:
+                            min_holding_minutes = 0.5  # ✅ Default из конфига для ranging (было 0.2)
+                            logger.debug(
+                                f"⚠️ [TP_ONLY] {symbol}: Используем fallback min_holding_minutes={min_holding_minutes:.2f} мин"
+                            )
 
                         min_holding_seconds = min_holding_minutes * 60.0
 

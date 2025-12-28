@@ -915,6 +915,8 @@ class FuturesScalpingOrchestrator:
             performance_tracker=self.performance_tracker,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
             signal_generator=self.signal_generator,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Для проверки готовности перед обработкой тикеров
         )
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Устанавливаем callback для синхронизации позиций
+        self.websocket_coordinator.sync_positions_with_exchange = self._sync_positions_with_exchange
 
         logger.info("FuturesScalpingOrchestrator инициализирован")
 

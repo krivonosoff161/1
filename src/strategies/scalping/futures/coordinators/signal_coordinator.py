@@ -133,6 +133,16 @@ class SignalCoordinator:
             30.0  # Минимум 30 секунд между одинаковыми предупреждениями
         )
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Счетчики блокировок сигналов для диагностики
+        self._block_stats = {
+            "circuit_breaker": 0,
+            "side_blocked": 0,
+            "low_strength": 0,
+            "existing_position": 0,
+            "margin_unsafe": 0,
+            "other": 0,
+        }
+
         logger.info("✅ SignalCoordinator initialized")
 
     def set_conversion_metrics(self, conversion_metrics):
@@ -163,10 +173,12 @@ class SignalCoordinator:
 
                 # ✅ FIX: Circuit breaker - проверяем блокировку символа
                 if self.risk_manager and self.risk_manager.is_symbol_blocked(symbol):
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличиваем счетчик блокировок
+                    self._block_stats["circuit_breaker"] += 1
                     # ✅ НОВОЕ (26.12.2025): Детальное логирование блокировки
                     logger.warning(
                         f"🚫 БЛОКИРОВКА СИГНАЛА: {symbol} {side.upper()} - "
-                        f"символ заблокирован RiskManager (последовательные убытки)"
+                        f"circuit_breaker (блокировок: {self._block_stats['circuit_breaker']})"
                     )
                     continue
 
@@ -178,15 +190,21 @@ class SignalCoordinator:
                 allow_long = getattr(self.scalping_config, "allow_long_positions", True)
 
                 if signal_side == "sell" and not allow_short:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличиваем счетчик блокировок
+                    self._block_stats["side_blocked"] += 1
                     logger.debug(
                         f"⛔ SHORT сигнал заблокирован для {symbol}: "
-                        f"allow_short_positions={allow_short} (только LONG стратегия)"
+                        f"allow_short_positions={allow_short} (только LONG стратегия) "
+                        f"(блокировок: {self._block_stats['side_blocked']})"
                     )
                     continue
                 elif signal_side == "buy" and not allow_long:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличиваем счетчик блокировок
+                    self._block_stats["side_blocked"] += 1
                     logger.debug(
                         f"⛔ LONG сигнал заблокирован для {symbol}: "
-                        f"allow_long_positions={allow_long} (только SHORT стратегия)"
+                        f"allow_long_positions={allow_long} (только SHORT стратегия) "
+                        f"(блокировок: {self._block_stats['side_blocked']})"
                     )
                     continue
 
@@ -256,12 +274,15 @@ class SignalCoordinator:
                 )
 
                 if strength < min_strength:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличиваем счетчик блокировок
+                    self._block_stats["low_strength"] += 1
                     # ✅ НОВОЕ (26.12.2025): Детальное логирование блокировки сигналов
                     logger.warning(
                         f"🚫 БЛОКИРОВКА СИГНАЛА: {symbol} {side.upper()} - "
                         f"strength={strength:.3f} < min={min_strength:.3f} "
                         f"(режим={regime or 'unknown'}, "
-                        f"базовый_порог={self.scalping_config.min_signal_strength:.3f})"
+                        f"базовый_порог={self.scalping_config.min_signal_strength:.3f}, "
+                        f"блокировок: {self._block_stats['low_strength']})"
                     )
                     continue
 
@@ -491,10 +512,13 @@ class SignalCoordinator:
                                     f"На OKX Futures ордера в одном направлении объединяются, комиссия накапливается!)"
                                 )
                             else:
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличиваем счетчик блокировок
+                                self._block_stats["existing_position"] += 1
                                 logger.warning(
                                     f"⚠️ Позиция {symbol} {signal_position_side.upper()} УЖЕ ОТКРЫТА на бирже (size={pos_size}), "
                                     f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
-                                    f"(на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!)"
+                                    f"(на OKX Futures ордера в одном направлении объединяются в одну позицию, комиссия накапливается!) "
+                                    f"(блокировок: {self._block_stats['existing_position']})"
                                 )
                             continue
                     elif len(symbol_positions) == 0:
@@ -586,6 +610,29 @@ class SignalCoordinator:
                 # Валидация сигнала
                 if await self.validate_signal(signal):
                     await self.execute_signal(signal)
+                    processed_count += 1
+                else:
+                    blocked_count += 1
+                    self._block_stats["other"] += 1
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Логирование статистики обработки сигналов
+            if total_signals > 0:
+                conversion_rate = (processed_count / total_signals) * 100 if total_signals > 0 else 0.0
+                logger.info(
+                    f"📊 Статистика обработки сигналов: "
+                    f"всего={total_signals}, заблокировано={blocked_count}, "
+                    f"обработано={processed_count}, "
+                    f"конверсия={conversion_rate:.1f}%"
+                )
+                logger.info(
+                    f"📊 Детали блокировок: "
+                    f"circuit_breaker={self._block_stats['circuit_breaker']}, "
+                    f"side_blocked={self._block_stats['side_blocked']}, "
+                    f"low_strength={self._block_stats['low_strength']}, "
+                    f"existing_position={self._block_stats['existing_position']}, "
+                    f"margin_unsafe={self._block_stats['margin_unsafe']}, "
+                    f"other={self._block_stats['other']}"
+                )
 
         except Exception as e:
             logger.error(f"Ошибка обработки сигналов: {e}")
@@ -2340,6 +2387,8 @@ class SignalCoordinator:
                 if margin_check:
                     logger.info(f"   ✅ Проверка маржи: пройдена")
                 else:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличиваем счетчик блокировок
+                    self._block_stats["margin_unsafe"] += 1
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Исправлена ошибка форматирования строки
                     margin_available_str = (
                         f"{margin_available:.2f}"
@@ -2355,7 +2404,8 @@ class SignalCoordinator:
                         f"      Требуется маржи: ${margin_required:.2f}\n"
                         f"      Доступно маржи: ${margin_available_str}\n"
                         f"      Использовано маржи: ${margin_used_str}\n"
-                        f"      Баланс: ${balance_str}"
+                        f"      Баланс: ${balance_str}\n"
+                        f"      (блокировок margin_unsafe: {self._block_stats['margin_unsafe']})"
                     )
             except Exception as e:
                 logger.warning(f"   ⚠️ Проверка маржи: ошибка {e}")
