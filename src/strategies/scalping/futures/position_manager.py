@@ -2035,9 +2035,10 @@ class FuturesPositionManager:
                     elif market_regime == "choppy":
                         min_holding_minutes = 1.0  # 1 минута в хаосе
                     else:  # ranging
-                    min_holding_minutes = (
-                        1.0  # ✅ ИСПРАВЛЕНО: 1 минута в боковике (было 3.0)
-                    )
+                        min_holding_minutes = 0.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Default из конфига для ranging (0.5 минуты)
+                        logger.debug(
+                            f"⚠️ [PH] {symbol}: Используем fallback min_holding_minutes={min_holding_minutes:.2f} мин для ranging"
+                        )
             except Exception:
                 pass  # Используем default 3 минуты
 
