@@ -167,22 +167,37 @@ class DataRegistry:
                 else None
             )
 
-    async def get_indicators(self, symbol: str) -> Optional[Dict[str, Any]]:
+    async def get_indicators(self, symbol: str, check_freshness: bool = True) -> Optional[Dict[str, Any]]:
         """
         Получить все индикаторы для символа.
 
         Args:
             symbol: Торговый символ
+            check_freshness: Проверять актуальность индикаторов (по умолчанию True)
+                           Если ADX старше 1 секунды → вернуть None для пересчета
 
         Returns:
-            Словарь всех индикаторов или None
+            Словарь всех индикаторов или None (если данные устарели или отсутствуют)
         """
         async with self._lock:
-            return (
-                self._indicators.get(symbol, {}).copy()
-                if symbol in self._indicators
-                else None
-            )
+            if symbol not in self._indicators:
+                return None
+            
+            indicators = self._indicators.get(symbol, {}).copy()
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Проверка актуальности ADX (TTL 1 секунда)
+            if check_freshness and "updated_at" in indicators:
+                updated_at = indicators.get("updated_at")
+                if updated_at and isinstance(updated_at, datetime):
+                    time_diff = (datetime.now() - updated_at).total_seconds()
+                    if time_diff > 1.0:  # ADX старше 1 секунды - считается устаревшим
+                        logger.debug(
+                            f"⚠️ DataRegistry: Индикаторы для {symbol} устарели "
+                            f"(прошло {time_diff:.2f}с > 1.0с), требуется пересчет"
+                        )
+                        return None  # Возвращаем None для пересчета
+            
+            return indicators
 
     # ==================== REGIMES ====================
 

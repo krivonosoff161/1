@@ -57,6 +57,7 @@ class WebSocketCoordinator:
         structured_logger=None,  # ✅ НОВОЕ: StructuredLogger для логирования свечей
         smart_exit_coordinator=None,  # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
         performance_tracker=None,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
+        signal_generator=None,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): SignalGenerator для проверки готовности
     ):
         """
         Инициализация WebSocketCoordinator.
@@ -82,6 +83,12 @@ class WebSocketCoordinator:
         self.private_ws_manager = private_ws_manager
         self.scalping_config = scalping_config
         self.active_positions_ref = active_positions_ref
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): FastADX должен быть per-symbol
+        # Сохраняем общий fast_adx как шаблон для создания per-symbol экземпляров
+        self._fast_adx_template = fast_adx
+        # Словарь для хранения FastADX экземпляров по символам
+        self._fast_adx_by_symbol: Dict[str, Any] = {}
+        # Старый способ для обратной совместимости (deprecated)
         self.fast_adx = fast_adx
         self.position_manager = position_manager
         self.trailing_sl_coordinator = trailing_sl_coordinator
@@ -103,6 +110,8 @@ class WebSocketCoordinator:
         self.smart_exit_coordinator = smart_exit_coordinator
         # ✅ НОВОЕ: PerformanceTracker для записи в CSV
         self.performance_tracker = performance_tracker
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): SignalGenerator для проверки готовности
+        self.signal_generator = signal_generator
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Отслеживание последнего timestamp для каждого символа и таймфрейма
         # Формат: "symbol_timeframe" -> timestamp последней обработанной свечи (в секундах)
@@ -183,6 +192,12 @@ class WebSocketCoordinator:
             data: Данные тикера из WebSocket
         """
         try:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Проверяем готовность signal_generator перед обработкой
+            # Это защита от race condition - если WebSocket подключился до завершения инициализации модулей
+            if self.signal_generator and hasattr(self.signal_generator, 'is_initialized'):
+                if not self.signal_generator.is_initialized:
+                    logger.debug(f"⚠️ SignalGenerator еще не инициализирован, пропускаем обработку тикера для {symbol}")
+                    return
             # Извлекаем данные из ответа WebSocket
             if "data" in data and len(data["data"]) > 0:
                 ticker = data["data"][0]
@@ -232,24 +247,35 @@ class WebSocketCoordinator:
                                 f"⚠️ Ошибка обновления DataRegistry для {symbol}: {e}"
                             )
 
-                    # Обновляем FastADX для расчета тренда
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Обновляем FastADX per-symbol для расчета тренда
                     try:
-                        if self.fast_adx:
+                        if self._fast_adx_template:
+                            # Получаем или создаем FastADX экземпляр для этого символа
+                            if symbol not in self._fast_adx_by_symbol:
+                                # Создаем новый экземпляр FastADX для этого символа
+                                from src.strategies.scalping.futures.indicators.fast_adx import FastADX
+                                period = getattr(self._fast_adx_template, "period", 9)
+                                threshold = getattr(self._fast_adx_template, "threshold", 20.0)
+                                self._fast_adx_by_symbol[symbol] = FastADX(period=period, threshold=threshold)
+                                logger.debug(f"✅ Создан FastADX экземпляр для {symbol} (period={period}, threshold={threshold})")
+                            
+                            fast_adx_for_symbol = self._fast_adx_by_symbol[symbol]
+                            
                             # Для тикера используем текущую цену как high/low/close
                             high = price
                             low = price
                             close = price
 
-                            # Обновляем FastADX для расчета тренда
-                            self.fast_adx.update(high=high, low=low, close=close)
+                            # Обновляем FastADX для этого символа
+                            fast_adx_for_symbol.update(high=high, low=low, close=close)
 
                             # ✅ НОВОЕ: Сохраняем ADX в DataRegistry после обновления
                             if self.data_registry:
                                 try:
-                                    adx_value = self.fast_adx.get_adx_value()
+                                    adx_value = fast_adx_for_symbol.get_adx_value()
                                     # Также получаем +DI и -DI
-                                    plus_di = self.fast_adx.get_di_plus()
-                                    minus_di = self.fast_adx.get_di_minus()
+                                    plus_di = fast_adx_for_symbol.get_di_plus()
+                                    minus_di = fast_adx_for_symbol.get_di_minus()
 
                                     indicators_to_save = {
                                         "adx": adx_value,
@@ -724,11 +750,12 @@ class WebSocketCoordinator:
                     try:
                         current_price = await self.get_current_price_fallback(symbol)
                         if current_price and current_price > 0 and entry_price > 0:
-                            # Рассчитываем PnL
+                            # Рассчитываем PnL в процентах
+                            # ✅ ИСПРАВЛЕНИЕ: Конвертируем в проценты (умножаем на 100)
                             if side.lower() == "long":
-                                profit_pct = (current_price - entry_price) / entry_price
+                                profit_pct = ((current_price - entry_price) / entry_price) * 100
                             else:
-                                profit_pct = (entry_price - current_price) / entry_price
+                                profit_pct = ((entry_price - current_price) / entry_price) * 100
                         else:
                             profit_pct = 0.0
                     except:

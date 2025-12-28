@@ -631,9 +631,10 @@ class TrailingStopLoss:
                 return True, "critical_loss_cut_2x"
 
             # ✅ 2. Обычный loss_cut - приоритет #2 (ПЕРЕД MIN_HOLDING!)
-            # Если убыток >= loss_cut, закрываем СРАЗУ (после минимальной задержки 5 сек)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличена минимальная задержка с 5 до 30 секунд
+            # Это предотвращает преждевременное закрытие из-за спреда/комиссии сразу после открытия
             if profit_pct <= -loss_cut_from_price:
-                min_loss_cut_hold_seconds = 5.0  # Минимальная задержка для loss_cut
+                min_loss_cut_hold_seconds = 30.0  # ✅ ИСПРАВЛЕНО: Увеличено с 5 до 30 секунд для защиты от преждевременного закрытия
 
                 if seconds_in_position >= min_loss_cut_hold_seconds:
                     # ✅ Закрываем по loss_cut, независимо от MIN_HOLDING
@@ -654,7 +655,7 @@ class TrailingStopLoss:
                         )
                     return True, "loss_cut"
                 else:
-                    # ✅ Минимальная задержка для loss_cut (5 сек)
+                    # ✅ Минимальная задержка для loss_cut (30 сек)
                     logger.debug(
                         f"⏱️ Loss-cut заблокирован минимальной задержкой: "
                         f"прибыль {profit_pct:.2%} <= -{loss_cut_from_price:.2%}, "

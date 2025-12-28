@@ -68,7 +68,8 @@ class TrailingSLCoordinator:
             order_flow: OrderFlowIndicator для анализа разворота (опционально)
             exit_analyzer: ExitAnalyzer для анализа закрытия (опционально)
         """
-        self.config_manager = config_manager
+        self.config_manager = config_manager  # Оставляем для обратной совместимости
+        self.parameter_provider = None  # ✅ НОВОЕ (26.12.2025): ParameterProvider для единого доступа к параметрам
         self.debug_logger = debug_logger
         self.signal_generator = signal_generator
         self.client = client
@@ -84,7 +85,8 @@ class TrailingSLCoordinator:
         self.order_flow = (
             order_flow  # ✅ ЭТАП 1.1: OrderFlowIndicator для анализа разворота
         )
-        self.exit_analyzer = exit_analyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
+        self.exit_analyzer = exit_analyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия (fallback)
+        self.exit_decision_coordinator = None  # ✅ НОВОЕ (26.12.2025): ExitDecisionCoordinator для координации закрытия
 
         # ✅ ЭТАП 1.1: История delta для анализа разворота Order Flow
         self._order_flow_delta_history: Dict[
@@ -109,6 +111,26 @@ class TrailingSLCoordinator:
 
         logger.info("✅ TrailingSLCoordinator initialized")
 
+    def set_exit_decision_coordinator(self, exit_decision_coordinator):
+        """
+        ✅ НОВОЕ (26.12.2025): Установить ExitDecisionCoordinator для координации закрытия.
+
+        Args:
+            exit_decision_coordinator: Экземпляр ExitDecisionCoordinator
+        """
+        self.exit_decision_coordinator = exit_decision_coordinator
+        logger.debug("✅ TrailingSLCoordinator: ExitDecisionCoordinator установлен")
+
+    def set_parameter_provider(self, parameter_provider):
+        """
+        ✅ НОВОЕ (26.12.2025): Установить ParameterProvider для единого доступа к параметрам.
+
+        Args:
+            parameter_provider: Экземпляр ParameterProvider
+        """
+        self.parameter_provider = parameter_provider
+        logger.debug("✅ TrailingSLCoordinator: ParameterProvider установлен")
+
     async def on_regime_change(self, new_regime: str, symbol: Optional[str] = None):
         """
         ✅ FIX: Перезагрузка параметров трейлинга при смене режима.
@@ -118,7 +140,12 @@ class TrailingSLCoordinator:
             symbol: Конкретный символ (если None — для всех)
         """
         try:
-            params = self.config_manager.get_trailing_sl_params(new_regime)
+            # ✅ НОВОЕ (26.12.2025): Используем ParameterProvider вместо прямого обращения к config_manager
+            if self.parameter_provider:
+                # Для обновления режима используем config_manager напрямую (так как режим меняется для всех символов)
+                params = self.config_manager.get_trailing_sl_params(new_regime)
+            else:
+                params = self.config_manager.get_trailing_sl_params(new_regime)
             if not params:
                 logger.warning(f"⚠️ Не найдены TSL параметры для режима {new_regime}")
                 return
@@ -207,8 +234,12 @@ class TrailingSLCoordinator:
                     if manager:
                         regime = manager.get_current_regime()
 
-            # Получаем параметры из config_manager
-            params = self.config_manager.get_trailing_sl_params(regime=regime)
+            # ✅ НОВОЕ (26.12.2025): Используем ParameterProvider вместо прямого обращения к config_manager
+            if self.parameter_provider:
+                params = self.parameter_provider.get_trailing_sl_params(symbol=symbol, regime=regime)
+            else:
+                # Fallback на config_manager
+                params = self.config_manager.get_trailing_sl_params(regime=regime)
             return params
         except Exception as e:
             logger.debug(f"⚠️ Ошибка получения TSL параметров для {symbol}: {e}")
@@ -250,7 +281,12 @@ class TrailingSLCoordinator:
                 regime = manager.get_current_regime()
 
         # ✅ ЭТАП 4: Получаем параметры с адаптацией под режим рынка
-        params = self.config_manager.get_trailing_sl_params(regime=regime)
+        # ✅ НОВОЕ (26.12.2025): Используем ParameterProvider вместо прямого обращения к config_manager
+        if self.parameter_provider:
+            params = self.parameter_provider.get_trailing_sl_params(symbol=symbol, regime=regime)
+        else:
+            # Fallback на config_manager
+            params = self.config_manager.get_trailing_sl_params(regime=regime)
 
         # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Логируем режим и параметры для диагностики
         logger.info(
@@ -843,9 +879,42 @@ class TrailingSLCoordinator:
                 )
                 return
 
-            # ✅ НОВОЕ: Вызываем ExitAnalyzer для анализа закрытия перед проверкой TSL
+            # ✅ НОВОЕ (26.12.2025): Используем ExitDecisionCoordinator для координации закрытия
             exit_decision = None
-            if self.exit_analyzer:
+            if self.exit_decision_coordinator:
+                try:
+                    # Получаем позицию и метаданные для координатора
+                    position = self.get_position_callback(symbol)
+                    metadata = None
+                    if hasattr(self, 'position_registry') and self.position_registry:
+                        try:
+                            metadata = await self.position_registry.get_metadata(symbol)
+                        except Exception:
+                            pass
+                    
+                    current_price = await self.get_current_price_callback(symbol)
+                    if current_price is None:
+                        current_price = 0.0
+                    
+                    # Получаем режим
+                    regime = "ranging"
+                    if self.signal_generator and hasattr(self.signal_generator, "regime_managers"):
+                        regime_manager = self.signal_generator.regime_managers.get(symbol)
+                        if regime_manager:
+                            regime = regime_manager.get_current_regime() or "ranging"
+                    
+                    exit_decision = await self.exit_decision_coordinator.analyze_position(
+                        symbol=symbol,
+                        position=position,
+                        metadata=metadata,
+                        market_data=None,
+                        current_price=current_price,
+                        regime=regime
+                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ TrailingSLCoordinator: Ошибка вызова ExitDecisionCoordinator для {symbol}: {e}")
+            elif self.exit_analyzer:
+                # Fallback: используем ExitAnalyzer напрямую
                 try:
                     exit_decision = await self.exit_analyzer.analyze_position(symbol)
                     if exit_decision:

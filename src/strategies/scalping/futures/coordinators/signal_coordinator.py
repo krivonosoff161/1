@@ -57,6 +57,7 @@ class SignalCoordinator:
         data_registry=None,  # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
         adaptive_leverage=None,  # ✅ ИСПРАВЛЕНИЕ #3: AdaptiveLeverage для адаптивного левериджа
         position_scaling_manager=None,  # ✅ НОВОЕ: PositionScalingManager для лестничного добавления
+        parameter_provider=None,  # ✅ НОВОЕ (26.12.2025): ParameterProvider для единого доступа к параметрам
     ):
         """
         Инициализация SignalCoordinator.
@@ -86,7 +87,8 @@ class SignalCoordinator:
         self.client = client
         self.scalping_config = scalping_config
         self.signal_generator = signal_generator
-        self.config_manager = config_manager
+        self.config_manager = config_manager  # Оставляем для обратной совместимости
+        self.parameter_provider = parameter_provider  # ✅ НОВОЕ (26.12.2025): ParameterProvider для единого доступа к параметрам
         self.order_executor = order_executor
         self.position_manager = position_manager
         self.margin_calculator = margin_calculator
@@ -117,6 +119,9 @@ class SignalCoordinator:
         self.adaptive_leverage = adaptive_leverage
         # ✅ НОВОЕ: PositionScalingManager для лестничного добавления
         self.position_scaling_manager = position_scaling_manager
+        
+        # ✅ НОВОЕ (26.12.2025): ConversionMetrics для отслеживания конверсии
+        self.conversion_metrics = None
 
         # Время последнего сигнала по символу: {symbol: timestamp}
         self._last_signal_time: Dict[str, float] = {}
@@ -129,6 +134,16 @@ class SignalCoordinator:
         )
 
         logger.info("✅ SignalCoordinator initialized")
+
+    def set_conversion_metrics(self, conversion_metrics):
+        """
+        ✅ НОВОЕ (26.12.2025): Установить ConversionMetrics для отслеживания конверсии сигналов.
+
+        Args:
+            conversion_metrics: Экземпляр ConversionMetrics
+        """
+        self.conversion_metrics = conversion_metrics
+        logger.debug("✅ SignalCoordinator: ConversionMetrics установлен")
 
     async def process_signals(self, signals: List[Dict[str, Any]]):
         """Обработка торговых сигналов"""
@@ -148,7 +163,11 @@ class SignalCoordinator:
 
                 # ✅ FIX: Circuit breaker - проверяем блокировку символа
                 if self.risk_manager and self.risk_manager.is_symbol_blocked(symbol):
-                    logger.debug(f"SKIP_BLOCK {symbol}: blocked by consecutive losses")
+                    # ✅ НОВОЕ (26.12.2025): Детальное логирование блокировки
+                    logger.warning(
+                        f"🚫 БЛОКИРОВКА СИГНАЛА: {symbol} {side.upper()} - "
+                        f"символ заблокирован RiskManager (последовательные убытки)"
+                    )
                     continue
 
                 # ✅ КОНФИГУРИРУЕМАЯ Блокировка SHORT/LONG сигналов по конфигу (по умолчанию разрешены обе стороны)
@@ -171,12 +190,9 @@ class SignalCoordinator:
                     )
                     continue
 
-                # ✅ ГРОК ФИКС: Проверка минимальной силы сигнала с учетом режима
-                # Для ranging режима используем более строгий порог (0.8 вместо 0.7)
-                min_strength = (
-                    self.scalping_config.min_signal_strength
-                )  # Базовый порог (0.7)
-
+                # ✅ ИСПРАВЛЕНО (27.12.2025): Используем параметры из конфига для каждого режима
+                # Приоритет: режим-специфичные -> базовый min_signal_strength -> fallback
+                
                 # Получаем текущий режим для символа
                 regime = signal.get("regime")
                 if not regime and hasattr(self.signal_generator, "regime_managers"):
@@ -207,23 +223,45 @@ class SignalCoordinator:
                                 else str(regime_obj).lower()
                             )
 
-                # ✅ ГРОК ФИКС: Для ranging режима используем более строгий порог
-                if regime and regime.lower() == "ranging":
-                    min_signal_strength_ranging = getattr(
-                        self.scalping_config, "min_signal_strength_ranging", None
-                    )
-                    if min_signal_strength_ranging is not None:
-                        min_strength = float(min_signal_strength_ranging)
-                        logger.debug(
-                            f"🔍 SignalCoordinator: RANGING режим для {symbol}, "
-                            f"используем строгий порог min_signal_strength={min_strength:.2f} "
-                            f"(вместо базового {self.scalping_config.min_signal_strength:.2f})"
+                # Используем режим-специфичные параметры из конфига, если заданы
+                min_strength = None
+                if regime:
+                    regime_lower = regime.lower()
+                    if regime_lower == "ranging":
+                        min_strength = getattr(
+                            self.scalping_config, "min_signal_strength_ranging", None
                         )
+                    elif regime_lower == "trending":
+                        min_strength = getattr(
+                            self.scalping_config, "min_signal_strength_trending", None
+                        )
+                    elif regime_lower == "choppy":
+                        min_strength = getattr(
+                            self.scalping_config, "min_signal_strength_choppy", None
+                        )
+                
+                # Fallback на базовый min_signal_strength из scalping_config
+                if min_strength is None:
+                    min_strength = getattr(
+                        self.scalping_config, "min_signal_strength", 0.3
+                    )
+                
+                # Преобразуем в float
+                min_strength = float(min_strength) if min_strength is not None else 0.3
+                
+                logger.debug(
+                    f"🔍 SignalCoordinator: {symbol} (режим: {regime or 'unknown'}), "
+                    f"используем min_signal_strength={min_strength:.2f} "
+                    f"(из конфига)"
+                )
 
                 if strength < min_strength:
-                    logger.debug(
-                        f"🔍 Сигнал {symbol} отфильтрован: strength={strength:.2f} < "
-                        f"min={min_strength:.2f} (режим={regime or 'unknown'})"
+                    # ✅ НОВОЕ (26.12.2025): Детальное логирование блокировки сигналов
+                    logger.warning(
+                        f"🚫 БЛОКИРОВКА СИГНАЛА: {symbol} {side.upper()} - "
+                        f"strength={strength:.3f} < min={min_strength:.3f} "
+                        f"(режим={regime or 'unknown'}, "
+                        f"базовый_порог={self.scalping_config.min_signal_strength:.3f})"
                     )
                     continue
 
@@ -1296,9 +1334,15 @@ class SignalCoordinator:
                             regime = (
                                 self.signal_generator.regime_manager.get_current_regime()
                             )
-                    adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
-                        balance, regime, signal_generator=self.signal_generator
-                    )
+                    # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения risk_params
+                    if self.parameter_provider:
+                        adaptive_risk_params = self.parameter_provider.get_risk_params(
+                            symbol, balance, regime
+                        )
+                    else:
+                        adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
+                            balance, regime, signal_generator=self.signal_generator
+                        )
                     min_balance_usd = adaptive_risk_params.get("min_balance_usd", 20.0)
 
                     if balance < min_balance_usd:
@@ -1341,15 +1385,125 @@ class SignalCoordinator:
                         current_positions=current_positions_dict
                     )
 
-                    # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование
-                    # logger.debug(f"📊 Сгенерировано сигналов: {len(signals)}")
+                    # ✅ ДОБАВЛЕНО: Логирование для отладки
+                    if len(signals) > 0:
+                        logger.info(f"📊 check_for_signals {symbol}: Сгенерировано {len(signals)} сигналов")
+                    else:
+                        logger.debug(f"📊 check_for_signals {symbol}: Сигналов не сгенерировано")
 
                     # Ищем сигнал для текущего символа
                     symbol_signal = None
+                    filtered_reasons = []  # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ (25.12.2025): Собираем причины отфильтровывания
                     for signal in signals:
                         if signal.get("symbol") == symbol:
                             symbol_signal = signal
                             break
+                    
+                    # ✅ НОВОЕ (27.12.2025): Детальное логирование отсутствия сигналов
+                    if symbol_signal is None:
+                        # Проверяем, были ли вообще сигналы сгенерированы
+                        if len(signals) == 0:
+                            # Получаем детальную информацию о причинах отсутствия сигналов
+                            try:
+                                # Пробуем получить данные для анализа
+                                market_data = await self.signal_generator._get_market_data(symbol)
+                                if market_data:
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Берем ADX из DataRegistry, а не из market_data.indicators
+                                    # market_data.indicators не содержит ADX, он хранится отдельно в DataRegistry
+                                    adx_value = 0.0
+                                    adx_trend = "unknown"
+                                    rsi = 50.0
+                                    
+                                    # Пытаемся получить ADX из DataRegistry
+                                    if self.data_registry:
+                                        try:
+                                            indicators_from_registry = await self.data_registry.get_indicators(symbol)
+                                            if indicators_from_registry:
+                                                adx_from_reg = indicators_from_registry.get("adx")
+                                                if adx_from_reg and isinstance(adx_from_reg, (int, float)) and float(adx_from_reg) > 0:
+                                                    adx_value = float(adx_from_reg)
+                                                    adx_plus_di = indicators_from_registry.get("adx_plus_di", 0)
+                                                    adx_minus_di = indicators_from_registry.get("adx_minus_di", 0)
+                                                    
+                                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Снижен порог ADX с 25 до 20
+                                                    # Определяем тренд
+                                                    if adx_value >= 20.0:
+                                                        if adx_plus_di > adx_minus_di + 5.0:
+                                                            adx_trend = "bullish"
+                                                        elif adx_minus_di > adx_plus_di + 5.0:
+                                                            adx_trend = "bearish"
+                                                        else:
+                                                            adx_trend = "ranging"
+                                                    else:
+                                                        adx_trend = "ranging"
+                                        except Exception as e:
+                                            logger.debug(f"⚠️ Не удалось получить ADX из DataRegistry для {symbol}: {e}")
+                                    
+                                    # Если ADX не получили из DataRegistry, берем из market_data.indicators (fallback)
+                                    if adx_value == 0.0:
+                                        indicators = market_data.indicators if hasattr(market_data, "indicators") else {}
+                                        adx_value = indicators.get("adx", indicators.get("adx_proxy", 0))
+                                        rsi = indicators.get("rsi", 50)
+                                        
+                                        # Пытаемся определить тренд через adx_filter (fallback)
+                                        try:
+                                            if self.signal_generator.adx_filter and market_data.ohlcv_data:
+                                                candles_dict = []
+                                                for candle in market_data.ohlcv_data:
+                                                    candles_dict.append({
+                                                        "high": candle.high,
+                                                        "low": candle.low,
+                                                        "close": candle.close,
+                                                    })
+                                                from src.strategies.modules.adx_filter import OrderSide
+                                                buy_result = self.signal_generator.adx_filter.check_trend_strength(
+                                                    symbol, OrderSide.BUY, candles_dict
+                                                )
+                                                adx_value_check = buy_result.adx_value
+                                                adx_plus_di = buy_result.plus_di
+                                                adx_minus_di = buy_result.minus_di
+                                                
+                                                if adx_value_check > 0:
+                                                    adx_value = adx_value_check
+                                                
+                                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Снижен порог ADX с 25 до 20
+                                                if adx_value >= 20.0:
+                                                    if adx_plus_di > adx_minus_di + 5.0:
+                                                        adx_trend = "bullish"
+                                                    elif adx_minus_di > adx_plus_di + 5.0:
+                                                        adx_trend = "bearish"
+                                                    else:
+                                                        adx_trend = "ranging"
+                                                else:
+                                                    adx_trend = "ranging"
+                                        except Exception:
+                                            pass
+                                    else:
+                                        # Если ADX получен из DataRegistry, берем RSI из indicators
+                                        indicators = market_data.indicators if hasattr(market_data, "indicators") else {}
+                                        rsi = indicators.get("rsi", 50)
+                                    
+                                    logger.warning(
+                                        f"🚫 НЕТ СИГНАЛОВ: {symbol} - signal_generator.generate_signals() вернул 0 сигналов. "
+                                        f"Причины: ADX={adx_value:.1f} ({adx_trend}), RSI={rsi:.1f}, "
+                                        f"возможные причины: все фильтры заблокировали, нет подходящих условий, режим рынка"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"🚫 НЕТ СИГНАЛОВ: {symbol} - signal_generator.generate_signals() вернул 0 сигналов "
+                                        f"(не удалось получить market_data для анализа)"
+                                    )
+                            except Exception as e:
+                                logger.warning(
+                                    f"🚫 НЕТ СИГНАЛОВ: {symbol} - signal_generator.generate_signals() вернул 0 сигналов "
+                                    f"(возможные причины: все фильтры заблокировали, нет подходящих условий, режим рынка). "
+                                    f"Ошибка анализа: {e}"
+                                )
+                        else:
+                            # Сигналы есть, но не для этого символа
+                            logger.debug(
+                                f"🔍 НЕТ СИГНАЛА ДЛЯ СИМВОЛА: {symbol} - сгенерировано {len(signals)} сигналов для других символов"
+                            )
 
                     # ✅ FIX: Positive EV filter — проверяем математическое ожидание
                     if symbol_signal:
@@ -1360,7 +1514,21 @@ class SignalCoordinator:
                         if atr_14 > 0 and entry_price > 0:
                             # Получаем SL-множитель для расчёта ожидаемого движения
                             sl_mult = 0.5  # Default
-                            if hasattr(self, "config_manager") and self.config_manager:
+                            # ✅ НОВОЕ (26.12.2025): Используем ParameterProvider вместо прямого обращения к config_manager
+                            if hasattr(self, "parameter_provider") and self.parameter_provider:
+                                try:
+                                    regime_params = self.parameter_provider.get_regime_params(
+                                        symbol=symbol,
+                                        regime=regime
+                                    )
+                                    if regime_params:
+                                        sl_mult = regime_params.get(
+                                            "sl_atr_multiplier", 0.5
+                                        )
+                                except Exception:
+                                    pass
+                            elif hasattr(self, "config_manager") and self.config_manager:
+                                # Fallback на config_manager
                                 try:
                                     regime_params = (
                                         self.config_manager.get_regime_params(regime)
@@ -1398,8 +1566,11 @@ class SignalCoordinator:
                             total_cost = maker_fee + taker_fee + slippage_buffer
 
                             if expected_move < total_cost:
+                                filtered_reasons.append(
+                                    f"EV_NEGATIVE (expected_move={expected_move:.4f}% < cost={total_cost:.4f}%)"
+                                )
                                 logger.debug(
-                                    f"SIGNAL_SKIP {symbol} EV_NEGATIVE move={expected_move:.4f} cost={total_cost:.4f}"
+                                    f"🔍 [SIGNAL_FILTER] {symbol}: EV_NEGATIVE - move={expected_move:.4f}% < cost={total_cost:.4f}%"
                                 )
                                 symbol_signal = None  # Отменяем сигнал
 
@@ -1441,11 +1612,40 @@ class SignalCoordinator:
                                 f"⚠️ Не удалось открыть позицию {symbol} {side_str} (недостаточно маржи или другие ограничения)"
                             )
                     else:
-                        # ✅ Изменено на INFO для видимости - важно знать что сигналов нет
-                        logger.info(
-                            f"📊 {symbol}: сигналов нет (индикаторы не дают сигнала). "
-                            f"Всего сгенерировано: {len(signals)} сигналов."
-                        )
+                        # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ (25.12.2025): Логируем причины отсутствия сигналов
+                        if filtered_reasons:
+                            logger.info(
+                                f"📊 {symbol}: Сигнал отфильтрован. Причины: {', '.join(filtered_reasons)}. "
+                                f"Всего сгенерировано: {len(signals)} сигналов."
+                            )
+                            # ✅ НОВОЕ (26.12.2025): Записываем отфильтрованные сигналы в метрики
+                            if hasattr(self, 'conversion_metrics') and self.conversion_metrics:
+                                try:
+                                    # Получаем режим для метрики
+                                    regime = None
+                                    if hasattr(self.signal_generator, "regime_managers"):
+                                        regime_manager = self.signal_generator.regime_managers.get(symbol)
+                                        if regime_manager:
+                                            regime_obj = regime_manager.get_current_regime()
+                                            if regime_obj:
+                                                regime = str(regime_obj).lower() if not hasattr(regime_obj, 'value') else regime_obj.value.lower()
+                                    
+                                    # Записываем каждую причину фильтрации
+                                    for reason in filtered_reasons:
+                                        self.conversion_metrics.record_signal_filtered(
+                                            symbol=symbol,
+                                            reason=reason,
+                                            signal_type="unknown",
+                                            regime=regime
+                                        )
+                                except Exception as e:
+                                    logger.debug(f"⚠️ Ошибка записи метрики фильтрации для {symbol}: {e}")
+                        else:
+                            # ✅ Изменено на INFO для видимости - важно знать что сигналов нет
+                            logger.info(
+                                f"📊 {symbol}: сигналов нет (индикаторы не дают сигнала). "
+                                f"Всего сгенерировано: {len(signals)} сигналов."
+                            )
 
                 except Exception as e:
                     logger.error(
@@ -1582,30 +1782,62 @@ class SignalCoordinator:
                 logger.debug(f"Позиция {symbol} уже в активных, пропускаем")
                 return False
 
-            # ✅ ОПТИМИЗАЦИЯ: Проверяем актуальность signal["price"] перед размещением ордера
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Проверка устаревания сигнала по времени (TTL 1 сек) и цене (>0.5%)
             if signal and signal.get("price"):
                 signal_price = signal.get("price", 0.0)
+                signal_timestamp = signal.get("timestamp")
+                should_update_price = False
+                update_reason = ""
+                
                 try:
-                    price_limits = await self.order_executor.client.get_price_limits(
-                        symbol
-                    )
+                    current_price = 0  # Инициализируем для использования ниже
+                    
+                    # ✅ Проверка 1: Время устаревания (TTL 0.5 секунды)
+                    if signal_timestamp:
+                        if isinstance(signal_timestamp, datetime):
+                            # Убеждаемся, что оба datetime имеют timezone
+                            now_utc = datetime.now(timezone.utc)
+                            if signal_timestamp.tzinfo is None:
+                                # Если timestamp без timezone, считаем его UTC
+                                signal_timestamp_utc = signal_timestamp.replace(tzinfo=timezone.utc)
+                            else:
+                                signal_timestamp_utc = signal_timestamp.astimezone(timezone.utc)
+                            
+                            time_diff = (now_utc - signal_timestamp_utc).total_seconds()
+                            if time_diff > 0.5:  # TTL: 0.5 секунды (учитываем задержки)
+                                should_update_price = True
+                                update_reason = f"TTL истек (прошло {time_diff:.2f}с > 0.5с)"
+                    
+                    # ✅ Проверка 2: Разница цены (>0.5%)
+                    price_limits = await self.order_executor.client.get_price_limits(symbol)
                     if price_limits:
                         current_price = price_limits.get("current_price", 0)
                         if current_price > 0 and signal_price > 0:
-                            price_diff_pct = (
-                                abs(signal_price - current_price) / current_price * 100
-                            )
+                            price_diff_pct = abs(signal_price - current_price) / current_price * 100
                             if price_diff_pct > 0.5:  # Разница > 0.5% - сигнал устарел
-                                logger.warning(
-                                    f"⚠️ signal['price']={signal_price:.2f} устарела для {symbol} "
-                                    f"(разница с current_price={current_price:.2f} составляет {price_diff_pct:.2f}%), "
-                                    f"рассматриваем использование market order"
-                                )
-                                # Обновляем цену сигнала на актуальную
-                                signal["price"] = current_price
-                                logger.info(
-                                    f"✅ Обновлена цена сигнала для {symbol}: {signal_price:.2f} → {current_price:.2f}"
-                                )
+                                should_update_price = True
+                                update_reason = f"разница цены {price_diff_pct:.2f}% > 0.5%"
+                    
+                    # ✅ Обновляем цену сигнала если устарел
+                    if should_update_price and current_price > 0:
+                        old_price = signal_price
+                        signal["price"] = current_price
+                        # Обновляем timestamp на текущее время
+                        signal["timestamp"] = datetime.now(timezone.utc)
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование устаревания сигнала
+                        time_info = ""
+                        if signal_timestamp and isinstance(signal_timestamp, datetime):
+                            now_utc = datetime.now(timezone.utc)
+                            if signal_timestamp.tzinfo is None:
+                                signal_timestamp_utc = signal_timestamp.replace(tzinfo=timezone.utc)
+                            else:
+                                signal_timestamp_utc = signal_timestamp.astimezone(timezone.utc)
+                            time_diff = (now_utc - signal_timestamp_utc).total_seconds()
+                            time_info = f", signal_age={time_diff:.2f}с"
+                        
+                        logger.warning(
+                            f"⚠️ УСТАРЕВАНИЕ сигнала {symbol}: цена обновлена {old_price:.2f} → {current_price:.2f} ({update_reason}){time_info}"
+                        )
                 except Exception as e:
                     logger.debug(
                         f"⚠️ Ошибка проверки актуальности signal['price'] для {symbol}: {e}"
@@ -1677,7 +1909,35 @@ class SignalCoordinator:
 
             # ✅ ИСПРАВЛЕНИЕ #3: Используем адаптивный леверидж на основе качества сигнала
             # Получаем режим и волатильность для расчета адаптивного левериджа
-            regime = signal.get("regime") or "ranging"
+            # ✅ ИСПРАВЛЕНО (25.12.2025): Получаем режим с альтернативными источниками
+            regime = signal.get("regime")
+            if not regime:
+                # Пробуем получить из signal_generator
+                if self.signal_generator:
+                    try:
+                        regime_manager = self.signal_generator.regime_managers.get(symbol) or self.signal_generator.regime_manager
+                        if regime_manager:
+                            regime = regime_manager.get_current_regime()
+                            if regime:
+                                regime = str(regime).lower()
+                    except Exception as e:
+                        logger.debug(f"⚠️ Не удалось получить режим из signal_generator для {symbol}: {e}")
+                
+                # Альтернативный источник - DataRegistry
+                if not regime and self.data_registry:
+                    try:
+                        regime_data = await self.data_registry.get_regime(symbol)
+                        if regime_data and regime_data.get("regime"):
+                            regime = str(regime_data.get("regime")).lower()
+                    except Exception as e:
+                        logger.debug(f"⚠️ Не удалось получить режим из DataRegistry для {symbol}: {e}")
+                
+                # Fallback только если все источники недоступны
+                if not regime:
+                    regime = "ranging"
+                    logger.warning(
+                        f"⚠️ Режим не определен для {symbol} (все источники недоступны), используется fallback 'ranging'"
+                    )
             volatility = None
 
             # Получаем волатильность (ATR) из DataRegistry
@@ -1691,31 +1951,95 @@ class SignalCoordinator:
                         f"⚠️ Не удалось получить ATR для расчета волатильности: {e}"
                     )
 
-            # Используем адаптивный леверидж если доступен, иначе fallback на фиксированный
-            if self.adaptive_leverage:
-                # ✅ ИСПРАВЛЕНИЕ #5: Используем async calculate_leverage с client для округления
-                leverage_config = await self.adaptive_leverage.calculate_leverage(
-                    signal, regime, volatility, client=self.client
+            # ✅ КРИТИЧНОЕ ИСПРАВЛЕНИЕ (25.12.2025): Итеративный расчет leverage с учетом notional
+            # Проблема: leverage зависит от размера позиции, а размер позиции зависит от leverage
+            # Решение: итеративный расчет - сначала margin, потом leverage, потом пересчет notional
+            leverage_config = 10  # Начальное значение для ranging (будет пересчитано)
+            estimated_notional_usd = None
+            
+            try:
+                # Получаем баланс для определения базового размера позиции
+                balance = None
+                if self.data_registry:
+                    try:
+                        balance_data = await self.data_registry.get_balance()
+                        balance = balance_data.get("balance") if balance_data else None
+                    except Exception:
+                        pass
+                
+                if balance is None:
+                    balance = await self.client.get_balance()
+                
+                if balance:
+                    # Получаем профиль баланса для базового размера позиции (margin)
+                    balance_profile = self.config_manager.get_balance_profile(balance)
+                    base_margin_usd = balance_profile.get("base_position_usd") or balance_profile.get("min_position_usd", 50.0)
+                    
+                    # ✅ ИТЕРАЦИЯ 1: Рассчитываем leverage на основе базового margin
+                    if self.adaptive_leverage:
+                        leverage_config = await self.adaptive_leverage.calculate_leverage(
+                            signal, regime, volatility, client=self.client, position_size_usd=base_margin_usd
+                        )
+                    else:
+                        leverage_config = getattr(self.scalping_config, "leverage", 10)
+                    
+                    # ✅ ИТЕРАЦИЯ 2: Пересчитываем notional = margin * leverage
+                    estimated_notional_usd = base_margin_usd * leverage_config
+                    
+                    # ✅ КРИТИЧНО: Снижаем плечо для ETH при большом notional (>$200) для защиты от ADL
+                    if symbol == "ETH-USDT" and estimated_notional_usd > 200:
+                        # Для ETH с notional > $200 снижаем плечо до 5-7x для защиты от ADL
+                        max_leverage_for_eth = 7 if estimated_notional_usd > 300 else 5
+                        if leverage_config > max_leverage_for_eth:
+                            logger.warning(
+                                f"🔒 [ADL_PROTECTION] {symbol}: Notional ${estimated_notional_usd:.2f} > $200, "
+                                f"снижаем плечо с {leverage_config}x до {max_leverage_for_eth}x для защиты от ADL"
+                            )
+                            leverage_config = max_leverage_for_eth
+                            # Пересчитываем notional с новым leverage
+                            estimated_notional_usd = base_margin_usd * leverage_config
+                    
+                    logger.info(
+                        f"📊 [LEVERAGE_ITERATIVE] {symbol}: Margin=${base_margin_usd:.2f}, "
+                        f"Leverage={leverage_config}x, Notional=${estimated_notional_usd:.2f}"
+                    )
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось рассчитать итеративный leverage: {e}, используем стандартный расчет")
+                # Fallback: используем стандартный расчет leverage
+                if self.adaptive_leverage:
+                    leverage_config = await self.adaptive_leverage.calculate_leverage(
+                        signal, regime, volatility, client=self.client, position_size_usd=None
+                    )
+                else:
+                    leverage_config = getattr(self.scalping_config, "leverage", 10)
+
+            # ✅ ИСПРАВЛЕНО (25.12.2025): Используем адаптивный леверидж если доступен, иначе fallback на фиксированный
+            if not self.adaptive_leverage:
+                # ✅ ИСПРАВЛЕНО: Проверяем инициализацию AdaptiveLeverage
+                logger.warning(
+                    f"⚠️ AdaptiveLeverage не инициализирован для {symbol}, проверяем конфиг..."
                 )
+                # Fallback на фиксированный leverage из конфига
+                leverage_config = getattr(self.scalping_config, "leverage", None)
+                if leverage_config is None or leverage_config <= 0:
+                    logger.error(
+                        f"❌ leverage не указан в конфиге для {symbol}, используем 3 (fallback). "
+                        f"Добавьте leverage в config_futures.yaml!"
+                    )
+                    leverage_config = 3
                 # ✅ УЛУЧШЕНИЕ: Детальное логирование левериджа
                 volatility_str = f"{volatility*100:.2f}%" if volatility else "N/A"
                 logger.info(
-                    f"📊 [LEVERAGE_FINAL] {symbol}: Адаптивный леверидж={leverage_config}x | "
+                    f"📊 [LEVERAGE_FINAL] {symbol}: Фиксированный леверидж={leverage_config}x (из конфига) | "
                     f"сила={signal.get('strength', 0.5):.2f}, режим={regime}, "
                     f"волатильность={volatility_str}"
                 )
                 # ✅ ИСПРАВЛЕНИЕ: Добавляем leverage в signal для использования в risk_manager
                 signal["leverage"] = leverage_config
             else:
-                # Fallback на фиксированный leverage из конфига
-                leverage_config = getattr(self.scalping_config, "leverage", None)
-                if leverage_config is None or leverage_config <= 0:
-                    logger.warning(
-                        f"⚠️ leverage не указан в конфиге для {symbol}, используем 3 (fallback)"
-                    )
-                    leverage_config = 3
+                # AdaptiveLeverage доступен - используем его
                 logger.debug(
-                    f"⚠️ AdaptiveLeverage не доступен, используем фиксированный leverage={leverage_config}x"
+                    f"✅ AdaptiveLeverage доступен для {symbol}, используем адаптивный расчет"
                 )
                 # ✅ ИСПРАВЛЕНИЕ: Добавляем leverage в signal для использования в risk_manager
                 signal["leverage"] = leverage_config
@@ -1798,8 +2122,121 @@ class SignalCoordinator:
                 )
 
             if position_size <= 0:
-                logger.warning(f"Размер позиции слишком мал: {position_size}")
+                logger.warning(
+                    f"⛔ {symbol}: Размер позиции слишком мал: {position_size}. "
+                    f"Проверьте баланс, лимиты маржи или min_position_usd в конфиге."
+                )
                 return False
+            
+            # ✅ НОВОЕ (26.12.2025): Детальное логирование всех проверок перед открытием
+            logger.info("=" * 80)
+            logger.info(f"🔍 ПРОВЕРКИ ПЕРЕД ОТКРЫТИЕМ ПОЗИЦИИ для {symbol}:")
+            logger.info(f"   Сигнал: {signal.get('side', 'N/A').upper()} @ ${price:.2f}, strength={signal.get('strength', 0):.2f}")
+            logger.info(f"   Размер позиции: {position_size:.6f} контрактов")
+            logger.info(f"   Леверидж: {leverage_config}x")
+            
+            # Проверка ADL rank
+            # ✅ ИСПРАВЛЕНО (26.12.2025): Получаем ADL из позиций с биржи, так как DataRegistry не имеет метода get_adl_rank
+            current_adl_rank = None
+            try:
+                if self.client:
+                    all_positions = await self.client.get_positions()
+                    if all_positions:
+                        # Ищем позицию для нашего символа
+                        inst_id = f"{symbol}-SWAP"
+                        for pos in all_positions:
+                            if pos.get("instId") == inst_id:
+                                pos_size = float(pos.get("pos", "0") or 0)
+                                if abs(pos_size) > 1e-8:  # Позиция существует
+                                    adl_rank = pos.get("adlRank") or pos.get("adl")
+                                    if adl_rank is not None:
+                                        try:
+                                            current_adl_rank = int(adl_rank)
+                                            break
+                                        except (ValueError, TypeError):
+                                            pass
+            except Exception as e:
+                logger.debug(f"   ⚠️ Ошибка получения ADL rank для {symbol}: {e}")
+            
+            if current_adl_rank is not None:
+                if current_adl_rank >= 4:
+                    logger.warning(
+                        f"   ⚠️ ADL rank: {current_adl_rank} (высокий риск авто-делевериджинга) - БЛОКИРУЕМ"
+                    )
+                    # Блокируем открытие позиции при высоком ADL
+                    logger.warning(f"⛔ Открытие позиции {symbol} заблокировано: ADL rank {current_adl_rank} >= 4")
+                    return
+                else:
+                    logger.info(f"   ✅ ADL rank: {current_adl_rank} (приемлемый)")
+            else:
+                logger.debug(f"   ⚠️ ADL rank: не доступен (позиция еще не открыта или данные не получены)")
+            
+            # Проверка маржи
+            try:
+                # ✅ ИСПРАВЛЕНО (26.12.2025): Детальное логирование проверки маржи
+                margin_required = position_size * price / leverage_config  # margin в USD
+                current_positions = await self.client.get_positions()
+                
+                # Получаем баланс для детального логирования
+                balance = None
+                margin_used = None
+                margin_available = None
+                try:
+                    if self.data_registry:
+                        balance_data = await self.data_registry.get_balance()
+                        balance = balance_data.get("balance", 0) if balance_data else 0
+                        margin_data = await self.data_registry.get_margin()
+                        if margin_data:
+                            margin_used = margin_data.get("used", 0)
+                            margin_available = margin_data.get("available", 0)
+                except Exception as e:
+                    logger.debug(f"   ⚠️ Ошибка получения данных маржи для логирования: {e}")
+                
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Исправлена ошибка форматирования строки
+                balance_str = f"{balance:.2f}" if balance is not None else "N/A"
+                margin_used_str = f"{margin_used:.2f}" if margin_used is not None else "N/A"
+                margin_available_str = f"{margin_available:.2f}" if margin_available is not None else "N/A"
+                logger.info(
+                    f"   💰 Проверка маржи: требуется=${margin_required:.2f}, "
+                    f"баланс=${balance_str}, "
+                    f"использовано=${margin_used_str}, "
+                    f"доступно=${margin_available_str}"
+                )
+                
+                margin_check = await self.risk_manager.check_margin_safety(
+                    margin_required,
+                    current_positions
+                )
+                if margin_check:
+                    logger.info(f"   ✅ Проверка маржи: пройдена")
+                else:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Исправлена ошибка форматирования строки
+                    margin_available_str = f"{margin_available:.2f}" if margin_available is not None else "N/A"
+                    margin_used_str = f"{margin_used:.2f}" if margin_used is not None else "N/A"
+                    balance_str = f"{balance:.2f}" if balance is not None else "N/A"
+                    logger.warning(
+                        f"   ⚠️ Проверка маржи: НЕ пройдена - БЛОКИРУЕМ\n"
+                        f"      Требуется маржи: ${margin_required:.2f}\n"
+                        f"      Доступно маржи: ${margin_available_str}\n"
+                        f"      Использовано маржи: ${margin_used_str}\n"
+                        f"      Баланс: ${balance_str}"
+                    )
+            except Exception as e:
+                logger.warning(f"   ⚠️ Проверка маржи: ошибка {e}")
+            
+            # Проверка риска ликвидации
+            try:
+                liquidation_check = await self.risk_manager.check_liquidation_risk(
+                    symbol, pos_side, position_size * price / leverage_config, price
+                )
+                if liquidation_check:
+                    logger.info(f"   ✅ Проверка риска ликвидации: пройдена")
+                else:
+                    logger.warning(f"   ⚠️ Проверка риска ликвидации: НЕ пройдена - БЛОКИРУЕМ")
+            except Exception as e:
+                logger.debug(f"   ⚠️ Проверка риска ликвидации: ошибка {e}")
+            
+            logger.info("=" * 80)
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала проверяем реальные позиции на бирже перед проверкой MaxSizeLimiter
             # Это гарантирует, что мы не блокируем открытие позиции из-за устаревших данных в max_size_limiter
@@ -2711,6 +3148,37 @@ class SignalCoordinator:
                         f"⚠️ initialize_trailing_stop_callback не установлен для {symbol}"
                     )
 
+                # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (26.12.2025): Добавляем детальную информацию
+                # Получаем TP/SL параметры для логирования
+                tp_percent = signal.get("tp_percent") if signal else None
+                sl_percent = signal.get("sl_percent") if signal else None
+                leverage_used = signal.get("leverage") if signal else None
+                
+                # Формируем детальное сообщение
+                log_parts = [
+                    f"✅ SignalCoordinator: Позиция {symbol} {position_side_for_storage.upper()} открыта",
+                    f"entry_price={real_entry_price:.6f}",
+                    f"size={position_size:.6f}",
+                    f"regime={regime or 'unknown'}",
+                ]
+                
+                if tp_percent:
+                    log_parts.append(f"TP={tp_percent:.2f}%")
+                else:
+                    log_parts.append("TP=N/A")
+                    
+                if sl_percent:
+                    log_parts.append(f"SL={sl_percent:.2f}%")
+                else:
+                    log_parts.append("SL=N/A")
+                    
+                if leverage_used:
+                    log_parts.append(f"leverage={leverage_used}x")
+                else:
+                    log_parts.append("leverage=N/A")
+                
+                logger.info(" | ".join(log_parts))
+                
                 # Логируем открытие позиции в debug_logger
                 if self.debug_logger:
                     self.debug_logger.log_position_open(

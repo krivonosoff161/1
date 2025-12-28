@@ -78,12 +78,18 @@ class MomentumFilter:
         if self.reject_vertical_spikes:
             has_spike = self._has_vertical_spike(candles, current_price)
             if has_spike:
+                logger.info(
+                    f"⛔ MomentumFilter: {symbol} отклонён - обнаружен вертикальный скачок цены"
+                )
                 return False, "Vertical spike detected - reject signal"
 
         # 2. Проверка медленного движения к уровню
         if self.check_grind_into_level and level is not None:
             is_grind = self._check_grind_into_level(candles, level, market_regime)
             if not is_grind:
+                logger.info(
+                    f"⛔ MomentumFilter: {symbol} отклонён - быстрое движение к уровню (не медленное 'grind')"
+                )
                 return False, "Fast movement to level - not a grind"
 
         # 3. Проверка постоянного роста объема
@@ -91,6 +97,9 @@ class MomentumFilter:
             is_increasing = self._check_volume_increasing(candles, market_regime)
             if not is_increasing:
                 if self.reject_decreasing_volume:
+                    logger.info(
+                        f"⛔ MomentumFilter: {symbol} отклонён - объем не растет постоянно"
+                    )
                     return False, "Volume not consistently increasing"
                 logger.debug(
                     f"⚠️ Volume not increasing for {symbol}, but allowing signal"
@@ -101,6 +110,9 @@ class MomentumFilter:
             has_staircase = self._check_staircase_action(candles, market_regime)
             if not has_staircase:
                 if self.reject_choppy_action:
+                    logger.info(
+                        f"⛔ MomentumFilter: {symbol} отклонён - не обнаружен лестничный паттерн (staircase)"
+                    )
                     return False, "No staircase pattern detected"
                 logger.debug(
                     f"⚠️ No staircase pattern for {symbol}, but allowing signal"

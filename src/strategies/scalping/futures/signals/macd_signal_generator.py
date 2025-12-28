@@ -142,8 +142,26 @@ class MACDSignalGenerator:
                 # ✅ ЗАДАЧА #7: Проверяем совпадение EMA и цены для BULLISH
                 is_bullish_trend = ema_fast > ema_slow and current_price > ema_fast
 
-                # Базовый strength из MACD histogram
-                base_strength = min(abs(histogram) / 200.0, 1.0)
+                # ✅ ПРИОРИТЕТ 1 (28.12.2025): Адаптивный MACD strength делитель по режимам
+                # Получаем режим для определения делителя
+                current_regime_macd_sig = regime_name_macd if regime_name_macd else "ranging"
+                
+                # Адаптивный делитель: Trending=120, Ranging=180, Choppy=150
+                macd_strength_divider = 180.0  # Fallback для ranging
+                try:
+                    if self.get_regime_indicators_params_callback:
+                        regime_params_divider = self.get_regime_indicators_params_callback(symbol=symbol)
+                        macd_strength_divider = regime_params_divider.get("macd_strength_divider", 180.0)
+                except Exception:
+                    # Если нет в конфиге, используем режим-специфичные значения
+                    if current_regime_macd_sig == "trending":
+                        macd_strength_divider = 120.0
+                    elif current_regime_macd_sig == "choppy":
+                        macd_strength_divider = 150.0
+                    else:  # ranging
+                        macd_strength_divider = 180.0
+                
+                base_strength = min(abs(histogram) / macd_strength_divider, 1.0)
 
                 # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим
                 if not is_bullish_trend:
@@ -212,8 +230,26 @@ class MACDSignalGenerator:
                 # ✅ ЗАДАЧА #7: Проверяем совпадение EMA и цены для BEARISH
                 is_bearish_trend = ema_fast < ema_slow and current_price < ema_fast
 
-                # Базовый strength из MACD histogram
-                base_strength = min(abs(histogram) / 200.0, 1.0)
+                # ✅ ПРИОРИТЕТ 1 (28.12.2025): Адаптивный MACD strength делитель по режимам
+                # Получаем режим для определения делителя
+                current_regime_macd_sig = regime_name_macd if regime_name_macd else "ranging"
+                
+                # Адаптивный делитель: Trending=120, Ranging=180, Choppy=150
+                macd_strength_divider = 180.0  # Fallback для ranging
+                try:
+                    if self.get_regime_indicators_params_callback:
+                        regime_params_divider = self.get_regime_indicators_params_callback(symbol=symbol)
+                        macd_strength_divider = regime_params_divider.get("macd_strength_divider", 180.0)
+                except Exception:
+                    # Если нет в конфиге, используем режим-специфичные значения
+                    if current_regime_macd_sig == "trending":
+                        macd_strength_divider = 120.0
+                    elif current_regime_macd_sig == "choppy":
+                        macd_strength_divider = 150.0
+                    else:  # ranging
+                        macd_strength_divider = 180.0
+                
+                base_strength = min(abs(histogram) / macd_strength_divider, 1.0)
 
                 # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим
                 if not is_bearish_trend:
@@ -283,3 +319,9 @@ class MACDSignalGenerator:
             )
 
         return signals
+
+
+
+
+
+

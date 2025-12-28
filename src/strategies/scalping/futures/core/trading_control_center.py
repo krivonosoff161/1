@@ -60,6 +60,9 @@ class TradingControlCenter:
         active_positions: Any,  # Прокси к position_registry
         normalize_symbol: Any,  # Метод нормализации символа
         sync_positions_with_exchange: Any,  # Метод синхронизации позиций
+        conversion_metrics: Any = None,  # ✅ НОВОЕ (26.12.2025): Метрики конверсии
+        holding_time_metrics: Any = None,  # ✅ НОВОЕ (26.12.2025): Метрики времени удержания
+        alert_manager: Any = None,  # ✅ НОВОЕ (26.12.2025): Менеджер алертов
     ):
         """
         Инициализация TradingControlCenter.
@@ -81,6 +84,9 @@ class TradingControlCenter:
             active_positions: Прокси к активным позициям
             normalize_symbol: Метод нормализации символа
             sync_positions_with_exchange: Метод синхронизации позиций
+            conversion_metrics: Метрики конверсии (опционально)
+            holding_time_metrics: Метрики времени удержания (опционально)
+            alert_manager: Менеджер алертов (опционально)
         """
         self.client = client
         self.signal_generator = signal_generator
@@ -98,6 +104,11 @@ class TradingControlCenter:
         self.active_positions = active_positions
         self._normalize_symbol = normalize_symbol
         self._sync_positions_with_exchange = sync_positions_with_exchange
+        
+        # ✅ НОВОЕ (26.12.2025): Метрики для мониторинга
+        self.conversion_metrics = conversion_metrics
+        self.holding_time_metrics = holding_time_metrics
+        self.alert_manager = alert_manager
 
         self.is_running = False
 
@@ -107,6 +118,9 @@ class TradingControlCenter:
         # ✅ НОВОЕ: Для логирования memory usage (раз в 10 минут)
         self._last_memory_log_time = 0
         self._memory_log_interval = 600  # 10 минут
+        # ✅ НОВОЕ (26.12.2025): Для периодической проверки метрик и алертов
+        self._last_metrics_check_time = 0
+        self._metrics_check_interval = 600  # 10 минут
 
         logger.info("✅ TradingControlCenter инициализирован")
 
@@ -145,6 +159,14 @@ class TradingControlCenter:
                 ):
                     await self._log_memory_usage()
                     self._last_memory_log_time = current_time
+                
+                # ✅ НОВОЕ (26.12.2025): Периодическая проверка метрик и алертов
+                if (
+                    current_time - self._last_metrics_check_time
+                    >= self._metrics_check_interval
+                ):
+                    await self._check_metrics_and_alerts()
+                    self._last_metrics_check_time = current_time
 
                 # Обновление состояния
                 state_start = time.perf_counter()
@@ -485,7 +507,9 @@ class TradingControlCenter:
                         try:
                             entry_timestamp_ms = int(entry_time_str)
                             entry_timestamp_sec = entry_timestamp_ms / 1000.0
-                            entry_time_from_api = dt.fromtimestamp(entry_timestamp_sec)
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Используем timezone.utc для создания offset-aware datetime
+                            # Это предотвращает ошибку "can't compare offset-naive and offset-aware datetimes"
+                            entry_time_from_api = dt.fromtimestamp(entry_timestamp_sec, tz=timezone.utc)
                         except (ValueError, TypeError):
                             pass
 
@@ -494,13 +518,30 @@ class TradingControlCenter:
                         # ✅ КРИТИЧЕСКОЕ: Подготавливаем обновления для metadata (без мутации)
                         metadata_updates = {}
 
-                        # Сохраняем entry_time, если он еще не установлен, но есть в API
-                        if (
-                            not existing_metadata.entry_time
-                            or existing_metadata.entry_time == dt.now(timezone.utc)
-                        ):
-                            if entry_time_from_api:
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Всегда обновляем entry_time из API, если он доступен
+                        # Это предотвращает дрифт позиций и потерю реального времени открытия
+                        if entry_time_from_api:
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Убеждаемся, что оба datetime offset-aware перед сравнением
+                            # Это предотвращает ошибку "can't compare offset-naive and offset-aware datetimes"
+                            existing_entry_time = existing_metadata.entry_time
+                            if existing_entry_time and existing_entry_time.tzinfo is None:
+                                # Если existing_entry_time offset-naive, конвертируем в offset-aware (UTC)
+                                existing_entry_time = existing_entry_time.replace(tzinfo=timezone.utc)
+                            
+                            # Обновляем entry_time если:
+                            # 1. Он не установлен
+                            # 2. Он установлен в текущее время (значит был fallback)
+                            # 3. API предоставляет более точное время
+                            should_update_entry_time = (
+                                not existing_metadata.entry_time
+                                or (existing_entry_time and existing_entry_time == dt.now(timezone.utc))
+                                or (existing_entry_time and entry_time_from_api < existing_entry_time)
+                            )
+                            if should_update_entry_time:
                                 metadata_updates["entry_time"] = entry_time_from_api
+                                logger.debug(
+                                    f"✅ TCC: Обновлен entry_time для {symbol} из API: {entry_time_from_api}"
+                                )
 
                         # Обновляем entry_price в метаданных если он изменился или отсутствует
                         if (
@@ -710,3 +751,64 @@ class TradingControlCenter:
 
         except Exception as e:
             logger.debug(f"⚠️ TCC: Ошибка логирования memory usage: {e}")
+
+    async def _check_metrics_and_alerts(self) -> None:
+        """
+        ✅ НОВОЕ (26.12.2025): Периодическая проверка метрик и отправка алертов.
+
+        Проверяет:
+        - Конверсию сигналов (сигнал → позиция → TP/SL)
+        - Win Rate
+        - Emergency Close Rate
+        - Время удержания позиций
+        """
+        try:
+            if not self.conversion_metrics or not self.alert_manager:
+                return
+
+            # Получаем метрики конверсии
+            conversion_rate = self.conversion_metrics.get_conversion_rate(period_hours=24)
+            win_rate = self.conversion_metrics.get_win_rate(period_hours=24)
+            emergency_close_rate = self.conversion_metrics.get_emergency_close_rate(period_hours=24)
+            
+            # Логируем метрики
+            logger.info(
+                f"📊 Метрики за 24 часа: "
+                f"конверсия сигналов={conversion_rate.get('signal_to_position', 0):.1%}, "
+                f"win_rate={win_rate:.1%}, "
+                f"emergency_close_rate={emergency_close_rate:.1%}"
+            )
+            
+            # Проверяем критические пороги и отправляем алерты
+            if win_rate < 0.3:
+                self.alert_manager.send_alert(
+                    f"⚠️ КРИТИЧНО: Win Rate ниже 30%: {win_rate:.1%}",
+                    level="warning"
+                )
+            
+            if emergency_close_rate > 0.5:
+                self.alert_manager.send_alert(
+                    f"⚠️ КРИТИЧНО: Emergency Close Rate выше 50%: {emergency_close_rate:.1%}",
+                    level="warning"
+                )
+            
+            # Проверяем конверсию сигналов
+            signal_to_position = conversion_rate.get('signal_to_position', 0)
+            if signal_to_position < 0.1:
+                self.alert_manager.send_alert(
+                    f"⚠️ Низкая конверсия сигналов: {signal_to_position:.1%}",
+                    level="info"
+                )
+            
+            # Проверяем метрики времени удержания
+            if self.holding_time_metrics:
+                avg_holding_time = self.holding_time_metrics.get_average_holding_time(period_hours=24)
+                if avg_holding_time:
+                    logger.info(
+                        f"⏱️ Среднее время удержания за 24 часа: "
+                        f"прибыльные={avg_holding_time.get('profitable', 0):.1f}с, "
+                        f"убыточные={avg_holding_time.get('losing', 0):.1f}с"
+                    )
+
+        except Exception as e:
+            logger.debug(f"⚠️ TCC: Ошибка проверки метрик и алертов: {e}")

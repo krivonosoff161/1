@@ -73,7 +73,8 @@ class FuturesPositionManager:
         )
         self.data_registry = None  # DataRegistry (будет установлен из orchestrator)
         self.entry_manager = None  # EntryManager (будет создан при необходимости)
-        self.exit_analyzer = None  # ExitAnalyzer (будет создан при необходимости)
+        self.exit_analyzer = None  # ExitAnalyzer (будет создан при необходимости, fallback)
+        self.exit_decision_coordinator = None  # ✅ НОВОЕ (26.12.2025): ExitDecisionCoordinator для координации закрытия
         self.position_monitor = None  # PositionMonitor (будет создан при необходимости)
 
         # ✅ РЕФАКТОРИНГ: Новые менеджеры для TP/SL/PeakProfit
@@ -114,9 +115,19 @@ class FuturesPositionManager:
         self._init_refactored_managers()
 
     def set_exit_analyzer(self, exit_analyzer):
-        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливает ExitAnalyzer для анализа позиций"""
+        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Устанавливает ExitAnalyzer для анализа позиций (fallback)"""
         self.exit_analyzer = exit_analyzer
         logger.info("✅ ExitAnalyzer установлен в FuturesPositionManager")
+
+    def set_exit_decision_coordinator(self, exit_decision_coordinator):
+        """
+        ✅ НОВОЕ (26.12.2025): Устанавливает ExitDecisionCoordinator для координации закрытия.
+
+        Args:
+            exit_decision_coordinator: Экземпляр ExitDecisionCoordinator
+        """
+        self.exit_decision_coordinator = exit_decision_coordinator
+        logger.info("✅ ExitDecisionCoordinator установлен в FuturesPositionManager")
 
     def _init_refactored_managers(self):
         """✅ РЕФАКТОРИНГ: Инициализация новых менеджеров TP/SL/PeakProfit"""
@@ -278,10 +289,17 @@ class FuturesPositionManager:
         # ✅ ЭТАП 2.3: Проверяем ATR-based TP если доступно
         if current_price and current_price > 0 and regime:
             try:
-                # Получаем tp_atr_multiplier из конфига
+                # Получаем tp_atr_multiplier из конфига через ParameterProvider
                 regime_params = None
                 if hasattr(self, "orchestrator") and self.orchestrator:
-                    if hasattr(self.orchestrator, "config_manager"):
+                    # ✅ НОВОЕ (26.12.2025): Используем ParameterProvider вместо прямого обращения к config_manager
+                    if hasattr(self.orchestrator, "parameter_provider") and self.orchestrator.parameter_provider:
+                        regime_params = self.orchestrator.parameter_provider.get_regime_params(
+                            symbol=symbol,
+                            regime=regime
+                        )
+                    elif hasattr(self.orchestrator, "config_manager"):
+                        # Fallback на config_manager
                         regime_params = (
                             self.orchestrator.config_manager.get_regime_params(
                                 regime, symbol
@@ -553,13 +571,60 @@ class FuturesPositionManager:
             logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Проверка безопасности позиции")
             await self._check_position_safety(position)
 
-            # ✅ УЛУЧШЕНИЕ #1: Exit Analyzer ПЕРВЫМ (высокий приоритет) - ПРИОРИТЕТ #0
-            # Exit Analyzer анализирует позицию с учетом всех факторов (тренд, разворот, PnL)
+            # ✅ УЛУЧШЕНИЕ #1: Exit Decision Coordinator ПЕРВЫМ (высокий приоритет) - ПРИОРИТЕТ #0
+            # Exit Decision Coordinator координирует все системы закрытия (ExitAnalyzer, TrailingSL, SmartExit)
             # и может принимать решения раньше других механизмов
-            if self.exit_analyzer:
+            if self.exit_decision_coordinator:
                 try:
                     logger.debug(
-                        f"🔄 [MANAGE_POSITION] {symbol}: Проверка Exit Analyzer (ПРИОРИТЕТ #0)"
+                        f"🔄 [MANAGE_POSITION] {symbol}: Проверка Exit Decision Coordinator (ПРИОРИТЕТ #0)"
+                    )
+                    # Получаем позицию и метаданные для координатора
+                    position_data = position
+                    metadata = None
+                    if self.position_registry:
+                        try:
+                            metadata = await self.position_registry.get_metadata(symbol)
+                        except Exception:
+                            pass
+                    
+                    # Получаем текущую цену
+                    current_price = 0.0
+                    if hasattr(self, 'data_registry') and self.data_registry:
+                        try:
+                            market_data = await self.data_registry.get_market_data(symbol)
+                            if market_data and hasattr(market_data, 'current_price'):
+                                current_price = market_data.current_price
+                        except Exception:
+                            pass
+                    
+                    # Получаем режим
+                    regime = "ranging"
+                    if hasattr(self, 'orchestrator') and self.orchestrator:
+                        signal_generator = getattr(self.orchestrator, 'signal_generator', None)
+                        if signal_generator and hasattr(signal_generator, 'regime_managers'):
+                            regime_manager = signal_generator.regime_managers.get(symbol)
+                            if regime_manager:
+                                regime = regime_manager.get_current_regime() or "ranging"
+                    
+                    exit_decision = await self.exit_decision_coordinator.analyze_position(
+                        symbol=symbol,
+                        position=position_data,
+                        metadata=metadata,
+                        market_data=None,
+                        current_price=current_price,
+                        regime=regime
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"❌ Ошибка Exit Decision Coordinator для {symbol}: {e}", exc_info=True
+                    )
+                    exit_decision = None
+            elif self.exit_analyzer:
+                # Fallback: используем ExitAnalyzer напрямую
+                try:
+                    logger.debug(
+                        f"🔄 [MANAGE_POSITION] {symbol}: Проверка Exit Analyzer (ПРИОРИТЕТ #0, fallback)"
                     )
                     exit_decision = await self.exit_analyzer.analyze_position(symbol)
                     if exit_decision:
@@ -2263,7 +2328,13 @@ class FuturesPositionManager:
 
                         if loss_cut_percent:
                             leverage = getattr(self.scalping_config, "leverage", 5)
-                            loss_cut_from_price = loss_cut_percent / leverage
+                            # ✅ ИСПРАВЛЕНИЕ: Проверка деления на ноль для leverage
+                            if leverage and leverage > 0:
+                                loss_cut_from_price = loss_cut_percent / leverage
+                            else:
+                                logger.warning(f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем fallback leverage=5")
+                                leverage = 5
+                                loss_cut_from_price = loss_cut_percent / leverage
 
                             # ✅ Для больших убытков (>= loss_cut) закрываем после минимальной задержки (5 сек)
                             if abs(pnl_pct) >= loss_cut_from_price:
@@ -2519,7 +2590,12 @@ class FuturesPositionManager:
                         ct_val = float(inst_details.get("ctVal", "0.01"))
                         size_in_coins = abs(size) * ct_val
                         position_value = size_in_coins * entry_price
-                        margin_used = position_value / leverage
+                        # ✅ ИСПРАВЛЕНИЕ: Проверка деления на ноль для leverage
+                        if leverage and leverage > 0:
+                            margin_used = position_value / leverage
+                        else:
+                            logger.warning(f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем fallback leverage=3")
+                            margin_used = position_value / 3
                     except Exception as e:
                         logger.debug(f"Не удалось рассчитать margin для {symbol}: {e}")
                         # Fallback: используем старый метод (процент от цены)
@@ -5073,7 +5149,8 @@ class FuturesPositionManager:
                 if peak_profit < 0:
                     # ✅ ИСПРАВЛЕНО: Защита от слишком быстрого закрытия только что открытых позиций
                     # Проверяем время в позиции
-                    from datetime import datetime, timezone
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Используем глобальный импорт datetime, не локальный
+                    # Локальный импорт создавал переменную datetime, которая перекрывала глобальный импорт
 
                     entry_time = metadata.entry_time
                     time_since_open = 0
@@ -5776,6 +5853,8 @@ class FuturesPositionManager:
         """
         # ✅ ПРАВКА #3: Блокировка для предотвращения race condition
         async with self._close_lock:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Инициализируем result как None для предотвращения UnboundLocalError
+            result = None
             try:
                 # ✅ ПРАВКА #5: Проверка entry_time и duration_sec перед закрытием
                 position = None
@@ -5916,6 +5995,13 @@ class FuturesPositionManager:
                         size_in_contracts=True,  # size из API уже в контрактах
                         reduce_only=True,  # ✅ КРИТИЧЕСКОЕ: Только закрытие, не открытие новой позиции
                     )
+
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Защита от None result
+                    if not result:
+                        logger.error(
+                            f"❌ Ошибка закрытия позиции {symbol}: result = None от place_futures_order"
+                        )
+                        return None
 
                     if result.get("code") == "0":
                         # ✅ ЗАДАЧА #8: Детальное логирование уже сделано выше перед закрытием
@@ -6259,11 +6345,14 @@ class FuturesPositionManager:
                         f"❌ Ошибка закрытия {symbol}: {error_msg} (код: {error_code})"
                     )
                     return {"success": False, "error": error_msg}
-
+                
+                # Если позиция не найдена в списке (цикл for завершился без нахождения нужной позиции)
                 return {"success": False, "error": "Позиция не найдена в списке"}
-
             except Exception as e:
-                logger.error(f"Ошибка ручного закрытия позиции: {e}")
+                logger.error(f"❌ Ошибка ручного закрытия позиции: {e}", exc_info=True)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Возвращаем result если он был создан, иначе ошибку
+                if result is not None:
+                    return result
                 return {"success": False, "error": str(e)}
 
     async def close_partial_position(

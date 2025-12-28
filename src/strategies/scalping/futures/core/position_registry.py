@@ -88,6 +88,10 @@ class PositionMetadata:
                     entry_time = None
             elif isinstance(data["entry_time"], datetime):
                 entry_time = data["entry_time"]
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Убеждаемся, что entry_time всегда offset-aware
+                # Это предотвращает ошибку "can't compare offset-naive and offset-aware datetimes"
+                if entry_time.tzinfo is None:
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
 
         # Парсим created_at
         created_at = datetime.now(timezone.utc)
@@ -101,6 +105,9 @@ class PositionMetadata:
                     created_at = datetime.now(timezone.utc)
             elif isinstance(data["created_at"], datetime):
                 created_at = data["created_at"]
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Убеждаемся, что created_at всегда offset-aware
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
 
         # Парсим peak_profit_time
         peak_profit_time = None
@@ -114,6 +121,9 @@ class PositionMetadata:
                     peak_profit_time = None
             elif isinstance(data["peak_profit_time"], datetime):
                 peak_profit_time = data["peak_profit_time"]
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Убеждаемся, что peak_profit_time всегда offset-aware
+                if peak_profit_time and peak_profit_time.tzinfo is None:
+                    peak_profit_time = peak_profit_time.replace(tzinfo=timezone.utc)
 
         return cls(
             entry_time=entry_time or datetime.now(timezone.utc),
@@ -267,13 +277,15 @@ class PositionRegistry:
                     # ✅ Создаем новый объект через replace() вместо мутации через setattr()
                     existing = self._metadata[symbol]
                     # Готовим обновленные поля с deepcopy для защиты от вложенных структур
-                    updated_fields = {
-                        key: deepcopy(
-                            value
-                        )  # защита от вложенных структур (dict, list)
-                        for key, value in metadata_updates.items()
-                        if hasattr(existing, key)
-                    }
+                    updated_fields = {}
+                    for key, value in metadata_updates.items():
+                        if hasattr(existing, key):
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Убеждаемся, что entry_time всегда offset-aware
+                            # Это предотвращает ошибку "can't compare offset-naive and offset-aware datetimes"
+                            if key == "entry_time" and isinstance(value, datetime):
+                                if value.tzinfo is None:
+                                    value = value.replace(tzinfo=timezone.utc)
+                            updated_fields[key] = deepcopy(value)  # защита от вложенных структур (dict, list)
                     # Создаем новый объект с обновленными полями
                     self._metadata[symbol] = replace(existing, **updated_fields)
                 else:

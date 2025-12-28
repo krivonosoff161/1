@@ -48,6 +48,7 @@ class AdaptiveLeverage:
         regime: Optional[str] = None,
         volatility: Optional[float] = None,
         client: Optional[Any] = None,
+        position_size_usd: Optional[float] = None,
     ) -> int:
         """
         Расчет адаптивного левериджа на основе качества сигнала.
@@ -115,6 +116,28 @@ class AdaptiveLeverage:
             # ✅ ПРАВКА #12: Снижаем леверидж для ranging (максимум 10x) - ПЕРЕМЕЩЕНО ПОСЛЕ ИНИЦИАЛИЗАЦИИ
             if regime == "ranging":
                 leverage = min(leverage, 10)  # Максимум 10x для ranging
+
+            # ✅ КРИТИЧНОЕ ИСПРАВЛЕНИЕ (25.12.2025): Ограничение плеча по размеру позиции
+            # ВАЖНО: position_size_usd может быть как margin, так и notional
+            # Если это margin, то notional = margin * leverage (будет пересчитано в signal_coordinator)
+            # Если это notional, то используем напрямую
+            # Для безопасности считаем, что это margin, и применяем более строгие ограничения
+            if position_size_usd is not None and position_size_usd > 0:
+                # ✅ УЛУЧШЕНО: Более строгие ограничения для защиты от ADL
+                # Для позиций с margin > $100 (notional > $1000 при 10x) снижаем плечо
+                if position_size_usd > 100:
+                    leverage = min(leverage, 10)  # Максимум 10x для позиций с margin > $100
+                    logger.info(
+                        f"🔒 [LEVERAGE_LIMIT] {signal.get('symbol', 'N/A')}: Margin ${position_size_usd:.2f} > $100, "
+                        f"ограничение плеча до 10x (было {leverage}x) для защиты от ADL"
+                    )
+                elif position_size_usd > 50:
+                    leverage = min(leverage, 15)  # Максимум 15x для позиций с margin > $50
+                    logger.info(
+                        f"🔒 [LEVERAGE_LIMIT] {signal.get('symbol', 'N/A')}: Margin ${position_size_usd:.2f} > $50, "
+                        f"ограничение плеча до 15x (было {leverage}x)"
+                    )
+                # Позиции с margin <= $50 могут использовать до 20x (уже ограничено max_leverage и ranging)
 
             # Ограничиваем минимальным и максимальным значением
             leverage = max(self.min_leverage, min(self.max_leverage, leverage))
@@ -196,6 +219,7 @@ class AdaptiveLeverage:
         signal: Dict[str, Any],
         indicators: Optional[Dict[str, Any]] = None,
         client: Optional[Any] = None,
+        position_size_usd: Optional[float] = None,
     ) -> int:
         """
         Получение левериджа для сигнала с учетом индикаторов.
@@ -204,6 +228,7 @@ class AdaptiveLeverage:
             signal: Торговый сигнал
             indicators: Словарь индикаторов (RSI, MACD, ADX и т.д.)
             client: OKXFuturesClient (опционально, для округления leverage)
+            position_size_usd: Размер позиции в USD (опционально, для ограничения плеча)
 
         Returns:
             Оптимальный леверидж
@@ -219,7 +244,7 @@ class AdaptiveLeverage:
                 if atr and current_price > 0:
                     volatility = (atr / current_price) if current_price > 0 else None
 
-            return await self.calculate_leverage(signal, regime, volatility, client)
+            return await self.calculate_leverage(signal, regime, volatility, client, position_size_usd)
 
         except Exception as e:
             logger.error(f"❌ Ошибка получения левериджа для сигнала: {e}")

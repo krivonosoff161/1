@@ -134,12 +134,26 @@ class SlippageGuard:
                     )
                     return
                 price = (
-                    current_prices["last"]
+                    current_prices.get("last", 0)
                     if side.lower() == "buy"
-                    else current_prices["bid"]
+                    else current_prices.get("bid", 0)
                 )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Проверка что цена > 0
+                if price <= 0:
+                    logger.debug(
+                        f"SlippageGuard: Некорректная цена для {symbol}: {price}, пропускаем анализ ордера {order_id} "
+                        f"(это нормально для ордеров, которые еще не обработаны биржей)"
+                    )
+                    return
             else:
                 price = float(px_value)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Проверка что цена > 0
+                if price <= 0:
+                    logger.debug(
+                        f"SlippageGuard: Некорректная цена ордера для {symbol}: {price}, пропускаем анализ ордера {order_id} "
+                        f"(это нормально для ордеров, которые еще не обработаны биржей)"
+                    )
+                    return
 
             size = float(order.get("sz", "0"))
 
@@ -162,9 +176,23 @@ class SlippageGuard:
             if not current_prices:
                 return
 
-            bid_price = current_prices["bid"]
-            ask_price = current_prices["ask"]
+            bid_price = current_prices.get("bid", 0)
+            ask_price = current_prices.get("ask", 0)
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Защита от деления на ноль
+            if bid_price <= 0 or ask_price <= 0:
+                logger.warning(
+                    f"⚠️ SlippageGuard: Некорректные цены для {symbol}: "
+                    f"bid={bid_price}, ask={ask_price}, пропускаем анализ"
+                )
+                return
+            
             mid_price = (bid_price + ask_price) / 2
+            if mid_price <= 0:
+                logger.warning(
+                    f"⚠️ SlippageGuard: mid_price <= 0 для {symbol}: {mid_price}, пропускаем анализ"
+                )
+                return
 
             # Обновляем историю цен
             self._update_price_history(symbol, mid_price)
@@ -183,7 +211,12 @@ class SlippageGuard:
                 await self._cancel_problematic_order(order_id, symbol, client)
 
         except Exception as e:
-            logger.error(f"Ошибка анализа ордера: {e}")
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(
+                f"Ошибка анализа ордера: {e}\n"
+                f"Traceback: {error_details}"
+            )
 
     async def _get_current_prices(
         self, client, symbol: str
@@ -274,17 +307,34 @@ class SlippageGuard:
     ) -> Dict[str, Any]:
         """Анализ проскальзывания"""
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Защита от деления на ноль
+        if mid_price <= 0:
+            return {
+                "spread": 0,
+                "spread_percent": 0,
+                "expected_price": mid_price,
+                "slippage_percent": 0,
+                "volatility": 0,
+                "is_spread_acceptable": False,
+                "is_slippage_acceptable": False,
+            }
+
         # Расчет спреда
         spread = ask_price - bid_price
-        spread_percent = (spread / mid_price) * 100
+        spread_percent = (spread / mid_price) * 100 if mid_price > 0 else 0
 
         # Расчет ожидаемого проскальзывания
-        if side.lower() == "buy":
-            expected_price = ask_price
-            slippage = (expected_price - order_price) / order_price * 100
-        else:  # sell
-            expected_price = bid_price
-            slippage = (order_price - expected_price) / order_price * 100
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Защита от деления на ноль
+        expected_price = mid_price  # Fallback значение
+        if order_price <= 0:
+            slippage = 0
+        else:
+            if side.lower() == "buy":
+                expected_price = ask_price
+                slippage = (expected_price - order_price) / order_price * 100
+            else:  # sell
+                expected_price = bid_price
+                slippage = (order_price - expected_price) / order_price * 100
 
         # Анализ волатильности
         volatility = self._calculate_volatility(order_price)
@@ -427,13 +477,20 @@ class SlippageGuard:
             if not current_prices:
                 return False, "Не удалось получить текущие цены"
 
-            bid_price = current_prices["bid"]
-            ask_price = current_prices["ask"]
+            bid_price = current_prices.get("bid", 0)
+            ask_price = current_prices.get("ask", 0)
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Защита от деления на ноль
+            if bid_price <= 0 or ask_price <= 0:
+                return False, f"Некорректные цены: bid={bid_price}, ask={ask_price}"
+            
             mid_price = (bid_price + ask_price) / 2
+            if mid_price <= 0:
+                return False, f"mid_price <= 0: {mid_price}"
 
             # Проверка спреда
             spread = ask_price - bid_price
-            spread_percent = (spread / mid_price) * 100
+            spread_percent = (spread / mid_price) * 100 if mid_price > 0 else 0
 
             if spread_percent > self.max_spread_percent:
                 return False, f"Спред слишком большой: {spread_percent:.3f}%"

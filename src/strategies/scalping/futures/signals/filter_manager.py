@@ -221,10 +221,11 @@ class FilterManager:
                         signal["filters_passed"].append("ADX")
                 else:
                     # Кэша нет - вычисляем и сохраняем
-                    signal = await self._apply_adx_filter(symbol, signal, market_data)
+                    signal = await self._apply_adx_filter(symbol, signal, market_data, regime=regime)
                     if signal is None:
                         # Сохраняем в кэш: False = отфильтрован
                         self._set_cached_filter_result(symbol, "adx", False)
+                        # ✅ НОВОЕ: Причина фильтрации уже сохранена в signal["filter_reason"] в _apply_adx_filter
                         logger.debug(f"🔍 Сигнал {symbol} отфильтрован: ADX Filter")
                         return None
                     else:
@@ -580,34 +581,45 @@ class FilterManager:
             return None
 
     async def _apply_adx_filter(
-        self, symbol: str, signal: Dict[str, Any], market_data: Any
+        self,
+        symbol: str,
+        signal: Dict[str, Any],
+        market_data: Any,
+        regime: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
-        Применить ADX фильтр (с возможностью переключения направления).
+        Применить ADX фильтр к сигналу с адаптацией к режиму рынка.
+
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Адаптация к режиму рынка
+        - RANGING: НЕ блокировать из-за низкого ADX (это нормально для ranging)
+        - TRENDING: Блокировать, если ADX < порога (18.0 из конфига)
+        - CHOPPY: Блокировать только сильные противонаправленные тренды
+
+        Args:
+            symbol: Торговый символ
+            signal: Торговый сигнал
+            market_data: Рыночные данные
+            regime: Режим рынка (trending, ranging, choppy)
 
         Returns:
             Обновленный сигнал или None если отфильтрован
         """
-        # ✅ НОВОЕ: Пытаемся получить ADX из DataRegistry
+        if not self.adx_filter:
+            return signal
+
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Пытаемся получить ADX из DataRegistry для быстрой проверки
+        adx_value_from_registry = None
         if self.data_registry:
             try:
-                indicators = await self._get_indicators_from_registry(symbol)
-                if indicators:
-                    adx_value = indicators.get("adx")
-                    adx_plus_di = indicators.get("adx_plus_di")
-                    adx_minus_di = indicators.get("adx_minus_di")
-
-                    # Если ADX доступен в DataRegistry, используем его для быстрой проверки
-                    if adx_value is not None:
-                        logger.debug(
-                            f"✅ FilterManager: ADX из DataRegistry для {symbol}: {adx_value:.2f}"
-                        )
-                        # Можно добавить быструю проверку ADX здесь, но пока оставляем полную проверку через фильтр
+                adx_value_from_registry = await self.data_registry.get_indicator(symbol, "ADX")
+                if adx_value_from_registry is not None:
+                    logger.debug(
+                        f"✅ FilterManager: ADX из DataRegistry для {symbol}: {adx_value_from_registry:.2f}"
+                    )
             except Exception as e:
                 logger.debug(f"⚠️ Ошибка чтения ADX из DataRegistry для {symbol}: {e}")
 
         # Логика ADX фильтра будет делегирована в существующий ADXFilter
-        # Здесь только координация
         from src.models import OrderSide
 
         signal_side_str = signal.get("side", "").lower()
@@ -637,13 +649,67 @@ class FilterManager:
         )
 
         if not adx_result.allowed:
-            # ✅ ИСПРАВЛЕНО: Блокируем сигнал против тренда (не переключаем направление)
-            logger.debug(
-                f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol}: "
-                f"сигнал против тренда ({adx_result.reason if hasattr(adx_result, 'reason') else 'ADX не разрешил'}, "
-                f"ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f})"
-            )
-            return None  # Блокируем сигнал
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Адаптация к режиму рынка
+            regime_lower = (regime or "").lower()
+            
+            # ✅ RANGING режим: НЕ блокируем из-за низкого ADX (это нормально!)
+            if regime_lower == "ranging":
+                # В ranging режиме низкий ADX - это нормально, не блокируем
+                logger.info(
+                    f"✅ ADX фильтр для {symbol} (RANGING): пропущен сигнал {signal_side_str.upper()} "
+                    f"несмотря на низкий ADX={adx_result.adx_value:.1f} (в ranging это нормально)"
+                )
+                return signal  # Пропускаем сигнал в ranging режиме
+            
+            # ✅ TRENDING режим: Блокируем, если ADX < порога (18.0)
+            elif regime_lower == "trending":
+                # В trending режиме требуем сильный тренд
+                if adx_result.adx_value < 18.0:
+                    filter_reason = f"ADX={adx_result.adx_value:.1f} < 18.0 (требуется сильный тренд)"
+                    logger.info(
+                        f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol} (TRENDING): "
+                        f"{filter_reason}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f}"
+                    )
+                    signal["filter_reason"] = f"ADX Filter: {filter_reason}"
+                    return None
+                else:
+                    # ADX достаточен, но сигнал против тренда - блокируем
+                    filter_reason = f"сигнал против тренда ({adx_result.reason if hasattr(adx_result, 'reason') else 'ADX не разрешил'})"
+                    logger.info(
+                        f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol} (TRENDING): "
+                        f"{filter_reason}, ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f}"
+                    )
+                    signal["filter_reason"] = f"ADX Filter: {filter_reason}"
+                    return None
+            
+            # ✅ CHOPPY режим: Блокируем только сильные противонаправленные тренды
+            elif regime_lower == "choppy":
+                # В choppy режиме блокируем только если очень сильный тренд против сигнала
+                if adx_result.adx_value > 30.0:
+                    filter_reason = f"очень сильный тренд против сигнала (ADX={adx_result.adx_value:.1f} > 30.0)"
+                    logger.info(
+                        f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol} (CHOPPY): "
+                        f"{filter_reason}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f}"
+                    )
+                    signal["filter_reason"] = f"ADX Filter: {filter_reason}"
+                    return None
+                else:
+                    # В choppy режиме слабый тренд - пропускаем
+                    logger.info(
+                        f"✅ ADX фильтр для {symbol} (CHOPPY): пропущен сигнал {signal_side_str.upper()} "
+                        f"несмотря на ADX={adx_result.adx_value:.1f} (в choppy это нормально)"
+                    )
+                    return signal
+            
+            # ✅ Неизвестный режим: используем стандартную логику
+            else:
+                filter_reason = f"сигнал против тренда ({adx_result.reason if hasattr(adx_result, 'reason') else 'ADX не разрешил'})"
+                logger.debug(
+                    f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol}: "
+                    f"{filter_reason}, ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f}"
+                )
+                signal["filter_reason"] = f"ADX Filter: {filter_reason}"
+                return None
         else:
             logger.debug(
                 f"✅ ADX подтвердил {signal_side_str.upper()} сигнал для {symbol}"

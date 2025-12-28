@@ -46,6 +46,7 @@ class EntryManager:
         self.order_executor = order_executor
         self.position_sizer = position_sizer
         self.performance_tracker = None  # Будет установлен из orchestrator
+        self.conversion_metrics = None  # ✅ НОВОЕ (26.12.2025): ConversionMetrics для отслеживания конверсии
 
         logger.info("✅ EntryManager инициализирован")
 
@@ -58,6 +59,16 @@ class EntryManager:
         """Установить PerformanceTracker для логирования"""
         self.performance_tracker = performance_tracker
         logger.debug("✅ EntryManager: PerformanceTracker установлен")
+
+    def set_conversion_metrics(self, conversion_metrics):
+        """
+        ✅ НОВОЕ (26.12.2025): Установить ConversionMetrics для отслеживания конверсии сигналов.
+
+        Args:
+            conversion_metrics: Экземпляр ConversionMetrics
+        """
+        self.conversion_metrics = conversion_metrics
+        logger.debug("✅ EntryManager: ConversionMetrics установлен")
 
     async def open_position(
         self,
@@ -481,11 +492,39 @@ class EntryManager:
                     f"✅ EntryManager: Режим {final_regime} сохранен в position_data для {symbol}"
                 )
 
-            logger.info(
-                f"✅ EntryManager: Позиция {symbol} открыта и зарегистрирована в PositionRegistry "
-                f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.6f}, "
-                f"side={position_data.get('position_side')}, regime={final_regime})"
-            )
+            # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (26.12.2025): Добавляем детальную информацию при открытии
+            tp_percent = signal.get("tp_percent") or metadata.tp_percent if metadata and hasattr(metadata, "tp_percent") else None
+            sl_percent = signal.get("sl_percent") or metadata.sl_percent if metadata and hasattr(metadata, "sl_percent") else None
+            leverage = signal.get("leverage") or metadata.leverage if metadata and hasattr(metadata, "leverage") else None
+            
+            log_parts = [
+                f"✅ EntryManager: Позиция {symbol} открыта и зарегистрирована",
+                f"size={position_size:.6f}",
+                f"entry_price={position_data.get('entry_price'):.6f}",
+                f"side={position_data.get('position_side')}",
+                f"regime={final_regime or 'unknown'}",
+            ]
+            
+            if tp_percent:
+                log_parts.append(f"TP={tp_percent:.2f}%")
+            if sl_percent:
+                log_parts.append(f"SL={sl_percent:.2f}%")
+            if leverage:
+                log_parts.append(f"leverage={leverage}x")
+            
+            logger.info(" | ".join(log_parts))
+
+            # ✅ НОВОЕ (26.12.2025): Записываем исполненный сигнал в метрики
+            if hasattr(self, 'conversion_metrics') and self.conversion_metrics:
+                try:
+                    signal_type = signal.get("source", "unknown")
+                    self.conversion_metrics.record_signal_executed(
+                        symbol=symbol,
+                        signal_type=signal_type,
+                        regime=final_regime
+                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка записи метрики исполненного сигнала для {symbol}: {e}")
 
             # ✅ НОВОЕ: Логирование открытия позиции в CSV
             if self.performance_tracker:
