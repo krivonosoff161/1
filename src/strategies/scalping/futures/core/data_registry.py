@@ -167,7 +167,9 @@ class DataRegistry:
                 else None
             )
 
-    async def get_indicators(self, symbol: str, check_freshness: bool = True) -> Optional[Dict[str, Any]]:
+    async def get_indicators(
+        self, symbol: str, check_freshness: bool = True
+    ) -> Optional[Dict[str, Any]]:
         """
         Получить все индикаторы для символа.
 
@@ -182,9 +184,9 @@ class DataRegistry:
         async with self._lock:
             if symbol not in self._indicators:
                 return None
-            
+
             indicators = self._indicators.get(symbol, {}).copy()
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Проверка актуальности ADX (TTL 1 секунда)
             if check_freshness and "updated_at" in indicators:
                 updated_at = indicators.get("updated_at")
@@ -196,7 +198,7 @@ class DataRegistry:
                             f"(прошло {time_diff:.2f}с > 1.0с), требуется пересчет"
                         )
                         return None  # Возвращаем None для пересчета
-            
+
             return indicators
 
     # ==================== REGIMES ====================

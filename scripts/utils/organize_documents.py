@@ -12,6 +12,7 @@ from pathlib import Path
 # Корневая директория проекта
 ROOT_DIR = Path(__file__).parent.parent.parent
 
+
 def create_directories():
     """Создает все необходимые папки"""
     dirs_to_create = [
@@ -29,29 +30,31 @@ def create_directories():
         "docs/reference",
         "docs/development",
     ]
-    
+
     for dir_path in dirs_to_create:
         full_path = ROOT_DIR / dir_path
         full_path.mkdir(parents=True, exist_ok=True)
         print(f"[OK] Создана папка: {dir_path}")
 
+
 def move_file(source, destination):
     """Безопасно перемещает файл"""
     source_path = ROOT_DIR / source
     dest_path = ROOT_DIR / destination
-    
+
     if not source_path.exists():
         print(f"[WARN] Файл не найден: {source}")
         return False
-    
+
     if dest_path.exists():
         print(f"[WARN] Файл уже существует: {destination}, пропускаем")
         return False
-    
+
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(source_path), str(dest_path))
     print(f"[OK] Перемещен: {source} -> {destination}")
     return True
+
 
 def organize_documents():
     """Основная функция организации документов"""
@@ -59,15 +62,15 @@ def organize_documents():
     print("ОРГАНИЗАЦИЯ ДОКУМЕНТОВ ПРОЕКТА")
     print("=" * 60)
     print()
-    
+
     # Создаем папки
     print("1. Создание папок...")
     create_directories()
     print()
-    
+
     # Перемещение файлов
     print("2. Перемещение файлов...")
-    
+
     # Анализы (декабрь 2025)
     analysis_files = [
         "АНАЛИЗ_6_ЧАСОВ_РАБОТЫ_2025-12-21.md",
@@ -118,19 +121,19 @@ def organize_documents():
         "ПОЛНЫЙ_КОД_ПРОЕКТА_26_12_2025.md",
         "УГЛУБЛЕННЫЙ_АНАЛИЗ_ВСЕХ_ВОПРОСОВ_26_12_2025.md",
     ]
-    
+
     for file in analysis_files:
         move_file(file, f"docs/analysis/reports/2025-12/{file}")
-    
+
     # Анализы логики
     logic_analysis = [
         "ANALYSIS_BOT_LOGIC_AND_DATA_FLOW.md",
         "DETAILED_ANALYSIS_POSITION_SCALING_AND_FIXES.md",
     ]
-    
+
     for file in logic_analysis:
         move_file(file, f"docs/analysis/other/{file}")
-    
+
     # Исправления и отчеты
     fixes_files = [
         "ОТЧЕТ_ИСПРАВЛЕНИЙ_26_12_2025.md",
@@ -153,10 +156,10 @@ def organize_documents():
         "РЕЗЮМЕ_ИСПРАВЛЕНИЙ_27_12_2025.md",
         "ПРОВЕРКА_ИНДИКАТОРОВ_27_12_2025.md",
     ]
-    
+
     for file in fixes_files:
         move_file(file, f"docs/fixes/completed/2025-12/{file}")
-    
+
     # Исправления (отдельные файлы)
     fixes_individual = [
         "ИСПРАВЛЕНИЕ_CSV_И_АРХИВАЦИИ.md",
@@ -169,10 +172,10 @@ def organize_documents():
         "ИСПРАВЛЕНИЯ_ПО_РЕКОМЕНДАЦИЯМ_ГРОКА.md",
         "АНАЛИЗ_IMPROVEMENTS_AND_FIXES.md",
     ]
-    
+
     for file in fixes_individual:
         move_file(file, f"docs/fixes/completed/2025-12/{file}")
-    
+
     # Планы
     plans_files = [
         "ПЛАН_АНАЛИЗА_ПОСЛЕ_6_ЧАСОВ_РАБОТЫ.md",
@@ -187,10 +190,10 @@ def organize_documents():
         "TODO_АРХИТЕКТУРНЫЕ_ИЗМЕНЕНИЯ_26_12_2025.md",
         "FINAL_TASK_LIST.md",
     ]
-    
+
     for file in plans_files:
         move_file(file, f"docs/plans/2025-12/{file}")
-    
+
     # Архитектура
     architecture_files = [
         "АРХИТЕКТУРА_АДАПТИВНОЙ_СИСТЕМЫ_ФИЛЬТРОВ.md",
@@ -199,10 +202,10 @@ def organize_documents():
         "СХЕМА_СТРУКТУРЫ_ЛОГОВ.md",
         "TECHNICAL_SPECIFICATION.md",
     ]
-    
+
     for file in architecture_files:
         move_file(file, f"docs/architecture/{file}")
-    
+
     # Реализация
     implementation_files = [
         "РЕАЛИЗАЦИЯ_АДАПТИВНОЙ_СИСТЕМЫ_ФИЛЬТРОВ.md",
@@ -215,10 +218,10 @@ def organize_documents():
         "РЕАЛИЗАЦИЯ_ФИКСОВ_ГРОКА_ПРОСКАЛЬЗЫВАНИЕ_2025-12-21.md",
         "РЕАЛИЗОВАНО_КРИТИЧЕСКИЕ_УЛУЧШЕНИЯ_ЛОГИРОВАНИЯ.md",
     ]
-    
+
     for file in implementation_files:
         move_file(file, f"docs/fixes/completed/2025-12/implementation/{file}")
-    
+
     # Отчеты
     reports_files = [
         "ИТОГОВОЕ_РЕЗЮМЕ_ИСПРАВЛЕНИЙ_21_12_2025.md",
@@ -231,10 +234,10 @@ def organize_documents():
         "EXIT_DECISIONS_2025-12-21.md",
         "РЕОРГАНИЗАЦИЯ_SUCCESS_REPORT.md",
     ]
-    
+
     for file in reports_files:
         move_file(file, f"docs/reports/2025-12/{file}")
-    
+
     # Проверки
     checks_files = [
         "ПРОВЕРКА_АНАЛИЗА_ГРОКА_ADX.md",
@@ -247,56 +250,56 @@ def organize_documents():
         "ПРОВЕРКА_ЧЕКЛИСТА_ГРОКА_2025-12-21.md",
         "ФИНАЛЬНАЯ_ПРОВЕРКА_ПЕРЕД_ЗАПУСКОМ_2025-12-21.md",
     ]
-    
+
     for file in checks_files:
         move_file(file, f"docs/fixes/completed/2025-12/checks/{file}")
-    
+
     # Оптимизация
     optimization_files = [
         "ОПТИМИЗАЦИЯ_TCC_CYCLE_2025-12-21.md",
         "УЛУЧШЕНИЕ_АДАПТИВНОСТИ_SL_TP_2025-12-21.md",
     ]
-    
+
     for file in optimization_files:
         move_file(file, f"docs/fixes/completed/2025-12/optimization/{file}")
-    
+
     # Справочники
     reference_files = [
         "СПИСОК_ФАЙЛОВ_ДЛЯ_АНАЛИЗА.md",
         "КЛЮЧЕВЫЕ_ФРАГМЕНТЫ_КОДА.md",
     ]
-    
+
     for file in reference_files:
         move_file(file, f"docs/reference/{file}")
-    
+
     # Логи
     logs_files = [
         "ЛОГИ_ДЛЯ_ГРОКА_2025-12-21.md",
         "ЛОГИ_ПОСЛЕДНИЙ_ЧАС_ДЛЯ_КИМИ.md",
         "ЛОГИРОВАНИЕ_TA_LIB_2025-12-21.md",
     ]
-    
+
     for file in logs_files:
         move_file(file, f"docs/analysis/logs/2025-12/{file}")
-    
+
     # Инструкции
     instruction_files = [
         "ИНСТРУКЦИЯ_ПОСЛЕ_ИСПРАВЛЕНИЙ.md",
     ]
-    
+
     for file in instruction_files:
         move_file(file, f"docs/guides/{file}")
-    
+
     # Q&A
     qa_files = [
         "ВОПРОСЫ_ПО_РЕКОМЕНДАЦИЯМ.md",
         "ОТВЕТ_НА_ДОПОЛНЕНИЕ_ГРОКА_ЛЕСТНИЦА.md",
         "ОТВЕТ_НА_ФИНАЛЬНЫЙ_АНАЛИЗ_ГРОКА.md",
     ]
-    
+
     for file in qa_files:
         move_file(file, f"docs/analysis/qa/{file}")
-    
+
     # Leverage
     leverage_files = [
         "LEVERAGE_SELECTION_MATH_AND_LOGGING.md",
@@ -304,52 +307,52 @@ def organize_documents():
         "LEVERAGE_VALIDATION_AND_ROUNDING.md",
         "PROBLEMS_ANALYSIS_LEVERAGE_DRIFT.md",
     ]
-    
+
     for file in leverage_files:
         move_file(file, f"docs/analysis/leverage/{file}")
-    
+
     # Аудиты
     audit_files = [
         "АУДИТ_ДЛЯ_ГРОКА_4.1.md",
         "КРИТИЧЕСКИЕ_ИСПРАВЛЕНИЯ_ПО_ЛОГАМ.md",
     ]
-    
+
     for file in audit_files:
         move_file(file, f"docs/audit/2025-12/{file}")
-    
+
     # Статусы
     status_files = [
         "СТАТУС_BTC_ПОЗИЦИИ.md",
     ]
-    
+
     for file in status_files:
         move_file(file, f"docs/reports/status/{file}")
-    
+
     # Python скрипты
     python_scripts = [
         "analyze_pnl_positions.py",
         "extract_and_analyze_logs.py",
     ]
-    
+
     for file in python_scripts:
         move_file(file, f"scripts/analysis/{file}")
-    
+
     # Утилиты
     utils_scripts = [
         "reorganize_root_files.py",
     ]
-    
+
     for file in utils_scripts:
         move_file(file, f"scripts/utils/{file}")
-    
+
     # Текстовые файлы
     text_files = [
         "project_structure.txt",
     ]
-    
+
     for file in text_files:
         move_file(file, f"docs/architecture/{file}")
-    
+
     # Изображения
     image_files = [
         "mathematical_expectancy.png",
@@ -357,23 +360,23 @@ def organize_documents():
         "problems_analysis.png",
         "risk_analysis.png",
     ]
-    
+
     for file in image_files:
         move_file(file, f"docs/analysis/{file}")
-    
+
     # Курсор промпты
     cursor_files = [
         "cursor_analysis_prompt.md",
     ]
-    
+
     for file in cursor_files:
         move_file(file, f"docs/development/{file}")
-    
+
     print()
     print("=" * 60)
     print("ОРГАНИЗАЦИЯ ЗАВЕРШЕНА!")
     print("=" * 60)
 
+
 if __name__ == "__main__":
     organize_documents()
-

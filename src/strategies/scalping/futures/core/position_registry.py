@@ -285,7 +285,9 @@ class PositionRegistry:
                             if key == "entry_time" and isinstance(value, datetime):
                                 if value.tzinfo is None:
                                     value = value.replace(tzinfo=timezone.utc)
-                            updated_fields[key] = deepcopy(value)  # защита от вложенных структур (dict, list)
+                            updated_fields[key] = deepcopy(
+                                value
+                            )  # защита от вложенных структур (dict, list)
                     # Создаем новый объект с обновленными полями
                     self._metadata[symbol] = replace(existing, **updated_fields)
                 else:

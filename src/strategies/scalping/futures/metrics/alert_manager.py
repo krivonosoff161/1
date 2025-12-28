@@ -19,7 +19,7 @@ from loguru import logger
 class AlertManager:
     """
     Менеджер алертов на критические события.
-    
+
     Отслеживает метрики и генерирует алерты при превышении порогов.
     """
 
@@ -39,24 +39,24 @@ class AlertManager:
     ):
         """
         Инициализация Alert Manager.
-        
+
         Args:
             conversion_metrics: ConversionMetrics для отслеживания конверсии
             holding_time_metrics: HoldingTimeMetrics для отслеживания времени удержания
         """
         self.conversion_metrics = conversion_metrics
         self.holding_time_metrics = holding_time_metrics
-        
+
         # История алертов
         self._alert_history: List[Dict[str, Any]] = []
         self._max_history_size = 1000
-        
+
         # Счетчики алертов
         self._alert_counts: Dict[str, int] = defaultdict(int)
-        
+
         # Callbacks для уведомлений
         self._alert_callbacks: List[Callable[[Dict[str, Any]], None]] = []
-        
+
         logger.info("✅ AlertManager инициализирован")
 
     def register_alert_callback(
@@ -64,7 +64,7 @@ class AlertManager:
     ) -> None:
         """
         Зарегистрировать callback для уведомлений об алертах.
-        
+
         Args:
             callback: Функция, которая будет вызвана при алерте
                      Принимает словарь с данными алерта
@@ -75,21 +75,21 @@ class AlertManager:
     def check_alerts(self, period_hours: int = 24) -> List[Dict[str, Any]]:
         """
         Проверить метрики и сгенерировать алерты.
-        
+
         Args:
             period_hours: Период для проверки (часы)
-            
+
         Returns:
             Список алертов
         """
         alerts = []
-        
+
         # Проверка конверсии сигналов
         if self.conversion_metrics:
             conversion = self.conversion_metrics.get_conversion_rate(
                 period_hours=period_hours
             )
-            
+
             # Низкая конверсия
             if (
                 conversion["executed_to_generated"]
@@ -107,7 +107,7 @@ class AlertManager:
                     },
                 )
                 alerts.append(alert)
-            
+
             # 0 сигналов за день
             if (
                 self.ALERT_THRESHOLDS["zero_signals_per_day"]
@@ -120,7 +120,7 @@ class AlertManager:
                     {"period_hours": period_hours},
                 )
                 alerts.append(alert)
-            
+
             # Высокая фильтрация
             if (
                 conversion["filter_to_generated"]
@@ -138,13 +138,13 @@ class AlertManager:
                     },
                 )
                 alerts.append(alert)
-        
+
         # Проверка времени удержания
         if self.holding_time_metrics:
             holding_stats = self.holding_time_metrics.get_holding_time_stats(
                 period_hours=period_hours
             )
-            
+
             # Слишком короткое время удержания
             if (
                 holding_stats["average"] > 0
@@ -162,11 +162,11 @@ class AlertManager:
                     },
                 )
                 alerts.append(alert)
-        
+
         # Обрабатываем алерты
         for alert in alerts:
             self._process_alert(alert)
-        
+
         return alerts
 
     def check_emergency_close_rate(
@@ -174,21 +174,21 @@ class AlertManager:
     ) -> Optional[Dict[str, Any]]:
         """
         Проверить частоту Emergency Close.
-        
+
         Args:
             exit_reason_counts: Словарь {exit_reason: count}
             period_hours: Период для проверки (часы)
-            
+
         Returns:
             Алерт если частота превышает порог, иначе None
         """
         total_closes = sum(exit_reason_counts.values())
         if total_closes == 0:
             return None
-        
+
         emergency_closes = exit_reason_counts.get("emergency_loss_protection", 0)
         emergency_rate = (emergency_closes / total_closes) * 100
-        
+
         if emergency_rate > self.ALERT_THRESHOLDS["high_emergency_close_rate"]:
             return self._create_alert(
                 "high_emergency_close_rate",
@@ -200,7 +200,7 @@ class AlertManager:
                     "total_count": total_closes,
                 },
             )
-        
+
         return None
 
     def _create_alert(
@@ -208,12 +208,12 @@ class AlertManager:
     ) -> Dict[str, Any]:
         """
         Создать алерт.
-        
+
         Args:
             alert_type: Тип алерта
             message: Сообщение алерта
             data: Дополнительные данные
-            
+
         Returns:
             Словарь с данными алерта
         """
@@ -224,16 +224,16 @@ class AlertManager:
             "data": data,
             "severity": self._get_severity(alert_type),
         }
-        
+
         return alert
 
     def _get_severity(self, alert_type: str) -> str:
         """
         Получить уровень серьезности алерта.
-        
+
         Args:
             alert_type: Тип алерта
-            
+
         Returns:
             "critical", "warning" или "info"
         """
@@ -241,7 +241,7 @@ class AlertManager:
             "zero_signals_per_day",
             "high_emergency_close_rate",
         ]
-        
+
         if alert_type in critical_alerts:
             return "critical"
         elif "high" in alert_type or "low" in alert_type:
@@ -252,7 +252,7 @@ class AlertManager:
     def _process_alert(self, alert: Dict[str, Any]) -> None:
         """
         Обработать алерт (логирование и callbacks).
-        
+
         Args:
             alert: Данные алерта
         """
@@ -264,15 +264,15 @@ class AlertManager:
             logger.warning(f"⚠️ АЛЕРТ: {alert['message']}")
         else:
             logger.info(f"ℹ️ АЛЕРТ: {alert['message']}")
-        
+
         # Сохраняем в историю
         self._alert_history.append(alert)
         self._alert_counts[alert["type"]] += 1
-        
+
         # Ограничиваем размер истории
         if len(self._alert_history) > self._max_history_size:
-            self._alert_history = self._alert_history[-self._max_history_size:]
-        
+            self._alert_history = self._alert_history[-self._max_history_size :]
+
         # Вызываем callbacks
         for callback in self._alert_callbacks:
             try:
@@ -290,17 +290,17 @@ class AlertManager:
     ) -> List[Dict[str, Any]]:
         """
         Получить историю алертов.
-        
+
         Args:
             alert_type: Тип алерта (если None - все типы)
             period_hours: Период для фильтрации (часы)
             severity: Уровень серьезности (если None - все уровни)
-            
+
         Returns:
             Список алертов
         """
         cutoff_time = datetime.now() - timedelta(hours=period_hours)
-        
+
         filtered = [
             a
             for a in self._alert_history
@@ -308,28 +308,28 @@ class AlertManager:
             and (alert_type is None or a["type"] == alert_type)
             and (severity is None or a.get("severity") == severity)
         ]
-        
+
         return sorted(filtered, key=lambda x: x["timestamp"], reverse=True)
 
     def get_alert_summary(self, period_hours: int = 24) -> Dict[str, Any]:
         """
         Получить сводку алертов за период.
-        
+
         Args:
             period_hours: Период для расчета (часы)
-            
+
         Returns:
             Словарь со сводкой
         """
         alerts = self.get_alert_history(period_hours=period_hours)
-        
+
         by_type = defaultdict(int)
         by_severity = defaultdict(int)
-        
+
         for alert in alerts:
             by_type[alert["type"]] += 1
             by_severity[alert.get("severity", "info")] += 1
-        
+
         return {
             "period_hours": period_hours,
             "total_alerts": len(alerts),
@@ -343,8 +343,3 @@ class AlertManager:
         self._alert_history.clear()
         self._alert_counts.clear()
         logger.info("✅ AlertManager: Все метрики сброшены")
-
-
-
-
-

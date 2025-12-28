@@ -33,7 +33,11 @@ from ..spot.performance_tracker import PerformanceTracker
 from .calculations.margin_calculator import MarginCalculator
 from .config.config_manager import ConfigManager
 from .config.parameter_provider import ParameterProvider
+from .coordinators.exit_decision_coordinator import \
+    ExitDecisionCoordinator  # ✅ НОВОЕ (26.12.2025): Координатор решений о закрытии
 from .coordinators.order_coordinator import OrderCoordinator
+from .coordinators.priority_resolver import \
+    PriorityResolver  # ✅ НОВОЕ (26.12.2025): Резолвер приоритетов
 from .coordinators.signal_coordinator import SignalCoordinator
 from .coordinators.smart_exit_coordinator import SmartExitCoordinator
 from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
@@ -50,8 +54,6 @@ from .logging.structured_logger import StructuredLogger
 from .order_executor import FuturesOrderExecutor
 from .position_manager import FuturesPositionManager
 from .positions.entry_manager import EntryManager
-from .coordinators.exit_decision_coordinator import ExitDecisionCoordinator  # ✅ НОВОЕ (26.12.2025): Координатор решений о закрытии
-from .coordinators.priority_resolver import PriorityResolver  # ✅ НОВОЕ (26.12.2025): Резолвер приоритетов
 from .positions.exit_analyzer import \
     ExitAnalyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
 from .positions.position_monitor import \
@@ -90,15 +92,17 @@ class FuturesScalpingOrchestrator:
         # ✅ ЭТАП 1: Config Manager для работы с конфигурацией
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Загружаем raw YAML для доступа к exit_params
         # exit_params находится в корне YAML, но не в BotConfig модели
-        import yaml
         from pathlib import Path
+
+        import yaml
+
         raw_config_dict = {}
         try:
             # Пробуем найти config файл
             config_paths = [
                 "config/config_futures.yaml",
                 "config_futures.yaml",
-                "config.yaml"
+                "config.yaml",
             ]
             for config_path in config_paths:
                 config_file = Path(config_path)
@@ -109,9 +113,9 @@ class FuturesScalpingOrchestrator:
                     break
         except Exception as e:
             logger.warning(f"⚠️ Не удалось загрузить raw config для exit_params: {e}")
-        
+
         self.config_manager = ConfigManager(config, raw_config_dict=raw_config_dict)
-        
+
         # ✅ НОВОЕ (26.12.2025): Инициализация ParameterProvider - единая точка получения параметров
         # ParameterProvider будет создан после regime_manager, поэтому пока передаем None
         # Будет обновлен после инициализации signal_generator и regime_manager
@@ -310,20 +314,22 @@ class FuturesScalpingOrchestrator:
         # ✅ НОВОЕ: Передаем config_manager в signal_generator для адаптивных параметров фильтров
         if hasattr(self.signal_generator, "set_config_manager"):
             self.signal_generator.set_config_manager(self.config_manager)
-        
+
         # ✅ НОВОЕ (26.12.2025): Инициализация метрик
+        from .metrics.alert_manager import AlertManager
         from .metrics.conversion_metrics import ConversionMetrics
         from .metrics.holding_time_metrics import HoldingTimeMetrics
-        from .metrics.alert_manager import AlertManager
-        
+
         self.conversion_metrics = ConversionMetrics()
         self.holding_time_metrics = HoldingTimeMetrics()
         self.alert_manager = AlertManager()
-        logger.info("✅ Метрики инициализированы: ConversionMetrics, HoldingTimeMetrics, AlertManager")
-        
+        logger.info(
+            "✅ Метрики инициализированы: ConversionMetrics, HoldingTimeMetrics, AlertManager"
+        )
+
         # ✅ НОВОЕ (26.12.2025): Передаем метрики в модули (после их создания)
         # Метрики будут переданы после создания entry_manager и exit_analyzer
-        
+
         # ✅ НОВОЕ (26.12.2025): Инициализация ParameterProvider после signal_generator
         # Получаем regime_manager из signal_generator (может быть общий или per-symbol)
         regime_manager = getattr(self.signal_generator, "regime_manager", None)
@@ -333,7 +339,7 @@ class FuturesScalpingOrchestrator:
             data_registry=self.data_registry,
         )
         logger.info("✅ ParameterProvider инициализирован в orchestrator")
-        
+
         self.order_executor = FuturesOrderExecutor(
             config, self.client, self.slippage_guard
         )
@@ -394,7 +400,7 @@ class FuturesScalpingOrchestrator:
         self.fast_adx = FastADX(period=fast_adx_period, threshold=fast_adx_threshold)
         # ✅ АДАПТИВНО: Сохраняем ссылку на fast_adx_config для адаптивных параметров
         self.fast_adx.fast_adx_config = fast_adx_config
-        
+
         # ✅ НОВОЕ (26.12.2025): Передаем fast_adx в signal_generator для DirectionAnalyzer
         if hasattr(self.signal_generator, "set_fast_adx"):
             self.signal_generator.set_fast_adx(self.fast_adx)
@@ -506,7 +512,7 @@ class FuturesScalpingOrchestrator:
         # ✅ НОВОЕ (26.12.2025): Инициализация ExitDecisionCoordinator
         # Получаем smart_exit_coordinator если он есть
         smart_exit_coordinator = getattr(self, "smart_exit_coordinator", None)
-        
+
         self.exit_decision_coordinator = ExitDecisionCoordinator(
             exit_analyzer=self.exit_analyzer,
             trailing_sl_coordinator=self.trailing_sl_coordinator,  # ✅ ИСПРАВЛЕНО: Используем уже созданный trailing_sl_coordinator
@@ -515,15 +521,19 @@ class FuturesScalpingOrchestrator:
             priority_resolver=self.priority_resolver,  # ✅ НОВОЕ: Передаем PriorityResolver
         )
         logger.info("✅ ExitDecisionCoordinator инициализирован в orchestrator")
-        
+
         # ✅ НОВОЕ (26.12.2025): Передаем ExitDecisionCoordinator в trailing_sl_coordinator
         if hasattr(self.trailing_sl_coordinator, "set_exit_decision_coordinator"):
-            self.trailing_sl_coordinator.set_exit_decision_coordinator(self.exit_decision_coordinator)
+            self.trailing_sl_coordinator.set_exit_decision_coordinator(
+                self.exit_decision_coordinator
+            )
         else:
             # Если нет setter, устанавливаем напрямую
-            self.trailing_sl_coordinator.exit_decision_coordinator = self.exit_decision_coordinator
+            self.trailing_sl_coordinator.exit_decision_coordinator = (
+                self.exit_decision_coordinator
+            )
         logger.info("✅ ExitDecisionCoordinator установлен в TrailingSLCoordinator")
-        
+
         # ✅ НОВОЕ (26.12.2025): Передаем ParameterProvider в trailing_sl_coordinator
         if hasattr(self.trailing_sl_coordinator, "set_parameter_provider"):
             self.trailing_sl_coordinator.set_parameter_provider(self.parameter_provider)
@@ -533,10 +543,12 @@ class FuturesScalpingOrchestrator:
         if hasattr(self.position_manager, "set_exit_analyzer"):
             self.position_manager.set_exit_analyzer(self.exit_analyzer)
             logger.info("✅ ExitAnalyzer установлен в FuturesPositionManager (fallback)")
-        
+
         # ✅ НОВОЕ (26.12.2025): Передаем ExitDecisionCoordinator в position_manager
         if hasattr(self.position_manager, "set_exit_decision_coordinator"):
-            self.position_manager.set_exit_decision_coordinator(self.exit_decision_coordinator)
+            self.position_manager.set_exit_decision_coordinator(
+                self.exit_decision_coordinator
+            )
             logger.info("✅ ExitDecisionCoordinator установлен в FuturesPositionManager")
 
         # ✅ НОВОЕ: Инициализация PositionMonitor для периодического мониторинга позиций
@@ -1239,12 +1251,15 @@ class FuturesScalpingOrchestrator:
             # Инициализация торговых модулей
             logger.info("🔄 Инициализация SignalGenerator...")
             await self.signal_generator.initialize()
-            if hasattr(self.signal_generator, "is_initialized") and self.signal_generator.is_initialized:
+            if (
+                hasattr(self.signal_generator, "is_initialized")
+                and self.signal_generator.is_initialized
+            ):
                 logger.info("✅ SignalGenerator: инициализирован и готов к работе")
-            
+
             logger.info("🔄 Инициализация OrderExecutor...")
             await self.order_executor.initialize()
-            
+
             logger.info("🔄 Инициализация PositionManager...")
             await self.position_manager.initialize()
 
@@ -1671,7 +1686,7 @@ class FuturesScalpingOrchestrator:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем реальное время открытия позиции из API
                     # ✅ ИСПРАВЛЕНО (25.12.2025): Добавлены альтернативные источники entry_time
                     entry_time_dt = None
-                    
+
                     # ПРИОРИТЕТ 1: API (cTime/uTime)
                     c_time = pos.get("cTime")
                     u_time = pos.get("uTime")
@@ -1695,9 +1710,13 @@ class FuturesScalpingOrchestrator:
                                 f"⚠️ Не удалось распарсить cTime/uTime для {symbol}: {e}, "
                                 f"пробуем альтернативные источники"
                             )
-                    
+
                     # ПРИОРИТЕТ 2: PositionRegistry (если позиция уже была зарегистрирована)
-                    if not entry_time_dt and hasattr(self, "position_registry") and self.position_registry:
+                    if (
+                        not entry_time_dt
+                        and hasattr(self, "position_registry")
+                        and self.position_registry
+                    ):
                         try:
                             metadata = await self.position_registry.get_metadata(symbol)
                             if metadata and metadata.entry_time:
@@ -1706,17 +1725,23 @@ class FuturesScalpingOrchestrator:
                                     f"✅ Реальное время открытия для {symbol} получено из PositionRegistry: {entry_time_dt}"
                                 )
                         except Exception as e:
-                            logger.debug(f"⚠️ Не удалось получить entry_time из PositionRegistry для {symbol}: {e}")
-                    
+                            logger.debug(
+                                f"⚠️ Не удалось получить entry_time из PositionRegistry для {symbol}: {e}"
+                            )
+
                     # ПРИОРИТЕТ 3: active_positions (если позиция уже была загружена ранее)
                     if not entry_time_dt and symbol in self.active_positions:
-                        existing_entry_time = self.active_positions[symbol].get("entry_time")
-                        if existing_entry_time and isinstance(existing_entry_time, datetime):
+                        existing_entry_time = self.active_positions[symbol].get(
+                            "entry_time"
+                        )
+                        if existing_entry_time and isinstance(
+                            existing_entry_time, datetime
+                        ):
                             entry_time_dt = existing_entry_time
                             logger.debug(
                                 f"✅ Реальное время открытия для {symbol} получено из active_positions: {entry_time_dt}"
                             )
-                    
+
                     # FALLBACK: Только если все источники недоступны
                     if not entry_time_dt:
                         logger.warning(
@@ -2036,7 +2061,7 @@ class FuturesScalpingOrchestrator:
             # ✅ ИСПРАВЛЕНО (25.12.2025): Восстанавливаем entry_time с биржи (cTime/uTime) с альтернативными источниками
             # Это критично для DRIFT_ADD - иначе min_holding будет считаться от "сейчас"
             timestamp = None
-            
+
             # ПРИОРИТЕТ 1: API (cTime/uTime)
             try:
                 # Пробуем получить из cTime (create time) или uTime (update time)
@@ -2057,9 +2082,13 @@ class FuturesScalpingOrchestrator:
                     f"⚠️ Не удалось распарсить cTime/uTime для {symbol}: {e}, "
                     f"пробуем альтернативные источники"
                 )
-            
+
             # ПРИОРИТЕТ 2: PositionRegistry (если позиция уже была зарегистрирована)
-            if not timestamp and hasattr(self, "position_registry") and self.position_registry:
+            if (
+                not timestamp
+                and hasattr(self, "position_registry")
+                and self.position_registry
+            ):
                 try:
                     metadata = await self.position_registry.get_metadata(symbol)
                     if metadata and metadata.entry_time:
@@ -2068,8 +2097,10 @@ class FuturesScalpingOrchestrator:
                             f"✅ entry_time для {symbol} получен из PositionRegistry: {timestamp}"
                         )
                 except Exception as e:
-                    logger.debug(f"⚠️ Не удалось получить entry_time из PositionRegistry для {symbol}: {e}")
-            
+                    logger.debug(
+                        f"⚠️ Не удалось получить entry_time из PositionRegistry для {symbol}: {e}"
+                    )
+
             # ПРИОРИТЕТ 3: active_positions (если позиция уже была загружена ранее)
             if not timestamp and symbol in self.active_positions:
                 existing_entry_time = self.active_positions[symbol].get("entry_time")
@@ -2291,7 +2322,7 @@ class FuturesScalpingOrchestrator:
                 is_likely_pending_order = False
                 duration_sec = 0.0
                 duration_str = "N/A"
-                
+
                 if entry_time is None:
                     # Нет entry_time - скорее всего это ордер, который еще не исполнился
                     is_likely_pending_order = True
@@ -2300,7 +2331,9 @@ class FuturesScalpingOrchestrator:
                     if isinstance(entry_time, datetime):
                         entry_time_copy = entry_time
                         if entry_time_copy.tzinfo is None:
-                            entry_time_copy = entry_time_copy.replace(tzinfo=timezone.utc)
+                            entry_time_copy = entry_time_copy.replace(
+                                tzinfo=timezone.utc
+                            )
                         elif entry_time_copy.tzinfo != timezone.utc:
                             entry_time_copy = entry_time_copy.astimezone(timezone.utc)
                         duration_sec = (
@@ -2308,11 +2341,11 @@ class FuturesScalpingOrchestrator:
                         ).total_seconds()
                     elif isinstance(entry_time, (int, float)):
                         duration_sec = time.time() - entry_time
-                    
+
                     # Если позиция была зарегистрирована менее 5 секунд назад, это скорее всего неисполненный ордер
                     if duration_sec < 5.0:
                         is_likely_pending_order = True
-                    
+
                     duration_min = duration_sec / 60.0
                     duration_str = f"{duration_sec:.0f} сек ({duration_min:.2f} мин)"
 
@@ -2328,7 +2361,9 @@ class FuturesScalpingOrchestrator:
                                 f"скорее всего ордер еще не исполнился (не закрытие позиции)"
                             )
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось проверить активные ордера для {symbol}: {e}")
+                        logger.debug(
+                            f"⚠️ Не удалось проверить активные ордера для {symbol}: {e}"
+                        )
 
                 # Если это скорее всего неисполненный ордер, не логируем как закрытие
                 if is_likely_pending_order:
@@ -2360,6 +2395,7 @@ class FuturesScalpingOrchestrator:
                 # 🔴 JSON-логирование exchange-side closure
                 try:
                     import json
+
                     # ✅ ИСПРАВЛЕНО (26.12.2025): Убран локальный импорт datetime - используем глобальный из строки 18
                     # from datetime import datetime, timezone  # ❌ УБРАНО - конфликт с глобальным импортом
 
@@ -2372,7 +2408,9 @@ class FuturesScalpingOrchestrator:
                         "entry_price": entry_price,
                         "entry_time": entry_time.isoformat()
                         if isinstance(entry_time, datetime)
-                        else (None if entry_time is None else str(entry_time)),  # ✅ ИСПРАВЛЕНО: null вместо "None"
+                        else (
+                            None if entry_time is None else str(entry_time)
+                        ),  # ✅ ИСПРАВЛЕНО: null вместо "None"
                         "duration_sec": duration_sec,
                         "reason": "exchange_side",
                         "possible_causes": ["TSL", "Liquidation", "ADL", "Manual"],
@@ -2655,11 +2693,13 @@ class FuturesScalpingOrchestrator:
                         existing_entry_time = existing_metadata.entry_time
                         if existing_entry_time and existing_entry_time.tzinfo is None:
                             # Если existing_entry_time offset-naive, конвертируем в offset-aware (UTC)
-                            existing_entry_time = existing_entry_time.replace(tzinfo=timezone.utc)
-                        
-                        if (
-                            not existing_metadata.entry_time
-                            or (existing_entry_time and existing_entry_time == datetime.now(timezone.utc))
+                            existing_entry_time = existing_entry_time.replace(
+                                tzinfo=timezone.utc
+                            )
+
+                        if not existing_metadata.entry_time or (
+                            existing_entry_time
+                            and existing_entry_time == datetime.now(timezone.utc)
                         ):
                             if entry_time_from_api:
                                 existing_metadata.entry_time = entry_time_from_api
@@ -3515,7 +3555,9 @@ class FuturesScalpingOrchestrator:
                 try:
                     regime = self.signal_generator.regime_manager.get_current_regime()
                 except Exception as e:
-                    logger.debug(f"⚠️ Не удалось получить режим для drawdown protection: {e}")
+                    logger.debug(
+                        f"⚠️ Не удалось получить режим для drawdown protection: {e}"
+                    )
 
             # ✅ ИСПРАВЛЕНО (25.12.2025): Передаем signal_generator только если он инициализирован
             # Если не инициализирован, get_adaptive_risk_params использует fallback значения
@@ -3523,25 +3565,37 @@ class FuturesScalpingOrchestrator:
             # Для drawdown protection symbol не нужен (это общая проверка для всего бота)
             # Используем первый символ из списка или fallback на config_manager
             adaptive_risk_params = {}
-            if self.parameter_provider and hasattr(self, "scalping_config") and hasattr(self.scalping_config, "symbols"):
+            if (
+                self.parameter_provider
+                and hasattr(self, "scalping_config")
+                and hasattr(self.scalping_config, "symbols")
+            ):
                 symbols_list = self.scalping_config.symbols
                 if symbols_list and len(symbols_list) > 0:
-                    symbol_for_risk = symbols_list[0]  # Используем первый символ для получения параметров
+                    symbol_for_risk = symbols_list[
+                        0
+                    ]  # Используем первый символ для получения параметров
                     try:
                         adaptive_risk_params = self.parameter_provider.get_risk_params(
-                            symbol=symbol_for_risk, 
-                            balance=current_balance, 
-                            regime=regime
+                            symbol=symbol_for_risk,
+                            balance=current_balance,
+                            regime=regime,
                         )
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка получения risk_params через ParameterProvider: {e}, используем fallback")
-            
+                        logger.debug(
+                            f"⚠️ Ошибка получения risk_params через ParameterProvider: {e}, используем fallback"
+                        )
+
             # Fallback: используем config_manager напрямую если ParameterProvider не доступен или ошибка
             if not adaptive_risk_params:
                 adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
-                    current_balance, 
-                    regime, 
-                    signal_generator=(self.signal_generator if hasattr(self, "signal_generator") and self.signal_generator else None)
+                    current_balance,
+                    regime,
+                    signal_generator=(
+                        self.signal_generator
+                        if hasattr(self, "signal_generator") and self.signal_generator
+                        else None
+                    ),
                 )
             max_drawdown_percent = (
                 adaptive_risk_params.get("max_drawdown_percent", 5.0) / 100.0
@@ -3745,10 +3799,14 @@ class FuturesScalpingOrchestrator:
                 )
             else:
                 adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
-                current_balance, 
-                regime, 
-                signal_generator=(self.signal_generator if hasattr(self, "signal_generator") and self.signal_generator else None)
-            )
+                    current_balance,
+                    regime,
+                    signal_generator=(
+                        self.signal_generator
+                        if hasattr(self, "signal_generator") and self.signal_generator
+                        else None
+                    ),
+                )
             max_drawdown_percent = (
                 adaptive_risk_params.get("max_drawdown_percent", 5.0) / 100.0
             )
@@ -3883,10 +3941,14 @@ class FuturesScalpingOrchestrator:
                 )
             else:
                 adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
-                current_balance, 
-                regime, 
-                signal_generator=(self.signal_generator if hasattr(self, "signal_generator") and self.signal_generator else None)
-            )
+                    current_balance,
+                    regime,
+                    signal_generator=(
+                        self.signal_generator
+                        if hasattr(self, "signal_generator") and self.signal_generator
+                        else None
+                    ),
+                )
             max_drawdown_percent = (
                 adaptive_risk_params.get("max_drawdown_percent", 5.0) / 100.0
             )
@@ -4302,13 +4364,18 @@ class FuturesScalpingOrchestrator:
                         # ✅ КРИТИЧЕСКОЕ: record_trade ожидает TradeResult объект, а не dict
                         if isinstance(trade_result, dict):
                             # Если это dict (ошибка), не записываем в CSV
-                            logger.warning(f"⚠️ trade_result для {symbol} это dict, не записываем в CSV: {trade_result.get('error', 'unknown error')}")
+                            logger.warning(
+                                f"⚠️ trade_result для {symbol} это dict, не записываем в CSV: {trade_result.get('error', 'unknown error')}"
+                            )
                         else:
                             # Это TradeResult объект, можно записывать
                             self.performance_tracker.record_trade(trade_result)
                             logger.debug(f"✅ Сделка {symbol} записана в CSV")
                     except Exception as e:
-                        logger.error(f"❌ Ошибка записи сделки в CSV для {symbol}: {e}", exc_info=True)
+                        logger.error(
+                            f"❌ Ошибка записи сделки в CSV для {symbol}: {e}",
+                            exc_info=True,
+                        )
 
                 # ✅ НОВОЕ: Записываем статистику для динамической адаптации
                 if trade_result and hasattr(self, "trading_statistics"):
@@ -4607,7 +4674,10 @@ class FuturesScalpingOrchestrator:
 
         except Exception as e:
             logger.error(f"Ошибка получения статуса: {e}")
-            return {"error": str(e), "timestamp": datetime.now(timezone.utc).isoformat()}
+            return {
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
     def _to_dict(self, raw: Any) -> Dict[str, Any]:
         """Преобразует объект в словарь, поддерживая Pydantic модели и обычные объекты"""
@@ -4873,35 +4943,40 @@ class FuturesScalpingOrchestrator:
     async def _verify_initialization(self) -> None:
         """
         ✅ НОВОЕ (26.12.2025): Проверка инициализации критических модулей.
-        
+
         Проверяет, что все необходимые модули инициализированы и конфиг загружен.
         """
         logger.info("=" * 80)
         logger.info("🔍 ПРОВЕРКА ИНИЦИАЛИЗАЦИИ МОДУЛЕЙ")
         logger.info("=" * 80)
-        
+
         # 1. ConfigManager
         if hasattr(self, "config_manager") and self.config_manager:
             logger.info("✅ ConfigManager: инициализирован")
-            if hasattr(self.config_manager, "symbol_profiles") and self.config_manager.symbol_profiles:
-                logger.info(f"   - Symbol profiles: {len(self.config_manager.symbol_profiles)} символов")
+            if (
+                hasattr(self.config_manager, "symbol_profiles")
+                and self.config_manager.symbol_profiles
+            ):
+                logger.info(
+                    f"   - Symbol profiles: {len(self.config_manager.symbol_profiles)} символов"
+                )
             else:
                 logger.warning("   ⚠️ Symbol profiles: НЕ загружены")
         else:
             logger.error("❌ ConfigManager: НЕ инициализирован!")
-        
+
         # 2. DataRegistry
         if hasattr(self, "data_registry") and self.data_registry:
             logger.info("✅ DataRegistry: инициализирован")
         else:
             logger.error("❌ DataRegistry: НЕ инициализирован!")
-        
+
         # 3. PositionRegistry
         if hasattr(self, "position_registry") and self.position_registry:
             logger.info("✅ PositionRegistry: инициализирован")
         else:
             logger.error("❌ PositionRegistry: НЕ инициализирован!")
-        
+
         # 4. SignalGenerator
         if hasattr(self, "signal_generator") and self.signal_generator:
             logger.info("✅ SignalGenerator: создан")
@@ -4909,22 +4984,24 @@ class FuturesScalpingOrchestrator:
                 if self.signal_generator.is_initialized:
                     logger.info("   - SignalGenerator: инициализирован")
                 else:
-                    logger.warning("   ⚠️ SignalGenerator: создан, но НЕ инициализирован (будет инициализирован позже)")
+                    logger.warning(
+                        "   ⚠️ SignalGenerator: создан, но НЕ инициализирован (будет инициализирован позже)"
+                    )
         else:
             logger.error("❌ SignalGenerator: НЕ создан!")
-        
+
         # 5. PositionManager
         if hasattr(self, "position_manager") and self.position_manager:
             logger.info("✅ PositionManager: создан")
         else:
             logger.error("❌ PositionManager: НЕ создан!")
-        
+
         # 6. Client
         if hasattr(self, "client") and self.client:
             logger.info("✅ OKXFuturesClient: создан")
         else:
             logger.error("❌ OKXFuturesClient: НЕ создан!")
-        
+
         # 7. Критические параметры конфига
         if hasattr(self, "scalping_config") and self.scalping_config:
             leverage = getattr(self.scalping_config, "leverage", None)
@@ -4932,7 +5009,7 @@ class FuturesScalpingOrchestrator:
                 logger.info(f"✅ Leverage из конфига: {leverage}x")
             else:
                 logger.error("❌ Leverage НЕ найден в конфиге!")
-        
+
         logger.info("=" * 80)
         logger.info("✅ ПРОВЕРКА ИНИЦИАЛИЗАЦИИ ЗАВЕРШЕНА")
         logger.info("=" * 80)
@@ -4940,7 +5017,7 @@ class FuturesScalpingOrchestrator:
     async def _verify_readiness(self) -> None:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Проверяет готовность всех модулей перед началом торговли.
-        
+
         Проверяет:
         1. Что свечи загружены для всех символов
         2. Что signal_generator инициализирован
@@ -4949,32 +5026,35 @@ class FuturesScalpingOrchestrator:
         logger.info("=" * 80)
         logger.info("🔍 ПРОВЕРКА ГОТОВНОСТИ МОДУЛЕЙ ПЕРЕД НАЧАЛОМ ТОРГОВЛИ")
         logger.info("=" * 80)
-        
+
         # 1. Проверяем, что свечи загружены
         await self._verify_candles_loaded()
-        
+
         # 2. Проверяем, что signal_generator инициализирован
-        if not hasattr(self.signal_generator, "is_initialized") or not self.signal_generator.is_initialized:
+        if (
+            not hasattr(self.signal_generator, "is_initialized")
+            or not self.signal_generator.is_initialized
+        ):
             raise ValueError("❌ КРИТИЧЕСКАЯ ОШИБКА: SignalGenerator не инициализирован")
         logger.info("✅ SignalGenerator: инициализирован и готов")
-        
+
         # 3. Проверяем, что все критичные модули готовы
         if not self.data_registry:
             raise ValueError("❌ КРИТИЧЕСКАЯ ОШИБКА: DataRegistry не доступен")
         logger.info("✅ DataRegistry: готов")
-        
+
         if not self.position_registry:
             raise ValueError("❌ КРИТИЧЕСКАЯ ОШИБКА: PositionRegistry не доступен")
         logger.info("✅ PositionRegistry: готов")
-        
+
         if not self.signal_coordinator:
             raise ValueError("❌ КРИТИЧЕСКАЯ ОШИБКА: SignalCoordinator не доступен")
         logger.info("✅ SignalCoordinator: готов")
-        
+
         if not self.position_manager:
             raise ValueError("❌ КРИТИЧЕСКАЯ ОШИБКА: PositionManager не доступен")
         logger.info("✅ PositionManager: готов")
-        
+
         logger.info("=" * 80)
         logger.info("✅ ВСЕ МОДУЛИ ГОТОВЫ, ТОРГОВЛЯ МОЖЕТ НАЧАТЬСЯ")
         logger.info("=" * 80)
@@ -4982,18 +5062,18 @@ class FuturesScalpingOrchestrator:
     async def _verify_candles_loaded(self) -> None:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Проверяет, что свечи загружены для всех символов перед началом торговли.
-        
+
         Требует минимум 50 свечей для каждого символа (для режимов и индикаторов).
         """
         logger.info("🔍 Проверка загрузки свечей для всех символов...")
-        
+
         symbols = self.scalping_config.symbols
         if not symbols:
             raise ValueError("❌ КРИТИЧЕСКАЯ ОШИБКА: Нет символов для торговли")
-        
+
         missing_candles = []
         insufficient_candles = []
-        
+
         for symbol in symbols:
             try:
                 candles_1m = await self.data_registry.get_candles(symbol, "1m")
@@ -5006,21 +5086,23 @@ class FuturesScalpingOrchestrator:
                         f"⚠️ {symbol}: Недостаточно свечей (нужно минимум 50, получено {len(candles_1m)})"
                     )
                 else:
-                    logger.info(f"✅ {symbol}: {len(candles_1m)} свечей загружено (требуется минимум 50)")
+                    logger.info(
+                        f"✅ {symbol}: {len(candles_1m)} свечей загружено (требуется минимум 50)"
+                    )
             except Exception as e:
                 logger.error(f"❌ {symbol}: Ошибка проверки свечей: {e}")
                 missing_candles.append(symbol)
-        
+
         if missing_candles:
             raise ValueError(
                 f"❌ КРИТИЧЕСКАЯ ОШИБКА: Свечи не загружены для символов: {', '.join(missing_candles)}"
             )
-        
+
         if insufficient_candles:
             raise ValueError(
                 f"❌ КРИТИЧЕСКАЯ ОШИБКА: Недостаточно свечей для символов: "
                 f"{', '.join([f'{s} ({c} свечей)' for s, c in insufficient_candles])}. "
                 f"Требуется минимум 50 свечей для каждого символа."
             )
-        
+
         logger.info(f"✅ Все свечи загружены для {len(symbols)} символов")

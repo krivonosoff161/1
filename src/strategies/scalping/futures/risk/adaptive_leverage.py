@@ -126,13 +126,17 @@ class AdaptiveLeverage:
                 # ✅ УЛУЧШЕНО: Более строгие ограничения для защиты от ADL
                 # Для позиций с margin > $100 (notional > $1000 при 10x) снижаем плечо
                 if position_size_usd > 100:
-                    leverage = min(leverage, 10)  # Максимум 10x для позиций с margin > $100
+                    leverage = min(
+                        leverage, 10
+                    )  # Максимум 10x для позиций с margin > $100
                     logger.info(
                         f"🔒 [LEVERAGE_LIMIT] {signal.get('symbol', 'N/A')}: Margin ${position_size_usd:.2f} > $100, "
                         f"ограничение плеча до 10x (было {leverage}x) для защиты от ADL"
                     )
                 elif position_size_usd > 50:
-                    leverage = min(leverage, 15)  # Максимум 15x для позиций с margin > $50
+                    leverage = min(
+                        leverage, 15
+                    )  # Максимум 15x для позиций с margin > $50
                     logger.info(
                         f"🔒 [LEVERAGE_LIMIT] {signal.get('symbol', 'N/A')}: Margin ${position_size_usd:.2f} > $50, "
                         f"ограничение плеча до 15x (было {leverage}x)"
@@ -244,7 +248,9 @@ class AdaptiveLeverage:
                 if atr and current_price > 0:
                     volatility = (atr / current_price) if current_price > 0 else None
 
-            return await self.calculate_leverage(signal, regime, volatility, client, position_size_usd)
+            return await self.calculate_leverage(
+                signal, regime, volatility, client, position_size_usd
+            )
 
         except Exception as e:
             logger.error(f"❌ Ошибка получения левериджа для сигнала: {e}")

@@ -85,7 +85,9 @@ class TrailingSLCoordinator:
         self.order_flow = (
             order_flow  # ✅ ЭТАП 1.1: OrderFlowIndicator для анализа разворота
         )
-        self.exit_analyzer = exit_analyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия (fallback)
+        self.exit_analyzer = (
+            exit_analyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия (fallback)
+        )
         self.exit_decision_coordinator = None  # ✅ НОВОЕ (26.12.2025): ExitDecisionCoordinator для координации закрытия
 
         # ✅ ЭТАП 1.1: История delta для анализа разворота Order Flow
@@ -236,7 +238,9 @@ class TrailingSLCoordinator:
 
             # ✅ НОВОЕ (26.12.2025): Используем ParameterProvider вместо прямого обращения к config_manager
             if self.parameter_provider:
-                params = self.parameter_provider.get_trailing_sl_params(symbol=symbol, regime=regime)
+                params = self.parameter_provider.get_trailing_sl_params(
+                    symbol=symbol, regime=regime
+                )
             else:
                 # Fallback на config_manager
                 params = self.config_manager.get_trailing_sl_params(regime=regime)
@@ -283,7 +287,9 @@ class TrailingSLCoordinator:
         # ✅ ЭТАП 4: Получаем параметры с адаптацией под режим рынка
         # ✅ НОВОЕ (26.12.2025): Используем ParameterProvider вместо прямого обращения к config_manager
         if self.parameter_provider:
-            params = self.parameter_provider.get_trailing_sl_params(symbol=symbol, regime=regime)
+            params = self.parameter_provider.get_trailing_sl_params(
+                symbol=symbol, regime=regime
+            )
         else:
             # Fallback на config_manager
             params = self.config_manager.get_trailing_sl_params(regime=regime)
@@ -886,33 +892,41 @@ class TrailingSLCoordinator:
                     # Получаем позицию и метаданные для координатора
                     position = self.get_position_callback(symbol)
                     metadata = None
-                    if hasattr(self, 'position_registry') and self.position_registry:
+                    if hasattr(self, "position_registry") and self.position_registry:
                         try:
                             metadata = await self.position_registry.get_metadata(symbol)
                         except Exception:
                             pass
-                    
+
                     current_price = await self.get_current_price_callback(symbol)
                     if current_price is None:
                         current_price = 0.0
-                    
+
                     # Получаем режим
                     regime = "ranging"
-                    if self.signal_generator and hasattr(self.signal_generator, "regime_managers"):
-                        regime_manager = self.signal_generator.regime_managers.get(symbol)
+                    if self.signal_generator and hasattr(
+                        self.signal_generator, "regime_managers"
+                    ):
+                        regime_manager = self.signal_generator.regime_managers.get(
+                            symbol
+                        )
                         if regime_manager:
                             regime = regime_manager.get_current_regime() or "ranging"
-                    
-                    exit_decision = await self.exit_decision_coordinator.analyze_position(
-                        symbol=symbol,
-                        position=position,
-                        metadata=metadata,
-                        market_data=None,
-                        current_price=current_price,
-                        regime=regime
+
+                    exit_decision = (
+                        await self.exit_decision_coordinator.analyze_position(
+                            symbol=symbol,
+                            position=position,
+                            metadata=metadata,
+                            market_data=None,
+                            current_price=current_price,
+                            regime=regime,
+                        )
                     )
                 except Exception as e:
-                    logger.debug(f"⚠️ TrailingSLCoordinator: Ошибка вызова ExitDecisionCoordinator для {symbol}: {e}")
+                    logger.debug(
+                        f"⚠️ TrailingSLCoordinator: Ошибка вызова ExitDecisionCoordinator для {symbol}: {e}"
+                    )
             elif self.exit_analyzer:
                 # Fallback: используем ExitAnalyzer напрямую
                 try:

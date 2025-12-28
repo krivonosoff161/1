@@ -29,7 +29,9 @@ class ConfigManager:
     - Валидация параметров
     """
 
-    def __init__(self, config: BotConfig, raw_config_dict: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, config: BotConfig, raw_config_dict: Optional[Dict[str, Any]] = None
+    ):
         """
         Инициализация Config Manager
 
@@ -183,14 +185,14 @@ class ConfigManager:
             exit_params = None
             if self._raw_config_dict:
                 exit_params = self._raw_config_dict.get("exit_params")
-            
+
             if not exit_params:
                 try:
                     # Пробуем получить из config как атрибут (если Pydantic загрузил через extra="allow")
                     exit_params = getattr(self.config, "exit_params", None)
                 except AttributeError:
                     pass
-            
+
             if not exit_params:
                 # Пробуем получить из raw YAML через model_dump (если есть)
                 try:
@@ -199,13 +201,13 @@ class ConfigManager:
                         exit_params = config_dict.get("exit_params")
                 except Exception:
                     pass
-            
+
             if not exit_params:
                 # Пробуем также в scalping_config (для обратной совместимости)
                 exit_params = self.get_config_value(
                     self.scalping_config, "exit_params", None
                 )
-            
+
             if not exit_params:
                 logger.debug(
                     "⚠️ exit_params не найден в конфиге (может быть в raw YAML, но не в Pydantic модели), "
@@ -227,7 +229,7 @@ class ConfigManager:
     def _log_config_summary(self) -> None:
         """
         ✅ НОВОЕ (26.12.2025): Детальное логирование загруженной конфигурации.
-        
+
         Показывает:
         - Загруженные symbol_profiles
         - Глобальные TP/SL параметры
@@ -238,33 +240,51 @@ class ConfigManager:
             logger.info("=" * 80)
             logger.info("📋 СВОДКА ЗАГРУЖЕННОЙ КОНФИГУРАЦИИ")
             logger.info("=" * 80)
-            
+
             # 1. Symbol profiles
             if self.symbol_profiles:
-                logger.info(f"✅ Symbol profiles загружены: {len(self.symbol_profiles)} символов")
+                logger.info(
+                    f"✅ Symbol profiles загружены: {len(self.symbol_profiles)} символов"
+                )
                 for symbol, profiles in self.symbol_profiles.items():
-                    regimes = list(profiles.keys()) if isinstance(profiles, dict) else []
+                    regimes = (
+                        list(profiles.keys()) if isinstance(profiles, dict) else []
+                    )
                     logger.debug(f"   - {symbol}: режимы {regimes}")
             else:
-                logger.warning("⚠️ Symbol profiles НЕ загружены (будет использован глобальный конфиг)")
-            
+                logger.warning(
+                    "⚠️ Symbol profiles НЕ загружены (будет использован глобальный конфиг)"
+                )
+
             # 2. Глобальные TP/SL
             tp_percent = self.get_config_value(self.scalping_config, "tp_percent", None)
             sl_percent = self.get_config_value(self.scalping_config, "sl_percent", None)
             if tp_percent is not None and sl_percent is not None:
                 logger.info(f"✅ Глобальные TP/SL: {tp_percent}% / {sl_percent}%")
             else:
-                logger.warning(f"⚠️ Глобальные TP/SL не найдены: tp={tp_percent}, sl={sl_percent}")
-            
+                logger.warning(
+                    f"⚠️ Глобальные TP/SL не найдены: tp={tp_percent}, sl={sl_percent}"
+                )
+
             # 3. Параметры режимов
-            adaptive_regime = self.get_config_value(self.scalping_config, "adaptive_regime", None)
+            adaptive_regime = self.get_config_value(
+                self.scalping_config, "adaptive_regime", None
+            )
             if adaptive_regime:
                 detection = self.get_config_value(adaptive_regime, "detection", None)
                 if detection:
-                    trending_adx = self.get_config_value(detection, "trending_adx_threshold", None)
-                    ranging_adx = self.get_config_value(detection, "ranging_adx_threshold", None)
-                    high_vol = self.get_config_value(detection, "high_volatility_threshold", None)
-                    trend_strength = self.get_config_value(detection, "trend_strength_percent", None)
+                    trending_adx = self.get_config_value(
+                        detection, "trending_adx_threshold", None
+                    )
+                    ranging_adx = self.get_config_value(
+                        detection, "ranging_adx_threshold", None
+                    )
+                    high_vol = self.get_config_value(
+                        detection, "high_volatility_threshold", None
+                    )
+                    trend_strength = self.get_config_value(
+                        detection, "trend_strength_percent", None
+                    )
                     logger.info(
                         f"✅ Пороги режимов: TRENDING ADX>{trending_adx}, RANGING ADX<{ranging_adx}, "
                         f"CHOPPY vol>{high_vol}, trend_strength>{trend_strength}%"
@@ -273,43 +293,59 @@ class ConfigManager:
                     logger.warning("⚠️ Параметры detection режимов не найдены")
             else:
                 logger.warning("⚠️ adaptive_regime не найден в конфиге")
-            
+
             # 4. Параметры по режимам
             by_regime = self.get_config_value(self.scalping_config, "by_regime", None)
             if by_regime:
                 for regime_name in ["trending", "ranging", "choppy"]:
                     regime_config = self.get_config_value(by_regime, regime_name, None)
                     if regime_config:
-                        regime_tp = self.get_config_value(regime_config, "tp_percent", None)
-                        regime_sl = self.get_config_value(regime_config, "sl_percent", None)
+                        regime_tp = self.get_config_value(
+                            regime_config, "tp_percent", None
+                        )
+                        regime_sl = self.get_config_value(
+                            regime_config, "sl_percent", None
+                        )
                         if regime_tp and regime_sl:
-                            logger.info(f"✅ {regime_name.upper()}: TP={regime_tp}%, SL={regime_sl}%")
+                            logger.info(
+                                f"✅ {regime_name.upper()}: TP={regime_tp}%, SL={regime_sl}%"
+                            )
                         else:
-                            logger.debug(f"   {regime_name.upper()}: TP/SL не указаны (используется глобальный)")
+                            logger.debug(
+                                f"   {regime_name.upper()}: TP/SL не указаны (используется глобальный)"
+                            )
                     else:
-                        logger.debug(f"   {regime_name.upper()}: конфиг не найден (используется глобальный)")
-            
+                        logger.debug(
+                            f"   {regime_name.upper()}: конфиг не найден (используется глобальный)"
+                        )
+
             # 5. Критические параметры
             min_adx = self.get_config_value(self.scalping_config, "min_adx", None)
             leverage = self.get_config_value(self.scalping_config, "leverage", None)
             if min_adx:
                 logger.info(f"✅ min_adx: {min_adx}")
             if leverage:
-                logger.info(f"✅ leverage: {leverage}x (базовое значение из конфига, адаптивный расчет будет применяться при генерации сигналов)")
-            
+                logger.info(
+                    f"✅ leverage: {leverage}x (базовое значение из конфига, адаптивный расчет будет применяться при генерации сигналов)"
+                )
+
             # 6. Exit params
             # ✅ ИСПРАВЛЕНО: Ищем exit_params в разных местах (как в _validate_config_structure)
             exit_params = None
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Сначала пробуем raw YAML
             # exit_params находится в корне YAML, но не в BotConfig модели
-            exit_params = self._raw_config_dict.get("exit_params") if self._raw_config_dict else None
-            
+            exit_params = (
+                self._raw_config_dict.get("exit_params")
+                if self._raw_config_dict
+                else None
+            )
+
             if not exit_params:
                 try:
                     exit_params = getattr(self.config, "exit_params", None)
                 except AttributeError:
                     pass
-            
+
             if not exit_params:
                 try:
                     if hasattr(self.config, "model_dump"):
@@ -317,10 +353,12 @@ class ConfigManager:
                         exit_params = config_dict.get("exit_params")
                 except Exception:
                     pass
-            
+
             if not exit_params:
-                exit_params = self.get_config_value(self.scalping_config, "exit_params", None)
-            
+                exit_params = self.get_config_value(
+                    self.scalping_config, "exit_params", None
+                )
+
             if exit_params:
                 # ✅ ИСПРАВЛЕНО (26.12.2025): exit_params имеет вложенную структуру по режимам
                 # Структура: exit_params.ranging, exit_params.trending, exit_params.choppy
@@ -330,31 +368,56 @@ class ConfigManager:
                     for regime_name in ["ranging", "trending", "choppy"]:
                         regime_exit = exit_params.get(regime_name, {})
                         if regime_exit:
-                            max_holding = self.get_config_value(regime_exit, "max_holding_minutes", None)
-                            tp_percent = self.get_config_value(regime_exit, "tp_percent", None)
-                            sl_percent = self.get_config_value(regime_exit, "sl_percent", None)
+                            max_holding = self.get_config_value(
+                                regime_exit, "max_holding_minutes", None
+                            )
+                            tp_percent = self.get_config_value(
+                                regime_exit, "tp_percent", None
+                            )
+                            sl_percent = self.get_config_value(
+                                regime_exit, "sl_percent", None
+                            )
                             if max_holding or tp_percent or sl_percent:
-                                regimes_found.append(f"{regime_name.upper()}: max_holding={max_holding}min, TP={tp_percent}%, SL={sl_percent}%")
-                    
+                                regimes_found.append(
+                                    f"{regime_name.upper()}: max_holding={max_holding}min, TP={tp_percent}%, SL={sl_percent}%"
+                                )
+
                     if regimes_found:
-                        logger.info(f"✅ exit_params загружены для режимов:\n   " + "\n   ".join(regimes_found))
+                        logger.info(
+                            f"✅ exit_params загружены для режимов:\n   "
+                            + "\n   ".join(regimes_found)
+                        )
                     else:
-                        logger.warning("⚠️ exit_params найдены, но не содержат параметров для режимов")
+                        logger.warning(
+                            "⚠️ exit_params найдены, но не содержат параметров для режимов"
+                        )
                 else:
                     # Fallback: пытаемся получить как плоскую структуру (для обратной совместимости)
-                    min_profit = self.get_config_value(exit_params, "min_profit_to_close", None)
-                    max_holding = self.get_config_value(exit_params, "max_holding_minutes", None)
+                    min_profit = self.get_config_value(
+                        exit_params, "min_profit_to_close", None
+                    )
+                    max_holding = self.get_config_value(
+                        exit_params, "max_holding_minutes", None
+                    )
                     if min_profit or max_holding:
-                        logger.info(f"✅ exit_params загружены (плоская структура): min_profit_to_close={min_profit}%, max_holding_minutes={max_holding}")
+                        logger.info(
+                            f"✅ exit_params загружены (плоская структура): min_profit_to_close={min_profit}%, max_holding_minutes={max_holding}"
+                        )
                     else:
-                        logger.warning("⚠️ exit_params найдены, но не содержат ожидаемых параметров")
+                        logger.warning(
+                            "⚠️ exit_params найдены, но не содержат ожидаемых параметров"
+                        )
             else:
-                logger.warning("⚠️ exit_params НЕ найдены в конфиге (будут использованы значения по умолчанию)")
-            
+                logger.warning(
+                    "⚠️ exit_params НЕ найдены в конфиге (будут использованы значения по умолчанию)"
+                )
+
             logger.info("=" * 80)
-            
+
         except Exception as e:
-            logger.error(f"❌ Ошибка при логировании сводки конфигурации: {e}", exc_info=True)
+            logger.error(
+                f"❌ Ошибка при логировании сводки конфигурации: {e}", exc_info=True
+            )
 
     @staticmethod
     def get_config_value(source: Any, key: str, default: Any = None) -> Any:
@@ -1424,10 +1487,16 @@ class ConfigManager:
                     try:
                         regime = signal_generator.regime_manager.get_current_regime()
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка получения режима из signal_generator.regime_manager: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Ошибка получения режима из signal_generator.regime_manager: {e}"
+                        )
+
                 # ПРИОРИТЕТ 2: signal_generator.regime_managers (per-symbol)
-                if not regime and signal_generator and hasattr(signal_generator, "regime_managers"):
+                if (
+                    not regime
+                    and signal_generator
+                    and hasattr(signal_generator, "regime_managers")
+                ):
                     try:
                         # Пробуем получить per-symbol regime_manager
                         for sym, rm in signal_generator.regime_managers.items():
@@ -1436,15 +1505,17 @@ class ConfigManager:
                                 if regime:
                                     break
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка получения режима из signal_generator.regime_managers: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Ошибка получения режима из signal_generator.regime_managers: {e}"
+                        )
+
                 # ПРИОРИТЕТ 3: DataRegistry (если доступен) - пропускаем, так как метод синхронный
                 # ✅ ИСПРАВЛЕНО (25.12.2025): DataRegistry.get_regime() - async метод, но get_adaptive_risk_params() - синхронный
                 # Режим уже должен быть получен из RegimeManager выше, DataRegistry используется в async контекстах
                 # if not regime and signal_generator and hasattr(signal_generator, "data_registry") and signal_generator.data_registry:
                 #     # Пропускаем - метод синхронный, а get_regime() - async
                 #     pass
-                
+
                 # FALLBACK: Только если все источники недоступны
                 if not regime:
                     regime = "ranging"  # Fallback режим
@@ -1459,15 +1530,20 @@ class ConfigManager:
                         # ✅ ИСПРАВЛЕНО (25.12.2025): Проверяем, инициализирован ли RegimeManager
                         # Если RegimeManager существует, но режим не определен, это может быть нормально при старте
                         regime_manager_initialized = False
-                        if hasattr(signal_generator, "regime_manager") and signal_generator.regime_manager:
+                        if (
+                            hasattr(signal_generator, "regime_manager")
+                            and signal_generator.regime_manager
+                        ):
                             # Проверяем, есть ли текущий режим (даже если он ranging по умолчанию)
                             try:
-                                current_regime = signal_generator.regime_manager.get_current_regime()
+                                current_regime = (
+                                    signal_generator.regime_manager.get_current_regime()
+                                )
                                 if current_regime:
                                     regime_manager_initialized = True
                             except Exception:
                                 pass
-                        
+
                         # Логируем только если RegimeManager не инициализирован
                         if not regime_manager_initialized:
                             logger.debug(

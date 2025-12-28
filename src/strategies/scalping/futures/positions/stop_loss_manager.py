@@ -86,7 +86,7 @@ class StopLossManager:
             # Проверяем время удержания позиции перед закрытием по SL
             import time
             from datetime import datetime, timezone
-            
+
             time_since_open = None
             try:
                 entry_time = position.get("entry_time")
@@ -94,18 +94,25 @@ class StopLossManager:
                     if isinstance(entry_time, datetime):
                         if entry_time.tzinfo is None:
                             entry_time = entry_time.replace(tzinfo=timezone.utc)
-                        time_since_open = (datetime.now(timezone.utc) - entry_time).total_seconds()
+                        time_since_open = (
+                            datetime.now(timezone.utc) - entry_time
+                        ).total_seconds()
                     elif isinstance(entry_time, (int, float)):
                         # Unix timestamp
                         if entry_time > 1000000000000:  # milliseconds
                             entry_time = entry_time / 1000.0
                         time_since_open = time.time() - entry_time
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка расчета времени удержания для SL проверки {symbol}: {e}")
-            
+                logger.debug(
+                    f"⚠️ Ошибка расчета времени удержания для SL проверки {symbol}: {e}"
+                )
+
             # Минимальное время удержания перед закрытием по SL (30 секунд)
             min_hold_seconds_before_sl = 30.0
-            if time_since_open is not None and time_since_open < min_hold_seconds_before_sl:
+            if (
+                time_since_open is not None
+                and time_since_open < min_hold_seconds_before_sl
+            ):
                 logger.debug(
                     f"⏱️ SL проверка для {symbol}: позиция открыта {time_since_open:.1f} сек назад < {min_hold_seconds_before_sl} сек, "
                     f"пропускаем проверку SL (защита от преждевременного закрытия)"
@@ -208,9 +215,3 @@ class StopLossManager:
             return 1.0  # Fallback
         except Exception:
             return 1.0  # Fallback
-
-
-
-
-
-

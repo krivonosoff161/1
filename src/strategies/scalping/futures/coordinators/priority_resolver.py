@@ -18,7 +18,7 @@ from loguru import logger
 class PriorityResolver:
     """
     Резолвер приоритетов для торговых решений.
-    
+
     Обеспечивает единую систему приоритетов и разрешает конфликты.
     """
 
@@ -61,10 +61,10 @@ class PriorityResolver:
     ) -> Optional[Dict[str, Any]]:
         """
         Разрешает конфликт приоритетов для решений о закрытии.
-        
+
         Args:
             decisions: Список решений о закрытии от разных систем
-            
+
         Returns:
             Решение с наивысшим приоритетом или None
         """
@@ -94,10 +94,10 @@ class PriorityResolver:
     ) -> Optional[Dict[str, Any]]:
         """
         Разрешает конфликт приоритетов для сигналов на открытие.
-        
+
         Args:
             signals: Список сигналов от разных систем
-            
+
         Returns:
             Сигнал с наивысшим приоритетом или None
         """
@@ -119,10 +119,10 @@ class PriorityResolver:
     ) -> Optional[Dict[str, Any]]:
         """
         Разрешает конфликт приоритетов для действий управления рисками.
-        
+
         Args:
             risk_actions: Список действий управления рисками
-            
+
         Returns:
             Действие с наивысшим приоритетом или None
         """
@@ -140,10 +140,10 @@ class PriorityResolver:
     def _get_exit_priority(self, reason: str) -> int:
         """
         Получить приоритет для причины закрытия.
-        
+
         Args:
             reason: Причина закрытия
-            
+
         Returns:
             Приоритет (меньшее число = выше приоритет)
         """
@@ -152,10 +152,10 @@ class PriorityResolver:
     def _get_entry_priority(self, confidence: str) -> int:
         """
         Получить приоритет для сигнала на открытие.
-        
+
         Args:
             confidence: Уровень уверенности
-            
+
         Returns:
             Приоритет (меньшее число = выше приоритет)
         """
@@ -164,10 +164,10 @@ class PriorityResolver:
     def _get_risk_priority(self, risk_type: str) -> int:
         """
         Получить приоритет для действия управления рисками.
-        
+
         Args:
             risk_type: Тип риска
-            
+
         Returns:
             Приоритет (меньшее число = выше приоритет)
         """
@@ -176,10 +176,10 @@ class PriorityResolver:
     def get_priority_matrix(self, matrix_type: str = "exit") -> Dict[str, int]:
         """
         Получить матрицу приоритетов для отладки.
-        
+
         Args:
             matrix_type: Тип матрицы ("exit", "entry", "risk")
-            
+
         Returns:
             Словарь {причина: приоритет}
         """
@@ -198,12 +198,12 @@ class PriorityResolver:
     ) -> int:
         """
         Сравнить приоритеты двух причин.
-        
+
         Args:
             reason1: Первая причина
             reason2: Вторая причина
             matrix_type: Тип матрицы ("exit", "entry", "risk")
-            
+
         Returns:
             -1 если reason1 имеет более высокий приоритет
             0 если приоритеты равны
@@ -227,8 +227,3 @@ class PriorityResolver:
             return 1
         else:
             return 0
-
-
-
-
-

@@ -104,7 +104,7 @@ class TradingControlCenter:
         self.active_positions = active_positions
         self._normalize_symbol = normalize_symbol
         self._sync_positions_with_exchange = sync_positions_with_exchange
-        
+
         # ✅ НОВОЕ (26.12.2025): Метрики для мониторинга
         self.conversion_metrics = conversion_metrics
         self.holding_time_metrics = holding_time_metrics
@@ -159,7 +159,7 @@ class TradingControlCenter:
                 ):
                     await self._log_memory_usage()
                     self._last_memory_log_time = current_time
-                
+
                 # ✅ НОВОЕ (26.12.2025): Периодическая проверка метрик и алертов
                 if (
                     current_time - self._last_metrics_check_time
@@ -509,7 +509,9 @@ class TradingControlCenter:
                             entry_timestamp_sec = entry_timestamp_ms / 1000.0
                             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Используем timezone.utc для создания offset-aware datetime
                             # Это предотвращает ошибку "can't compare offset-naive and offset-aware datetimes"
-                            entry_time_from_api = dt.fromtimestamp(entry_timestamp_sec, tz=timezone.utc)
+                            entry_time_from_api = dt.fromtimestamp(
+                                entry_timestamp_sec, tz=timezone.utc
+                            )
                         except (ValueError, TypeError):
                             pass
 
@@ -524,18 +526,29 @@ class TradingControlCenter:
                             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Убеждаемся, что оба datetime offset-aware перед сравнением
                             # Это предотвращает ошибку "can't compare offset-naive and offset-aware datetimes"
                             existing_entry_time = existing_metadata.entry_time
-                            if existing_entry_time and existing_entry_time.tzinfo is None:
+                            if (
+                                existing_entry_time
+                                and existing_entry_time.tzinfo is None
+                            ):
                                 # Если existing_entry_time offset-naive, конвертируем в offset-aware (UTC)
-                                existing_entry_time = existing_entry_time.replace(tzinfo=timezone.utc)
-                            
+                                existing_entry_time = existing_entry_time.replace(
+                                    tzinfo=timezone.utc
+                                )
+
                             # Обновляем entry_time если:
                             # 1. Он не установлен
                             # 2. Он установлен в текущее время (значит был fallback)
                             # 3. API предоставляет более точное время
                             should_update_entry_time = (
                                 not existing_metadata.entry_time
-                                or (existing_entry_time and existing_entry_time == dt.now(timezone.utc))
-                                or (existing_entry_time and entry_time_from_api < existing_entry_time)
+                                or (
+                                    existing_entry_time
+                                    and existing_entry_time == dt.now(timezone.utc)
+                                )
+                                or (
+                                    existing_entry_time
+                                    and entry_time_from_api < existing_entry_time
+                                )
                             )
                             if should_update_entry_time:
                                 metadata_updates["entry_time"] = entry_time_from_api
@@ -767,10 +780,14 @@ class TradingControlCenter:
                 return
 
             # Получаем метрики конверсии
-            conversion_rate = self.conversion_metrics.get_conversion_rate(period_hours=24)
+            conversion_rate = self.conversion_metrics.get_conversion_rate(
+                period_hours=24
+            )
             win_rate = self.conversion_metrics.get_win_rate(period_hours=24)
-            emergency_close_rate = self.conversion_metrics.get_emergency_close_rate(period_hours=24)
-            
+            emergency_close_rate = self.conversion_metrics.get_emergency_close_rate(
+                period_hours=24
+            )
+
             # Логируем метрики
             logger.info(
                 f"📊 Метрики за 24 часа: "
@@ -778,31 +795,32 @@ class TradingControlCenter:
                 f"win_rate={win_rate:.1%}, "
                 f"emergency_close_rate={emergency_close_rate:.1%}"
             )
-            
+
             # Проверяем критические пороги и отправляем алерты
             if win_rate < 0.3:
                 self.alert_manager.send_alert(
-                    f"⚠️ КРИТИЧНО: Win Rate ниже 30%: {win_rate:.1%}",
-                    level="warning"
+                    f"⚠️ КРИТИЧНО: Win Rate ниже 30%: {win_rate:.1%}", level="warning"
                 )
-            
+
             if emergency_close_rate > 0.5:
                 self.alert_manager.send_alert(
                     f"⚠️ КРИТИЧНО: Emergency Close Rate выше 50%: {emergency_close_rate:.1%}",
-                    level="warning"
+                    level="warning",
                 )
-            
+
             # Проверяем конверсию сигналов
-            signal_to_position = conversion_rate.get('signal_to_position', 0)
+            signal_to_position = conversion_rate.get("signal_to_position", 0)
             if signal_to_position < 0.1:
                 self.alert_manager.send_alert(
                     f"⚠️ Низкая конверсия сигналов: {signal_to_position:.1%}",
-                    level="info"
+                    level="info",
                 )
-            
+
             # Проверяем метрики времени удержания
             if self.holding_time_metrics:
-                avg_holding_time = self.holding_time_metrics.get_average_holding_time(period_hours=24)
+                avg_holding_time = self.holding_time_metrics.get_average_holding_time(
+                    period_hours=24
+                )
                 if avg_holding_time:
                     logger.info(
                         f"⏱️ Среднее время удержания за 24 часа: "

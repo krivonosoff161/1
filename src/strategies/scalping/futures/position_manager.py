@@ -73,7 +73,9 @@ class FuturesPositionManager:
         )
         self.data_registry = None  # DataRegistry (будет установлен из orchestrator)
         self.entry_manager = None  # EntryManager (будет создан при необходимости)
-        self.exit_analyzer = None  # ExitAnalyzer (будет создан при необходимости, fallback)
+        self.exit_analyzer = (
+            None  # ExitAnalyzer (будет создан при необходимости, fallback)
+        )
         self.exit_decision_coordinator = None  # ✅ НОВОЕ (26.12.2025): ExitDecisionCoordinator для координации закрытия
         self.position_monitor = None  # PositionMonitor (будет создан при необходимости)
 
@@ -293,10 +295,14 @@ class FuturesPositionManager:
                 regime_params = None
                 if hasattr(self, "orchestrator") and self.orchestrator:
                     # ✅ НОВОЕ (26.12.2025): Используем ParameterProvider вместо прямого обращения к config_manager
-                    if hasattr(self.orchestrator, "parameter_provider") and self.orchestrator.parameter_provider:
-                        regime_params = self.orchestrator.parameter_provider.get_regime_params(
-                            symbol=symbol,
-                            regime=regime
+                    if (
+                        hasattr(self.orchestrator, "parameter_provider")
+                        and self.orchestrator.parameter_provider
+                    ):
+                        regime_params = (
+                            self.orchestrator.parameter_provider.get_regime_params(
+                                symbol=symbol, regime=regime
+                            )
                         )
                     elif hasattr(self.orchestrator, "config_manager"):
                         # Fallback на config_manager
@@ -587,37 +593,50 @@ class FuturesPositionManager:
                             metadata = await self.position_registry.get_metadata(symbol)
                         except Exception:
                             pass
-                    
+
                     # Получаем текущую цену
                     current_price = 0.0
-                    if hasattr(self, 'data_registry') and self.data_registry:
+                    if hasattr(self, "data_registry") and self.data_registry:
                         try:
-                            market_data = await self.data_registry.get_market_data(symbol)
-                            if market_data and hasattr(market_data, 'current_price'):
+                            market_data = await self.data_registry.get_market_data(
+                                symbol
+                            )
+                            if market_data and hasattr(market_data, "current_price"):
                                 current_price = market_data.current_price
                         except Exception:
                             pass
-                    
+
                     # Получаем режим
                     regime = "ranging"
-                    if hasattr(self, 'orchestrator') and self.orchestrator:
-                        signal_generator = getattr(self.orchestrator, 'signal_generator', None)
-                        if signal_generator and hasattr(signal_generator, 'regime_managers'):
-                            regime_manager = signal_generator.regime_managers.get(symbol)
+                    if hasattr(self, "orchestrator") and self.orchestrator:
+                        signal_generator = getattr(
+                            self.orchestrator, "signal_generator", None
+                        )
+                        if signal_generator and hasattr(
+                            signal_generator, "regime_managers"
+                        ):
+                            regime_manager = signal_generator.regime_managers.get(
+                                symbol
+                            )
                             if regime_manager:
-                                regime = regime_manager.get_current_regime() or "ranging"
-                    
-                    exit_decision = await self.exit_decision_coordinator.analyze_position(
-                        symbol=symbol,
-                        position=position_data,
-                        metadata=metadata,
-                        market_data=None,
-                        current_price=current_price,
-                        regime=regime
+                                regime = (
+                                    regime_manager.get_current_regime() or "ranging"
+                                )
+
+                    exit_decision = (
+                        await self.exit_decision_coordinator.analyze_position(
+                            symbol=symbol,
+                            position=position_data,
+                            metadata=metadata,
+                            market_data=None,
+                            current_price=current_price,
+                            regime=regime,
+                        )
                     )
                 except Exception as e:
                     logger.error(
-                        f"❌ Ошибка Exit Decision Coordinator для {symbol}: {e}", exc_info=True
+                        f"❌ Ошибка Exit Decision Coordinator для {symbol}: {e}",
+                        exc_info=True,
                     )
                     exit_decision = None
             elif self.exit_analyzer:
@@ -2332,7 +2351,9 @@ class FuturesPositionManager:
                             if leverage and leverage > 0:
                                 loss_cut_from_price = loss_cut_percent / leverage
                             else:
-                                logger.warning(f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем fallback leverage=5")
+                                logger.warning(
+                                    f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем fallback leverage=5"
+                                )
                                 leverage = 5
                                 loss_cut_from_price = loss_cut_percent / leverage
 
@@ -2594,7 +2615,9 @@ class FuturesPositionManager:
                         if leverage and leverage > 0:
                             margin_used = position_value / leverage
                         else:
-                            logger.warning(f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем fallback leverage=3")
+                            logger.warning(
+                                f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем fallback leverage=3"
+                            )
                             margin_used = position_value / 3
                     except Exception as e:
                         logger.debug(f"Не удалось рассчитать margin для {symbol}: {e}")
@@ -6345,7 +6368,7 @@ class FuturesPositionManager:
                         f"❌ Ошибка закрытия {symbol}: {error_msg} (код: {error_code})"
                     )
                     return {"success": False, "error": error_msg}
-                
+
                 # Если позиция не найдена в списке (цикл for завершился без нахождения нужной позиции)
                 return {"success": False, "error": "Позиция не найдена в списке"}
             except Exception as e:

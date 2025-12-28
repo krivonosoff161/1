@@ -45,7 +45,9 @@ class PositionMonitor:
         self.position_registry = position_registry
         self.data_registry = data_registry
         self.exit_analyzer = exit_analyzer
-        self.exit_decision_coordinator = exit_decision_coordinator  # ✅ НОВОЕ (26.12.2025)
+        self.exit_decision_coordinator = (
+            exit_decision_coordinator  # ✅ НОВОЕ (26.12.2025)
+        )
         self.check_interval = check_interval
         self.close_position_callback = close_position_callback  # ✅ НОВОЕ
         self.position_manager = position_manager  # ✅ НОВОЕ
@@ -165,18 +167,24 @@ class PositionMonitor:
                 market_data = await self.data_registry.get_market_data(symbol)
                 current_price = 0.0
                 regime = "ranging"
-                
+
                 if market_data:
-                    current_price = market_data.current_price if hasattr(market_data, 'current_price') else 0.0
-                if hasattr(self.data_registry, 'get_regime_name_sync'):
-                    regime = self.data_registry.get_regime_name_sync(symbol) or "ranging"
-                
+                    current_price = (
+                        market_data.current_price
+                        if hasattr(market_data, "current_price")
+                        else 0.0
+                    )
+                if hasattr(self.data_registry, "get_regime_name_sync"):
+                    regime = (
+                        self.data_registry.get_regime_name_sync(symbol) or "ranging"
+                    )
+
                 # ✅ ИСПРАВЛЕНО (27.12.2025): Конвертируем market_data в dict правильно
                 market_data_dict = None
                 if market_data:
                     if isinstance(market_data, dict):
                         market_data_dict = market_data
-                    elif hasattr(market_data, '__dict__'):
+                    elif hasattr(market_data, "__dict__"):
                         market_data_dict = market_data.__dict__
                     else:
                         # Fallback: пробуем получить через vars() или создать dict из атрибутов
@@ -185,20 +193,22 @@ class PositionMonitor:
                         except (TypeError, AttributeError):
                             # Если не получается, передаем None
                             market_data_dict = None
-                
+
                 decision = await self.exit_decision_coordinator.analyze_position(
                     symbol=symbol,
                     position=position,
                     metadata=metadata,
                     market_data=market_data_dict,
                     current_price=current_price,
-                    regime=regime
+                    regime=regime,
                 )
             elif self.exit_analyzer:
                 # Fallback: используем ExitAnalyzer напрямую
                 decision = await self.exit_analyzer.analyze_position(symbol)
             else:
-                logger.warning(f"⚠️ PositionMonitor: Нет ни ExitDecisionCoordinator, ни ExitAnalyzer для {symbol}")
+                logger.warning(
+                    f"⚠️ PositionMonitor: Нет ни ExitDecisionCoordinator, ни ExitAnalyzer для {symbol}"
+                )
                 return None
 
             if decision:

@@ -194,9 +194,13 @@ class WebSocketCoordinator:
         try:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Проверяем готовность signal_generator перед обработкой
             # Это защита от race condition - если WebSocket подключился до завершения инициализации модулей
-            if self.signal_generator and hasattr(self.signal_generator, 'is_initialized'):
+            if self.signal_generator and hasattr(
+                self.signal_generator, "is_initialized"
+            ):
                 if not self.signal_generator.is_initialized:
-                    logger.debug(f"⚠️ SignalGenerator еще не инициализирован, пропускаем обработку тикера для {symbol}")
+                    logger.debug(
+                        f"⚠️ SignalGenerator еще не инициализирован, пропускаем обработку тикера для {symbol}"
+                    )
                     return
             # Извлекаем данные из ответа WebSocket
             if "data" in data and len(data["data"]) > 0:
@@ -253,14 +257,22 @@ class WebSocketCoordinator:
                             # Получаем или создаем FastADX экземпляр для этого символа
                             if symbol not in self._fast_adx_by_symbol:
                                 # Создаем новый экземпляр FastADX для этого символа
-                                from src.strategies.scalping.futures.indicators.fast_adx import FastADX
+                                from src.strategies.scalping.futures.indicators.fast_adx import \
+                                    FastADX
+
                                 period = getattr(self._fast_adx_template, "period", 9)
-                                threshold = getattr(self._fast_adx_template, "threshold", 20.0)
-                                self._fast_adx_by_symbol[symbol] = FastADX(period=period, threshold=threshold)
-                                logger.debug(f"✅ Создан FastADX экземпляр для {symbol} (period={period}, threshold={threshold})")
-                            
+                                threshold = getattr(
+                                    self._fast_adx_template, "threshold", 20.0
+                                )
+                                self._fast_adx_by_symbol[symbol] = FastADX(
+                                    period=period, threshold=threshold
+                                )
+                                logger.debug(
+                                    f"✅ Создан FastADX экземпляр для {symbol} (period={period}, threshold={threshold})"
+                                )
+
                             fast_adx_for_symbol = self._fast_adx_by_symbol[symbol]
-                            
+
                             # Для тикера используем текущую цену как high/low/close
                             high = price
                             low = price
@@ -753,9 +765,13 @@ class WebSocketCoordinator:
                             # Рассчитываем PnL в процентах
                             # ✅ ИСПРАВЛЕНИЕ: Конвертируем в проценты (умножаем на 100)
                             if side.lower() == "long":
-                                profit_pct = ((current_price - entry_price) / entry_price) * 100
+                                profit_pct = (
+                                    (current_price - entry_price) / entry_price
+                                ) * 100
                             else:
-                                profit_pct = ((entry_price - current_price) / entry_price) * 100
+                                profit_pct = (
+                                    (entry_price - current_price) / entry_price
+                                ) * 100
                         else:
                             profit_pct = 0.0
                     except:

@@ -178,7 +178,7 @@ class SlippageGuard:
 
             bid_price = current_prices.get("bid", 0)
             ask_price = current_prices.get("ask", 0)
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Защита от деления на ноль
             if bid_price <= 0 or ask_price <= 0:
                 logger.warning(
@@ -186,7 +186,7 @@ class SlippageGuard:
                     f"bid={bid_price}, ask={ask_price}, пропускаем анализ"
                 )
                 return
-            
+
             mid_price = (bid_price + ask_price) / 2
             if mid_price <= 0:
                 logger.warning(
@@ -212,11 +212,9 @@ class SlippageGuard:
 
         except Exception as e:
             import traceback
+
             error_details = traceback.format_exc()
-            logger.error(
-                f"Ошибка анализа ордера: {e}\n"
-                f"Traceback: {error_details}"
-            )
+            logger.error(f"Ошибка анализа ордера: {e}\n" f"Traceback: {error_details}")
 
     async def _get_current_prices(
         self, client, symbol: str
@@ -479,11 +477,11 @@ class SlippageGuard:
 
             bid_price = current_prices.get("bid", 0)
             ask_price = current_prices.get("ask", 0)
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Защита от деления на ноль
             if bid_price <= 0 or ask_price <= 0:
                 return False, f"Некорректные цены: bid={bid_price}, ask={ask_price}"
-            
+
             mid_price = (bid_price + ask_price) / 2
             if mid_price <= 0:
                 return False, f"mid_price <= 0: {mid_price}"

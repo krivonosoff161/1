@@ -20,7 +20,7 @@ from .config_manager import ConfigManager
 class ParameterProvider:
     """
     Единая точка получения параметров торговли.
-    
+
     Объединяет доступ к параметрам из различных источников и предоставляет
     единый интерфейс для всех модулей системы.
     """
@@ -33,7 +33,7 @@ class ParameterProvider:
     ):
         """
         Инициализация Parameter Provider.
-        
+
         Args:
             config_manager: ConfigManager для доступа к конфигурации
             regime_manager: AdaptiveRegimeManager для режим-специфичных параметров (опционально)
@@ -58,12 +58,12 @@ class ParameterProvider:
     ) -> Dict[str, Any]:
         """
         Получить параметры для режима рынка.
-        
+
         Args:
             symbol: Торговый символ
             regime: Режим рынка (trending/ranging/choppy). Если None, определяется автоматически
             balance: Текущий баланс (для адаптивных параметров)
-            
+
         Returns:
             Словарь с параметрами режима:
             {
@@ -107,11 +107,11 @@ class ParameterProvider:
     ) -> Dict[str, Any]:
         """
         Получить параметры выхода (TP/SL) для режима.
-        
+
         Args:
             symbol: Торговый символ
             regime: Режим рынка. Если None, определяется автоматически
-            
+
         Returns:
             Словарь с параметрами выхода:
             {
@@ -130,10 +130,19 @@ class ParameterProvider:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Получаем exit_params напрямую из raw_config_dict
             # ConfigManager не имеет метода get_exit_param, получаем через _raw_config_dict
             exit_params = {}
-            if hasattr(self.config_manager, "_raw_config_dict") and self.config_manager._raw_config_dict:
-                all_exit_params = self.config_manager._raw_config_dict.get("exit_params", {})
+            if (
+                hasattr(self.config_manager, "_raw_config_dict")
+                and self.config_manager._raw_config_dict
+            ):
+                all_exit_params = self.config_manager._raw_config_dict.get(
+                    "exit_params", {}
+                )
                 if isinstance(all_exit_params, dict) and regime:
-                    regime_lower = regime.lower() if isinstance(regime, str) else str(regime).lower()
+                    regime_lower = (
+                        regime.lower()
+                        if isinstance(regime, str)
+                        else str(regime).lower()
+                    )
                     exit_params = all_exit_params.get(regime_lower, {})
                 elif isinstance(all_exit_params, dict):
                     # Если режим не указан, возвращаем все exit_params
@@ -150,10 +159,10 @@ class ParameterProvider:
     def get_symbol_params(self, symbol: str) -> Dict[str, Any]:
         """
         Получить параметры для конкретного символа.
-        
+
         Args:
             symbol: Торговый символ
-            
+
         Returns:
             Словарь с параметрами символа из symbol_profiles
         """
@@ -170,11 +179,11 @@ class ParameterProvider:
     ) -> Dict[str, Any]:
         """
         Получить параметры индикаторов для режима.
-        
+
         Args:
             symbol: Торговый символ
             regime: Режим рынка. Если None, определяется автоматически
-            
+
         Returns:
             Словарь с параметрами индикаторов:
             {
@@ -217,11 +226,11 @@ class ParameterProvider:
     ) -> Dict[str, Any]:
         """
         Получить параметры модулей (фильтров) для режима.
-        
+
         Args:
             symbol: Торговый символ
             regime: Режим рынка. Если None, определяется автоматически
-            
+
         Returns:
             Словарь с параметрами модулей:
             {
@@ -260,12 +269,12 @@ class ParameterProvider:
     ) -> Dict[str, Any]:
         """
         Получить параметры управления рисками.
-        
+
         Args:
             symbol: Торговый символ
             balance: Текущий баланс
             regime: Режим рынка. Если None, определяется автоматически
-            
+
         Returns:
             Словарь с параметрами риска:
             {
@@ -282,9 +291,7 @@ class ParameterProvider:
                 regime = self._get_current_regime(symbol)
 
             # Получаем адаптивные параметры риска
-            risk_params = self.config_manager.get_adaptive_risk_params(
-                balance, regime
-            )
+            risk_params = self.config_manager.get_adaptive_risk_params(balance, regime)
 
             return risk_params
 
@@ -294,14 +301,16 @@ class ParameterProvider:
             )
             return {}
 
-    def get_trailing_sl_params(self, symbol: str, regime: Optional[str] = None) -> Dict[str, Any]:
+    def get_trailing_sl_params(
+        self, symbol: str, regime: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Получить параметры Trailing Stop Loss.
-        
+
         Args:
             symbol: Торговый символ
             regime: Режим рынка. Если None, определяется автоматически
-            
+
         Returns:
             Словарь с параметрами TSL
         """
@@ -309,7 +318,7 @@ class ParameterProvider:
             # Определяем режим если не указан
             if not regime:
                 regime = self._get_current_regime(symbol)
-            
+
             return self.config_manager.get_trailing_sl_params(regime=regime) or {}
         except Exception as e:
             logger.warning(
@@ -320,10 +329,10 @@ class ParameterProvider:
     def _get_current_regime(self, symbol: str) -> str:
         """
         Получить текущий режим рынка для символа.
-        
+
         Args:
             symbol: Торговый символ
-            
+
         Returns:
             Режим рынка (trending/ranging/choppy) или "ranging" по умолчанию
         """
@@ -338,7 +347,11 @@ class ParameterProvider:
             if self.regime_manager:
                 regime = self.regime_manager.get_current_regime()
                 if regime:
-                    return regime.lower() if isinstance(regime, str) else str(regime).lower()
+                    return (
+                        regime.lower()
+                        if isinstance(regime, str)
+                        else str(regime).lower()
+                    )
 
         except Exception as e:
             logger.debug(
@@ -351,7 +364,7 @@ class ParameterProvider:
     def _get_default_regime_params(self) -> Dict[str, Any]:
         """
         Получить дефолтные параметры режима.
-        
+
         Returns:
             Словарь с дефолтными параметрами
         """
@@ -368,7 +381,7 @@ class ParameterProvider:
     def clear_cache(self, key: Optional[str] = None) -> None:
         """
         Очистить кэш параметров.
-        
+
         Args:
             key: Ключ для очистки (если None - очистить весь кэш)
         """
@@ -385,10 +398,10 @@ class ParameterProvider:
     def get_cached_value(self, key: str) -> Optional[Any]:
         """
         Получить значение из кэша.
-        
+
         Args:
             key: Ключ кэша
-            
+
         Returns:
             Значение из кэша или None
         """
@@ -409,7 +422,7 @@ class ParameterProvider:
     def set_cached_value(self, key: str, value: Any) -> None:
         """
         Сохранить значение в кэш.
-        
+
         Args:
             key: Ключ кэша
             value: Значение для кэширования
@@ -418,4 +431,3 @@ class ParameterProvider:
 
         self._cache[key] = value
         self._cache_timestamps[key] = time.time()
-

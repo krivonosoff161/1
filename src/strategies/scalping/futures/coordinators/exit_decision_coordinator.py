@@ -22,7 +22,7 @@ from loguru import logger
 class ExitDecisionCoordinator:
     """
     Координатор решений о закрытии позиций.
-    
+
     Объединяет решения от всех систем закрытия и выбирает приоритетное действие.
     """
 
@@ -50,7 +50,7 @@ class ExitDecisionCoordinator:
     ):
         """
         Инициализация Exit Decision Coordinator.
-        
+
         Args:
             exit_analyzer: ExitAnalyzer для анализа позиций
             trailing_sl_coordinator: TrailingSLCoordinator для трейлинг стоп-лоссов
@@ -77,9 +77,9 @@ class ExitDecisionCoordinator:
     ) -> Optional[Dict[str, Any]]:
         """
         Анализирует позицию и возвращает приоритетное решение о закрытии.
-        
+
         Собирает решения от всех систем закрытия и выбирает самое приоритетное.
-        
+
         Args:
             symbol: Торговый символ
             position: Данные позиции
@@ -87,7 +87,7 @@ class ExitDecisionCoordinator:
             market_data: Рыночные данные
             current_price: Текущая цена
             regime: Режим рынка (trending, ranging, choppy)
-            
+
         Returns:
             Решение о закрытии с наивысшим приоритетом или None
         """
@@ -99,7 +99,9 @@ class ExitDecisionCoordinator:
             # ✅ ИСПРАВЛЕНО (27.12.2025): ExitAnalyzer.analyze_position принимает только symbol
             if self.exit_analyzer:
                 try:
-                    exit_decision = await self.exit_analyzer.analyze_position(symbol=symbol)
+                    exit_decision = await self.exit_analyzer.analyze_position(
+                        symbol=symbol
+                    )
                     if exit_decision:
                         exit_decision["source"] = "exit_analyzer"
                         all_decisions.append(exit_decision)
@@ -156,9 +158,13 @@ class ExitDecisionCoordinator:
 
             # ✅ НОВОЕ (26.12.2025): Используем PriorityResolver для разрешения конфликтов
             if self.priority_resolver:
-                best_decision = self.priority_resolver.resolve_exit_priority(all_decisions)
+                best_decision = self.priority_resolver.resolve_exit_priority(
+                    all_decisions
+                )
                 if best_decision:
-                    priority = self.priority_resolver._get_exit_priority(best_decision.get("reason", "unknown"))
+                    priority = self.priority_resolver._get_exit_priority(
+                        best_decision.get("reason", "unknown")
+                    )
                 else:
                     return None
             else:
@@ -193,10 +199,10 @@ class ExitDecisionCoordinator:
     def _get_priority(self, reason: str) -> int:
         """
         Получить приоритет для причины закрытия.
-        
+
         Args:
             reason: Причина закрытия
-            
+
         Returns:
             Приоритет (меньшее число = выше приоритет)
         """
@@ -211,13 +217,13 @@ class ExitDecisionCoordinator:
     ) -> Optional[Dict[str, Any]]:
         """
         Проверяет Trailing Stop Loss.
-        
+
         Args:
             symbol: Торговый символ
             position: Данные позиции
             metadata: Метаданные позиции
             current_price: Текущая цена
-            
+
         Returns:
             Решение о закрытии или None
         """
@@ -257,7 +263,7 @@ class ExitDecisionCoordinator:
     ) -> Optional[Dict[str, Any]]:
         """
         Проверяет Smart Exit (разворот, паттерны).
-        
+
         Args:
             symbol: Торговый символ
             position: Данные позиции
@@ -265,7 +271,7 @@ class ExitDecisionCoordinator:
             market_data: Рыночные данные
             current_price: Текущая цена
             regime: Режим рынка
-            
+
         Returns:
             Решение о закрытии или None
         """
@@ -300,13 +306,13 @@ class ExitDecisionCoordinator:
     ) -> Optional[Dict[str, Any]]:
         """
         Проверяет Position Manager (TP/SL).
-        
+
         Args:
             symbol: Торговый символ
             position: Данные позиции
             metadata: Метаданные позиции
             current_price: Текущая цена
-            
+
         Returns:
             Решение о закрытии или None
         """
@@ -317,9 +323,8 @@ class ExitDecisionCoordinator:
     def get_priority_matrix(self) -> Dict[str, int]:
         """
         Возвращает матрицу приоритетов для отладки.
-        
+
         Returns:
             Словарь {причина: приоритет}
         """
         return self.EXIT_PRIORITIES.copy()
-

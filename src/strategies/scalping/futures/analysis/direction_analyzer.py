@@ -21,7 +21,7 @@ from src.models import OHLCV
 class DirectionAnalyzer:
     """
     Анализатор направления рынка с взвешенной системой индикаторов.
-    
+
     Объединяет сигналы от различных индикаторов для определения единого направления.
     """
 
@@ -43,7 +43,7 @@ class DirectionAnalyzer:
     def __init__(self, fast_adx=None, indicator_calculator=None):
         """
         Инициализация Direction Analyzer.
-        
+
         Args:
             fast_adx: FastADX для расчета ADX (опционально)
             indicator_calculator: IndicatorCalculator для расчета индикаторов (опционально)
@@ -61,12 +61,12 @@ class DirectionAnalyzer:
     ) -> Dict[str, Any]:
         """
         Анализирует направление рынка на основе взвешенной системы индикаторов.
-        
+
         Args:
             candles: Список свечей
             current_price: Текущая цена
             indicators: Предрассчитанные индикаторы (опционально)
-            
+
         Returns:
             Словарь с результатами анализа:
             {
@@ -107,9 +107,7 @@ class DirectionAnalyzer:
             sma_confidence = sma_result["confidence"]
 
             # 4. Price Action анализ (вес 10%)
-            price_action_result = self._analyze_price_action(
-                candles, current_price
-            )
+            price_action_result = self._analyze_price_action(candles, current_price)
             price_action_direction = price_action_result["direction"]
             price_action_confidence = price_action_result["confidence"]
 
@@ -142,13 +140,13 @@ class DirectionAnalyzer:
 
             # Price Action (10%)
             if price_action_direction == "bullish":
-                bullish_score += price_action_confidence * self.INDICATOR_WEIGHTS[
-                    "price_action"
-                ]
+                bullish_score += (
+                    price_action_confidence * self.INDICATOR_WEIGHTS["price_action"]
+                )
             elif price_action_direction == "bearish":
-                bearish_score += price_action_confidence * self.INDICATOR_WEIGHTS[
-                    "price_action"
-                ]
+                bearish_score += (
+                    price_action_confidence * self.INDICATOR_WEIGHTS["price_action"]
+                )
 
             # Volume (10%)
             if volume_signal == "bullish":
@@ -201,7 +199,7 @@ class DirectionAnalyzer:
     ) -> Dict[str, Any]:
         """
         Анализирует направление на основе ADX.
-        
+
         Returns:
             {"direction": str, "adx_value": float, "confidence": float}
         """
@@ -242,15 +240,13 @@ class DirectionAnalyzer:
                 # Confidence зависит от силы ADX и разницы DI
                 confidence = min(
                     1.0,
-                    (adx_value / 50.0) * 0.7
-                    + (abs(di_difference) / 10.0) * 0.3,
+                    (adx_value / 50.0) * 0.7 + (abs(di_difference) / 10.0) * 0.3,
                 )
             elif di_difference < -self.DI_DIFFERENCE_THRESHOLD:
                 direction = "bearish"
                 confidence = min(
                     1.0,
-                    (adx_value / 50.0) * 0.7
-                    + (abs(di_difference) / 10.0) * 0.3,
+                    (adx_value / 50.0) * 0.7 + (abs(di_difference) / 10.0) * 0.3,
                 )
             else:
                 direction = "neutral"
@@ -274,7 +270,7 @@ class DirectionAnalyzer:
     ) -> Dict[str, Any]:
         """
         Анализирует направление на основе EMA.
-        
+
         Returns:
             {"direction": str, "confidence": float}
         """
@@ -286,12 +282,8 @@ class DirectionAnalyzer:
                 ema_fast = indicators.get("ema_fast") or indicators.get("ema_12")
                 ema_slow = indicators.get("ema_slow") or indicators.get("ema_26")
             elif self.indicator_calculator:
-                ema_fast = self.indicator_calculator.calculate_ema(
-                    candles, period=12
-                )
-                ema_slow = self.indicator_calculator.calculate_ema(
-                    candles, period=26
-                )
+                ema_fast = self.indicator_calculator.calculate_ema(candles, period=12)
+                ema_slow = self.indicator_calculator.calculate_ema(candles, period=26)
 
             if not ema_fast or not ema_slow or ema_slow == 0:
                 return {"direction": "neutral", "confidence": 0.0}
@@ -302,12 +294,16 @@ class DirectionAnalyzer:
                 # Confidence зависит от разницы EMA и позиции цены
                 ema_diff_pct = ((ema_fast - ema_slow) / ema_slow) * 100
                 price_above_pct = ((current_price - ema_fast) / ema_fast) * 100
-                confidence = min(1.0, (ema_diff_pct / 2.0) * 0.5 + (price_above_pct / 1.0) * 0.5)
+                confidence = min(
+                    1.0, (ema_diff_pct / 2.0) * 0.5 + (price_above_pct / 1.0) * 0.5
+                )
             elif ema_fast < ema_slow and current_price < ema_fast:
                 direction = "bearish"
                 ema_diff_pct = ((ema_slow - ema_fast) / ema_fast) * 100
                 price_below_pct = ((ema_fast - current_price) / ema_fast) * 100
-                confidence = min(1.0, (ema_diff_pct / 2.0) * 0.5 + (price_below_pct / 1.0) * 0.5)
+                confidence = min(
+                    1.0, (ema_diff_pct / 2.0) * 0.5 + (price_below_pct / 1.0) * 0.5
+                )
             else:
                 direction = "neutral"
                 confidence = 0.3
@@ -326,7 +322,7 @@ class DirectionAnalyzer:
     ) -> Dict[str, Any]:
         """
         Анализирует направление на основе SMA.
-        
+
         Returns:
             {"direction": str, "confidence": float}
         """
@@ -365,7 +361,7 @@ class DirectionAnalyzer:
     ) -> Dict[str, Any]:
         """
         Анализирует направление на основе Price Action.
-        
+
         Returns:
             {"direction": str, "confidence": float}
         """
@@ -380,20 +376,30 @@ class DirectionAnalyzer:
             lows = [c.low for c in recent_candles]
 
             # Подсчитываем бычьи и медвежьи свечи
-            bullish_candles = sum(1 for i in range(1, len(closes)) if closes[i] > closes[i - 1])
-            bearish_candles = sum(1 for i in range(1, len(closes)) if closes[i] < closes[i - 1])
+            bullish_candles = sum(
+                1 for i in range(1, len(closes)) if closes[i] > closes[i - 1]
+            )
+            bearish_candles = sum(
+                1 for i in range(1, len(closes)) if closes[i] < closes[i - 1]
+            )
 
             # Анализируем высшие максимумы и низшие минимумы
-            higher_highs = sum(1 for i in range(1, len(highs)) if highs[i] > highs[i - 1])
+            higher_highs = sum(
+                1 for i in range(1, len(highs)) if highs[i] > highs[i - 1]
+            )
             lower_lows = sum(1 for i in range(1, len(lows)) if lows[i] < lows[i - 1])
 
             # Определяем направление
             if bullish_candles >= 3 and higher_highs >= 2:
                 direction = "bullish"
-                confidence = min(1.0, (bullish_candles / 5.0) * 0.7 + (higher_highs / 4.0) * 0.3)
+                confidence = min(
+                    1.0, (bullish_candles / 5.0) * 0.7 + (higher_highs / 4.0) * 0.3
+                )
             elif bearish_candles >= 3 and lower_lows >= 2:
                 direction = "bearish"
-                confidence = min(1.0, (bearish_candles / 5.0) * 0.7 + (lower_lows / 4.0) * 0.3)
+                confidence = min(
+                    1.0, (bearish_candles / 5.0) * 0.7 + (lower_lows / 4.0) * 0.3
+                )
             else:
                 direction = "neutral"
                 confidence = 0.3
@@ -407,7 +413,7 @@ class DirectionAnalyzer:
     def _analyze_volume(self, candles: List[OHLCV]) -> Dict[str, Any]:
         """
         Анализирует направление на основе Volume.
-        
+
         Returns:
             {"signal": str, "confidence": float}
         """
@@ -426,9 +432,7 @@ class DirectionAnalyzer:
             volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
 
             # Анализируем объем при росте/падении цены
-            price_changes = [
-                closes[i] - closes[i - 1] for i in range(1, len(closes))
-            ]
+            price_changes = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
             recent_changes = price_changes[-5:]
             recent_volumes = volumes[-5:]
 
@@ -466,13 +470,8 @@ class DirectionAnalyzer:
     def get_weights(self) -> Dict[str, float]:
         """
         Получить веса индикаторов для отладки.
-        
+
         Returns:
             Словарь {индикатор: вес}
         """
         return self.INDICATOR_WEIGHTS.copy()
-
-
-
-
-

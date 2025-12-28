@@ -285,7 +285,7 @@ class AdaptiveRegimeManager:
         trend_deviation = indicators.get("trend_deviation", 0)
         range_width = indicators.get("range_width", 0)
         reversals = indicators.get("reversals", 0)
-        
+
         # Вычисляем scores для логирования
         choppy_score = 0.0
         if volatility > self.config.high_volatility_threshold:
@@ -294,7 +294,7 @@ class AdaptiveRegimeManager:
             choppy_score += min(0.3, (reversals / 20) * 0.3)
         if vol_ratio > 1.1:
             choppy_score += min(0.3, ((vol_ratio - 1.0) / 0.5) * 0.3)
-        
+
         trending_score = 0.0
         if abs(trend_deviation) > self.config.trend_strength_percent:
             trending_score += min(0.3, (abs(trend_deviation) / 5.0) * 0.3)
@@ -308,30 +308,39 @@ class AdaptiveRegimeManager:
             trending_score += 0.2
         if vol_ratio > 0.9:
             trending_score += min(0.2, ((vol_ratio - 0.9) / 0.5) * 0.2)
-        
+
         ranging_score = 0.0
         if range_width < 5.0:
             ranging_score += min(0.4, (5.0 - range_width) / 5.0 * 0.4)
         elif range_width < 10.0:
             ranging_score += min(0.2, (10.0 - range_width) / 10.0 * 0.2)
         if abs(trend_deviation) < self.config.trend_strength_percent:
-            ranging_score += min(0.3, (1.0 - abs(trend_deviation) / self.config.trend_strength_percent) * 0.3)
+            ranging_score += min(
+                0.3,
+                (1.0 - abs(trend_deviation) / self.config.trend_strength_percent) * 0.3,
+            )
         if adx_val < self.config.ranging_adx_threshold:
-            ranging_score += min(0.3, (1.0 - adx_val / self.config.ranging_adx_threshold) * 0.3)
+            ranging_score += min(
+                0.3, (1.0 - adx_val / self.config.ranging_adx_threshold) * 0.3
+            )
         elif adx_val < self.config.ranging_adx_threshold * 1.5:
-            ranging_score += min(0.15, (1.0 - adx_val / (self.config.ranging_adx_threshold * 1.5)) * 0.15)
-        
+            ranging_score += min(
+                0.15, (1.0 - adx_val / (self.config.ranging_adx_threshold * 1.5)) * 0.15
+            )
+
         # ✅ Ограничиваем вывод volatility (если >100% значит ошибка)
         volatility_str = (
             f"{volatility:.2%}" if volatility <= 100 else f"{volatility:.0f}% (ERROR!)"
         )
-        
+
         # ✅ НОВОЕ: Получаем пороги для сравнения
         trending_adx_threshold = getattr(self.config, "trending_adx_threshold", 20.0)
         ranging_adx_threshold = getattr(self.config, "ranging_adx_threshold", 20.0)
-        high_volatility_threshold = getattr(self.config, "high_volatility_threshold", 3.0)
+        high_volatility_threshold = getattr(
+            self.config, "high_volatility_threshold", 3.0
+        )
         trend_strength_percent = getattr(self.config, "trend_strength_percent", 2.0)
-        
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Логируем scores для всех режимов (БЕЗ FALLBACK)
         logger.info(
             f"🧠 ARM Detect Regime (SCORING SYSTEM - БЕЗ FALLBACK):\n"
@@ -347,11 +356,10 @@ class AdaptiveRegimeManager:
             f"   Volume Ratio: {vol_ratio:.2f}x\n"
             f"   Reversals: {reversals}"
         )
-        
+
         # ✅ Дополнительное DEBUG логирование для детального анализа
         logger.debug(
-            f"🧠 ARM Detect Regime (DEBUG):\n"
-            f"   All indicators: {indicators}"
+            f"🧠 ARM Detect Regime (DEBUG):\n" f"   All indicators: {indicators}"
         )
 
         return RegimeDetectionResult(
@@ -451,7 +459,7 @@ class AdaptiveRegimeManager:
     ) -> tuple[RegimeType, float, str]:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Классифицирует режим рынка на основе индикаторов БЕЗ FALLBACK.
-        
+
         Использует систему скоринга для каждого режима, чтобы всегда определялся один из режимов.
         Убрана fallback логика - всегда выбирается режим с наивысшим score.
 
@@ -470,36 +478,36 @@ class AdaptiveRegimeManager:
 
         # ✅ НОВАЯ ЛОГИКА: Вычисляем score для каждого режима
         # Это гарантирует, что всегда будет выбран один из режимов (TRENDING, RANGING, CHOPPY)
-        
+
         # 1. CHOPPY Score
         choppy_score = 0.0
         choppy_reason_parts = []
-        
+
         # Волатильность (макс 40%)
         if vol > self.config.high_volatility_threshold:
             vol_score = min(0.4, (vol / 0.1) * 0.4)
             choppy_score += vol_score
             choppy_reason_parts.append(f"high volatility ({vol:.2%})")
-        
+
         # Развороты (макс 30%)
         if reversals > 5:  # Снижено с 8 для более широкого покрытия
             reversal_score = min(0.3, (reversals / 20) * 0.3)
             choppy_score += reversal_score
             choppy_reason_parts.append(f"{reversals} reversals")
-        
+
         # Объем (макс 30%)
         if volume_ratio > 1.1:  # Снижено с 1.2 для более широкого покрытия
             volume_score = min(0.3, ((volume_ratio - 1.0) / 0.5) * 0.3)
             choppy_score += volume_score
             choppy_reason_parts.append(f"high volume ({volume_ratio:.2f}x)")
-        
+
         choppy_confidence = min(1.0, choppy_score)
         choppy_reason = f"Chaotic market: {', '.join(choppy_reason_parts) if choppy_reason_parts else 'moderate chaos'}"
-        
+
         # 2. TRENDING Score
         trending_score = 0.0
         trending_reason_parts = []
-        
+
         # ✅ ИСПРАВЛЕНО (26.12.2025): Снижен вес trend deviation (макс 20% вместо 30%)
         # ADX теперь более важный индикатор
         if trend_dev > self.config.trend_strength_percent:
@@ -510,7 +518,7 @@ class AdaptiveRegimeManager:
             trend_dev_score = min(0.1, (trend_dev / 5.0) * 0.1)  # Снижено с 0.15 до 0.1
             trending_score += trend_dev_score
             trending_reason_parts.append(f"moderate deviation {trend_dev:.2%}")
-        
+
         # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличен вес ADX в TRENDING score (макс 50% вместо 30%)
         # ADX - самый важный индикатор для определения тренда
         if adx > self.config.trending_adx_threshold:
@@ -521,9 +529,11 @@ class AdaptiveRegimeManager:
             adx_score = min(0.25, (adx / 50.0) * 0.25)  # Увеличено с 0.15 до 0.25
             trending_score += adx_score
             trending_reason_parts.append(f"moderate ADX {adx:.1f}")
-        
+
         # Направленность (макс 20%)
-        has_direction = (trend_direction in ["bullish", "bearish"]) or (abs(di_plus - di_minus) > 3.0)  # ✅ Расширяем: снижено с 5.0 до 3.0
+        has_direction = (trend_direction in ["bullish", "bearish"]) or (
+            abs(di_plus - di_minus) > 3.0
+        )  # ✅ Расширяем: снижено с 5.0 до 3.0
         if has_direction:
             trending_score += 0.2
             trend_info = (
@@ -532,20 +542,20 @@ class AdaptiveRegimeManager:
                 else f"(+DI={di_plus:.1f}, -DI={di_minus:.1f})"
             )
             trending_reason_parts.append(trend_info)
-        
+
         # Объем (макс 20%, но опционален)
         if volume_ratio > 0.9:  # ✅ Расширяем: даже нормальный объем учитывается
             volume_score = min(0.2, ((volume_ratio - 0.9) / 0.5) * 0.2)
             trending_score += volume_score
             trending_reason_parts.append(f"volume {volume_ratio:.2f}x")
-        
+
         trending_confidence = min(1.0, trending_score)
         trending_reason = f"Trending market: {', '.join(trending_reason_parts) if trending_reason_parts else 'weak trend detected'}"
-        
+
         # 3. RANGING Score
         ranging_score = 0.0
         ranging_reason_parts = []
-        
+
         # Узкий диапазон (макс 40%)
         if range_width < 5.0:  # ✅ Расширяем: было 3.0, теперь до 5.0%
             range_score = min(0.4, (5.0 - range_width) / 5.0 * 0.4)
@@ -555,31 +565,39 @@ class AdaptiveRegimeManager:
             range_score = min(0.2, (10.0 - range_width) / 10.0 * 0.2)
             ranging_score += range_score
             ranging_reason_parts.append(f"moderate range ({range_width:.2%})")
-        
+
         # Слабый тренд (макс 30%)
         if trend_dev < self.config.trend_strength_percent:
-            trend_weak_score = min(0.3, (1.0 - trend_dev / self.config.trend_strength_percent) * 0.3)
+            trend_weak_score = min(
+                0.3, (1.0 - trend_dev / self.config.trend_strength_percent) * 0.3
+            )
             ranging_score += trend_weak_score
             ranging_reason_parts.append(f"weak trend (dev {trend_dev:.2%})")
-        
+
         # ✅ ИСПРАВЛЕНО (26.12.2025): Блокируем RANGING при ADX>=30
         # Если ADX >= 30, это явный тренд, не может быть ranging
         if adx >= 30.0:
             # Блокируем RANGING - не добавляем score
-            ranging_reason_parts.append(f"ADX too high ({adx:.1f} >= 30), blocking RANGING")
+            ranging_reason_parts.append(
+                f"ADX too high ({adx:.1f} >= 30), blocking RANGING"
+            )
         elif adx < self.config.ranging_adx_threshold:
             # Низкий ADX (макс 30%)
-            adx_low_score = min(0.3, (1.0 - adx / self.config.ranging_adx_threshold) * 0.3)
+            adx_low_score = min(
+                0.3, (1.0 - adx / self.config.ranging_adx_threshold) * 0.3
+            )
             ranging_score += adx_low_score
             ranging_reason_parts.append(f"low ADX ({adx:.1f})")
         elif adx < self.config.ranging_adx_threshold * 1.5:  # Средний ADX
-            adx_low_score = min(0.15, (1.0 - adx / (self.config.ranging_adx_threshold * 1.5)) * 0.15)
+            adx_low_score = min(
+                0.15, (1.0 - adx / (self.config.ranging_adx_threshold * 1.5)) * 0.15
+            )
             ranging_score += adx_low_score
             ranging_reason_parts.append(f"moderate ADX ({adx:.1f})")
-        
+
         ranging_confidence = min(1.0, ranging_score)
         ranging_reason = f"Ranging market: {', '.join(ranging_reason_parts) if ranging_reason_parts else 'sideways movement'}"
-        
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Выбираем режим с наивысшим score (БЕЗ FALLBACK)
         # ✅ НОВОЕ (26.12.2025): Блокируем RANGING при ADX>=30
         scores = {
@@ -587,18 +605,18 @@ class AdaptiveRegimeManager:
             RegimeType.TRENDING: trending_score,
             RegimeType.RANGING: ranging_score,
         }
-        
+
         # ✅ НОВОЕ (26.12.2025): Если ADX>=30, принудительно блокируем RANGING
         if adx >= 30.0:
             scores[RegimeType.RANGING] = 0.0  # Обнуляем score для RANGING
             logger.debug(
                 f"🔒 RegimeManager: ADX={adx:.1f} >= 30, блокируем RANGING режим"
             )
-        
+
         # Находим режим с максимальным score
         best_regime = max(scores, key=scores.get)
         best_score = scores[best_regime]
-        
+
         # Определяем confidence и reason на основе выбранного режима
         if best_regime == RegimeType.CHOPPY:
             return RegimeType.CHOPPY, choppy_confidence, choppy_reason

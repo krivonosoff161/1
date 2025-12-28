@@ -16,11 +16,11 @@ from src.indicators.advanced.candle_patterns import CandlePatternDetector
 from src.indicators.advanced.pivot_calculator import PivotCalculator
 from src.indicators.advanced.volume_profile import VolumeProfileCalculator
 
+from ..config.parameter_provider import ParameterProvider
 from ..core.data_registry import DataRegistry
 from ..core.position_registry import PositionMetadata, PositionRegistry
 from ..indicators.atr_provider import ATRProvider
 from ..indicators.liquidity_levels import LiquidityLevelsDetector
-from ..config.parameter_provider import ParameterProvider
 
 
 class ExitAnalyzer:
@@ -94,7 +94,7 @@ class ExitAnalyzer:
         self.orchestrator = orchestrator
         self.config_manager = config_manager  # Оставляем для обратной совместимости
         self.signal_generator = signal_generator
-        
+
         # ✅ НОВОЕ (26.12.2025): ParameterProvider для единого доступа к параметрам
         self.parameter_provider = parameter_provider
         # Если parameter_provider не передан, создаем его из config_manager
@@ -235,9 +235,7 @@ class ExitAnalyzer:
             # Записываем закрытие позиции в ConversionMetrics
             if self.conversion_metrics:
                 self.conversion_metrics.record_position_closed(
-                    symbol=symbol,
-                    reason=reason,
-                    pnl=pnl_percent
+                    symbol=symbol, reason=reason, pnl=pnl_percent
                 )
 
             # Записываем время удержания в HoldingTimeMetrics
@@ -249,21 +247,25 @@ class ExitAnalyzer:
                         )
                     else:
                         entry_time_dt = entry_time
-                    
+
                     if entry_time_dt.tzinfo is None:
                         entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
                     elif entry_time_dt.tzinfo != timezone.utc:
                         entry_time_dt = entry_time_dt.astimezone(timezone.utc)
-                    
-                    holding_seconds = (datetime.now(timezone.utc) - entry_time_dt).total_seconds()
+
+                    holding_seconds = (
+                        datetime.now(timezone.utc) - entry_time_dt
+                    ).total_seconds()
                     self.holding_time_metrics.record_holding_time(
                         symbol=symbol,
                         reason=reason,
                         holding_time_seconds=holding_seconds,
-                        pnl=pnl_percent
+                        pnl=pnl_percent,
                     )
                 except Exception as e:
-                    logger.debug(f"⚠️ Ошибка записи времени удержания для {symbol}: {e}")
+                    logger.debug(
+                        f"⚠️ Ошибка записи времени удержания для {symbol}: {e}"
+                    )
         except Exception as e:
             logger.debug(f"⚠️ Ошибка записи метрик при закрытии {symbol}: {e}")
 
@@ -455,14 +457,18 @@ class ExitAnalyzer:
                 action = decision.get("action", "unknown")
                 reason = decision.get("reason", "unknown")
                 pnl_pct = decision.get("pnl_pct", 0.0)
-                
+
                 # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (26.12.2025): Добавляем детальную информацию
                 # Получаем TP/SL параметры для логирования
                 tp_percent = decision.get("tp_percent") or decision.get("current_tp")
                 sl_percent = decision.get("sl_percent")
-                entry_regime = decision.get("entry_regime") or metadata.regime if metadata and hasattr(metadata, "regime") else regime
+                entry_regime = (
+                    decision.get("entry_regime") or metadata.regime
+                    if metadata and hasattr(metadata, "regime")
+                    else regime
+                )
                 threshold = decision.get("threshold")
-                
+
                 # Формируем детальное сообщение
                 log_parts = [
                     f"📊 ExitAnalyzer: Решение для {symbol}",
@@ -471,7 +477,7 @@ class ExitAnalyzer:
                     f"reason={reason}",
                     f"PnL={pnl_pct:.2f}%",
                 ]
-                
+
                 if tp_percent:
                     log_parts.append(f"TP={tp_percent:.2f}%")
                 if sl_percent:
@@ -482,9 +488,9 @@ class ExitAnalyzer:
                     log_parts.append(f"threshold={threshold:.2f}%")
                 if decision.get("emergency"):
                     log_parts.append("🚨 EMERGENCY")
-                
+
                 log_parts.append(f"(за {analysis_time:.2f}ms)")
-                
+
                 logger.info(" | ".join(log_parts))
             else:
                 # Логируем, что решение не принято (hold)
@@ -763,7 +769,9 @@ class ExitAnalyzer:
                 exit_params = self.parameter_provider.get_exit_params(symbol, regime)
                 if exit_params:
                     if "tp_percent" in exit_params:
-                        tp_percent = self._to_float(exit_params["tp_percent"], "tp_percent", 2.4)
+                        tp_percent = self._to_float(
+                            exit_params["tp_percent"], "tp_percent", 2.4
+                        )
                     if "tp_atr_multiplier" in exit_params:
                         tp_atr_multiplier = self._to_float(
                             exit_params["tp_atr_multiplier"], "tp_atr_multiplier", 2.5
@@ -871,15 +879,25 @@ class ExitAnalyzer:
             try:
                 # Используем ATRProvider для получения ATR (синхронно)
                 atr_1m = self.atr_provider.get_atr(symbol, fallback=None)
-                
+
                 # Если ATR не найден в кэше, пробуем получить из market_data как fallback
                 if atr_1m is None and market_data:
                     try:
                         # Пробуем разные ключи для ATR в market_data
                         if isinstance(market_data, dict):
-                            atr_1m = market_data.get("atr") or market_data.get("atr_1m") or market_data.get("atr_14") or market_data.get("ATR")
+                            atr_1m = (
+                                market_data.get("atr")
+                                or market_data.get("atr_1m")
+                                or market_data.get("atr_14")
+                                or market_data.get("ATR")
+                            )
                         elif hasattr(market_data, "get"):
-                            atr_1m = market_data.get("atr") or market_data.get("atr_1m") or market_data.get("atr_14") or market_data.get("ATR")
+                            atr_1m = (
+                                market_data.get("atr")
+                                or market_data.get("atr_1m")
+                                or market_data.get("atr_14")
+                                or market_data.get("ATR")
+                            )
                         if atr_1m:
                             atr_1m = float(atr_1m)
                             # Обновляем кэш в ATRProvider
@@ -888,7 +906,9 @@ class ExitAnalyzer:
                                 f"✅ [ATR_TP] {symbol}: ATR получен из market_data и обновлен в кэше: {atr_1m:.6f}"
                             )
                     except Exception as e:
-                        logger.debug(f"⚠️ [ATR_TP] {symbol}: Не удалось получить ATR из market_data: {e}")
+                        logger.debug(
+                            f"⚠️ [ATR_TP] {symbol}: Не удалось получить ATR из market_data: {e}"
+                        )
 
                 if atr_1m and atr_1m > 0:
                     # ✅ ГРОК ФИКС: ATR-based TP: max(1.5%, 2.5*ATR_1m) для ranging с per-symbol adjustment
@@ -967,7 +987,9 @@ class ExitAnalyzer:
                 exit_params = self.parameter_provider.get_exit_params(symbol, regime)
                 if exit_params:
                     if "sl_percent" in exit_params:
-                        sl_percent = self._to_float(exit_params["sl_percent"], "sl_percent", 2.0)
+                        sl_percent = self._to_float(
+                            exit_params["sl_percent"], "sl_percent", 2.0
+                        )
                     if "sl_atr_multiplier" in exit_params:
                         sl_atr_multiplier = self._to_float(
                             exit_params["sl_atr_multiplier"], "sl_atr_multiplier", 1.0
@@ -1114,19 +1136,35 @@ class ExitAnalyzer:
                 if atr_1m is None and market_data:
                     try:
                         if isinstance(market_data, dict):
-                            atr_1m = market_data.get("atr") or market_data.get("atr_1m") or market_data.get("atr_14") or market_data.get("ATR")
+                            atr_1m = (
+                                market_data.get("atr")
+                                or market_data.get("atr_1m")
+                                or market_data.get("atr_14")
+                                or market_data.get("ATR")
+                            )
                         elif hasattr(market_data, "get"):
-                            atr_1m = market_data.get("atr") or market_data.get("atr_1m") or market_data.get("atr_14") or market_data.get("ATR")
+                            atr_1m = (
+                                market_data.get("atr")
+                                or market_data.get("atr_1m")
+                                or market_data.get("atr_14")
+                                or market_data.get("ATR")
+                            )
                         if atr_1m:
                             atr_1m = float(atr_1m)
                             logger.debug(
                                 f"✅ [ATR_SL] {symbol}: ATR получен из market_data: {atr_1m:.6f}"
                             )
                     except Exception as e:
-                        logger.debug(f"⚠️ [ATR_SL] {symbol}: Не удалось получить ATR из market_data: {e}")
+                        logger.debug(
+                            f"⚠️ [ATR_SL] {symbol}: Не удалось получить ATR из market_data: {e}"
+                        )
 
                 # Fallback: пробуем получить ATR через orchestrator
-                if atr_1m is None and hasattr(self, "orchestrator") and self.orchestrator:
+                if (
+                    atr_1m is None
+                    and hasattr(self, "orchestrator")
+                    and self.orchestrator
+                ):
                     if hasattr(self.orchestrator, "signal_generator"):
                         indicator_manager = getattr(
                             self.orchestrator.signal_generator,
@@ -1214,19 +1252,21 @@ class ExitAnalyzer:
         # Fallback: 0.05% по умолчанию
         return 0.05
 
-    def _get_commission_buffer(self, position: Any = None, metadata: Any = None) -> float:
+    def _get_commission_buffer(
+        self, position: Any = None, metadata: Any = None
+    ) -> float:
         """
         Возвращает буфер комиссии в процентах для учёта комиссий при закрытии позиции.
-        
+
         Комиссия учитывает:
         - maker_fee_rate (0.02% на сторону)
         - leverage (комиссия от номинала, PnL% от маржи)
         - две стороны (вход + выход)
-        
+
         Args:
             position: Данные позиции (для получения leverage)
             metadata: Метаданные позиции (для получения leverage)
-            
+
         Returns:
             Буфер комиссии в процентах (например, 0.2 для 0.2% при leverage=5)
         """
@@ -1237,7 +1277,7 @@ class ExitAnalyzer:
                 leverage = int(metadata.leverage)
             elif position and isinstance(position, dict):
                 leverage = position.get("leverage", 5) or 5
-            
+
             # Получаем maker_fee_rate из конфига
             trading_fee_rate = 0.0002  # 0.02% по умолчанию
             if self.scalping_config:
@@ -1248,14 +1288,18 @@ class ExitAnalyzer:
                         commission_config.get("trading_fee_rate", 0.0002),
                     )
                 elif hasattr(commission_config, "maker_fee_rate"):
-                    trading_fee_rate = getattr(commission_config, "maker_fee_rate", 0.0002)
+                    trading_fee_rate = getattr(
+                        commission_config, "maker_fee_rate", 0.0002
+                    )
                 elif hasattr(commission_config, "trading_fee_rate"):
-                    trading_fee_rate = getattr(commission_config, "trading_fee_rate", 0.0002)
-            
+                    trading_fee_rate = getattr(
+                        commission_config, "trading_fee_rate", 0.0002
+                    )
+
             # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
             # (т.к. комиссия считается от номинала, а PnL% от маржи)
             commission_buffer = (trading_fee_rate * 2) * leverage * 100  # в процентах
-            
+
             return commission_buffer
         except Exception as e:
             logger.debug(f"⚠️ Не удалось получить commission_buffer: {e}")
@@ -1400,7 +1444,9 @@ class ExitAnalyzer:
             )
             return None
 
-    def _get_max_holding_minutes(self, regime: str, symbol: Optional[str] = None) -> float:
+    def _get_max_holding_minutes(
+        self, regime: str, symbol: Optional[str] = None
+    ) -> float:
         """
         Получение max_holding_minutes из конфига по режиму.
 
@@ -1418,11 +1464,13 @@ class ExitAnalyzer:
             max_holding_minutes или 120.0 по умолчанию
         """
         max_holding_minutes = 120.0  # Default 2 часа
-        
+
         # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения exit_params
         if self.parameter_provider:
             try:
-                exit_params = self.parameter_provider.get_exit_params(symbol or "", regime)
+                exit_params = self.parameter_provider.get_exit_params(
+                    symbol or "", regime
+                )
                 if exit_params and "max_holding_minutes" in exit_params:
                     max_holding_minutes = self._to_float(
                         exit_params["max_holding_minutes"], "max_holding_minutes", 120.0
@@ -1443,12 +1491,19 @@ class ExitAnalyzer:
         if self.config_manager:
             try:
                 # ConfigManager не имеет метода get(), используем _raw_config_dict напрямую
-                if hasattr(self.config_manager, "_raw_config_dict") and self.config_manager._raw_config_dict:
-                    exit_params = self.config_manager._raw_config_dict.get("exit_params", {})
+                if (
+                    hasattr(self.config_manager, "_raw_config_dict")
+                    and self.config_manager._raw_config_dict
+                ):
+                    exit_params = self.config_manager._raw_config_dict.get(
+                        "exit_params", {}
+                    )
                 else:
                     # Fallback: пробуем получить через другие способы
-                    exit_params = getattr(self.config_manager.config, "exit_params", None) or {}
-                
+                    exit_params = (
+                        getattr(self.config_manager.config, "exit_params", None) or {}
+                    )
+
                 if isinstance(exit_params, dict) and regime in exit_params:
                     regime_config = exit_params.get(regime, {})
                     if (
@@ -1976,13 +2031,15 @@ class ExitAnalyzer:
             # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличены пороги для уменьшения частоты emergency close
             # TRENDING: более высокий порог (-4.0%), так как тренды могут иметь большие просадки
             emergency_loss_threshold = -4.0  # Для trending режима (было -2.5)
-            
+
             # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
             spread_buffer = self._get_spread_buffer(symbol, current_price)
             commission_buffer = self._get_commission_buffer(position, metadata)
             # Скорректируем порог вниз (сделаем более строгим), чтобы учесть дополнительные потери при закрытии
-            adjusted_emergency_threshold = emergency_loss_threshold - spread_buffer - commission_buffer
-            
+            adjusted_emergency_threshold = (
+                emergency_loss_threshold - spread_buffer - commission_buffer
+            )
+
             # ✅ НОВОЕ (26.12.2025): Минимальное время удержания перед emergency close
             min_holding_seconds = 120.0  # TRENDING: 120 секунд (2 минуты)
             if pnl_percent < adjusted_emergency_threshold:
@@ -1995,15 +2052,17 @@ class ExitAnalyzer:
                             )
                         else:
                             entry_time_dt = entry_time
-                        
+
                         # Убеждаемся, что entry_time в UTC
                         if entry_time_dt.tzinfo is None:
                             entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
                         elif entry_time_dt.tzinfo != timezone.utc:
                             entry_time_dt = entry_time_dt.astimezone(timezone.utc)
-                        
-                        holding_seconds = (datetime.now(timezone.utc) - entry_time_dt).total_seconds()
-                        
+
+                        holding_seconds = (
+                            datetime.now(timezone.utc) - entry_time_dt
+                        ).total_seconds()
+
                         if holding_seconds < min_holding_seconds:
                             logger.debug(
                                 f"⏳ ExitAnalyzer TRENDING: Emergency close заблокирован для {symbol} - "
@@ -2017,7 +2076,7 @@ class ExitAnalyzer:
                             f"⚠️ ExitAnalyzer TRENDING: Ошибка проверки времени удержания для {symbol}: {e}"
                         )
                         # В случае ошибки разрешаем emergency close (безопаснее)
-                
+
                 logger.warning(
                     f"🚨 ExitAnalyzer TRENDING: Критический убыток {pnl_percent:.2f}% для {symbol} "
                     f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
@@ -2029,7 +2088,7 @@ class ExitAnalyzer:
                     symbol=symbol,
                     reason="emergency_loss_protection",
                     pnl_percent=pnl_percent,
-                    entry_time=entry_time
+                    entry_time=entry_time,
                 )
                 return {
                     "action": "close",
@@ -2080,13 +2139,17 @@ class ExitAnalyzer:
                         f"🎯 ExitAnalyzer TRENDING: TP достигнут для {symbol}: "
                         f"{pnl_percent:.2f}% >= {tp_percent:.2f}% (режим={regime})"
                     )
-                    entry_regime = metadata.regime if metadata and hasattr(metadata, "regime") else regime
+                    entry_regime = (
+                        metadata.regime
+                        if metadata and hasattr(metadata, "regime")
+                        else regime
+                    )
                     # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
                     self._record_metrics_on_close(
                         symbol=symbol,
                         reason="tp_reached",
                         pnl_percent=pnl_percent,
-                        entry_time=entry_time
+                        entry_time=entry_time,
                     )
                     return {
                         "action": "close",
@@ -2120,7 +2183,7 @@ class ExitAnalyzer:
                     symbol=symbol,
                     reason="big_profit_exit",
                     pnl_percent=pnl_percent,
-                    entry_time=entry_time
+                    entry_time=entry_time,
                 )
                 return {
                     "action": "close",
@@ -2378,7 +2441,7 @@ class ExitAnalyzer:
                 f"position_type={type(position).__name__}, metadata_type={type(metadata).__name__}, "
                 f"current_price={current_price:.2f}, regime={regime}"
             )
-            
+
             # 1. Получаем данные позиции (✅ ИСПОЛЬЗУЕМ ОБЩИЙ МЕТОД)
             entry_price, position_side = await self._get_entry_price_and_side(
                 symbol, position, metadata
@@ -2390,7 +2453,7 @@ class ExitAnalyzer:
                     f"(metadata={metadata is not None}, position={isinstance(position, dict)})"
                 )
                 return None
-            
+
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ (25.12.2025): Данные позиции получены
             logger.debug(
                 f"🔍 [RANGING_POSITION_DATA] {symbol}: entry_price={entry_price:.2f}, "
@@ -2440,13 +2503,15 @@ class ExitAnalyzer:
             # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличены пороги для уменьшения частоты emergency close
             # RANGING: более низкий порог (-2.5%), так как в ranging режиме позиции должны закрываться быстрее
             emergency_loss_threshold = -2.5  # Для ranging режима (было -1.5)
-            
+
             # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
             spread_buffer = self._get_spread_buffer(symbol, current_price)
             commission_buffer = self._get_commission_buffer(position, metadata)
             # Скорректируем порог вниз (сделаем более строгим), чтобы учесть дополнительные потери при закрытии
-            adjusted_emergency_threshold = emergency_loss_threshold - spread_buffer - commission_buffer
-            
+            adjusted_emergency_threshold = (
+                emergency_loss_threshold - spread_buffer - commission_buffer
+            )
+
             # ✅ НОВОЕ (26.12.2025): Минимальное время удержания перед emergency close
             min_holding_seconds = 60.0  # RANGING: 60 секунд (1 минута)
             if net_pnl_percent < adjusted_emergency_threshold:
@@ -2459,15 +2524,17 @@ class ExitAnalyzer:
                             )
                         else:
                             entry_time_dt = entry_time
-                        
+
                         # Убеждаемся, что entry_time в UTC
                         if entry_time_dt.tzinfo is None:
                             entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
                         elif entry_time_dt.tzinfo != timezone.utc:
                             entry_time_dt = entry_time_dt.astimezone(timezone.utc)
-                        
-                        holding_seconds = (datetime.now(timezone.utc) - entry_time_dt).total_seconds()
-                        
+
+                        holding_seconds = (
+                            datetime.now(timezone.utc) - entry_time_dt
+                        ).total_seconds()
+
                         if holding_seconds < min_holding_seconds:
                             logger.debug(
                                 f"⏳ ExitAnalyzer RANGING: Emergency close заблокирован для {symbol} - "
@@ -2481,7 +2548,7 @@ class ExitAnalyzer:
                             f"⚠️ ExitAnalyzer RANGING: Ошибка проверки времени удержания для {symbol}: {e}"
                         )
                         # В случае ошибки разрешаем emergency close (безопаснее)
-                
+
                 logger.warning(
                     f"🚨 ExitAnalyzer RANGING: Критический убыток {net_pnl_percent:.2f}% для {symbol} "
                     f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
@@ -2493,7 +2560,7 @@ class ExitAnalyzer:
                     symbol=symbol,
                     reason="emergency_loss_protection",
                     pnl_percent=net_pnl_percent,
-                    entry_time=entry_time
+                    entry_time=entry_time,
                 )
                 return {
                     "action": "close",
@@ -2631,7 +2698,7 @@ class ExitAnalyzer:
                     symbol=symbol,
                     reason="sl_reached",
                     pnl_percent=gross_pnl_percent,
-                    entry_time=entry_time
+                    entry_time=entry_time,
                 )
                 return {
                     "action": "close",
@@ -2641,7 +2708,9 @@ class ExitAnalyzer:
                     "sl_percent": sl_percent,
                     "spread_buffer": spread_buffer,
                     "regime": regime,
-                    "entry_regime": metadata.regime if metadata and hasattr(metadata, "regime") else regime,
+                    "entry_regime": metadata.regime
+                    if metadata and hasattr(metadata, "regime")
+                    else regime,
                 }
 
             # 3. Проверка TP (Take Profit) - в ranging режиме закрываем сразу
@@ -2671,7 +2740,7 @@ class ExitAnalyzer:
                     symbol=symbol,
                     reason="tp_reached",
                     pnl_percent=net_pnl_percent,
-                    entry_time=entry_time
+                    entry_time=entry_time,
                 )
                 return {
                     "action": "close",
@@ -2680,7 +2749,9 @@ class ExitAnalyzer:
                     "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                     "tp_percent": tp_percent,
                     "regime": regime,
-                    "entry_regime": metadata.regime if metadata and hasattr(metadata, "regime") else regime,
+                    "entry_regime": metadata.regime
+                    if metadata and hasattr(metadata, "regime")
+                    else regime,
                 }
 
             # 4. Проверка big_profit_exit
@@ -2709,7 +2780,7 @@ class ExitAnalyzer:
                     symbol=symbol,
                     reason="big_profit_exit",
                     pnl_percent=net_pnl_percent,
-                    entry_time=entry_time
+                    entry_time=entry_time,
                 )
                 return {
                     "action": "close",
@@ -2718,7 +2789,9 @@ class ExitAnalyzer:
                     "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                     "big_profit_exit_percent": big_profit_exit_percent,
                     "regime": regime,
-                    "entry_regime": metadata.regime if metadata and hasattr(metadata, "regime") else regime,
+                    "entry_regime": metadata.regime
+                    if metadata and hasattr(metadata, "regime")
+                    else regime,
                 }
 
             # 5. Проверка partial_tp с учетом adaptive_min_holding
@@ -2907,11 +2980,17 @@ class ExitAnalyzer:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Конвертируем max_holding_minutes в float сразу
             try:
-                max_holding_minutes_float = float(max_holding_minutes) if max_holding_minutes is not None else 25.0
+                max_holding_minutes_float = (
+                    float(max_holding_minutes)
+                    if max_holding_minutes is not None
+                    else 25.0
+                )
             except (TypeError, ValueError):
-                logger.warning(f"⚠️ ExitAnalyzer: Не удалось преобразовать max_holding_minutes={max_holding_minutes} в float, используем 25.0")
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Не удалось преобразовать max_holding_minutes={max_holding_minutes} в float, используем 25.0"
+                )
                 max_holding_minutes_float = 25.0
-            
+
             actual_max_holding = max_holding_minutes_float
             # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки продления (реальная прибыль после комиссий)
             if (
@@ -2920,12 +2999,20 @@ class ExitAnalyzer:
             ):
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Конвертируем extension_percent в float
                 try:
-                    extension_percent_float = float(extension_percent) if extension_percent is not None else 100.0
+                    extension_percent_float = (
+                        float(extension_percent)
+                        if extension_percent is not None
+                        else 100.0
+                    )
                 except (TypeError, ValueError):
-                    logger.warning(f"⚠️ ExitAnalyzer: Не удалось преобразовать extension_percent={extension_percent} в float, используем 100.0")
+                    logger.warning(
+                        f"⚠️ ExitAnalyzer: Не удалось преобразовать extension_percent={extension_percent} в float, используем 100.0"
+                    )
                     extension_percent_float = 100.0
-                
-                extension_minutes = max_holding_minutes_float * (extension_percent_float / 100.0)
+
+                extension_minutes = max_holding_minutes_float * (
+                    extension_percent_float / 100.0
+                )
                 actual_max_holding = max_holding_minutes_float + extension_minutes
 
             # ✅ ИСПРАВЛЕНИЕ #1: Приводим оба значения к float перед сравнением
@@ -2942,20 +3029,36 @@ class ExitAnalyzer:
                 and net_pnl_percent >= min_profit_for_extension
             ):
                 # ✅ ИСПРАВЛЕНО: Конвертируем extension_percent в float перед вычислением
-                extension_percent_float = float(extension_percent) if extension_percent is not None else 100.0
-                max_holding_minutes_float = float(max_holding_minutes) if max_holding_minutes is not None else 25.0
-                extension_minutes = max_holding_minutes_float * (extension_percent_float / 100.0)
+                extension_percent_float = (
+                    float(extension_percent) if extension_percent is not None else 100.0
+                )
+                max_holding_minutes_float = (
+                    float(max_holding_minutes)
+                    if max_holding_minutes is not None
+                    else 25.0
+                )
+                extension_minutes = max_holding_minutes_float * (
+                    extension_percent_float / 100.0
+                )
                 actual_max_holding = max_holding_minutes_float + extension_minutes
             else:
                 # ✅ ИСПРАВЛЕНО: Конвертируем max_holding_minutes в float сразу
-                actual_max_holding = float(max_holding_minutes) if max_holding_minutes is not None else 25.0
+                actual_max_holding = (
+                    float(max_holding_minutes)
+                    if max_holding_minutes is not None
+                    else 25.0
+                )
 
             try:
                 actual_max_holding_float = (
-                    float(actual_max_holding) if actual_max_holding is not None else 25.0
+                    float(actual_max_holding)
+                    if actual_max_holding is not None
+                    else 25.0
                 )
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.12.2025): Сохраняем float версию для использования везде
-                actual_max_holding = actual_max_holding_float  # Теперь actual_max_holding всегда float
+                actual_max_holding = (
+                    actual_max_holding_float  # Теперь actual_max_holding всегда float
+                )
                 logger.debug(
                     f"✅ [RANGING_TYPE_CONVERSION] {symbol}: actual_max_holding успешно конвертирован в float: {actual_max_holding:.2f}"
                 )
@@ -2965,7 +3068,11 @@ class ExitAnalyzer:
                     f"используем max_holding_minutes={max_holding_minutes}"
                 )
                 try:
-                    actual_max_holding_float = float(max_holding_minutes) if max_holding_minutes is not None else 25.0
+                    actual_max_holding_float = (
+                        float(max_holding_minutes)
+                        if max_holding_minutes is not None
+                        else 25.0
+                    )
                     actual_max_holding = actual_max_holding_float
                     logger.debug(
                         f"✅ [RANGING_TYPE_CONVERSION] {symbol}: Использован max_holding_minutes, конвертирован в float: {actual_max_holding:.2f}"
@@ -2981,14 +3088,22 @@ class ExitAnalyzer:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Убеждаемся, что actual_max_holding всегда float перед сравнениями
             try:
                 if not isinstance(actual_max_holding, (int, float)):
-                    actual_max_holding = float(actual_max_holding) if actual_max_holding is not None else 25.0
+                    actual_max_holding = (
+                        float(actual_max_holding)
+                        if actual_max_holding is not None
+                        else 25.0
+                    )
                 else:
                     actual_max_holding = float(actual_max_holding)
             except (TypeError, ValueError) as e:
-                logger.warning(f"⚠️ ExitAnalyzer: Не удалось преобразовать actual_max_holding в float: {e}, используем 25.0")
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Не удалось преобразовать actual_max_holding в float: {e}, используем 25.0"
+                )
                 actual_max_holding = 25.0
-            
-            actual_max_holding_float = actual_max_holding  # Теперь actual_max_holding всегда float
+
+            actual_max_holding_float = (
+                actual_max_holding  # Теперь actual_max_holding всегда float
+            )
 
             if (
                 minutes_in_position is not None
@@ -3117,7 +3232,9 @@ class ExitAnalyzer:
                 # ✅ ИСПРАВЛЕНИЕ: min_profit_to_close в долях (0.003 = 0.3%), net_pnl_percent в процентах (1.5 = 1.5%)
                 # Конвертируем min_profit_to_close в проценты для сравнения
                 min_profit_threshold_pct = (
-                    min_profit_to_close * 100 if min_profit_to_close is not None else 0.3
+                    min_profit_to_close * 100
+                    if min_profit_to_close is not None
+                    else 0.3
                 )  # 0.3% в процентах
 
                 # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки min_profit_to_close (реальная прибыль после комиссий)
@@ -3309,13 +3426,15 @@ class ExitAnalyzer:
             # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличены пороги для уменьшения частоты emergency close
             # CHOPPY: средний порог (-2.0%), так как в choppy режиме высокая волатильность
             emergency_loss_threshold = -2.0  # Для choppy режима (было -1.5)
-            
+
             # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
             spread_buffer = self._get_spread_buffer(symbol, current_price)
             commission_buffer = self._get_commission_buffer(position, metadata)
             # Скорректируем порог вниз (сделаем более строгим), чтобы учесть дополнительные потери при закрытии
-            adjusted_emergency_threshold = emergency_loss_threshold - spread_buffer - commission_buffer
-            
+            adjusted_emergency_threshold = (
+                emergency_loss_threshold - spread_buffer - commission_buffer
+            )
+
             # ✅ НОВОЕ (26.12.2025): Минимальное время удержания перед emergency close
             min_holding_seconds = 30.0  # CHOPPY: 30 секунд
             if pnl_percent < adjusted_emergency_threshold:
@@ -3328,15 +3447,17 @@ class ExitAnalyzer:
                             )
                         else:
                             entry_time_dt = entry_time
-                        
+
                         # Убеждаемся, что entry_time в UTC
                         if entry_time_dt.tzinfo is None:
                             entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
                         elif entry_time_dt.tzinfo != timezone.utc:
                             entry_time_dt = entry_time_dt.astimezone(timezone.utc)
-                        
-                        holding_seconds = (datetime.now(timezone.utc) - entry_time_dt).total_seconds()
-                        
+
+                        holding_seconds = (
+                            datetime.now(timezone.utc) - entry_time_dt
+                        ).total_seconds()
+
                         if holding_seconds < min_holding_seconds:
                             logger.debug(
                                 f"⏳ ExitAnalyzer CHOPPY: Emergency close заблокирован для {symbol} - "
@@ -3350,7 +3471,7 @@ class ExitAnalyzer:
                             f"⚠️ ExitAnalyzer CHOPPY: Ошибка проверки времени удержания для {symbol}: {e}"
                         )
                         # В случае ошибки разрешаем emergency close (безопаснее)
-                
+
                 logger.warning(
                     f"🚨 ExitAnalyzer CHOPPY: Критический убыток {pnl_percent:.2f}% для {symbol} "
                     f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
@@ -3362,7 +3483,7 @@ class ExitAnalyzer:
                     symbol=symbol,
                     reason="emergency_loss_protection",
                     pnl_percent=pnl_percent,
-                    entry_time=entry_time
+                    entry_time=entry_time,
                 )
                 return {
                     "action": "close",
@@ -3438,7 +3559,7 @@ class ExitAnalyzer:
                     symbol=symbol,
                     reason="tp_reached",
                     pnl_percent=pnl_percent,
-                    entry_time=entry_time
+                    entry_time=entry_time,
                 )
                 return {
                     "action": "close",
@@ -3460,7 +3581,7 @@ class ExitAnalyzer:
                     symbol=symbol,
                     reason="big_profit_exit",
                     pnl_percent=pnl_percent,
-                    entry_time=entry_time
+                    entry_time=entry_time,
                 )
                 return {
                     "action": "close",
@@ -3606,7 +3727,9 @@ class ExitAnalyzer:
                 # ✅ ИСПРАВЛЕНИЕ: min_profit_to_close в долях (0.003 = 0.3%), pnl_percent в процентах (1.5 = 1.5%)
                 # Конвертируем min_profit_to_close в проценты для сравнения
                 min_profit_threshold_pct = (
-                    min_profit_to_close * 100 if min_profit_to_close is not None else 0.3
+                    min_profit_to_close * 100
+                    if min_profit_to_close is not None
+                    else 0.3
                 )  # 0.3% в процентах
 
                 if pnl_percent < min_profit_threshold_pct:

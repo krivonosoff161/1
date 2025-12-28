@@ -293,8 +293,11 @@ class FuturesSignalGenerator:
         """
         try:
             from .analysis.direction_analyzer import DirectionAnalyzer
+
             self.direction_analyzer = DirectionAnalyzer(fast_adx=fast_adx)
-            logger.info("✅ SignalGenerator: DirectionAnalyzer инициализирован с FastADX")
+            logger.info(
+                "✅ SignalGenerator: DirectionAnalyzer инициализирован с FastADX"
+            )
         except Exception as e:
             logger.warning(f"⚠️ Не удалось инициализировать DirectionAnalyzer: {e}")
             self.direction_analyzer = None
@@ -801,8 +804,11 @@ class FuturesSignalGenerator:
             self.direction_analyzer = None
             try:
                 from .analysis.direction_analyzer import DirectionAnalyzer
+
                 # DirectionAnalyzer будет инициализирован после установки fast_adx
-                logger.info("✅ DirectionAnalyzer будет инициализирован после установки fast_adx")
+                logger.info(
+                    "✅ DirectionAnalyzer будет инициализирован после установки fast_adx"
+                )
             except Exception as e:
                 logger.warning(f"⚠️ Не удалось импортировать DirectionAnalyzer: {e}")
 
@@ -1412,7 +1418,7 @@ class FuturesSignalGenerator:
                 "SignalGenerator еще не инициализирован, пропускаем генерацию сигналов"
             )
             return []
-        
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Проверяем наличие свечей перед генерацией сигналов
         # Это предотвращает генерацию сигналов до загрузки свечей
         if not self.data_registry:
@@ -1440,8 +1446,10 @@ class FuturesSignalGenerator:
                                 f"(нужно минимум 50, получено {len(candles_1m) if candles_1m else 0}), "
                                 f"пропускаем генерацию сигналов"
                             )
-                            return []  # Не генерируем сигналы без достаточного количества свечей
-                    
+                            return (
+                                []
+                            )  # Не генерируем сигналы без достаточного количества свечей
+
                     # Получаем данные один раз для символа
                     market_data = await self._get_market_data(symbol)
                     if not market_data:
@@ -1578,55 +1586,67 @@ class FuturesSignalGenerator:
 
             # Генерация базовых сигналов
             base_signals = await self._generate_base_signals(symbol, market_data)
-            
+
             # ✅ НОВОЕ (26.12.2025): Логирование причин отсутствия сигналов
             if not base_signals or len(base_signals) == 0:
                 # Получаем индикаторы для анализа
                 try:
-                    indicators = market_data.indicators if hasattr(market_data, "indicators") else {}
+                    indicators = (
+                        market_data.indicators
+                        if hasattr(market_data, "indicators")
+                        else {}
+                    )
                     adx_value = indicators.get("adx", indicators.get("adx_proxy", 0))
                     min_adx = getattr(self.scalping_config, "min_adx", 20.0)
-                    
+
                     # Получаем MA значения
                     ma_fast = indicators.get("ema_12", 0)
                     ma_slow = indicators.get("ema_26", 0)
                     ma_difference_pct = (
                         abs(ma_fast - ma_slow) / ma_slow * 100 if ma_slow > 0 else 0
                     )
-                    
+
                     # Получаем min_ma_difference_pct из конфига
                     min_ma_difference_pct = 0.1  # Fallback
                     try:
-                        adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                        adaptive_regime = getattr(
+                            self.scalping_config, "adaptive_regime", {}
+                        )
                         if isinstance(adaptive_regime, dict):
                             regime_config = adaptive_regime.get("ranging", {})
                             if isinstance(regime_config, dict):
                                 indicators_config = regime_config.get("indicators", {})
                                 if isinstance(indicators_config, dict):
-                                    min_ma_difference_pct = indicators_config.get("min_ma_difference_pct", 0.1)
+                                    min_ma_difference_pct = indicators_config.get(
+                                        "min_ma_difference_pct", 0.1
+                                    )
                     except Exception:
                         pass
-                    
+
                     reasons = []
                     if adx_value < min_adx:
                         reasons.append(f"ADX={adx_value:.1f} < min_adx={min_adx:.1f}")
                     if ma_difference_pct < min_ma_difference_pct:
-                        reasons.append(f"MA разница={ma_difference_pct:.3f}% < min={min_ma_difference_pct}%")
+                        reasons.append(
+                            f"MA разница={ma_difference_pct:.3f}% < min={min_ma_difference_pct}%"
+                        )
                     if not reasons:
                         reasons.append("индикаторы не дают сигнала")
-                    
+
                     logger.info(
                         f"📊 {symbol}: Сигналы не сгенерированы. Причины: {', '.join(reasons)}. "
                         f"ADX={adx_value:.1f}, MA разница={ma_difference_pct:.3f}%"
                     )
                 except Exception as e:
-                    logger.debug(f"⚠️ Не удалось проанализировать причины отсутствия сигналов для {symbol}: {e}")
+                    logger.debug(
+                        f"⚠️ Не удалось проанализировать причины отсутствия сигналов для {symbol}: {e}"
+                    )
 
             # Применение фильтров (передаем позиции для CorrelationFilter)
             filtered_signals = await self._apply_filters(
                 symbol, base_signals, market_data, current_positions=current_positions
             )
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Детальное логирование причин фильтрации
             if base_signals and len(base_signals) > 0 and len(filtered_signals) == 0:
                 # Собираем причины фильтрации для каждого сигнала
@@ -1639,7 +1659,7 @@ class FuturesSignalGenerator:
                     filtered_reasons.append(
                         f"Сигнал #{len(filtered_reasons)+1} ({sig_type} {sig_side}, strength={sig_strength:.2f}): {sig_filter_reason}"
                     )
-                
+
                 logger.info(
                     f"📊 {symbol}: Все {len(base_signals)} базовых сигналов отфильтрованы.\n"
                     f"   Причины фильтрации:\n"
@@ -1971,26 +1991,50 @@ class FuturesSignalGenerator:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала пытаемся получить ADX из DataRegistry
             if self.data_registry:
                 try:
-                    indicators_from_registry = await self.data_registry.get_indicators(symbol)
+                    indicators_from_registry = await self.data_registry.get_indicators(
+                        symbol
+                    )
                     if indicators_from_registry:
                         adx_from_reg = indicators_from_registry.get("adx")
-                        adx_plus_di_from_reg = indicators_from_registry.get("adx_plus_di")
-                        adx_minus_di_from_reg = indicators_from_registry.get("adx_minus_di")
-                        
+                        adx_plus_di_from_reg = indicators_from_registry.get(
+                            "adx_plus_di"
+                        )
+                        adx_minus_di_from_reg = indicators_from_registry.get(
+                            "adx_minus_di"
+                        )
+
                         # Проверяем, что ADX валидный (не 0.0 и не None)
-                        if adx_from_reg and isinstance(adx_from_reg, (int, float)) and float(adx_from_reg) > 0:
+                        if (
+                            adx_from_reg
+                            and isinstance(adx_from_reg, (int, float))
+                            and float(adx_from_reg) > 0
+                        ):
                             adx_value = float(adx_from_reg)
-                            adx_plus_di = float(adx_plus_di_from_reg) if adx_plus_di_from_reg else 0.0
-                            adx_minus_di = float(adx_minus_di_from_reg) if adx_minus_di_from_reg else 0.0
+                            adx_plus_di = (
+                                float(adx_plus_di_from_reg)
+                                if adx_plus_di_from_reg
+                                else 0.0
+                            )
+                            adx_minus_di = (
+                                float(adx_minus_di_from_reg)
+                                if adx_minus_di_from_reg
+                                else 0.0
+                            )
                             adx_from_registry = True
                             logger.debug(
                                 f"✅ ADX для {symbol} получен из DataRegistry: ADX={adx_value:.2f}, +DI={adx_plus_di:.2f}, -DI={adx_minus_di:.2f}"
                             )
                 except Exception as e:
-                    logger.debug(f"⚠️ Не удалось получить ADX из DataRegistry для {symbol}: {e}, используем fallback")
+                    logger.debug(
+                        f"⚠️ Не удалось получить ADX из DataRegistry для {symbol}: {e}, используем fallback"
+                    )
 
             # ✅ FALLBACK: Если ADX не получен из DataRegistry, рассчитываем через adx_filter
-            if not adx_from_registry and self.adx_filter and self.adx_filter.config.enabled:
+            if (
+                not adx_from_registry
+                and self.adx_filter
+                and self.adx_filter.config.enabled
+            ):
                 try:
                     # Получаем порог из конфига
                     adx_threshold = self.adx_filter.config.adx_threshold
@@ -2024,7 +2068,7 @@ class FuturesSignalGenerator:
                         adx_value = buy_result.adx_value
                         adx_plus_di = buy_result.plus_di
                         adx_minus_di = buy_result.minus_di
-                        
+
                         logger.debug(
                             f"✅ ADX для {symbol} рассчитан через adx_filter (fallback): ADX={adx_value:.2f}, +DI={adx_plus_di:.2f}, -DI={adx_minus_di:.2f}"
                         )
@@ -2036,27 +2080,25 @@ class FuturesSignalGenerator:
 
             # ✅ Определяем направление тренда на основе ADX значений
             if adx_value > 0:
-                adx_threshold = self.adx_filter.config.adx_threshold if self.adx_filter else 20.0  # ✅ ИСПРАВЛЕНО: Снижен дефолт с 25 до 20
-                
+                adx_threshold = (
+                    self.adx_filter.config.adx_threshold if self.adx_filter else 20.0
+                )  # ✅ ИСПРАВЛЕНО: Снижен дефолт с 25 до 20
+
                 if adx_value >= adx_threshold:
                     # Сильный тренд
-                    di_difference = self.adx_filter.config.di_difference if self.adx_filter else 5.0
-                    if (
-                        adx_plus_di
-                        > adx_minus_di + di_difference
-                    ):
+                    di_difference = (
+                        self.adx_filter.config.di_difference if self.adx_filter else 5.0
+                    )
+                    if adx_plus_di > adx_minus_di + di_difference:
                         adx_trend = "bullish"  # Восходящий тренд
-                    elif (
-                        adx_minus_di
-                        > adx_plus_di + di_difference
-                    ):
+                    elif adx_minus_di > adx_plus_di + di_difference:
                         adx_trend = "bearish"  # Нисходящий тренд
                     else:
                         adx_trend = "ranging"  # Нейтральный (DI близки)
                 else:
                     # Слабый тренд (ADX < threshold)
                     adx_trend = "ranging"
-                
+
                 logger.debug(
                     f"📊 ADX тренд для {symbol}: {adx_trend}, "
                     f"ADX={adx_value:.1f}, +DI={adx_plus_di:.1f}, -DI={adx_minus_di:.1f} "
@@ -2131,11 +2173,13 @@ class FuturesSignalGenerator:
                     f"MACD={indicators.get('macd', {}).get('histogram', 'N/A') if isinstance(indicators.get('macd'), dict) else 'N/A'}"
                 )
             else:
-                stats_summary = ", ".join([
-                    f"{name.upper()}={stats['generated']}" 
-                    for name, stats in signal_stats.items() 
-                    if stats['generated'] > 0
-                ])
+                stats_summary = ", ".join(
+                    [
+                        f"{name.upper()}={stats['generated']}"
+                        for name, stats in signal_stats.items()
+                        if stats["generated"] > 0
+                    ]
+                )
                 logger.debug(
                     f"📊 {symbol}: Сгенерировано {total_generated} сигналов ({stats_summary})"
                 )
@@ -2149,7 +2193,7 @@ class FuturesSignalGenerator:
                 symbol, market_data, indicators, current_regime
             )
             signals.extend(impulse_signals)
-            
+
             # Сохраняем количество сигналов до фильтрации по ADX
             total_before_adx_filter = len(signals)
 
@@ -2167,34 +2211,44 @@ class FuturesSignalGenerator:
                         direction_result = self.direction_analyzer.analyze_direction(
                             candles=market_data.ohlcv_data,
                             current_price=current_price,
-                            indicators=indicators
+                            indicators=indicators,
                         )
-                        
+
                         market_direction = direction_result.get("direction", "neutral")
                         adx_value_from_analyzer = direction_result.get("adx_value", 0)
                         confidence = direction_result.get("confidence", 0.0)
-                        
+
                         # ✅ ПРИОРИТЕТ 1 (28.12.2025): Режим-специфичная ADX блокировка
                         # Получаем текущий режим для определения порога блокировки
                         current_regime_for_adx = "ranging"  # Fallback
                         try:
                             if self.data_registry:
-                                regime_data = await self.data_registry.get_regime(symbol)
+                                regime_data = await self.data_registry.get_regime(
+                                    symbol
+                                )
                                 if regime_data:
-                                    current_regime_for_adx = regime_data.get("regime", "ranging").lower()
+                                    current_regime_for_adx = regime_data.get(
+                                        "regime", "ranging"
+                                    ).lower()
                         except Exception as e:
-                            logger.debug(f"⚠️ Не удалось получить режим для ADX блокировки: {e}")
-                        
+                            logger.debug(
+                                f"⚠️ Не удалось получить режим для ADX блокировки: {e}"
+                            )
+
                         # Определяем порог ADX в зависимости от режима
                         # Trending: строгая блокировка (>=20), Ranging: ослабленная (>=30), Choppy: минимальная (>=40)
                         adx_blocking_threshold = 30.0  # Fallback для ranging
                         if current_regime_for_adx == "trending":
                             adx_blocking_threshold = 20.0  # Строгая блокировка в тренде
                         elif current_regime_for_adx == "ranging":
-                            adx_blocking_threshold = 30.0  # Ослабленная блокировка во флэте
+                            adx_blocking_threshold = (
+                                30.0  # Ослабленная блокировка во флэте
+                            )
                         elif current_regime_for_adx == "choppy":
-                            adx_blocking_threshold = 40.0  # Минимальная блокировка в хаосе
-                        
+                            adx_blocking_threshold = (
+                                40.0  # Минимальная блокировка в хаосе
+                            )
+
                         # Блокируем сигналы против тренда только если ADX превышает режим-специфичный порог
                         if adx_value_from_analyzer >= adx_blocking_threshold:
                             if market_direction == "bearish" and signal_side == "LONG":
@@ -2206,7 +2260,9 @@ class FuturesSignalGenerator:
                                     f"direction={market_direction}, confidence={confidence:.2f})"
                                 )
                                 continue  # Пропускаем этот сигнал
-                            elif market_direction == "bullish" and signal_side == "SHORT":
+                            elif (
+                                market_direction == "bullish" and signal_side == "SHORT"
+                            ):
                                 blocked_by_adx["SHORT"] += 1
                                 signal_type = signal.get("type", "unknown")
                                 logger.warning(
@@ -2227,21 +2283,30 @@ class FuturesSignalGenerator:
                             current_regime_for_adx_fallback = "ranging"  # Fallback
                             try:
                                 if self.data_registry:
-                                    regime_data = await self.data_registry.get_regime(signal_symbol)
+                                    regime_data = await self.data_registry.get_regime(
+                                        signal_symbol
+                                    )
                                     if regime_data:
-                                        current_regime_for_adx_fallback = regime_data.get("regime", "ranging").lower()
+                                        current_regime_for_adx_fallback = (
+                                            regime_data.get("regime", "ranging").lower()
+                                        )
                             except Exception:
                                 pass
-                            
-                            adx_blocking_threshold_fallback = 30.0  # Fallback для ranging
+
+                            adx_blocking_threshold_fallback = (
+                                30.0  # Fallback для ranging
+                            )
                             if current_regime_for_adx_fallback == "trending":
                                 adx_blocking_threshold_fallback = 20.0
                             elif current_regime_for_adx_fallback == "ranging":
                                 adx_blocking_threshold_fallback = 30.0
                             elif current_regime_for_adx_fallback == "choppy":
                                 adx_blocking_threshold_fallback = 40.0
-                            
-                            if adx_value >= adx_blocking_threshold_fallback and adx_trend == "bullish":
+
+                            if (
+                                adx_value >= adx_blocking_threshold_fallback
+                                and adx_trend == "bullish"
+                            ):
                                 logger.warning(
                                     f"🚫 XRP-USDT SHORT ПОЛНОСТЬЮ ЗАБЛОКИРОВАН: сильный BULLISH тренд "
                                     f"(ADX={adx_value:.1f} >= {adx_blocking_threshold_fallback:.1f} для режима {current_regime_for_adx_fallback}, "
@@ -2273,23 +2338,25 @@ class FuturesSignalGenerator:
                     if self.data_registry:
                         regime_data = await self.data_registry.get_regime(symbol)
                         if regime_data:
-                            current_regime_log = regime_data.get("regime", "ranging").lower()
+                            current_regime_log = regime_data.get(
+                                "regime", "ranging"
+                            ).lower()
                 except Exception:
                     pass
-                
+
                 adx_threshold_log = 30.0
                 if current_regime_log == "trending":
                     adx_threshold_log = 20.0
                 elif current_regime_log == "choppy":
                     adx_threshold_log = 40.0
-                
+
                 logger.info(
                     f"📊 {symbol}: Все {total_before_adx_filter} сгенерированных сигналов заблокированы по ADX "
                     f"(ADX={adx_value:.1f} >= {adx_threshold_log:.1f} для режима {current_regime_log}, тренд={adx_trend})"
                 )
 
             # ✅ НОВОЕ (26.12.2025): Записываем сгенерированные сигналы в метрики
-            if hasattr(self, 'conversion_metrics') and self.conversion_metrics:
+            if hasattr(self, "conversion_metrics") and self.conversion_metrics:
                 for signal in signals:
                     signal_type = signal.get("source", "unknown")
                     strength = signal.get("strength", 0.0)
@@ -2298,10 +2365,12 @@ class FuturesSignalGenerator:
                             symbol=symbol,
                             signal_type=signal_type,
                             regime=current_regime,
-                            strength=strength
+                            strength=strength,
                         )
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка записи метрики сигнала для {symbol}: {e}")
+                        logger.debug(
+                            f"⚠️ Ошибка записи метрики сигнала для {symbol}: {e}"
+                        )
 
             # ✅ ОПТИМИЗАЦИЯ: Логируем только если есть сигналы (INFO уровень) или важная информация
             # logger.debug(f"📊 Всего базовых сигналов для {symbol}: {len(signals)}")
@@ -2312,105 +2381,99 @@ class FuturesSignalGenerator:
             logger.error(f"Ошибка генерации базовых сигналов для {symbol}: {e}")
             return []
 
-    def _calculate_regime_ema(
-        self, candles: List, period: int
-    ) -> float:
+    def _calculate_regime_ema(self, candles: List, period: int) -> float:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Пересчитать EMA с указанным периодом.
-        
+
         Используется для динамического пересчета EMA с режим-специфичными периодами
         вместо использования захардкоженных EMA_12/EMA_26.
-        
+
         Args:
             candles: Список свечей OHLCV
             period: Период EMA
-            
+
         Returns:
             Значение EMA или 0.0 если недостаточно данных
         """
         if not candles or len(candles) < period:
             return 0.0
-        
+
         # Получаем цены закрытия
-        closes = [c.close for c in candles] if hasattr(candles[0], 'close') else candles
-        
+        closes = [c.close for c in candles] if hasattr(candles[0], "close") else candles
+
         if len(closes) < period:
             return 0.0
-        
+
         # Расчет EMA: EMA(t) = Price(t) * α + EMA(t-1) * (1 - α)
         # где α = 2 / (period + 1)
         alpha = 2.0 / (period + 1)
-        
+
         # Начальное значение EMA = SMA за период
         ema = sum(closes[:period]) / period
-        
+
         # Применяем формулу EMA для остальных значений
         for price in closes[period:]:
             ema = (price * alpha) + (ema * (1 - alpha))
-        
+
         return ema
-    
+
     def _calculate_regime_bollinger_bands(
         self, candles: List, period: int, std_multiplier: float
     ) -> Dict[str, float]:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Пересчитать Bollinger Bands с указанными параметрами.
-        
+
         Используется для динамического пересчета BB с режим-специфичными параметрами.
-        
+
         Args:
             candles: Список свечей OHLCV
             period: Период для SMA
             std_multiplier: Множитель стандартного отклонения
-            
+
         Returns:
             Dict с upper, lower, middle или пустой dict если недостаточно данных
         """
         import numpy as np
-        
+
         if not candles or len(candles) < period:
             return {}
-        
+
         # Получаем цены закрытия
-        closes = [c.close for c in candles] if hasattr(candles[0], 'close') else candles
-        
+        closes = [c.close for c in candles] if hasattr(candles[0], "close") else candles
+
         if len(closes) < period:
             return {}
-        
+
         # Берем последние period свечей
         recent_data = closes[-period:]
-        
+
         # Средняя линия = SMA
         sma = np.mean(recent_data)
-        
+
         # Стандартное отклонение
         std = np.std(recent_data)
-        
+
         # Верхняя и нижняя полосы
         upper_band = sma + (std * std_multiplier)
         lower_band = sma - (std * std_multiplier)
-        
-        return {
-            "upper": upper_band,
-            "lower": lower_band,
-            "middle": sma
-        }
-    
+
+        return {"upper": upper_band, "lower": lower_band, "middle": sma}
+
     async def _calculate_atr_adaptive_rsi_thresholds(
         self, symbol: str, base_overbought: float = 85.0, base_oversold: float = 25.0
     ) -> Dict[str, float]:
         """
         ✅ ПРИОРИТЕТ 2.5 (28.12.2025): Рассчитать адаптивные RSI пороги на основе ATR.
-        
+
         Адаптирует пороги overbought/oversold в зависимости от текущей волатильности:
         - Высокая волатильность: расширяет диапазон (более экстремальные уровни)
         - Низкая волатильность: сужает диапазон (менее экстремальные уровни)
-        
+
         Args:
             symbol: Торговый символ
             base_overbought: Базовый порог overbought (85)
             base_oversold: Базовый порог oversold (25)
-            
+
         Returns:
             Dict с адаптивными overbought и oversold порогами
         """
@@ -2423,16 +2486,18 @@ class FuturesSignalGenerator:
                     if indicators:
                         current_atr = indicators.get("atr")
                 except Exception as e:
-                    logger.debug(f"⚠️ Не удалось получить ATR из DataRegistry для {symbol}: {e}")
-            
+                    logger.debug(
+                        f"⚠️ Не удалось получить ATR из DataRegistry для {symbol}: {e}"
+                    )
+
             # Если нет в DataRegistry, пробуем получить из свечей
             if current_atr is None or current_atr <= 0:
                 # Fallback: используем базовые пороги
                 return {
                     "rsi_overbought": base_overbought,
-                    "rsi_oversold": base_oversold
+                    "rsi_oversold": base_oversold,
                 }
-            
+
             # Получаем средний ATR из истории свечей
             avg_atr = current_atr  # Fallback: используем текущий как средний
             try:
@@ -2444,23 +2509,25 @@ class FuturesSignalGenerator:
                         for i in range(max(0, len(candles) - 100), len(candles)):
                             if i >= 14:  # Нужно минимум 14 свечей для ATR
                                 # Простой расчет ATR: средняя разница high-low за последние 14 свечей
-                                high_low_diff = sum([
-                                    abs(candles[j].high - candles[j].low)
-                                    for j in range(max(0, i-13), i+1)
-                                ]) / min(14, i+1)
+                                high_low_diff = sum(
+                                    [
+                                        abs(candles[j].high - candles[j].low)
+                                        for j in range(max(0, i - 13), i + 1)
+                                    ]
+                                ) / min(14, i + 1)
                                 atr_values.append(high_low_diff)
-                        
+
                         if atr_values:
                             avg_atr = sum(atr_values) / len(atr_values)
             except Exception as e:
                 logger.debug(f"⚠️ Не удалось рассчитать средний ATR для {symbol}: {e}")
-            
+
             # Коэффициент волатильности
             if avg_atr and avg_atr > 0:
                 volatility_ratio = current_atr / avg_atr
             else:
                 volatility_ratio = 1.0
-            
+
             # Адаптация порогов
             if volatility_ratio > 1.3:  # Высокая волатильность (на 30% выше среднего)
                 # Расширяем диапазон (более экстремальные уровни)
@@ -2473,104 +2540,105 @@ class FuturesSignalGenerator:
             else:  # Нормальная волатильность
                 overbought = base_overbought
                 oversold = base_oversold
-            
+
             # Ограничиваем диапазоны (защита от экстремальных значений)
             overbought = min(95.0, max(75.0, overbought))
             oversold = min(35.0, max(15.0, oversold))
-            
+
             return {
                 "rsi_overbought": overbought,
                 "rsi_oversold": oversold,
                 "volatility_ratio": volatility_ratio,  # Для логирования
                 "current_atr": current_atr,  # Для логирования
-                "avg_atr": avg_atr  # Для логирования
+                "avg_atr": avg_atr,  # Для логирования
             }
         except Exception as e:
-            logger.debug(f"⚠️ Ошибка расчета адаптивных RSI порогов для {symbol}: {e}, используем базовые")
-            return {
-                "rsi_overbought": base_overbought,
-                "rsi_oversold": base_oversold
-            }
-    
+            logger.debug(
+                f"⚠️ Ошибка расчета адаптивных RSI порогов для {symbol}: {e}, используем базовые"
+            )
+            return {"rsi_overbought": base_overbought, "rsi_oversold": base_oversold}
+
     def _calculate_regime_rsi(
         self, candles: List, period: int, overbought: float = 70, oversold: float = 30
     ) -> float:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Пересчитать RSI с указанным периодом.
-        
+
         Args:
             candles: Список свечей OHLCV
             period: Период RSI
             overbought: Порог перекупленности (не используется в расчете, только для совместимости)
             oversold: Порог перепроданности (не используется в расчете, только для совместимости)
-            
+
         Returns:
             Значение RSI или 50.0 если недостаточно данных
         """
         import numpy as np
-        
+
         if not candles or len(candles) < period + 1:
             return 50.0
-        
+
         # Получаем цены закрытия
-        closes = [c.close for c in candles] if hasattr(candles[0], 'close') else candles
-        
+        closes = [c.close for c in candles] if hasattr(candles[0], "close") else candles
+
         if len(closes) < period + 1:
             return 50.0
-        
+
         # Расчет RSI по формуле Wilder
         prices = np.array(closes)
         deltas = np.diff(prices)
-        
+
         gains = np.where(deltas > 0, deltas, 0)
         losses = np.where(deltas < 0, -deltas, 0)
-        
+
         # Экспоненциальное сглаживание Wilder
         if len(gains) >= period:
             avg_gain = np.mean(gains[-period:])
             avg_loss = np.mean(losses[-period:])
-            
+
             if len(gains) > period:
                 for i in range(period, len(gains)):
                     avg_gain = (avg_gain * (period - 1) + gains[i]) / period
                     avg_loss = (avg_loss * (period - 1) + losses[i]) / period
         else:
             return 50.0
-        
+
         if avg_loss == 0:
             return 100.0
-        
+
         rs = avg_gain / avg_loss
         rsi_value = 100.0 - (100.0 / (1.0 + rs))
-        
+
         return rsi_value
-    
-    def _calculate_regime_atr(
-        self, candles: List, period: int
-    ) -> float:
+
+    def _calculate_regime_atr(self, candles: List, period: int) -> float:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Пересчитать ATR с указанным периодом.
-        
+
         Args:
             candles: Список свечей OHLCV
             period: Период ATR
-            
+
         Returns:
             Значение ATR или 0.0 если недостаточно данных
         """
         import numpy as np
-        
+
         if not candles or len(candles) < period + 1:
             return 0.0
-        
+
         # Получаем high, low, close
-        highs = [c.high for c in candles] if hasattr(candles[0], 'high') else []
-        lows = [c.low for c in candles] if hasattr(candles[0], 'low') else []
-        closes = [c.close for c in candles] if hasattr(candles[0], 'close') else candles
-        
-        if len(highs) < period + 1 or len(lows) < period + 1 or len(closes) < period + 1:
+        highs = [c.high for c in candles] if hasattr(candles[0], "high") else []
+        lows = [c.low for c in candles] if hasattr(candles[0], "low") else []
+        closes = [c.close for c in candles] if hasattr(candles[0], "close") else candles
+
+        if (
+            len(highs) < period + 1
+            or len(lows) < period + 1
+            or len(closes) < period + 1
+        ):
             return 0.0
-        
+
         # Расчет True Range
         true_ranges = []
         for i in range(1, len(closes)):
@@ -2579,107 +2647,109 @@ class FuturesSignalGenerator:
             low_close = abs(lows[i] - closes[i - 1])
             true_range = max(high_low, high_close, low_close)
             true_ranges.append(true_range)
-        
+
         if len(true_ranges) < period:
             return 0.0
-        
+
         # ATR с экспоненциальным сглаживанием Wilder
         atr_value = np.mean(true_ranges[-period:])
-        
+
         if len(true_ranges) > period:
             for i in range(period, len(true_ranges)):
                 atr_value = (atr_value * (period - 1) + true_ranges[i]) / period
-        
+
         return atr_value
-    
+
     def _calculate_regime_macd(
         self, candles: List, fast_period: int, slow_period: int, signal_period: int
     ) -> Dict[str, float]:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Пересчитать MACD с указанными параметрами.
-        
+
         Args:
             candles: Список свечей OHLCV
             fast_period: Период быстрой EMA
             slow_period: Период медленной EMA
             signal_period: Период сигнальной линии
-            
+
         Returns:
             Dict с macd_line, signal_line, histogram или пустой dict если недостаточно данных
         """
         if not candles or len(candles) < slow_period + signal_period:
             return {}
-        
+
         # Получаем цены закрытия
-        closes = [c.close for c in candles] if hasattr(candles[0], 'close') else candles
-        
+        closes = [c.close for c in candles] if hasattr(candles[0], "close") else candles
+
         if len(closes) < slow_period + signal_period:
             return {}
-        
+
         # Рассчитываем EMA fast и slow
         ema_fast = self._calculate_regime_ema(candles, fast_period)
         ema_slow = self._calculate_regime_ema(candles, slow_period)
-        
+
         if ema_fast == 0.0 or ema_slow == 0.0:
             return {}
-        
+
         # MACD line
         macd_line = ema_fast - ema_slow
-        
+
         # Для signal line нужна история MACD - упрощенный расчет
         # Берем последние signal_period свечей и рассчитываем EMA от MACD
         # Упрощение: используем последние значения для расчета signal
         if len(closes) >= slow_period + signal_period:
             # Рассчитываем MACD для последних signal_period свечей
             macd_history = []
-            for i in range(len(closes) - signal_period - slow_period, len(closes) - slow_period):
+            for i in range(
+                len(closes) - signal_period - slow_period, len(closes) - slow_period
+            ):
                 if i >= fast_period:
                     # Рассчитываем EMA для этого момента
-                    ema_fast_i = self._calculate_regime_ema(candles[:i+1], fast_period)
-                    ema_slow_i = self._calculate_regime_ema(candles[:i+1], slow_period)
+                    ema_fast_i = self._calculate_regime_ema(
+                        candles[: i + 1], fast_period
+                    )
+                    ema_slow_i = self._calculate_regime_ema(
+                        candles[: i + 1], slow_period
+                    )
                     if ema_fast_i > 0 and ema_slow_i > 0:
                         macd_history.append(ema_fast_i - ema_slow_i)
-            
+
             # Если есть история, рассчитываем signal как EMA от истории
             if len(macd_history) >= signal_period:
-                signal_line = self._calculate_ema_from_list(macd_history[-signal_period:], signal_period)
+                signal_line = self._calculate_ema_from_list(
+                    macd_history[-signal_period:], signal_period
+                )
             else:
                 signal_line = macd_line
         else:
             signal_line = macd_line
-        
+
         histogram = macd_line - signal_line
-        
-        return {
-            "macd": macd_line,
-            "signal": signal_line,
-            "histogram": histogram
-        }
-    
-    def _calculate_ema_from_list(
-        self, data: List[float], period: int
-    ) -> float:
+
+        return {"macd": macd_line, "signal": signal_line, "histogram": histogram}
+
+    def _calculate_ema_from_list(self, data: List[float], period: int) -> float:
         """
         Вспомогательный метод для расчета EMA из списка значений.
-        
+
         Args:
             data: Список значений
             period: Период EMA
-            
+
         Returns:
             Значение EMA
         """
         if not data or len(data) < period:
             return data[-1] if data else 0.0
-        
+
         alpha = 2.0 / (period + 1)
         ema = sum(data[:period]) / period
-        
+
         for value in data[period:]:
             ema = (value * alpha) + (ema * (1 - alpha))
-        
+
         return ema
-    
+
     def _get_regime_indicators_params(
         self, regime: str = None, symbol: str = None
     ) -> Dict:
@@ -2760,7 +2830,7 @@ class FuturesSignalGenerator:
         # Объединяем: сначала базовые, затем per-symbol (per-symbol имеет приоритет)
         final_indicators = base_indicators.copy()
         final_indicators.update(symbol_indicators)  # Per-symbol перезаписывает базовые
-        
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Добавляем bb_period и bb_std_multiplier если их нет
         if "bb_period" not in final_indicators:
             final_indicators["bb_period"] = 20
@@ -2814,29 +2884,36 @@ class FuturesSignalGenerator:
             rsi_period = regime_params.get("rsi_period", 14)
             base_rsi_oversold = regime_params.get("rsi_oversold", 30)
             base_rsi_overbought = regime_params.get("rsi_overbought", 70)
-            
+
             # ✅ ПРИОРИТЕТ 2.5 (28.12.2025): Адаптируем RSI пороги на основе ATR
             adaptive_thresholds = await self._calculate_atr_adaptive_rsi_thresholds(
                 symbol=symbol,
                 base_overbought=base_rsi_overbought,
-                base_oversold=base_rsi_oversold
+                base_oversold=base_rsi_oversold,
             )
-            rsi_overbought = adaptive_thresholds.get("rsi_overbought", base_rsi_overbought)
+            rsi_overbought = adaptive_thresholds.get(
+                "rsi_overbought", base_rsi_overbought
+            )
             rsi_oversold = adaptive_thresholds.get("rsi_oversold", base_rsi_oversold)
             volatility_ratio = adaptive_thresholds.get("volatility_ratio", 1.0)
-            
+
             # Логируем адаптивные пороги (только если они отличаются от базовых)
-            if abs(rsi_overbought - base_rsi_overbought) > 0.5 or abs(rsi_oversold - base_rsi_oversold) > 0.5:
+            if (
+                abs(rsi_overbought - base_rsi_overbought) > 0.5
+                or abs(rsi_oversold - base_rsi_oversold) > 0.5
+            ):
                 logger.debug(
                     f"📊 {symbol}: RSI пороги адаптированы по ATR: "
                     f"overbought={rsi_overbought:.1f} (база={base_rsi_overbought:.1f}), "
                     f"oversold={rsi_oversold:.1f} (база={base_rsi_oversold:.1f}), "
                     f"volatility_ratio={volatility_ratio:.2f}"
                 )
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Пересчитываем RSI с режим-специфичным периодом
             if market_data.ohlcv_data and len(market_data.ohlcv_data) >= rsi_period + 1:
-                rsi = self._calculate_regime_rsi(market_data.ohlcv_data, rsi_period, rsi_overbought, rsi_oversold)
+                rsi = self._calculate_regime_rsi(
+                    market_data.ohlcv_data, rsi_period, rsi_overbought, rsi_oversold
+                )
             else:
                 # Fallback на базовый индикатор
                 rsi = indicators.get("rsi", 50)
@@ -2857,21 +2934,27 @@ class FuturesSignalGenerator:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Пересчитываем EMA с режим-специфичными периодами
             ema_fast_period_rsi = regime_params.get("ema_fast", 12)
             ema_slow_period_rsi = regime_params.get("ema_slow", 26)
-            
-            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(ema_fast_period_rsi, ema_slow_period_rsi):
-                ema_fast = self._calculate_regime_ema(market_data.ohlcv_data, ema_fast_period_rsi)
-                ema_slow = self._calculate_regime_ema(market_data.ohlcv_data, ema_slow_period_rsi)
+
+            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(
+                ema_fast_period_rsi, ema_slow_period_rsi
+            ):
+                ema_fast = self._calculate_regime_ema(
+                    market_data.ohlcv_data, ema_fast_period_rsi
+                )
+                ema_slow = self._calculate_regime_ema(
+                    market_data.ohlcv_data, ema_slow_period_rsi
+                )
             else:
                 # Fallback на базовые индикаторы
                 ema_fast = indicators.get("ema_12", 0)
                 ema_slow = indicators.get("ema_26", 0)
-            
+
             # ✅ ПРИОРИТЕТ 2.5 (28.12.2025): Логирование параметров EMA
             logger.debug(
                 f"📊 {symbol} EMA параметры: fast_period={ema_fast_period_rsi}, slow_period={ema_slow_period_rsi}, "
                 f"EMA_fast={ema_fast:.2f}, EMA_slow={ema_slow:.2f}, цена={current_price:.2f}"
             )
-            
+
             # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
             candle_close_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
@@ -2948,21 +3031,25 @@ class FuturesSignalGenerator:
                     strength = min(1.0, (rsi_oversold - rsi) / rsi_oversold)
                 else:
                     # Fallback: если rsi_oversold == 0, используем 0.5 как базовую силу
-                    logger.warning(f"⚠️ RSI oversold == 0 для {symbol}, используем fallback strength=0.5")
+                    logger.warning(
+                        f"⚠️ RSI oversold == 0 для {symbol}, используем fallback strength=0.5"
+                    )
                     strength = 0.5
-                confidence = confidence_config_rsi.get("rsi_signal", 0.6)  # ✅ АДАПТИВНО: Из конфига
+                confidence = confidence_config_rsi.get(
+                    "rsi_signal", 0.6
+                )  # ✅ АДАПТИВНО: Из конфига
                 has_conflict = False
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Блокировка конфликта EMA всегда (не только в trending)
                 # Блокируем BUY сигналы при конфликте EMA (RSI oversold + EMA bearish) ИЛИ при ADX>=20 bearish
                 should_block = False
                 block_reason = ""
-                
+
                 if is_downtrend:
                     # Конфликт: RSI oversold (LONG) vs EMA bearish (DOWN) - ПОЛНАЯ БЛОКИРОВКА (ВСЕГДА)
                     should_block = True
                     block_reason = f"конфликт EMA (EMA_12={ema_fast:.2f} < EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
-                
+
                 # ✅ ПРИОРИТЕТ 1 (28.12.2025): Режим-специфичная ADX блокировка
                 # Получаем режим для определения порога
                 current_regime_rsi_oversold = "ranging"  # Fallback
@@ -2970,20 +3057,22 @@ class FuturesSignalGenerator:
                     if self.data_registry:
                         regime_data = await self.data_registry.get_regime(symbol)
                         if regime_data:
-                            current_regime_rsi_oversold = regime_data.get("regime", "ranging").lower()
+                            current_regime_rsi_oversold = regime_data.get(
+                                "regime", "ranging"
+                            ).lower()
                 except Exception:
                     pass
-                
+
                 adx_threshold_rsi_oversold = 30.0  # Fallback для ranging
                 if current_regime_rsi_oversold == "trending":
                     adx_threshold_rsi_oversold = 20.0
                 elif current_regime_rsi_oversold == "choppy":
                     adx_threshold_rsi_oversold = 40.0
-                
+
                 if adx_value >= adx_threshold_rsi_oversold and adx_trend == "bearish":
                     should_block = True
                     block_reason = f"ADX={adx_value:.1f} >= {adx_threshold_rsi_oversold:.1f} для режима {current_regime_rsi_oversold} показывает нисходящий тренд (против тренда)"
-                
+
                 if should_block:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование конфликта с указанием всех параметров
                     logger.warning(
@@ -3032,33 +3121,42 @@ class FuturesSignalGenerator:
                     strength = min(1.0, (rsi - rsi_overbought) / denominator)
                 else:
                     # Fallback: если rsi_overbought == 100, используем 0.5 как базовую силу
-                    logger.warning(f"⚠️ RSI overbought == 100 для {symbol}, используем fallback strength=0.5")
+                    logger.warning(
+                        f"⚠️ RSI overbought == 100 для {symbol}, используем fallback strength=0.5"
+                    )
                     strength = 0.5
-                confidence = confidence_config_rsi.get("rsi_signal", 0.6)  # ✅ АДАПТИВНО: Из конфига
+                confidence = confidence_config_rsi.get(
+                    "rsi_signal", 0.6
+                )  # ✅ АДАПТИВНО: Из конфига
                 has_conflict = False
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Блокировка конфликта EMA всегда (не только в trending)
                 # Блокируем SELL сигналы при конфликте EMA (RSI overbought + EMA bullish) ИЛИ при ADX>=20 bullish
                 should_block_rsi_overbought = False
                 block_reason_rsi_overbought = ""
-                
+
                 if is_uptrend:
                     # Конфликт: RSI overbought (SHORT) vs EMA bullish (UP) - ПОЛНАЯ БЛОКИРОВКА (ВСЕГДА)
                     should_block_rsi_overbought = True
                     block_reason_rsi_overbought = f"конфликт EMA (EMA_12={ema_fast:.2f} > EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
-                
+
                 # ✅ ПРИОРИТЕТ 1 (28.12.2025): Режим-специфичная ADX блокировка
-                current_regime_rsi_overbought_2 = current_regime  # Используем уже полученный режим выше
+                current_regime_rsi_overbought_2 = (
+                    current_regime  # Используем уже полученный режим выше
+                )
                 adx_threshold_rsi_overbought_2 = 30.0  # Fallback для ranging
                 if current_regime_rsi_overbought_2 == "trending":
                     adx_threshold_rsi_overbought_2 = 20.0
                 elif current_regime_rsi_overbought_2 == "choppy":
                     adx_threshold_rsi_overbought_2 = 40.0
-                
-                if adx_value >= adx_threshold_rsi_overbought_2 and adx_trend == "bullish":
+
+                if (
+                    adx_value >= adx_threshold_rsi_overbought_2
+                    and adx_trend == "bullish"
+                ):
                     should_block_rsi_overbought = True
                     block_reason_rsi_overbought = f"ADX={adx_value:.1f} >= {adx_threshold_rsi_overbought_2:.1f} для режима {current_regime_rsi_overbought_2} показывает восходящий тренд (против тренда)"
-                
+
                 if should_block_rsi_overbought:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование конфликта с указанием всех параметров
                     logger.warning(
@@ -3143,10 +3241,16 @@ class FuturesSignalGenerator:
             macd_fast_period = regime_params_macd.get("macd_fast", 12)
             macd_slow_period = regime_params_macd.get("macd_slow", 26)
             macd_signal_period = regime_params_macd.get("macd_signal", 9)
-            
-            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= macd_slow_period + macd_signal_period:
+
+            if (
+                market_data.ohlcv_data
+                and len(market_data.ohlcv_data) >= macd_slow_period + macd_signal_period
+            ):
                 macd_calculated = self._calculate_regime_macd(
-                    market_data.ohlcv_data, macd_fast_period, macd_slow_period, macd_signal_period
+                    market_data.ohlcv_data,
+                    macd_fast_period,
+                    macd_slow_period,
+                    macd_signal_period,
                 )
                 if macd_calculated:
                     macd_line = macd_calculated.get("macd", 0)
@@ -3176,15 +3280,21 @@ class FuturesSignalGenerator:
             regime_params_macd = self._get_regime_indicators_params(symbol=symbol)
             ema_fast_period_macd = regime_params_macd.get("ema_fast", 12)
             ema_slow_period_macd = regime_params_macd.get("ema_slow", 26)
-            
-            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(ema_fast_period_macd, ema_slow_period_macd):
-                ema_fast = self._calculate_regime_ema(market_data.ohlcv_data, ema_fast_period_macd)
-                ema_slow = self._calculate_regime_ema(market_data.ohlcv_data, ema_slow_period_macd)
+
+            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(
+                ema_fast_period_macd, ema_slow_period_macd
+            ):
+                ema_fast = self._calculate_regime_ema(
+                    market_data.ohlcv_data, ema_fast_period_macd
+                )
+                ema_slow = self._calculate_regime_ema(
+                    market_data.ohlcv_data, ema_slow_period_macd
+                )
             else:
                 # Fallback на базовые индикаторы
                 ema_fast = indicators.get("ema_12", 0)
                 ema_slow = indicators.get("ema_26", 0)
-            
+
             # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
             candle_close_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
@@ -3205,15 +3315,21 @@ class FuturesSignalGenerator:
                     if self.data_registry:
                         regime_data = await self.data_registry.get_regime(symbol)
                         if regime_data:
-                            current_regime_macd_divider_bullish = regime_data.get("regime", "ranging").lower()
+                            current_regime_macd_divider_bullish = regime_data.get(
+                                "regime", "ranging"
+                            ).lower()
                 except Exception:
                     pass
-                
+
                 # Адаптивный делитель: Trending=120 (агрессивно), Ranging=180 (консервативно), Choppy=150 (баланс)
                 macd_strength_divider_bullish = 180.0  # Fallback для ranging
                 try:
-                    regime_params_divider_bullish = self._get_regime_indicators_params(symbol=symbol)
-                    macd_strength_divider_bullish = regime_params_divider_bullish.get("macd_strength_divider", 180.0)
+                    regime_params_divider_bullish = self._get_regime_indicators_params(
+                        symbol=symbol
+                    )
+                    macd_strength_divider_bullish = regime_params_divider_bullish.get(
+                        "macd_strength_divider", 180.0
+                    )
                 except Exception:
                     # Если нет в конфиге, используем режим-специфичные значения
                     if current_regime_macd_divider_bullish == "trending":
@@ -3222,10 +3338,10 @@ class FuturesSignalGenerator:
                         macd_strength_divider_bullish = 150.0
                     else:  # ranging
                         macd_strength_divider_bullish = 180.0
-                
+
                 base_strength_raw = abs(histogram) / macd_strength_divider_bullish
                 base_strength = min(base_strength_raw, 1.0)
-                
+
                 # ✅ ПРИОРИТЕТ 2.5 (28.12.2025): Логирование параметров и strength расчетов
                 logger.debug(
                     f"📊 MACD BULLISH сигнал {symbol}: histogram={histogram:.4f}, "
@@ -3287,32 +3403,34 @@ class FuturesSignalGenerator:
                 # ✅ КРИТИЧЕСКОЕ: Блокируем при конфликте EMA (MACD bullish + EMA bearish) вместо снижения strength
                 should_block_macd_bullish = False
                 block_reason_macd_bullish = ""
-                
+
                 if not is_bullish_trend:
                     # Конфликт: MACD bullish, но EMA/цена не bullish - ПОЛНАЯ БЛОКИРОВКА
                     should_block_macd_bullish = True
                     block_reason_macd_bullish = f"конфликт EMA (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
-                
+
                 # ✅ ПРИОРИТЕТ 1 (28.12.2025): Режим-специфичная ADX блокировка
                 current_regime_macd_bullish = "ranging"  # Fallback
                 try:
                     if self.data_registry:
                         regime_data = await self.data_registry.get_regime(symbol)
                         if regime_data:
-                            current_regime_macd_bullish = regime_data.get("regime", "ranging").lower()
+                            current_regime_macd_bullish = regime_data.get(
+                                "regime", "ranging"
+                            ).lower()
                 except Exception:
                     pass
-                
+
                 adx_threshold_macd_bullish = 30.0  # Fallback для ranging
                 if current_regime_macd_bullish == "trending":
                     adx_threshold_macd_bullish = 20.0
                 elif current_regime_macd_bullish == "choppy":
                     adx_threshold_macd_bullish = 40.0
-                
+
                 if adx_value >= adx_threshold_macd_bullish and adx_trend == "bearish":
                     should_block_macd_bullish = True
                     block_reason_macd_bullish = f"ADX={adx_value:.1f} >= {adx_threshold_macd_bullish:.1f} для режима {current_regime_macd_bullish} показывает нисходящий тренд (против тренда)"
-                
+
                 if should_block_macd_bullish:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование конфликта с указанием всех параметров
                     logger.warning(
@@ -3343,7 +3461,7 @@ class FuturesSignalGenerator:
                 # Используем тот же делитель что для BULLISH (уже получен выше)
                 base_strength_raw = abs(histogram) / macd_strength_divider_bullish
                 base_strength = min(base_strength_raw, 1.0)
-                
+
                 # ✅ ПРИОРИТЕТ 2.5 (28.12.2025): Логирование параметров и strength расчетов
                 logger.debug(
                     f"📊 MACD BEARISH сигнал {symbol}: histogram={histogram:.4f}, "
@@ -3404,16 +3522,16 @@ class FuturesSignalGenerator:
                 # ✅ КРИТИЧЕСКОЕ: Блокируем при конфликте EMA (MACD bearish + EMA bullish) вместо снижения strength
                 should_block_macd_bearish = False
                 block_reason_macd_bearish = ""
-                
+
                 if not is_bearish_trend:
                     # Конфликт: MACD bearish, но EMA/цена не bearish - ПОЛНАЯ БЛОКИРОВКА
                     should_block_macd_bearish = True
                     block_reason_macd_bearish = f"конфликт EMA (EMA_12={ema_fast:.2f}, EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
-                
+
                 if adx_value >= 20.0 and adx_trend == "bullish":
                     should_block_macd_bearish = True
                     block_reason_macd_bearish = f"ADX={adx_value:.1f} >= 20 показывает восходящий тренд (против тренда)"
-                
+
                 if should_block_macd_bearish:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование конфликта с указанием всех параметров
                     logger.warning(
@@ -3488,10 +3606,12 @@ class FuturesSignalGenerator:
             bb_confidence = confidence_config_bb.get("rsi_signal", 0.6)  # Fallback
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Пересчитываем BB с режим-специфичными параметрами
-            regime_params_bb = self._get_regime_indicators_params(symbol=symbol, regime=regime_name_bb)
+            regime_params_bb = self._get_regime_indicators_params(
+                symbol=symbol, regime=regime_name_bb
+            )
             bb_period = regime_params_bb.get("bb_period", 20)
             bb_std_multiplier = regime_params_bb.get("bb_std_multiplier", 2.0)
-            
+
             if market_data.ohlcv_data and len(market_data.ohlcv_data) >= bb_period:
                 bb_calculated = self._calculate_regime_bollinger_bands(
                     market_data.ohlcv_data, bb_period, bb_std_multiplier
@@ -3516,7 +3636,7 @@ class FuturesSignalGenerator:
                     f"⚠️ {symbol}: Недостаточно свечей для пересчета BB ({len(market_data.ohlcv_data) if market_data.ohlcv_data else 0}), "
                     f"используем базовые индикаторы"
                 )
-            
+
             # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
             candle_close_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
@@ -3532,10 +3652,16 @@ class FuturesSignalGenerator:
                 regime_params_bb = self._get_regime_indicators_params(symbol=symbol)
                 ema_fast_period_bb = regime_params_bb.get("ema_fast", 12)
                 ema_slow_period_bb = regime_params_bb.get("ema_slow", 26)
-                
-                if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(ema_fast_period_bb, ema_slow_period_bb):
-                    ema_fast = self._calculate_regime_ema(market_data.ohlcv_data, ema_fast_period_bb)
-                    ema_slow = self._calculate_regime_ema(market_data.ohlcv_data, ema_slow_period_bb)
+
+                if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(
+                    ema_fast_period_bb, ema_slow_period_bb
+                ):
+                    ema_fast = self._calculate_regime_ema(
+                        market_data.ohlcv_data, ema_fast_period_bb
+                    )
+                    ema_slow = self._calculate_regime_ema(
+                        market_data.ohlcv_data, ema_slow_period_bb
+                    )
                 else:
                     # Fallback на базовые индикаторы
                     ema_fast = indicators.get("ema_12", 0)
@@ -3606,16 +3732,16 @@ class FuturesSignalGenerator:
                 # ✅ КРИТИЧЕСКОЕ: Блокируем при конфликте EMA (BB oversold + EMA bearish) вместо снижения strength
                 should_block_bb_oversold = False
                 block_reason_bb_oversold = ""
-                
+
                 if is_downtrend:
                     # Конфликт: BB oversold (LONG) vs EMA bearish (DOWN) - ПОЛНАЯ БЛОКИРОВКА
                     should_block_bb_oversold = True
                     block_reason_bb_oversold = f"конфликт EMA (EMA_12={ema_fast:.2f} < EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
-                
+
                 if adx_value >= 20.0 and adx_trend == "bearish":
                     should_block_bb_oversold = True
                     block_reason_bb_oversold = f"ADX={adx_value:.1f} >= 20 показывает нисходящий тренд (против тренда)"
-                
+
                 if should_block_bb_oversold:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование конфликта с указанием всех параметров
                     logger.warning(
@@ -3644,10 +3770,16 @@ class FuturesSignalGenerator:
                 regime_params_bb = self._get_regime_indicators_params(symbol=symbol)
                 ema_fast_period_bb = regime_params_bb.get("ema_fast", 12)
                 ema_slow_period_bb = regime_params_bb.get("ema_slow", 26)
-                
-                if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(ema_fast_period_bb, ema_slow_period_bb):
-                    ema_fast = self._calculate_regime_ema(market_data.ohlcv_data, ema_fast_period_bb)
-                    ema_slow = self._calculate_regime_ema(market_data.ohlcv_data, ema_slow_period_bb)
+
+                if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(
+                    ema_fast_period_bb, ema_slow_period_bb
+                ):
+                    ema_fast = self._calculate_regime_ema(
+                        market_data.ohlcv_data, ema_fast_period_bb
+                    )
+                    ema_slow = self._calculate_regime_ema(
+                        market_data.ohlcv_data, ema_slow_period_bb
+                    )
                 else:
                     # Fallback на базовые индикаторы
                     ema_fast = indicators.get("ema_12", 0)
@@ -3718,16 +3850,16 @@ class FuturesSignalGenerator:
                 # ✅ КРИТИЧЕСКОЕ: Блокируем при конфликте EMA (BB overbought + EMA bullish) вместо снижения strength
                 should_block_bb_overbought = False
                 block_reason_bb_overbought = ""
-                
+
                 if is_uptrend:
                     # Конфликт: BB overbought (SHORT) vs EMA bullish (UP) - ПОЛНАЯ БЛОКИРОВКА
                     should_block_bb_overbought = True
                     block_reason_bb_overbought = f"конфликт EMA (EMA_12={ema_fast:.2f} > EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
-                
+
                 if adx_value >= 20.0 and adx_trend == "bullish":
                     should_block_bb_overbought = True
                     block_reason_bb_overbought = f"ADX={adx_value:.1f} >= 20 показывает восходящий тренд (против тренда)"
-                
+
                 if should_block_bb_overbought:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование конфликта с указанием всех параметров
                     logger.warning(
@@ -3777,7 +3909,7 @@ class FuturesSignalGenerator:
                         current_regime_ma = regime_data.get("regime", "ranging").lower()
             except Exception:
                 pass
-            
+
             adx_threshold_ma = 30.0  # Fallback для ranging
             if current_regime_ma == "trending":
                 adx_threshold_ma = 20.0
@@ -3789,14 +3921,22 @@ class FuturesSignalGenerator:
             regime_name_ma = current_regime_ma  # Используем уже полученный режим
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Пересчитываем EMA с режим-специфичными периодами
-            regime_params = self._get_regime_indicators_params(symbol=symbol, regime=regime_name_ma)
+            regime_params = self._get_regime_indicators_params(
+                symbol=symbol, regime=regime_name_ma
+            )
             ema_fast_period = regime_params.get("ema_fast", 12)
             ema_slow_period = regime_params.get("ema_slow", 26)
-            
+
             # Пересчитываем EMA с правильными периодами
-            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(ema_fast_period, ema_slow_period):
-                ma_fast = self._calculate_regime_ema(market_data.ohlcv_data, ema_fast_period)
-                ma_slow = self._calculate_regime_ema(market_data.ohlcv_data, ema_slow_period)
+            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= max(
+                ema_fast_period, ema_slow_period
+            ):
+                ma_fast = self._calculate_regime_ema(
+                    market_data.ohlcv_data, ema_fast_period
+                )
+                ma_slow = self._calculate_regime_ema(
+                    market_data.ohlcv_data, ema_slow_period
+                )
             else:
                 # Fallback на базовые индикаторы если недостаточно данных
                 ma_fast = indicators.get("ema_12", 0)
@@ -3805,7 +3945,7 @@ class FuturesSignalGenerator:
                     f"⚠️ {symbol}: Недостаточно свечей для пересчета EMA ({len(market_data.ohlcv_data) if market_data.ohlcv_data else 0}), "
                     f"используем базовые индикаторы"
                 )
-            
+
             # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
             candle_close_price = (
                 market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
@@ -4561,7 +4701,9 @@ class FuturesSignalGenerator:
             return sum(trs) / len(trs) if trs else 0.0
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Используем адаптивный ATR период
-        regime_params_atr = self._get_regime_indicators_params(symbol=symbol, regime=regime_key)
+        regime_params_atr = self._get_regime_indicators_params(
+            symbol=symbol, regime=regime_key
+        )
         atr_period = regime_params_atr.get("atr_period", 14)
         atr_slice = candles[-(atr_period + 1) :]
         atr_value = _calc_atr(atr_slice) if atr_slice else 0.0
@@ -4743,7 +4885,7 @@ class FuturesSignalGenerator:
                 # ✅ ИСПРАВЛЕНО (25.12.2025): Получаем режим с проверкой инициализации и альтернативными источниками
                 regime_manager = self.regime_managers.get(symbol) or self.regime_manager
                 current_regime_name = None
-                
+
                 if regime_manager:
                     try:
                         current_regime_name = regime_manager.get_current_regime()
@@ -4756,18 +4898,28 @@ class FuturesSignalGenerator:
                                 # Если это объект (например, Regime enum), конвертируем в строку
                                 current_regime_name = str(current_regime_name).lower()
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка получения режима из RegimeManager для {symbol}: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Ошибка получения режима из RegimeManager для {symbol}: {e}"
+                        )
+
                 # ✅ НОВОЕ: Альтернативный источник - DataRegistry
-                if not current_regime_name and hasattr(self, "data_registry") and self.data_registry:
+                if (
+                    not current_regime_name
+                    and hasattr(self, "data_registry")
+                    and self.data_registry
+                ):
                     try:
                         regime_data = await self.data_registry.get_regime(symbol)
                         if regime_data and regime_data.get("regime"):
                             current_regime_name = str(regime_data.get("regime")).lower()
-                            logger.debug(f"✅ Режим для {symbol} получен из DataRegistry: {current_regime_name}")
+                            logger.debug(
+                                f"✅ Режим для {symbol} получен из DataRegistry: {current_regime_name}"
+                            )
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить режим из DataRegistry для {symbol}: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Не удалось получить режим из DataRegistry для {symbol}: {e}"
+                        )
+
                 if current_regime_name:
                     signal["regime"] = current_regime_name
                     logger.debug(
@@ -5348,7 +5500,7 @@ class FuturesSignalGenerator:
                 # ✅ ИСПРАВЛЕНО (25.12.2025): Получаем режим с проверкой инициализации и альтернативными источниками
                 regime_manager = self.regime_managers.get(symbol) or self.regime_manager
                 current_regime_name = None
-                
+
                 if regime_manager:
                     try:
                         current_regime_name = regime_manager.get_current_regime()
@@ -5361,18 +5513,28 @@ class FuturesSignalGenerator:
                                 # Если это объект (например, Regime enum), конвертируем в строку
                                 current_regime_name = str(current_regime_name).lower()
                     except Exception as e:
-                        logger.debug(f"⚠️ Ошибка получения режима из RegimeManager для {symbol}: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Ошибка получения режима из RegimeManager для {symbol}: {e}"
+                        )
+
                 # ✅ НОВОЕ: Альтернативный источник - DataRegistry
-                if not current_regime_name and hasattr(self, "data_registry") and self.data_registry:
+                if (
+                    not current_regime_name
+                    and hasattr(self, "data_registry")
+                    and self.data_registry
+                ):
                     try:
                         regime_data = await self.data_registry.get_regime(symbol)
                         if regime_data and regime_data.get("regime"):
                             current_regime_name = str(regime_data.get("regime")).lower()
-                            logger.debug(f"✅ Режим для {symbol} получен из DataRegistry: {current_regime_name}")
+                            logger.debug(
+                                f"✅ Режим для {symbol} получен из DataRegistry: {current_regime_name}"
+                            )
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить режим из DataRegistry для {symbol}: {e}")
-                
+                        logger.debug(
+                            f"⚠️ Не удалось получить режим из DataRegistry для {symbol}: {e}"
+                        )
+
                 if current_regime_name:
                     signal["regime"] = current_regime_name
                     logger.debug(
@@ -5881,7 +6043,7 @@ class FuturesSignalGenerator:
                 if isinstance(thresholds_config_min, dict)
                 else getattr(thresholds_config_min, "min_signal_strength", None)
             )
-            
+
             # Если нет в thresholds, пробуем режим-специфичные параметры из scalping_config
             if min_strength is None and regime_name_min_strength:
                 if regime_name_min_strength == "ranging":
@@ -5896,14 +6058,14 @@ class FuturesSignalGenerator:
                     min_strength = getattr(
                         self.scalping_config, "min_signal_strength_choppy", None
                     )
-            
+
             # Если все еще нет, используем базовый min_signal_strength из scalping_config
             if min_strength is None:
                 min_strength = getattr(self.scalping_config, "min_signal_strength", 0.3)
-            
+
             # Преобразуем в float
             min_strength = float(min_strength) if min_strength is not None else 0.3
-            
+
             logger.debug(
                 f"🔍 SignalGenerator: min_signal_strength={min_strength:.2f} "
                 f"(режим: {regime_name_min_strength or 'unknown'}, "
