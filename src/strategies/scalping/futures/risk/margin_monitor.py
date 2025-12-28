@@ -138,7 +138,13 @@ class MarginMonitor:
                 current_balance = 1000.0  # Fallback
 
             # ✅ Рассчитываем требуемую маржу (с учетом leverage)
-            leverage = self.config.get("leverage", 5)  # Из конфига или fallback
+            # ✅ ИСПРАВЛЕНО (28.12.2025): RiskConfig не имеет метода .get(), используем getattr()
+            if isinstance(self.config, dict):
+                leverage = self.config.get("leverage", 5)
+                max_margin_ratio = self.config.get("max_margin_ratio", 0.8)
+            else:
+                leverage = getattr(self.config, "leverage", 5)
+                max_margin_ratio = getattr(self.config, "max_margin_ratio", 0.8)
             required_margin = position_size_usd / leverage
 
             # ✅ Проверяем доступность маржи
@@ -150,9 +156,6 @@ class MarginMonitor:
             margin_ratio = self.get_margin_ratio(
                 current_balance, used_margin + required_margin
             )
-            max_margin_ratio = self.config.get(
-                "max_margin_ratio", 0.8
-            )  # Из конфига или 80%
 
             if not available:
                 logger.warning(f"❌ MarginMonitor: Margin unsafe: {reason}")
