@@ -1159,30 +1159,8 @@ class ExitAnalyzer:
                             f"⚠️ [ATR_SL] {symbol}: Не удалось получить ATR из market_data: {e}"
                         )
 
-                # Fallback: пробуем получить ATR через orchestrator
-                if (
-                    atr_1m is None
-                    and hasattr(self, "orchestrator")
-                    and self.orchestrator
-                ):
-                    if hasattr(self.orchestrator, "signal_generator"):
-                        indicator_manager = getattr(
-                            self.orchestrator.signal_generator,
-                            "indicator_manager",
-                            None,
-                        )
-                        if indicator_manager:
-                            atr_indicator = indicator_manager.get_indicator("ATR")
-                            if atr_indicator:
-                                atr_1m = (
-                                    atr_indicator.get_value()
-                                    if hasattr(atr_indicator, "get_value")
-                                    else None
-                                )
-                                if atr_1m:
-                                    logger.debug(
-                                        f"✅ [ATR_SL] {symbol}: ATR получен через indicator_manager: {atr_1m:.6f}"
-                                    )
+                # ✅ ИСПРАВЛЕНО (28.12.2025): Удален проблемный fallback через IndicatorManager.get_indicator()
+                # IndicatorManager не имеет метода get_indicator(), используем только ATRProvider и fallback на фиксированный SL
 
                 # ✅ ИСПРАВЛЕНО: Используем ATR для расчета SL если доступен
                 if atr_1m and atr_1m > 0:
@@ -2317,6 +2295,36 @@ class ExitAnalyzer:
                     # ✅ ИСПРАВЛЕНО: Не закрываем убыточные позиции по max_holding
                     # Позволяем им дойти до SL или восстановиться
                     if pnl_percent < 0:
+                        # ✅ НОВОЕ (28.12.2025): Проверяем min_holding_minutes перед проверкой SL
+                        min_holding_minutes = None
+                        if self.parameter_provider:
+                            try:
+                                exit_params = self.parameter_provider.get_exit_params(symbol, regime)
+                                min_holding_minutes = exit_params.get("min_holding_minutes", 1.5)
+                                if min_holding_minutes is not None:
+                                    min_holding_minutes = float(min_holding_minutes)
+                            except Exception as e:
+                                logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes: {e}")
+                        
+                        if min_holding_minutes is None:
+                            min_holding_minutes = 1.5  # Fallback для trending
+                        
+                        # Не закрываем по SL если позиция открыта меньше min_holding_minutes
+                        if minutes_in_position is not None and minutes_in_position < min_holding_minutes:
+                            logger.debug(
+                                f"⏳ ExitAnalyzer TRENDING: Позиция {symbol} в убытке {pnl_percent:.2f}%, "
+                                f"но время {minutes_in_position:.2f} мин < min_holding {min_holding_minutes:.2f} мин - "
+                                f"пропускаем проверку SL"
+                            )
+                            return {
+                                "action": "hold",
+                                "reason": "min_holding_not_reached_before_sl",
+                                "pnl_pct": pnl_percent,
+                                "minutes_in_position": minutes_in_position,
+                                "min_holding_minutes": min_holding_minutes,
+                                "regime": regime,
+                            }
+                        
                         # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
                         # Вызывается только если pnl_percent < 0 и |убыток| >= 1.5 * SL
                         sl_percent = self._get_sl_percent(
@@ -3184,6 +3192,36 @@ class ExitAnalyzer:
                     # Позволяем им дойти до SL или восстановиться
                     # ✅ ИСПРАВЛЕНО: Используем Gross PnL для проверки убытка (SL должен срабатывать на основе движения цены)
                     if gross_pnl_percent < 0:
+                        # ✅ НОВОЕ (28.12.2025): Проверяем min_holding_minutes перед проверкой SL
+                        min_holding_minutes = None
+                        if self.parameter_provider:
+                            try:
+                                exit_params = self.parameter_provider.get_exit_params(symbol, regime)
+                                min_holding_minutes = exit_params.get("min_holding_minutes", 0.5)
+                                if min_holding_minutes is not None:
+                                    min_holding_minutes = float(min_holding_minutes)
+                            except Exception as e:
+                                logger.debug(f"⚠️ ExitAnalyzer: Ошибка получения min_holding_minutes: {e}")
+                        
+                        if min_holding_minutes is None:
+                            min_holding_minutes = 0.5  # Fallback
+                        
+                        # Не закрываем по SL если позиция открыта меньше min_holding_minutes
+                        if minutes_in_position is not None and minutes_in_position < min_holding_minutes:
+                            logger.debug(
+                                f"⏳ ExitAnalyzer RANGING: Позиция {symbol} в убытке {gross_pnl_percent:.2f}%, "
+                                f"но время {minutes_in_position:.2f} мин < min_holding {min_holding_minutes:.2f} мин - "
+                                f"пропускаем проверку SL"
+                            )
+                            return {
+                                "action": "hold",
+                                "reason": "min_holding_not_reached_before_sl",
+                                "pnl_pct": gross_pnl_percent,
+                                "minutes_in_position": minutes_in_position,
+                                "min_holding_minutes": min_holding_minutes,
+                                "regime": regime,
+                            }
+                        
                         # ---------- УМНОЕ ЗАКРЫТИЕ УБЫТОЧНОЙ ПОЗИЦИИ ----------
                         # Вызывается только если gross_pnl_percent < 0 и |убыток| >= 1.5 * SL
                         # ✅ ИСПРАВЛЕНО: Учитываем спред для предотвращения дергания

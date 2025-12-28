@@ -328,56 +328,83 @@ class EntryManager:
                         }
                         break
 
-                # Если позицию не нашли, делаем retry с задержкой
+                # ✅ ИСПРАВЛЕНО (28.12.2025): Улучшенная retry логика с 3 попытками и увеличивающимися задержками
                 if not position_data:
-                    logger.warning(
-                        f"⚠️ EntryManager: Позиция {symbol} не найдена сразу, ждём 0.5 сек и делаем retry..."
-                    )
-                    await asyncio.sleep(0.5)
+                    max_retries = 3
+                    retry_delays = [0.5, 1.0, 2.0]  # Увеличивающиеся задержки
+                    
+                    for retry_num in range(max_retries):
+                        logger.warning(
+                            f"⚠️ EntryManager: Позиция {symbol} не найдена, попытка {retry_num + 1}/{max_retries}, "
+                            f"ждём {retry_delays[retry_num]} сек..."
+                        )
+                        await asyncio.sleep(retry_delays[retry_num])
 
-                    # Retry получения позиции
-                    try:
-                        positions_retry = await client.get_positions()
-                        for pos in positions_retry:
-                            pos_inst_id = pos.get("instId", "")
-                            pos_size = abs(float(pos.get("pos", "0")))
-                            if (
-                                pos_inst_id == inst_id or pos_inst_id == symbol
-                            ) and pos_size > 0.000001:
-                                pos_side_raw = pos.get("posSide", "").lower()
-                                position_side = (
-                                    pos_side_raw
-                                    if pos_side_raw in ["long", "short"]
-                                    else (
-                                        "long"
-                                        if float(pos.get("pos", "0")) > 0
-                                        else "short"
+                        # Retry получения позиции
+                        try:
+                            positions_retry = await client.get_positions()
+                            for pos in positions_retry:
+                                pos_inst_id = pos.get("instId", "")
+                                pos_size = abs(float(pos.get("pos", "0")))
+                                if (
+                                    pos_inst_id == inst_id or pos_inst_id == symbol
+                                ) and pos_size > 0.000001:
+                                    pos_side_raw = pos.get("posSide", "").lower()
+                                    position_side = (
+                                        pos_side_raw
+                                        if pos_side_raw in ["long", "short"]
+                                        else (
+                                            "long"
+                                            if float(pos.get("pos", "0")) > 0
+                                            else "short"
+                                        )
                                     )
-                                )
 
-                                # ✅ FIX: Получаем ТОЧНУЮ цену avgPx с биржи
-                                real_entry_price = float(pos.get("avgPx", "0"))
-                                logger.info(
-                                    f"✅ Retry успешен! Получена реальная entry_price={real_entry_price:.6f} для {symbol}"
-                                )
+                                    # ✅ FIX: Получаем ТОЧНУЮ цену avgPx с биржи
+                                    real_entry_price = float(pos.get("avgPx", "0"))
+                                    logger.info(
+                                        f"✅ Retry {retry_num + 1} успешен! Получена реальная entry_price={real_entry_price:.6f} для {symbol}"
+                                    )
 
-                                position_data = {
-                                    "symbol": symbol,
-                                    "instId": pos.get("instId", ""),
-                                    "pos": pos.get("pos", "0"),
-                                    "posSide": position_side,
-                                    "avgPx": pos.get("avgPx", "0"),
-                                    "markPx": pos.get("markPx", pos.get("avgPx", "0")),
-                                    "size": pos_size,
-                                    "entry_price": real_entry_price,
-                                    "position_side": position_side,
-                                    "margin_used": float(pos.get("margin", "0"))
-                                    if pos.get("margin")
-                                    else 0.0,
-                                }
-                                break
-                    except Exception as retry_e:
-                        logger.warning(f"⚠️ Retry не удался: {retry_e}")
+                                    # Получаем entry_time из API
+                                    entry_time_from_api = None
+                                    c_time = pos.get("cTime")
+                                    u_time = pos.get("uTime")
+                                    entry_time_str = c_time or u_time
+                                    if entry_time_str:
+                                        try:
+                                            entry_timestamp_ms = int(entry_time_str)
+                                            entry_timestamp_sec = entry_timestamp_ms / 1000.0
+                                            from datetime import timezone
+                                            entry_time_from_api = datetime.fromtimestamp(
+                                                entry_timestamp_sec, tz=timezone.utc
+                                            )
+                                        except (ValueError, TypeError):
+                                            pass
+
+                                    position_data = {
+                                        "symbol": symbol,
+                                        "instId": pos.get("instId", ""),
+                                        "pos": pos.get("pos", "0"),
+                                        "posSide": position_side,
+                                        "avgPx": pos.get("avgPx", "0"),
+                                        "markPx": pos.get("markPx", pos.get("avgPx", "0")),
+                                        "size": pos_size,
+                                        "entry_price": real_entry_price,
+                                        "position_side": position_side,
+                                        "margin_used": float(pos.get("margin", "0"))
+                                        if pos.get("margin")
+                                        else 0.0,
+                                        "entry_time": entry_time_from_api,
+                                    }
+                                    break
+                            
+                            if position_data:
+                                break  # Позиция найдена, выходим из цикла retry
+                        except Exception as retry_e:
+                            logger.warning(f"⚠️ Retry {retry_num + 1} не удался: {retry_e}")
+                            if retry_num == max_retries - 1:
+                                logger.error(f"❌ Все {max_retries} попытки retry не удались для {symbol}")
 
                 # Если всё ещё не нашли — используем order_result.price (лимитная цена)
                 if not position_data:

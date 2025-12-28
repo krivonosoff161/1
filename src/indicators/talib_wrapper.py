@@ -37,9 +37,9 @@ class TALibRSI(BaseIndicator):
                 else 50.0
             )
         except Exception as e:
-            # ✅ ЛОГИРОВАНИЕ: Логируем ошибку и используем fallback
-            logger.warning(
-                f"⚠️ TALibRSI: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
+            # ✅ ИСПРАВЛЕНО (28.12.2025): Silent fallback без warning (только debug для диагностики)
+            logger.debug(
+                f"TALibRSI: Ошибка расчета через TA-Lib ({type(e).__name__}: {e}), используется fallback"
             )
             # Fallback на простое среднее (не идеально, но лучше чем ошибка)
             rsi_value = 50.0

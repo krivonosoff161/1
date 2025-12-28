@@ -640,6 +640,27 @@ class SignalCoordinator:
 
         except Exception as e:
             logger.error(f"Ошибка обработки сигналов: {e}")
+        finally:
+            # ✅ НОВОЕ (28.12.2025): Логируем статистику блокировок после обработки сигналов
+            self._log_block_stats()
+
+    def _log_block_stats(self):
+        """
+        ✅ НОВОЕ (28.12.2025): Периодическое логирование статистики блокировок сигналов.
+        
+        Вызывается после обработки сигналов для диагностики причин низкой конверсии.
+        """
+        total_blocked = sum(self._block_stats.values())
+        if total_blocked > 0:
+            logger.info(
+                f"📊 Статистика блокировок сигналов (всего заблокировано: {total_blocked}):\n"
+                f"   - Circuit breaker: {self._block_stats['circuit_breaker']}\n"
+                f"   - Side blocked: {self._block_stats['side_blocked']}\n"
+                f"   - Low strength: {self._block_stats['low_strength']}\n"
+                f"   - Existing position: {self._block_stats['existing_position']}\n"
+                f"   - Margin unsafe: {self._block_stats['margin_unsafe']}\n"
+                f"   - Other: {self._block_stats['other']}"
+            )
 
     async def validate_signal(self, signal: Dict[str, Any]) -> bool:
         """Валидация торгового сигнала"""

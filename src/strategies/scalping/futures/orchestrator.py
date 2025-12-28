@@ -2596,6 +2596,34 @@ class FuturesScalpingOrchestrator:
                 # Обновление статистики
                 await self._update_performance()
 
+                # ✅ НОВОЕ (28.12.2025): Периодический вывод метрик производительности каждые 300 сек
+                if hasattr(self, "_last_performance_log_time"):
+                    time_since_last_log = time.time() - self._last_performance_log_time
+                else:
+                    time_since_last_log = 301.0  # Первый запуск
+                    self._last_performance_log_time = time.time()
+
+                if time_since_last_log >= 300.0:  # Каждые 5 минут
+                    if self.performance_tracker:
+                        try:
+                            win_rate = self.performance_tracker.calculate_win_rate()
+                            total_trades = self.performance_tracker.total_trades
+                            total_pnl = self.performance_tracker.total_pnl
+                            daily_pnl = self.performance_tracker.daily_pnl
+                            winning_trades = self.performance_tracker.winning_trades
+                            
+                            logger.info(
+                                f"📊 МЕТРИКИ ПРОИЗВОДИТЕЛЬНОСТИ (каждые 5 мин):\n"
+                                f"   - Всего сделок: {total_trades}\n"
+                                f"   - Прибыльных: {winning_trades}\n"
+                                f"   - Win Rate: {win_rate:.2f}%\n"
+                                f"   - Общий PnL: ${total_pnl:.2f}\n"
+                                f"   - Дневной PnL: ${daily_pnl:.2f}"
+                            )
+                            self._last_performance_log_time = time.time()
+                        except Exception as e:
+                            logger.debug(f"⚠️ Ошибка получения метрик производительности: {e}")
+
                 if not self.is_running:
                     break
 

@@ -30,8 +30,8 @@ class ATRProvider:
         self._atr_cache: Dict[str, float] = {}
         # Время последнего обновления: symbol -> timestamp
         self._cache_timestamps: Dict[str, float] = {}
-        # TTL кэша: 30 секунд
-        self._cache_ttl_seconds = 30.0
+        # TTL кэша: 60 секунд (✅ УВЕЛИЧЕНО 28.12.2025 для уменьшения запросов)
+        self._cache_ttl_seconds = 60.0
 
     def get_atr(self, symbol: str, fallback: Optional[float] = None) -> Optional[float]:
         """
