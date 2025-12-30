@@ -373,4 +373,3 @@ class HoldingTimeMetrics:
         self.holding_times_by_exit.clear()
         self.holding_times_by_symbol.clear()
         logger.info("✅ HoldingTimeMetrics: Все метрики сброшены")
-
