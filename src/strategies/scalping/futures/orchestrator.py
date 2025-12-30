@@ -375,6 +375,9 @@ class FuturesScalpingOrchestrator:
         # ✅ НОВОЕ: Передаем performance_tracker в entry_manager, order_executor и signal_generator для CSV логирования
         if hasattr(self.entry_manager, "set_performance_tracker"):
             self.entry_manager.set_performance_tracker(self.performance_tracker)
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Устанавливаем DataRegistry в EntryManager для fallback entry_price
+        if hasattr(self.entry_manager, "set_data_registry"):
+            self.entry_manager.set_data_registry(self.data_registry)
         if hasattr(self.order_executor, "set_performance_tracker"):
             self.order_executor.set_performance_tracker(self.performance_tracker)
         if hasattr(self.signal_generator, "set_performance_tracker"):
@@ -996,7 +999,11 @@ class FuturesScalpingOrchestrator:
                     f"📊 Пропущено сигналов из-за инициализации: {self.skipped_signals_due_init}"
                 )
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Логируем готовность модулей (дважды для надежности)
             logger.info("🟢 Все модули инициализированы — торговля разрешена")
+            logger.info(
+                "[READY] All modules initialized - trading enabled (all_modules_ready=True, initialization_complete.set())"
+            )
 
             # ✅ РЕФАКТОРИНГ: Основной торговый цикл делегирован в TradingControlCenter
             self.is_running = True

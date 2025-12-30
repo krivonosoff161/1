@@ -1755,6 +1755,16 @@ class SignalCoordinator:
                                 )
                                 return
 
+                        # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (29.12.2025): Лог успешной генерации сигнала
+                        signal_strength = symbol_signal.get("strength", 0)
+                        confidence = symbol_signal.get("confidence", 0)
+                        regime = symbol_signal.get("regime", "unknown")
+                        logger.info(
+                            f"📊 Signal generated: {symbol} {side_str}, "
+                            f"strength={signal_strength:.2f}, confidence={confidence:.1%}, "
+                            f"regime={regime}, price={price:.2f}"
+                        )
+
                         # Выполняем реальный сигнал
                         success = await self.execute_signal_from_price(
                             symbol, price, symbol_signal

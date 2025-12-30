@@ -334,3 +334,4 @@ class IndicatorCalculator:
             validation_results[indicator] = is_valid
 
         return validation_results
+

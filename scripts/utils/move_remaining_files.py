@@ -27,3 +27,4 @@ for src, dst in moves:
         print(f"Moved: {src} -> {dst}")
     else:
         print(f"Not found: {src}")
+

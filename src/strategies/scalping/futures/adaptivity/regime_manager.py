@@ -341,20 +341,13 @@ class AdaptiveRegimeManager:
         )
         trend_strength_percent = getattr(self.config, "trend_strength_percent", 2.0)
 
-        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Логируем scores для всех режимов (БЕЗ FALLBACK)
+        # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (29.12.2025): Улучшен формат лога scoring режима
         logger.info(
-            f"🧠 ARM Detect Regime (SCORING SYSTEM - БЕЗ FALLBACK):\n"
-            f"   Detected: {regime.value.upper()} (confidence: {confidence:.1%})\n"
-            f"   Reason: {reason}\n"
-            f"   Scores: CHOPPY={choppy_score:.2f}, TRENDING={trending_score:.2f}, RANGING={ranging_score:.2f} (выбран: {regime.value.upper()})\n"
-            f"   ADX: {adx_val:.1f} (+DI={di_plus:.1f}, -DI={di_minus:.1f}, direction={trend_dir})\n"
-            f"      → TRENDING порог: {trending_adx_threshold:.1f} ({'✅' if adx_val >= trending_adx_threshold else '❌'})\n"
-            f"      → RANGING порог: {ranging_adx_threshold:.1f} ({'✅' if adx_val < ranging_adx_threshold else '❌'})\n"
-            f"   Volatility: {volatility_str} (CHOPPY порог: {high_volatility_threshold:.2%}, {'✅' if volatility > high_volatility_threshold else '❌'})\n"
-            f"   Trend Deviation: {trend_deviation:.2%} (порог: {trend_strength_percent:.2%}, {'✅' if abs(trend_deviation) > trend_strength_percent else '❌'})\n"
-            f"   Range Width: {range_width:.2%}\n"
-            f"   Volume Ratio: {vol_ratio:.2f}x\n"
-            f"   Reversals: {reversals}"
+            f"🧠 Regime scoring for {self.symbol if hasattr(self, 'symbol') else 'UNKNOWN'}: "
+            f"CHOPPY={choppy_score:.2f}, TRENDING={trending_score:.2f}, RANGING={ranging_score:.2f}, "
+            f"selected={regime.value.upper()} (confidence={confidence:.1%}), "
+            f"ADX={adx_val:.1f}, volatility={volatility_str}, "
+            f"trend_deviation={trend_deviation:.2%}, volume_ratio={vol_ratio:.2f}x"
         )
 
         # ✅ Дополнительное DEBUG логирование для детального анализа

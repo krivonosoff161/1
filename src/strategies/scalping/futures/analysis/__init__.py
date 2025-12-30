@@ -10,3 +10,4 @@ from .direction_analyzer import DirectionAnalyzer
 __all__ = [
     "DirectionAnalyzer",
 ]
+

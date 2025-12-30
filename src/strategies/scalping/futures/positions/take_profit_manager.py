@@ -193,3 +193,4 @@ class TakeProfitManager:
             return 2.0  # Fallback
         except Exception:
             return 2.0  # Fallback
+

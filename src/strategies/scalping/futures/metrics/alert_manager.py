@@ -72,6 +72,17 @@ class AlertManager:
         self._alert_callbacks.append(callback)
         logger.debug(f"✅ AlertManager: Зарегистрирован callback для алертов")
 
+    def send_alert(self, message: str, level: str = "info") -> None:
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Отправить алерт напрямую (для использования из других модулей).
+
+        Args:
+            message: Текст сообщения алерта
+            level: Уровень серьезности ("info", "warning", "critical")
+        """
+        alert = self._create_alert("manual_alert", message, {"level": level})
+        self._process_alert(alert)
+
     def check_alerts(self, period_hours: int = 24) -> List[Dict[str, Any]]:
         """
         Проверить метрики и сгенерировать алерты.

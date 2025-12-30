@@ -884,10 +884,12 @@ class TradingControlCenter:
             # Проверяем конверсию сигналов
             signal_to_position = conversion_rate.get("signal_to_position", 0)
             if signal_to_position < 0.1:
-                self.alert_manager.send_alert(
-                    f"⚠️ Низкая конверсия сигналов: {signal_to_position:.1%}",
-                    level="info",
-                )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Добавлена проверка наличия alert_manager
+                if self.alert_manager:
+                    self.alert_manager.send_alert(
+                        f"⚠️ Низкая конверсия сигналов: {signal_to_position:.1%}",
+                        level="info",
+                    )
 
             # Проверяем метрики времени удержания
             if self.holding_time_metrics:

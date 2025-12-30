@@ -445,9 +445,15 @@ class TrailingStopLoss:
                 else:
                     # После 10 секунд учитываем комиссию
                     trading_fee_rate = self.trading_fee_rate
-                    # Комиссия в процентах от маржи (0.1% на круг = 0.1% от маржи)
-                    net_pnl_pct_from_margin = gross_pnl_pct_from_margin - (
-                        trading_fee_rate * 100
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Учитываем leverage в комиссиях
+                    # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
+                    # (т.к. комиссия считается от номинала, а PnL% от маржи)
+                    commission_pct = (trading_fee_rate * 2) * self.leverage * 100
+                    net_pnl_pct_from_margin = gross_pnl_pct_from_margin - commission_pct
+                    logger.debug(
+                        f"💰 TrailingStopLoss: PnL calc: leverage={self.leverage}, "
+                        f"fees_adj={commission_pct:.4f}%, "
+                        f"gross={gross_pnl_pct_from_margin:.4f}%, net={net_pnl_pct_from_margin:.4f}%"
                     )
                     return net_pnl_pct_from_margin
             else:
@@ -482,8 +488,14 @@ class TrailingStopLoss:
             else:
                 # После 10 секунд учитываем комиссию
                 trading_fee_rate = self.trading_fee_rate
-                net_pnl_pct_from_margin = gross_profit_pct_from_margin - (
-                    trading_fee_rate * 100
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Учитываем leverage в комиссиях (fallback)
+                # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
+                commission_pct = (trading_fee_rate * 2) * self.leverage * 100
+                net_pnl_pct_from_margin = gross_profit_pct_from_margin - commission_pct
+                logger.debug(
+                    f"💰 TrailingStopLoss: PnL calc (fallback): leverage={self.leverage}, "
+                    f"fees_adj={commission_pct:.4f}%, "
+                    f"gross={gross_profit_pct_from_margin:.4f}%, net={net_pnl_pct_from_margin:.4f}%"
                 )
                 return net_pnl_pct_from_margin
         else:

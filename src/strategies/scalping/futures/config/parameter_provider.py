@@ -198,6 +198,42 @@ class ParameterProvider:
                     0.5,  # ✅ Default для ranging: 0.5 минуты
                 )
 
+            # ✅ ПРИОРИТЕТ 1 (29.12.2025): Проверка by_symbol для per-symbol параметров
+            if symbol and hasattr(self.config_manager, "_raw_config_dict"):
+                config_dict = self.config_manager._raw_config_dict
+                by_symbol = config_dict.get("by_symbol", {})
+                symbol_config = by_symbol.get(symbol, {})
+                if isinstance(symbol_config, dict):
+                    # Переопределяем параметры из by_symbol (приоритет выше exit_params.{regime})
+                    per_symbol_keys = [
+                        "sl_atr_multiplier",
+                        "tp_atr_multiplier",
+                        "max_holding_minutes",
+                    ]
+                    for key in per_symbol_keys:
+                        if key in symbol_config:
+                            exit_params[key] = _to_float(
+                                symbol_config[key],
+                                key,
+                                exit_params.get(
+                                    key,
+                                    2.0
+                                    if "sl_atr" in key
+                                    else 1.0
+                                    if "tp_atr" in key
+                                    else 25.0,
+                                ),
+                            )
+                    # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (29.12.2025): Повышен уровень с DEBUG на INFO для видимости
+                    logger.info(
+                        f"📊 Per-symbol params for {symbol}: "
+                        f"sl_atr_multiplier={exit_params.get('sl_atr_multiplier', 'N/A')}, "
+                        f"tp_atr_multiplier={exit_params.get('tp_atr_multiplier', 'N/A')}, "
+                        f"max_holding_minutes={exit_params.get('max_holding_minutes', 'N/A')}, "
+                        f"min_holding_minutes={exit_params.get('min_holding_minutes', 'N/A')} "
+                        f"(источник: by_symbol)"
+                    )
+
             return exit_params or {}
 
         except Exception as e:
@@ -365,17 +401,64 @@ class ParameterProvider:
             # Извлекаем параметры индикаторов
             indicators = regime_params.get("indicators", {})
             if isinstance(indicators, dict):
-                return indicators
+                indicators = indicators.copy()
             elif hasattr(indicators, "__dict__"):
-                return indicators.__dict__
+                indicators = indicators.__dict__.copy()
             else:
-                return {}
+                indicators = {}
+
+            # ✅ ПРИОРИТЕТ 2 (29.12.2025): Проверка by_symbol.{symbol}.indicators для per-symbol параметров
+            if symbol and hasattr(self.config_manager, "_raw_config_dict"):
+                config_dict = self.config_manager._raw_config_dict
+                by_symbol = config_dict.get("by_symbol", {})
+                symbol_config = by_symbol.get(symbol, {})
+                if isinstance(symbol_config, dict):
+                    symbol_indicators = symbol_config.get("indicators", {})
+                    if isinstance(symbol_indicators, dict):
+                        # Переопределяем параметры из by_symbol (приоритет выше regime)
+                        indicators.update(symbol_indicators)
+                        logger.debug(
+                            f"✅ ParameterProvider: Индикаторы для {symbol} получены из by_symbol: "
+                            f"{list(symbol_indicators.keys())}"
+                        )
+
+            return indicators
 
         except Exception as e:
             logger.warning(
                 f"⚠️ ParameterProvider: Ошибка получения параметров индикаторов для {symbol}: {e}"
             )
             return {}
+
+    def get_rsi_thresholds(
+        self, symbol: str, regime: Optional[str] = None
+    ) -> Dict[str, float]:
+        """
+        Получить пороги RSI для режима и символа.
+
+        Args:
+            symbol: Торговый символ
+            regime: Режим рынка. Если None, определяется автоматически
+
+        Returns:
+            {
+                'overbought': float,
+                'oversold': float,
+                'period': int
+            }
+        """
+        try:
+            indicator_params = self.get_indicator_params(symbol, regime)
+            return {
+                "overbought": indicator_params.get("rsi_overbought", 70),
+                "oversold": indicator_params.get("rsi_oversold", 30),
+                "period": indicator_params.get("rsi_period", 14),
+            }
+        except Exception as e:
+            logger.warning(
+                f"⚠️ ParameterProvider: Ошибка получения RSI порогов для {symbol}: {e}"
+            )
+            return {"overbought": 70, "oversold": 30, "period": 14}
 
     def get_module_params(
         self, symbol: str, regime: Optional[str] = None

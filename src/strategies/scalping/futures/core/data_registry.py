@@ -108,6 +108,29 @@ class DataRegistry:
             market_data = self._market_data.get(symbol, {})
             return market_data.get("price") or market_data.get("last_price")
 
+    async def get_mark_price(self, symbol: str) -> Optional[float]:
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Получить markPx для фьючерсов.
+
+        MarkPx используется биржей для расчета PnL и ликвидации.
+        Если markPx недоступен, используется fallback на обычную цену.
+
+        Args:
+            symbol: Торговый символ
+
+        Returns:
+            MarkPx или None (fallback на обычную цену)
+        """
+        async with self._lock:
+            market_data = self._market_data.get(symbol, {})
+            # Пробуем получить markPx из market_data (приходит из WebSocket)
+            mark_px = market_data.get("markPx") or market_data.get("mark_px")
+            if mark_px and isinstance(mark_px, (int, float)) and mark_px > 0:
+                return float(mark_px)
+
+            # Fallback на обычную цену
+            return market_data.get("price") or market_data.get("last_price")
+
     # ==================== INDICATORS ====================
 
     async def update_indicator(

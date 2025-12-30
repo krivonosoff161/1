@@ -49,6 +49,7 @@ class EntryManager:
         self.conversion_metrics = (
             None  # ✅ НОВОЕ (26.12.2025): ConversionMetrics для отслеживания конверсии
         )
+        self.data_registry = None  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): DataRegistry для fallback entry_price
 
         logger.info("✅ EntryManager инициализирован")
 
@@ -60,6 +61,11 @@ class EntryManager:
     def set_performance_tracker(self, performance_tracker):
         """Установить PerformanceTracker для логирования"""
         self.performance_tracker = performance_tracker
+
+    def set_data_registry(self, data_registry):
+        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Установить DataRegistry для fallback entry_price"""
+        self.data_registry = data_registry
+        logger.debug("✅ EntryManager: DataRegistry установлен")
         logger.debug("✅ EntryManager: PerformanceTracker установлен")
 
     def set_conversion_metrics(self, conversion_metrics):
@@ -181,10 +187,36 @@ class EntryManager:
                 metadata=metadata,
             )
 
+            # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (29.12.2025): Детальный лог открытия позиции
+            entry_price = position_data.get("entry_price", 0)
+            position_side = position_data.get("position_side", "unknown")
+            margin_used = position_data.get("margin_used", 0)
+            leverage = signal.get("leverage", 1)
+            sl_percent = signal.get("sl_percent")
+            tp_percent = signal.get("tp_percent")
+            signal_strength = signal.get("strength", 0)
+
+            # Рассчитываем SL/TP цены для лога
+            sl_price = None
+            tp_price = None
+            if entry_price > 0:
+                if position_side == "long":
+                    if sl_percent:
+                        sl_price = entry_price * (1 - sl_percent / 100)
+                    if tp_percent:
+                        tp_price = entry_price * (1 + tp_percent / 100)
+                else:  # short
+                    if sl_percent:
+                        sl_price = entry_price * (1 + sl_percent / 100)
+                    if tp_percent:
+                        tp_price = entry_price * (1 - tp_percent / 100)
+
             logger.info(
-                f"✅ EntryManager: Позиция {symbol} открыта и зарегистрирована "
-                f"(size={position_size:.6f}, entry={position_data.get('entry_price'):.6f}, "
-                f"side={position_data.get('position_side')}, regime={regime})"
+                f"📈 Position opened: {symbol} {position_side.upper()} @ {entry_price:.2f}, "
+                f"size={position_size:.6f}, margin={margin_used:.2f} USD, leverage={leverage}x, "
+                f"regime={regime}, signal_strength={signal_strength:.2f}, "
+                f"SL={'{:.2f}'.format(sl_price) if sl_price else 'N/A'}, "
+                f"TP={'{:.2f}'.format(tp_price) if tp_price else 'N/A'}"
             )
 
             return True
@@ -311,6 +343,29 @@ class EntryManager:
                             except (ValueError, TypeError):
                                 pass
 
+                        entry_price = float(pos.get("avgPx", "0"))
+
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Fallback для entry_price=0.0
+                        # Если ордер не вернул price (avgPx=0), используем текущую цену из DataRegistry
+                        if entry_price == 0.0:
+                            if self.data_registry:
+                                fallback_price = await self.data_registry.get_price(
+                                    symbol
+                                )
+                                if fallback_price and fallback_price > 0:
+                                    entry_price = fallback_price
+                                    logger.warning(
+                                        f"⚠️ EntryManager: entry_price=0.0 для {symbol}, используем fallback из DataRegistry: {entry_price:.2f}"
+                                    )
+                                else:
+                                    logger.error(
+                                        f"❌ EntryManager: Не удалось получить fallback цену для {symbol} из DataRegistry"
+                                    )
+                            else:
+                                logger.error(
+                                    f"❌ EntryManager: entry_price=0.0 для {symbol}, но DataRegistry не доступен"
+                                )
+
                         position_data = {
                             "symbol": symbol,
                             "instId": pos.get("instId", ""),
@@ -319,7 +374,7 @@ class EntryManager:
                             "avgPx": pos.get("avgPx", "0"),
                             "markPx": pos.get("markPx", pos.get("avgPx", "0")),
                             "size": pos_size,
-                            "entry_price": float(pos.get("avgPx", "0")),
+                            "entry_price": entry_price,  # ✅ Используем entry_price с fallback
                             "position_side": position_side,
                             "margin_used": float(pos.get("margin", "0"))
                             if pos.get("margin")
@@ -332,7 +387,7 @@ class EntryManager:
                 if not position_data:
                     max_retries = 3
                     retry_delays = [0.5, 1.0, 2.0]  # Увеличивающиеся задержки
-                    
+
                     for retry_num in range(max_retries):
                         logger.warning(
                             f"⚠️ EntryManager: Позиция {symbol} не найдена, попытка {retry_num + 1}/{max_retries}, "
@@ -374,10 +429,15 @@ class EntryManager:
                                     if entry_time_str:
                                         try:
                                             entry_timestamp_ms = int(entry_time_str)
-                                            entry_timestamp_sec = entry_timestamp_ms / 1000.0
+                                            entry_timestamp_sec = (
+                                                entry_timestamp_ms / 1000.0
+                                            )
                                             from datetime import timezone
-                                            entry_time_from_api = datetime.fromtimestamp(
-                                                entry_timestamp_sec, tz=timezone.utc
+
+                                            entry_time_from_api = (
+                                                datetime.fromtimestamp(
+                                                    entry_timestamp_sec, tz=timezone.utc
+                                                )
                                             )
                                         except (ValueError, TypeError):
                                             pass
@@ -388,7 +448,9 @@ class EntryManager:
                                         "pos": pos.get("pos", "0"),
                                         "posSide": position_side,
                                         "avgPx": pos.get("avgPx", "0"),
-                                        "markPx": pos.get("markPx", pos.get("avgPx", "0")),
+                                        "markPx": pos.get(
+                                            "markPx", pos.get("avgPx", "0")
+                                        ),
                                         "size": pos_size,
                                         "entry_price": real_entry_price,
                                         "position_side": position_side,
@@ -398,13 +460,17 @@ class EntryManager:
                                         "entry_time": entry_time_from_api,
                                     }
                                     break
-                            
+
                             if position_data:
                                 break  # Позиция найдена, выходим из цикла retry
                         except Exception as retry_e:
-                            logger.warning(f"⚠️ Retry {retry_num + 1} не удался: {retry_e}")
+                            logger.warning(
+                                f"⚠️ Retry {retry_num + 1} не удался: {retry_e}"
+                            )
                             if retry_num == max_retries - 1:
-                                logger.error(f"❌ Все {max_retries} попытки retry не удались для {symbol}")
+                                logger.error(
+                                    f"❌ Все {max_retries} попытки retry не удались для {symbol}"
+                                )
 
                 # Если всё ещё не нашли — используем order_result.price (лимитная цена)
                 if not position_data:
@@ -538,22 +604,38 @@ class EntryManager:
                 else None
             )
 
-            log_parts = [
-                f"✅ EntryManager: Позиция {symbol} открыта и зарегистрирована",
-                f"size={position_size:.6f}",
-                f"entry_price={position_data.get('entry_price'):.6f}",
-                f"side={position_data.get('position_side')}",
-                f"regime={final_regime or 'unknown'}",
-            ]
+            # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (29.12.2025): Детальный лог открытия позиции
+            entry_price = position_data.get("entry_price", 0)
+            position_side = position_data.get("position_side", "unknown")
+            margin_used = (
+                position_data.get("margin_used", 0) or metadata.margin_used
+                if metadata and hasattr(metadata, "margin_used")
+                else 0
+            )
+            signal_strength = signal.get("strength", 0)
 
-            if tp_percent:
-                log_parts.append(f"TP={tp_percent:.2f}%")
-            if sl_percent:
-                log_parts.append(f"SL={sl_percent:.2f}%")
-            if leverage:
-                log_parts.append(f"leverage={leverage}x")
+            # Рассчитываем SL/TP цены для лога
+            sl_price = None
+            tp_price = None
+            if entry_price > 0:
+                if position_side == "long":
+                    if sl_percent:
+                        sl_price = entry_price * (1 - sl_percent / 100)
+                    if tp_percent:
+                        tp_price = entry_price * (1 + tp_percent / 100)
+                else:  # short
+                    if sl_percent:
+                        sl_price = entry_price * (1 + sl_percent / 100)
+                    if tp_percent:
+                        tp_price = entry_price * (1 - tp_percent / 100)
 
-            logger.info(" | ".join(log_parts))
+            logger.info(
+                f"📈 Position opened: {symbol} {position_side.upper()} @ {entry_price:.2f}, "
+                f"size={position_size:.6f}, margin={margin_used:.2f} USD, leverage={leverage or 'N/A'}x, "
+                f"regime={final_regime or 'unknown'}, signal_strength={signal_strength:.2f}, "
+                f"SL={'{:.2f}'.format(sl_price) if sl_price else 'N/A'}, "
+                f"TP={'{:.2f}'.format(tp_price) if tp_price else 'N/A'}"
+            )
 
             # ✅ НОВОЕ (26.12.2025): Записываем исполненный сигнал в метрики
             if hasattr(self, "conversion_metrics") and self.conversion_metrics:

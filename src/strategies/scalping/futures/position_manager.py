@@ -1994,7 +1994,9 @@ class FuturesPositionManager:
                 if hasattr(self, "parameter_provider") and self.parameter_provider:
                     try:
                         exit_params = self.parameter_provider.get_exit_params(symbol)
-                        min_holding_minutes = exit_params.get("min_holding_minutes", None)
+                        min_holding_minutes = exit_params.get(
+                            "min_holding_minutes", None
+                        )
                         if min_holding_minutes is not None:
                             min_holding_minutes = float(min_holding_minutes)
                             logger.debug(
@@ -2002,11 +2004,17 @@ class FuturesPositionManager:
                                 f"получен из ParameterProvider"
                             )
                     except Exception as e:
-                        logger.debug(f"⚠️ [PH] {symbol}: Ошибка получения min_holding_minutes из ParameterProvider: {e}")
-                
+                        logger.debug(
+                            f"⚠️ [PH] {symbol}: Ошибка получения min_holding_minutes из ParameterProvider: {e}"
+                        )
+
                 # Получаем режим рынка для fallback
                 market_regime = None
-                if min_holding_minutes is None and hasattr(self, "orchestrator") and self.orchestrator:
+                if (
+                    min_holding_minutes is None
+                    and hasattr(self, "orchestrator")
+                    and self.orchestrator
+                ):
                     if (
                         hasattr(self.orchestrator, "signal_generator")
                         and self.orchestrator.signal_generator
@@ -2281,10 +2289,17 @@ class FuturesPositionManager:
 
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Используем ParameterProvider для получения min_holding_minutes из конфига
                         min_holding_minutes = None
-                        if hasattr(self, "parameter_provider") and self.parameter_provider:
+                        if (
+                            hasattr(self, "parameter_provider")
+                            and self.parameter_provider
+                        ):
                             try:
-                                exit_params = self.parameter_provider.get_exit_params(symbol)
-                                min_holding_minutes = exit_params.get("min_holding_minutes", None)
+                                exit_params = self.parameter_provider.get_exit_params(
+                                    symbol
+                                )
+                                min_holding_minutes = exit_params.get(
+                                    "min_holding_minutes", None
+                                )
                                 if min_holding_minutes is not None:
                                     min_holding_minutes = float(min_holding_minutes)
                                     logger.debug(
@@ -2292,10 +2307,16 @@ class FuturesPositionManager:
                                         f"получен из ParameterProvider"
                                     )
                             except Exception as e:
-                                logger.debug(f"⚠️ [TP_ONLY] {symbol}: Ошибка получения min_holding_minutes из ParameterProvider: {e}")
-                        
+                                logger.debug(
+                                    f"⚠️ [TP_ONLY] {symbol}: Ошибка получения min_holding_minutes из ParameterProvider: {e}"
+                                )
+
                         # Fallback: пробуем получить из regime_manager
-                        if min_holding_minutes is None and hasattr(self, "orchestrator") and self.orchestrator:
+                        if (
+                            min_holding_minutes is None
+                            and hasattr(self, "orchestrator")
+                            and self.orchestrator
+                        ):
                             if (
                                 hasattr(self.orchestrator, "signal_generator")
                                 and self.orchestrator.signal_generator
@@ -2307,10 +2328,12 @@ class FuturesPositionManager:
                                     min_holding_minutes = getattr(
                                         regime_params, "min_holding_minutes", None
                                     )
-                        
+
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Fallback на значение из конфига (0.5 для ranging)
                         if min_holding_minutes is None:
-                            min_holding_minutes = 0.5  # ✅ Default из конфига для ranging (было 0.2)
+                            min_holding_minutes = (
+                                0.5  # ✅ Default из конфига для ranging (было 0.2)
+                            )
                             logger.debug(
                                 f"⚠️ [TP_ONLY] {symbol}: Используем fallback min_holding_minutes={min_holding_minutes:.2f} мин"
                             )
@@ -6559,7 +6582,20 @@ class FuturesPositionManager:
 
             # Получаем текущую цену для расчета PnL
             entry_price = float(pos_data.get("avgPx", "0"))
-            current_price = float(pos_data.get("markPx", entry_price))
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Используем markPx из DataRegistry или позиции
+            # markPx используется биржей для расчета PnL и ликвидации
+            mark_px_from_pos = float(pos_data.get("markPx", "0"))
+            if mark_px_from_pos > 0:
+                current_price = mark_px_from_pos
+            elif hasattr(self, "data_registry") and self.data_registry:
+                # Пробуем получить markPx из DataRegistry
+                mark_px_from_registry = await self.data_registry.get_mark_price(symbol)
+                if mark_px_from_registry and mark_px_from_registry > 0:
+                    current_price = mark_px_from_registry
+                else:
+                    current_price = entry_price
+            else:
+                current_price = entry_price
 
             # ✅ ИСПРАВЛЕНИЕ #5: Проверка минимальной стоимости для Partial TP
             # Рассчитываем стоимость закрываемой части позиции
@@ -6648,10 +6684,43 @@ class FuturesPositionManager:
                             commission_config, "trading_fee_rate", 0.001
                         )
 
-                    # Комиссия за вход + выход для частичного закрытия
-                    partial_commission = (
-                        close_size_coins * current_price * commission_rate * 2
-                    )
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Правильный расчет комиссии при частичном закрытии
+                    # Комиссия за вход уже была уплачена за всю позицию при открытии
+                    # При частичном закрытии нужно учитывать:
+                    # 1. Пропорциональную комиссию за вход для закрываемой части
+                    # 2. Комиссию за выход для закрываемой части
+                    total_size_coins = (
+                        abs(current_size) * ct_val
+                    )  # Общий размер позиции в монетах
+
+                    if total_size_coins > 0:
+                        # Пропорциональная комиссия за вход для закрываемой части
+                        entry_commission_proportional = (
+                            (close_size_coins / total_size_coins)
+                            * total_size_coins
+                            * entry_price
+                            * commission_rate
+                        )
+
+                        # Комиссия за выход для закрываемой части
+                        exit_commission = (
+                            close_size_coins * current_price * commission_rate
+                        )
+
+                        # Итого комиссия для частичного закрытия
+                        partial_commission = (
+                            entry_commission_proportional + exit_commission
+                        )
+                    else:
+                        # Fallback: если не можем определить total_size, используем старый расчет
+                        partial_commission = (
+                            close_size_coins * current_price * commission_rate * 2
+                        )
+                        logger.warning(
+                            f"⚠️ [PARTIAL_TP_COMMISSION] {symbol}: Не удалось определить total_size, "
+                            f"используем fallback расчет комиссии"
+                        )
+
                     net_partial_pnl = partial_pnl - partial_commission
 
                     if net_partial_pnl < min_profit_after_commission:

@@ -146,7 +146,8 @@ class TALibATR(BaseIndicator):
                     atr_value = float(atr_values[i])
                     break
 
-            # ✅ КРИТИЧЕСКОЕ: Если TA-Lib вернул 0.0 или все NaN → используем fallback
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Автоматический fallback при 0.0 или NaN
+            # Если TA-Lib вернул 0.0 или все NaN → используем fallback БЕЗ исключения
             if atr_value > 0:
                 return IndicatorResult(
                     name=f"ATR_{self.period}",
@@ -155,7 +156,11 @@ class TALibATR(BaseIndicator):
                     metadata={"period": self.period, "source": "talib"},
                 )
             else:
-                raise ValueError("TA-Lib вернул 0.0 или все NaN")
+                # ✅ НОВОЕ: Автоматический fallback без исключения
+                logger.debug(
+                    f"ATR TA-Lib вернул 0.0 или все NaN, используем fallback простой расчёт"
+                )
+                return self._fallback_simple_atr(high_data, low_data, close_data)
 
         except Exception as e:
             # ✅ ИСПРАВЛЕНО: Silent fallback без warning (только debug для диагностики)

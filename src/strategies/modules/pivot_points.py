@@ -326,7 +326,8 @@ class PivotPointsFilter:
                         f"для {symbol} из DataRegistry"
                     )
                     # Рассчитываем уровни из свечей DataRegistry
-                    levels = self.calculator.calculate(
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Используем правильное имя метода calculate_pivots
+                    levels = self.calculator.calculate_pivots(
                         daily_candles, self.config.use_last_n_days
                     )
                     if levels:

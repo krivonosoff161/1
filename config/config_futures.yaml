@@ -40,12 +40,20 @@ scalping:
     ETH-USDT:
       min_signal_strength: 0.55  # ✅ Looser для ETH (volatile)
       sl_atr_multiplier: 3.0  # ✅ Wider SL для ETH (volatility high)
+      tp_atr_multiplier: 4.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol tp_atr_multiplier для ETH
+      max_holding_minutes: 30.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol max_holding_minutes для ETH
       min_adx: 14.0  # ✅ Looser ADX для ETH
       min_holding_minutes:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol min_holding_minutes для ETH
         ranging: 2.0  # ✅ ETH требует больше времени в ranging (2 минуты) из-за высокой волатильности
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol Smart Close параметры для ETH
         reversal_score_threshold:
           ranging: 4  # ✅ ETH требует еще больше подтверждений разворота в ranging (4 вместо 3)
+      indicators:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol параметры индикаторов для ETH
+        rsi_overbought: 78  # ✅ Для ETH более строгий порог (78 вместо 70) - volatile пары реже SHORT на слабом overbought
+        rsi_oversold: 22  # ✅ Для ETH более строгий порог (22 вместо 30)
+        macd_fast: 10  # ✅ Более быстрый MACD для ETH
+        macd_slow: 22  # ✅ Более быстрый MACD для ETH
+        bb_std_multiplier: 2.1  # ✅ Шире полосы для волатильности ETH
     SOL-USDT:
       min_adx: 20.0  # ✅ Looser для trending
       min_signal_strength: 0.58  # ✅ Looser для SOL

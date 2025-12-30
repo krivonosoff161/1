@@ -1960,22 +1960,26 @@ class FuturesSignalGenerator:
                                     break
 
                         if value is not None and isinstance(value, (int, float)):
-                            # ✅ ИСПРАВЛЕНО: Для ATR разрешаем сохранение даже если value = 0.0
-                            # (но логируем предупреждение для диагностики)
-                            if key == "atr" and value == 0.0:
-                                logger.debug(
-                                    f"⚠️ ATR для {symbol} равен 0.0 (возможно, недостаточно данных для расчета), "
-                                    f"не сохраняем в DataRegistry (будет использован fallback)"
-                                )
-                            elif value > 0:
-                                indicators_for_registry[key] = value
-                                if key == "atr":
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Сохраняем ATR даже если value = 0.0
+                            # Fallback ATR может вернуть 0.0, но это валидное значение (недостаточно данных)
+                            # ATRProvider будет использовать fallback=5.0 если ATR не найден или = 0.0
+                            if key == "atr":
+                                if value == 0.0:
+                                    logger.debug(
+                                        f"⚠️ ATR для {symbol} равен 0.0 (fallback вернул 0.0 - недостаточно данных), "
+                                        f"сохраняем в DataRegistry (ATRProvider использует fallback=5.0)"
+                                    )
+                                else:
                                     found_key = (
                                         atr_key if "atr_key" in locals() else key
                                     )
                                     logger.debug(
                                         f"📊 Сохранение ATR для {symbol}: {value:.6f} (найден по ключу: {found_key})"
                                     )
+                                # ✅ Сохраняем ATR даже если = 0.0 (для диагностики)
+                                indicators_for_registry[key] = value
+                            elif value > 0:
+                                indicators_for_registry[key] = value
                         elif key == "atr":
                             # Логируем, почему ATR не сохранился
                             logger.debug(
@@ -2191,6 +2195,10 @@ class FuturesSignalGenerator:
                 "macd": {"generated": 0, "blocked_adx": 0},
                 "bb": {"generated": 0, "blocked_adx": 0},
                 "ma": {"generated": 0, "blocked_adx": 0},
+                "adx": {
+                    "generated": 0,
+                    "blocked_adx": 0,
+                },  # ✅ НОВОЕ (29.12.2025): Счетчик для ADX сигналов
             }
 
             # ✅ РЕФАКТОРИНГ: Используем новые модули генерации сигналов
@@ -2237,6 +2245,64 @@ class FuturesSignalGenerator:
             )
             signal_stats["ma"]["generated"] = len(ma_signals)
             signals.extend(ma_signals)
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Генерация SHORT сигналов на основе ADX bearish тренда
+            # Если ADX показывает сильный bearish тренд, генерируем SHORT сигнал
+            # ✅ ДИАГНОСТИКА: Логируем условие для отладки
+            if adx_trend == "bearish":
+                logger.debug(
+                    f"🔍 {symbol}: ADX bearish тренд обнаружен (ADX={adx_value:.1f}, threshold={adx_threshold:.1f}), "
+                    f"проверяем условие: adx_value >= adx_threshold → {adx_value:.1f} >= {adx_threshold:.1f} = {adx_value >= adx_threshold}"
+                )
+            if adx_trend == "bearish" and adx_value >= adx_threshold:
+                # ✅ ИСПРАВЛЕНО: Используем уже полученные DI значения вместо indicators.get()
+                # adx_plus_di и adx_minus_di уже определены выше при получении ADX из DataRegistry или adx_filter
+
+                # Рассчитываем strength на основе силы bearish тренда
+                if adx_minus_di > 0 and adx_plus_di > 0:
+                    # Strength = отношение -DI к +DI (чем больше, тем сильнее bearish)
+                    bearish_strength = min(
+                        1.0, (adx_minus_di / (adx_minus_di + adx_plus_di)) * 2
+                    )
+                    # Дополнительный boost от ADX значения
+                    adx_boost = min(0.3, (adx_value - adx_threshold) / 50.0)
+                    final_strength = min(1.0, bearish_strength + adx_boost)
+
+                    # Получаем текущую цену
+                    candle_close_price = (
+                        market_data.ohlcv_data[-1].close
+                        if market_data.ohlcv_data
+                        else 0.0
+                    )
+                    current_price = await self._get_current_market_price(
+                        symbol, candle_close_price
+                    )
+
+                    # Генерируем SHORT сигнал на основе ADX bearish тренда
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "sell",
+                            "type": "adx_bearish",
+                            "strength": final_strength,
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "sell"
+                            ),
+                            "timestamp": datetime.now(),
+                            "indicator_value": adx_value,
+                            "confidence": 0.7,  # Высокая уверенность при сильном bearish тренде
+                            "has_conflict": False,
+                            "source": "adx_bearish",
+                        }
+                    )
+                    signal_stats["adx"]["generated"] = (
+                        signal_stats.get("adx", {}).get("generated", 0) + 1
+                    )
+                    logger.debug(
+                        f"📊 {symbol}: Сгенерирован SHORT сигнал на основе ADX bearish тренда "
+                        f"(ADX={adx_value:.1f}, -DI={adx_minus_di:.1f}, +DI={adx_plus_di:.1f}, "
+                        f"strength={final_strength:.3f})"
+                    )
 
             # ✅ НОВОЕ (27.12.2025): Детальное логирование статистики генерации сигналов
             total_generated = sum(stats["generated"] for stats in signal_stats.values())
