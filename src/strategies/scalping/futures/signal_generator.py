@@ -6389,10 +6389,23 @@ class FuturesSignalGenerator:
             # Преобразуем в float
             min_strength = float(min_strength) if min_strength is not None else 0.3
 
-            logger.debug(
-                f"🔍 SignalGenerator: min_signal_strength={min_strength:.2f} "
-                f"(режим: {regime_name_min_strength or 'unknown'}, "
-                f"источник: {'thresholds' if thresholds_config_min.get('min_signal_strength') else 'scalping_config'})"
+            # ✅ НОВОЕ (03.01.2026): Детальное логирование источников min_signal_strength
+            source_info = "unknown"
+            if thresholds_config_min and thresholds_config_min.get("min_signal_strength"):
+                source_info = f"by_symbol[{symbol}]"
+            elif hasattr(self.scalping_config, "by_symbol") and symbol:
+                by_symbol = getattr(self.scalping_config, "by_symbol", {})
+                if isinstance(by_symbol, dict) and symbol in by_symbol:
+                    source_info = f"by_symbol[{symbol}]"
+            elif regime_name_min_strength:
+                source_info = f"min_signal_strength_{regime_name_min_strength}"
+            else:
+                source_info = "scalping_config.min_signal_strength"
+            
+            logger.info(
+                f"📊 [PARAMS] {symbol} ({regime_name_min_strength or 'default'}): "
+                f"min_signal_strength={min_strength:.2f} | "
+                f"Источник: {source_info}"
             )
 
             filtered_signals = [

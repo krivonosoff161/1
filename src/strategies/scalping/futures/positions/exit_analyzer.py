@@ -784,11 +784,12 @@ class ExitAnalyzer:
                         tp_max_percent = self._to_float(
                             exit_params["tp_max_percent"], "tp_max_percent", 2.2
                         )
-                    logger.debug(
-                        f"✅ ExitAnalyzer: TP параметры для {symbol} ({regime}) "
-                        f"получены через ParameterProvider: tp_percent={tp_percent:.2f}%, "
-                        f"tp_atr_multiplier={tp_atr_multiplier:.2f}, "
-                        f"tp_min_percent={tp_min_percent:.2f}%, tp_max_percent={tp_max_percent:.2f}%"
+                    # ✅ НОВОЕ (03.01.2026): Детальное логирование источников TP параметров
+                    logger.info(
+                        f"📊 [PARAMS] {symbol} ({regime}): TP параметры "
+                        f"tp_percent={tp_percent:.2f}%, tp_atr_multiplier={tp_atr_multiplier:.2f}, "
+                        f"tp_min={tp_min_percent:.2f}%, tp_max={tp_max_percent:.2f}% | "
+                        f"Источник: ParameterProvider.get_exit_params()"
                     )
             except Exception as e:
                 logger.debug(
@@ -998,20 +999,12 @@ class ExitAnalyzer:
                         sl_min_percent = self._to_float(
                             exit_params["sl_min_percent"], "sl_min_percent", 0.6
                         )
-                    logger.debug(
-                        f"✅ ExitAnalyzer: SL параметры для {symbol} ({regime}) "
-                        f"получены через ParameterProvider: sl_percent={sl_percent:.2f}%, "
-                        f"sl_atr_multiplier={sl_atr_multiplier:.2f}, sl_min_percent={sl_min_percent:.2f}%"
-                    )
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Полный лог exit_params для диагностики per-symbol параметров
+                    # ✅ НОВОЕ (03.01.2026): Детальное логирование источников SL параметров
                     logger.info(
-                        f"📊 Exit params for {symbol}/{regime}: "
-                        f"sl_atr_multiplier={exit_params.get('sl_atr_multiplier', 'N/A')}, "
-                        f"tp_atr_multiplier={exit_params.get('tp_atr_multiplier', 'N/A')}, "
-                        f"max_holding_minutes={exit_params.get('max_holding_minutes', 'N/A')}, "
-                        f"min_holding_minutes={exit_params.get('min_holding_minutes', 'N/A')}, "
-                        f"sl_percent={exit_params.get('sl_percent', 'N/A')}, "
-                        f"tp_percent={exit_params.get('tp_percent', 'N/A')}"
+                        f"📊 [PARAMS] {symbol} ({regime}): SL параметры "
+                        f"sl_percent={sl_percent:.2f}%, sl_atr_multiplier={sl_atr_multiplier:.2f}, "
+                        f"sl_min={sl_min_percent:.2f}% | "
+                        f"Источник: ParameterProvider.get_exit_params()"
                     )
             except Exception as e:
                 logger.debug(

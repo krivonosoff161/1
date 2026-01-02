@@ -199,6 +199,8 @@ class ParameterProvider:
                 )
 
             # ✅ ПРИОРИТЕТ 1 (29.12.2025): Проверка by_symbol для per-symbol параметров
+            # ✅ НОВОЕ (03.01.2026): Логирование источников параметров для понимания работы бота
+            sources_log = []
             if symbol and hasattr(self.config_manager, "_raw_config_dict"):
                 config_dict = self.config_manager._raw_config_dict
                 by_symbol = config_dict.get("by_symbol", {})
@@ -212,6 +214,7 @@ class ParameterProvider:
                     ]
                     for key in per_symbol_keys:
                         if key in symbol_config:
+                            old_value = exit_params.get(key)
                             exit_params[key] = _to_float(
                                 symbol_config[key],
                                 key,
@@ -224,14 +227,15 @@ class ParameterProvider:
                                     else 25.0,
                                 ),
                             )
-                    # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (29.12.2025): Повышен уровень с DEBUG на INFO для видимости
+                            sources_log.append(f"{key}={exit_params[key]} (by_symbol, было={old_value})")
+                    # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (03.01.2026): Детальное логирование источников
                     logger.info(
-                        f"📊 Per-symbol params for {symbol}: "
-                        f"sl_atr_multiplier={exit_params.get('sl_atr_multiplier', 'N/A')}, "
-                        f"tp_atr_multiplier={exit_params.get('tp_atr_multiplier', 'N/A')}, "
-                        f"max_holding_minutes={exit_params.get('max_holding_minutes', 'N/A')}, "
-                        f"min_holding_minutes={exit_params.get('min_holding_minutes', 'N/A')} "
-                        f"(источник: by_symbol)"
+                        f"📊 [PARAMS] {symbol} ({regime}): exit_params "
+                        f"sl_atr={exit_params.get('sl_atr_multiplier', 'N/A')}, "
+                        f"tp_atr={exit_params.get('tp_atr_multiplier', 'N/A')}, "
+                        f"max_holding={exit_params.get('max_holding_minutes', 'N/A')}мин, "
+                        f"min_holding={exit_params.get('min_holding_minutes', 'N/A')}мин | "
+                        f"Источники: {', '.join(sources_log) if sources_log else 'exit_params.' + regime}"
                     )
 
             return exit_params or {}
