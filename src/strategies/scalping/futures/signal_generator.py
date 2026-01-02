@@ -2211,7 +2211,7 @@ class FuturesSignalGenerator:
                         current_regime_for_vol = regime_data.get("regime", "").lower()
             except Exception:
                 pass
-            
+
             if current_regime_for_vol == "choppy":
                 # Получаем ATR для расчета волатильности
                 atr_14 = indicators.get("atr_14", 0) if indicators else 0
@@ -2221,16 +2221,14 @@ class FuturesSignalGenerator:
                         if atr_key in indicators:
                             atr_14 = indicators[atr_key]
                             break
-                
+
                 candle_close_price = (
-                    market_data.ohlcv_data[-1].close
-                    if market_data.ohlcv_data
-                    else 0.0
+                    market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
                 )
                 current_price_for_vol = await self._get_current_market_price(
                     symbol, candle_close_price
                 )
-                
+
                 if atr_14 > 0 and current_price_for_vol > 0:
                     volatility_pct = (atr_14 / current_price_for_vol) * 100.0
                     if volatility_pct > 3.0:
@@ -2240,7 +2238,7 @@ class FuturesSignalGenerator:
                         )
                         # Возвращаем пустой список сигналов - фильтр сработал
                         return []
-            
+
             # ✅ РЕФАКТОРИНГ: Используем новые модули генерации сигналов
             # RSI сигналы
             if self.rsi_signal_generator:
@@ -2291,40 +2289,53 @@ class FuturesSignalGenerator:
             rsi_value = indicators.get("rsi", 0) if indicators else 0
             macd_data = indicators.get("macd", {}) if indicators else {}
             macd_line = macd_data.get("macd", 0) if isinstance(macd_data, dict) else 0
-            signal_line = macd_data.get("signal", 0) if isinstance(macd_data, dict) else 0
-            
+            signal_line = (
+                macd_data.get("signal", 0) if isinstance(macd_data, dict) else 0
+            )
+
             # Получаем rsi_overbought из конфига
             rsi_overbought_threshold = 75  # По умолчанию 75
             try:
                 if hasattr(self.scalping_config, "rsi_overbought"):
-                    rsi_overbought_threshold = getattr(self.scalping_config, "rsi_overbought", 75)
+                    rsi_overbought_threshold = getattr(
+                        self.scalping_config, "rsi_overbought", 75
+                    )
                 elif isinstance(self.scalping_config, dict):
-                    rsi_overbought_threshold = self.scalping_config.get("rsi_overbought", 75)
+                    rsi_overbought_threshold = self.scalping_config.get(
+                        "rsi_overbought", 75
+                    )
             except Exception:
                 pass
-            
+
             # Проверяем условия для SHORT сигнала
             rsi_overbought = rsi_value > rsi_overbought_threshold
             macd_down = macd_line < signal_line if macd_line and signal_line else False
             adx_bearish_strong = adx_trend == "bearish" and adx_value > 25.0
-            
+
             if rsi_overbought and macd_down and adx_bearish_strong:
                 # Рассчитываем strength на основе всех условий
-                rsi_strength = min(1.0, (rsi_value - rsi_overbought_threshold) / 30.0)  # Нормализация от 75 до 105
-                macd_strength = min(1.0, abs(macd_line - signal_line) / abs(signal_line) if signal_line else 0.5)
-                adx_strength = min(1.0, (adx_value - 25.0) / 50.0)  # Нормализация от 25 до 75
+                rsi_strength = min(
+                    1.0, (rsi_value - rsi_overbought_threshold) / 30.0
+                )  # Нормализация от 75 до 105
+                macd_strength = min(
+                    1.0,
+                    abs(macd_line - signal_line) / abs(signal_line)
+                    if signal_line
+                    else 0.5,
+                )
+                adx_strength = min(
+                    1.0, (adx_value - 25.0) / 50.0
+                )  # Нормализация от 25 до 75
                 final_strength = (rsi_strength + macd_strength + adx_strength) / 3.0
-                
+
                 # Получаем текущую цену
                 candle_close_price = (
-                    market_data.ohlcv_data[-1].close
-                    if market_data.ohlcv_data
-                    else 0.0
+                    market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
                 )
                 current_price = await self._get_current_market_price(
                     symbol, candle_close_price
                 )
-                
+
                 # Генерируем SHORT сигнал
                 signals.append(
                     {
@@ -2353,7 +2364,7 @@ class FuturesSignalGenerator:
                     f"MACD={macd_line:.4f}<signal={signal_line:.4f}, ADX={adx_value:.1f}>25 bearish, "
                     f"strength={final_strength:.3f})"
                 )
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Генерация SHORT сигналов на основе ADX bearish тренда (старая логика для обратной совместимости)
             # Если ADX показывает сильный bearish тренд, генерируем SHORT сигнал
             # ✅ ДИАГНОСТИКА: Логируем условие для отладки
@@ -2441,7 +2452,13 @@ class FuturesSignalGenerator:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (31.12.2025): Передаем ADX тренд в импульсные сигналы
             # Это позволит правильно определить направление сигнала с учетом общего тренда рынка
             impulse_signals = await self._detect_impulse_signals(
-                symbol, market_data, indicators, current_regime, adx_trend, adx_value, adx_threshold
+                symbol,
+                market_data,
+                indicators,
+                current_regime,
+                adx_trend,
+                adx_value,
+                adx_threshold,
             )
             signals.extend(impulse_signals)
 
@@ -5010,7 +5027,7 @@ class FuturesSignalGenerator:
         # Направление определяется не только по цвету свечи, но и по общему тренду рынка
         initial_direction = "buy" if body >= 0 else "sell"
         direction = initial_direction
-        
+
         # Проверяем ADX тренд для правильного определения направления
         if adx_value >= adx_threshold and adx_trend:
             # Сильный тренд обнаружен - проверяем соответствие направления сигнала тренду
@@ -5032,7 +5049,7 @@ class FuturesSignalGenerator:
                     f"свеча красная (локальная коррекция)"
                 )
                 return []  # Не генерируем SHORT сигнал в bullish рынке
-        
+
         # Если тренд ranging или слабый (ADX < threshold) - используем начальное направление
         # Если тренд соответствует направлению свечи - тоже используем
         body_abs = abs(body)
@@ -6391,7 +6408,9 @@ class FuturesSignalGenerator:
 
             # ✅ НОВОЕ (03.01.2026): Детальное логирование источников min_signal_strength
             source_info = "unknown"
-            if thresholds_config_min and thresholds_config_min.get("min_signal_strength"):
+            if thresholds_config_min and thresholds_config_min.get(
+                "min_signal_strength"
+            ):
                 source_info = f"by_symbol[{symbol}]"
             elif hasattr(self.scalping_config, "by_symbol") and symbol:
                 by_symbol = getattr(self.scalping_config, "by_symbol", {})
@@ -6401,7 +6420,7 @@ class FuturesSignalGenerator:
                 source_info = f"min_signal_strength_{regime_name_min_strength}"
             else:
                 source_info = "scalping_config.min_signal_strength"
-            
+
             logger.info(
                 f"📊 [PARAMS] {symbol} ({regime_name_min_strength or 'default'}): "
                 f"min_signal_strength={min_strength:.2f} | "

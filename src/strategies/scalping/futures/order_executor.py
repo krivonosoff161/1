@@ -210,7 +210,7 @@ class FuturesOrderExecutor:
                 f"📊 [PARAMS] {symbol}: order_type={order_type} | "
                 f"Источник: _determine_order_type() (signal.type={signal.get('type', 'N/A')})"
             )
-            
+
             # Размещение ордера
             if order_type == "market":
                 result = await self._place_market_order(symbol, side, position_size)

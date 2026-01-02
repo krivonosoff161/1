@@ -227,7 +227,9 @@ class ParameterProvider:
                                     else 25.0,
                                 ),
                             )
-                            sources_log.append(f"{key}={exit_params[key]} (by_symbol, было={old_value})")
+                            sources_log.append(
+                                f"{key}={exit_params[key]} (by_symbol, было={old_value})"
+                            )
                     # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (03.01.2026): Детальное логирование источников
                     logger.info(
                         f"📊 [PARAMS] {symbol} ({regime}): exit_params "
