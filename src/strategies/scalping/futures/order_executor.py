@@ -49,6 +49,8 @@ class FuturesOrderExecutor:
         self.client = client
         self.slippage_guard = slippage_guard
         self.performance_tracker = None  # Будет установлен из orchestrator
+        self.data_registry = None  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): DataRegistry для получения волатильности
+        self.signal_generator = None  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): SignalGenerator для получения волатильности
 
         # Состояние
         self.is_initialized = False
@@ -89,6 +91,16 @@ class FuturesOrderExecutor:
         """Установить PerformanceTracker для логирования"""
         self.performance_tracker = performance_tracker
         logger.debug("✅ FuturesOrderExecutor: PerformanceTracker установлен")
+
+    def set_data_registry(self, data_registry):
+        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Установить DataRegistry для получения волатильности"""
+        self.data_registry = data_registry
+        logger.debug("✅ FuturesOrderExecutor: DataRegistry установлен")
+
+    def set_signal_generator(self, signal_generator):
+        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Установить SignalGenerator для получения волатильности"""
+        self.signal_generator = signal_generator
+        logger.debug("✅ FuturesOrderExecutor: SignalGenerator установлен")
 
     async def execute_signal(
         self, signal: Dict[str, Any], position_size: float
@@ -1225,11 +1237,80 @@ class FuturesOrderExecutor:
             else:
                 post_only = limit_order_config.get("post_only", True)
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Проверка свежести цены перед POST_ONLY
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Отключение POST_ONLY при высокой волатильности (>0.5%)
+            price_limits = None  # Инициализируем для использования ниже
+            if post_only:
+                # Проверяем свежесть цены
+                price_limits = await self.client.get_price_limits(symbol)
+                if price_limits:
+                    price_timestamp = price_limits.get("timestamp", 0)
+                    current_price = price_limits.get("current_price", 0)
+                    
+                    if price_timestamp > 0:
+                        price_age = time.time() - price_timestamp
+                        if price_age > 1.0:  # Цена старше 1 секунды
+                            logger.warning(
+                                f"⚠️ Цена для {symbol} устарела ({price_age:.2f} сек), "
+                                f"отключаем POST_ONLY для быстрого исполнения"
+                            )
+                            post_only = False
+                        
+                        # Проверяем расхождение между лимитной ценой и текущей ценой
+                        if current_price > 0 and price > 0:
+                            price_diff_pct = abs(price - current_price) / current_price * 100.0
+                            if price_diff_pct > 0.5:  # Расхождение > 0.5%
+                                logger.warning(
+                                    f"⚠️ Лимитная цена {price:.2f} отличается от текущей {current_price:.2f} "
+                                    f"на {price_diff_pct:.2f}%, отключаем POST_ONLY"
+                                )
+                                post_only = False
+                    
+                    # ✅ ИСПРАВЛЕНИЕ: Проверка волатильности для отключения POST_ONLY
+                    volatility = None
+                    if self.data_registry:
+                        try:
+                            # Получаем ATR из DataRegistry
+                            atr = await self.data_registry.get_indicator(symbol, "atr")
+                            if atr and current_price > 0:
+                                # Рассчитываем волатильность как ATR в процентах от цены
+                                volatility = (atr / current_price) * 100.0
+                        except Exception as e:
+                            logger.debug(f"⚠️ Не удалось получить ATR для расчета волатильности: {e}")
+                    
+                    # Альтернативный способ получения волатильности из regime_manager
+                    if volatility is None and self.signal_generator:
+                        try:
+                            regime_manager = (
+                                self.signal_generator.regime_managers.get(symbol)
+                                or self.signal_generator.regime_manager
+                            )
+                            if regime_manager and hasattr(regime_manager, "last_volatility"):
+                                volatility = regime_manager.last_volatility
+                        except Exception as e:
+                            logger.debug(f"⚠️ Не удалось получить волатильность из regime_manager: {e}")
+                    
+                    # Отключаем POST_ONLY при высокой волатильности (>0.5%)
+                    if volatility is not None and volatility > 0.5:
+                        logger.warning(
+                            f"⚠️ Высокая волатильность для {symbol} ({volatility:.2f}% > 0.5%), "
+                            f"отключаем POST_ONLY для быстрого исполнения"
+                        )
+                        post_only = False
+                    elif volatility is not None:
+                        logger.debug(
+                            f"✅ Волатильность для {symbol}: {volatility:.2f}% (POST_ONLY разрешен)"
+                        )
+
             if post_only:
                 logger.info(f"POST_ONLY enabled {symbol} (maker fee 0.02%)")
+            else:
+                logger.info(f"POST_ONLY disabled {symbol} (быстрое исполнение, taker fee 0.05%)")
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ценовые лимиты перед размещением ордера
-            price_limits = await self.client.get_price_limits(symbol)
+            # ✅ ИСПРАВЛЕНИЕ: Используем уже полученные price_limits из проверки свежести цены
+            if not price_limits:
+                price_limits = await self.client.get_price_limits(symbol)
             if price_limits:
                 max_buy_price = price_limits.get("max_buy_price", 0)
                 min_sell_price = price_limits.get("min_sell_price", 0)

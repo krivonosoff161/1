@@ -360,9 +360,34 @@ class TrailingSLCoordinator:
                     "initial_trail", params["initial_trail"]
                 )
 
-        # Сбрасываем предыдущий экземпляр, если он был
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Проверяем существование TSL перед инициализацией
         existing_tsl = self.trailing_sl_by_symbol.get(symbol)
         if existing_tsl:
+            # ✅ ИСПРАВЛЕНИЕ: Если TSL уже существует и параметры не изменились, не переинициализируем
+            # Проверяем, изменились ли критичные параметры (trail, loss_cut)
+            existing_trail = getattr(existing_tsl, "initial_trail", None)
+            existing_loss_cut = getattr(existing_tsl, "loss_cut_percent", None)
+            new_trail = params.get("initial_trail", 0.0)
+            new_loss_cut = params.get("loss_cut_percent", 0.0)
+            
+            # Если параметры не изменились и entry_price совпадает, не переинициализируем
+            if (existing_trail == new_trail and 
+                existing_loss_cut == new_loss_cut and 
+                abs(getattr(existing_tsl, "entry_price", 0) - entry_price) < 0.01):
+                logger.debug(
+                    f"ℹ️ TSL для {symbol} уже существует с теми же параметрами "
+                    f"(trail={new_trail:.2%}, loss_cut={new_loss_cut:.2%}, entry={entry_price:.2f}), "
+                    f"пропускаем повторную инициализацию"
+                )
+                return existing_tsl
+            
+            # Параметры изменились или entry_price отличается - переинициализируем
+            logger.info(
+                f"🔄 TSL для {symbol} переинициализируется: "
+                f"trail={existing_trail:.2%}→{new_trail:.2%}, "
+                f"loss_cut={existing_loss_cut:.2%}→{new_loss_cut:.2%}, "
+                f"entry={getattr(existing_tsl, 'entry_price', 0):.2f}→{entry_price:.2f}"
+            )
             existing_tsl.reset()
 
         initial_trail = params["initial_trail"] or 0.0

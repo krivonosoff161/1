@@ -3391,24 +3391,42 @@ class SignalCoordinator:
                     }
                 )
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Проверяем существование TSL перед инициализацией
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Переинициализируем trailing stop loss с правильной ценой входа
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем position_side_for_storage, который уже был рассчитан выше
                 if self.initialize_trailing_stop_callback:
-                    tsl = self.initialize_trailing_stop_callback(
-                        symbol=symbol,
-                        entry_price=real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа с биржи
-                        side=position_side_for_storage,  # "long" или "short", а не "buy"/"sell"
-                        current_price=real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа
-                        signal=signal,
-                    )
-                    if tsl:
-                        logger.info(
-                            f"🎯 Позиция {symbol} открыта с TrailingSL (entry={real_entry_price:.2f})"
+                    # ✅ ИСПРАВЛЕНИЕ: Проверяем, не существует ли уже TSL для этого символа
+                    existing_tsl = None
+                    if hasattr(self, "trailing_sl_coordinator") and self.trailing_sl_coordinator:
+                        existing_tsl = self.trailing_sl_coordinator.get_tsl(symbol)
+                    
+                    if existing_tsl:
+                        logger.debug(
+                            f"ℹ️ TSL для {symbol} уже существует, пропускаем повторную инициализацию "
+                            f"(entry={real_entry_price:.2f})"
                         )
                     else:
-                        logger.warning(
-                            f"⚠️ TrailingStopLoss не был инициализирован для {symbol} (entry={real_entry_price:.2f})"
+                        # ✅ ИСПРАВЛЕНИЕ: Передаем signal с strength для агрессивного режима
+                        signal_with_strength = signal.copy() if signal else {}
+                        if "strength" not in signal_with_strength:
+                            signal_with_strength["strength"] = signal.get("strength", 0.0) if signal else 0.0
+                        
+                        tsl = self.initialize_trailing_stop_callback(
+                            symbol=symbol,
+                            entry_price=real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа с биржи
+                            side=position_side_for_storage,  # "long" или "short", а не "buy"/"sell"
+                            current_price=real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа
+                            signal=signal_with_strength,  # ✅ ИСПРАВЛЕНИЕ: Передаем signal с strength
                         )
+                        if tsl:
+                            logger.info(
+                                f"🎯 Позиция {symbol} открыта с TrailingSL (entry={real_entry_price:.2f}, "
+                                f"strength={signal_with_strength.get('strength', 0.0):.2f})"
+                            )
+                        else:
+                            logger.warning(
+                                f"⚠️ TrailingStopLoss не был инициализирован для {symbol} (entry={real_entry_price:.2f})"
+                            )
                 else:
                     logger.warning(
                         f"⚠️ initialize_trailing_stop_callback не установлен для {symbol}"

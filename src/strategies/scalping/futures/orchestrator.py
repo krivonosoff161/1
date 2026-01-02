@@ -380,6 +380,12 @@ class FuturesScalpingOrchestrator:
             self.entry_manager.set_data_registry(self.data_registry)
         if hasattr(self.order_executor, "set_performance_tracker"):
             self.order_executor.set_performance_tracker(self.performance_tracker)
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Устанавливаем DataRegistry в OrderExecutor для проверки волатильности
+        if hasattr(self.order_executor, "set_data_registry"):
+            self.order_executor.set_data_registry(self.data_registry)
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Устанавливаем SignalGenerator в OrderExecutor для получения волатильности
+        if hasattr(self.order_executor, "set_signal_generator"):
+            self.order_executor.set_signal_generator(self.signal_generator)
         if hasattr(self.signal_generator, "set_performance_tracker"):
             self.signal_generator.set_performance_tracker(self.performance_tracker)
 
@@ -2288,7 +2294,9 @@ class FuturesScalpingOrchestrator:
                         f"(риск автоматического сокращения позиции биржей)"
                     )
 
-            if not self.trailing_sl_coordinator.get_tsl(symbol):
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Проверяем существование TSL перед инициализацией
+            existing_tsl = self.trailing_sl_coordinator.get_tsl(symbol)
+            if not existing_tsl:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем position_side ("long"/"short") в initialize_trailing_stop
                 # Используем position_side из active_positions, если доступен, иначе конвертируем side
                 trailing_side = (
@@ -2306,8 +2314,23 @@ class FuturesScalpingOrchestrator:
                     if manager:
                         regime = manager.get_current_regime()
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем signal с режимом для передачи в initialize_trailing_stop
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Создаем signal с режимом и strength для передачи в initialize_trailing_stop
                 signal_with_regime = {"regime": regime} if regime else {}
+                
+                # ✅ ИСПРАВЛЕНИЕ: Получаем strength из активной позиции или метаданных
+                signal_strength = 0.0
+                if symbol in self.active_positions:
+                    signal_strength = self.active_positions[symbol].get("signal_strength", 0.0)
+                if signal_strength == 0.0:
+                    # Пробуем получить из PositionRegistry
+                    try:
+                        metadata = await self.position_registry.get_metadata(symbol)
+                        if metadata and hasattr(metadata, "signal_strength"):
+                            signal_strength = metadata.signal_strength or 0.0
+                    except Exception:
+                        pass
+                if signal_strength > 0.0:
+                    signal_with_regime["strength"] = signal_strength
 
                 # ✅ КРИТИЧЕСКОЕ: Получаем entry_time из активной позиции или метаданных для передачи в TSL
                 entry_time_for_tsl = None
@@ -2332,7 +2355,7 @@ class FuturesScalpingOrchestrator:
                     current_price=mark_price,
                     signal=signal_with_regime
                     if signal_with_regime
-                    else None,  # ✅ КРИТИЧЕСКОЕ: Передаем режим и entry_time через signal
+                    else None,  # ✅ КРИТИЧЕСКОЕ: Передаем режим, strength и entry_time через signal
                 )
                 if not tsl:
                     logger.warning(
