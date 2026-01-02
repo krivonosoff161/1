@@ -280,13 +280,13 @@ class SignalCoordinator:
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Проверка consecutive losses по символу
                 if self.risk_manager:
-                    symbol_consecutive_losses = self.risk_manager.get_consecutive_losses(symbol)
+                    symbol_consecutive_losses = (
+                        self.risk_manager.get_consecutive_losses(symbol)
+                    )
                     max_consecutive = getattr(
                         self.scalping_config, "max_consecutive_losses_per_symbol", None
-                    ) or getattr(
-                        self.risk_manager, "_max_consecutive_losses", 3
-                    )
-                    
+                    ) or getattr(self.risk_manager, "_max_consecutive_losses", 3)
+
                     if symbol_consecutive_losses >= max_consecutive:
                         logger.warning(
                             f"🚫 БЛОКИРОВКА СИГНАЛА: {symbol} {side.upper()} - "
@@ -3397,9 +3397,12 @@ class SignalCoordinator:
                 if self.initialize_trailing_stop_callback:
                     # ✅ ИСПРАВЛЕНИЕ: Проверяем, не существует ли уже TSL для этого символа
                     existing_tsl = None
-                    if hasattr(self, "trailing_sl_coordinator") and self.trailing_sl_coordinator:
+                    if (
+                        hasattr(self, "trailing_sl_coordinator")
+                        and self.trailing_sl_coordinator
+                    ):
                         existing_tsl = self.trailing_sl_coordinator.get_tsl(symbol)
-                    
+
                     if existing_tsl:
                         logger.debug(
                             f"ℹ️ TSL для {symbol} уже существует, пропускаем повторную инициализацию "
@@ -3409,8 +3412,10 @@ class SignalCoordinator:
                         # ✅ ИСПРАВЛЕНИЕ: Передаем signal с strength для агрессивного режима
                         signal_with_strength = signal.copy() if signal else {}
                         if "strength" not in signal_with_strength:
-                            signal_with_strength["strength"] = signal.get("strength", 0.0) if signal else 0.0
-                        
+                            signal_with_strength["strength"] = (
+                                signal.get("strength", 0.0) if signal else 0.0
+                            )
+
                         tsl = self.initialize_trailing_stop_callback(
                             symbol=symbol,
                             entry_price=real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа с биржи

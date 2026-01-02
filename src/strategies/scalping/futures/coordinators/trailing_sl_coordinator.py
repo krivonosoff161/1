@@ -369,18 +369,20 @@ class TrailingSLCoordinator:
             existing_loss_cut = getattr(existing_tsl, "loss_cut_percent", None)
             new_trail = params.get("initial_trail", 0.0)
             new_loss_cut = params.get("loss_cut_percent", 0.0)
-            
+
             # Если параметры не изменились и entry_price совпадает, не переинициализируем
-            if (existing_trail == new_trail and 
-                existing_loss_cut == new_loss_cut and 
-                abs(getattr(existing_tsl, "entry_price", 0) - entry_price) < 0.01):
+            if (
+                existing_trail == new_trail
+                and existing_loss_cut == new_loss_cut
+                and abs(getattr(existing_tsl, "entry_price", 0) - entry_price) < 0.01
+            ):
                 logger.debug(
                     f"ℹ️ TSL для {symbol} уже существует с теми же параметрами "
                     f"(trail={new_trail:.2%}, loss_cut={new_loss_cut:.2%}, entry={entry_price:.2f}), "
                     f"пропускаем повторную инициализацию"
                 )
                 return existing_tsl
-            
+
             # Параметры изменились или entry_price отличается - переинициализируем
             logger.info(
                 f"🔄 TSL для {symbol} переинициализируется: "

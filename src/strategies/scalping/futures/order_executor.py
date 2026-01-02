@@ -1246,7 +1246,7 @@ class FuturesOrderExecutor:
                 if price_limits:
                     price_timestamp = price_limits.get("timestamp", 0)
                     current_price = price_limits.get("current_price", 0)
-                    
+
                     if price_timestamp > 0:
                         price_age = time.time() - price_timestamp
                         if price_age > 1.0:  # Цена старше 1 секунды
@@ -1255,17 +1255,19 @@ class FuturesOrderExecutor:
                                 f"отключаем POST_ONLY для быстрого исполнения"
                             )
                             post_only = False
-                        
+
                         # Проверяем расхождение между лимитной ценой и текущей ценой
                         if current_price > 0 and price > 0:
-                            price_diff_pct = abs(price - current_price) / current_price * 100.0
+                            price_diff_pct = (
+                                abs(price - current_price) / current_price * 100.0
+                            )
                             if price_diff_pct > 0.5:  # Расхождение > 0.5%
                                 logger.warning(
                                     f"⚠️ Лимитная цена {price:.2f} отличается от текущей {current_price:.2f} "
                                     f"на {price_diff_pct:.2f}%, отключаем POST_ONLY"
                                 )
                                 post_only = False
-                    
+
                     # ✅ ИСПРАВЛЕНИЕ: Проверка волатильности для отключения POST_ONLY
                     volatility = None
                     if self.data_registry:
@@ -1276,8 +1278,10 @@ class FuturesOrderExecutor:
                                 # Рассчитываем волатильность как ATR в процентах от цены
                                 volatility = (atr / current_price) * 100.0
                         except Exception as e:
-                            logger.debug(f"⚠️ Не удалось получить ATR для расчета волатильности: {e}")
-                    
+                            logger.debug(
+                                f"⚠️ Не удалось получить ATR для расчета волатильности: {e}"
+                            )
+
                     # Альтернативный способ получения волатильности из regime_manager
                     if volatility is None and self.signal_generator:
                         try:
@@ -1285,11 +1289,15 @@ class FuturesOrderExecutor:
                                 self.signal_generator.regime_managers.get(symbol)
                                 or self.signal_generator.regime_manager
                             )
-                            if regime_manager and hasattr(regime_manager, "last_volatility"):
+                            if regime_manager and hasattr(
+                                regime_manager, "last_volatility"
+                            ):
                                 volatility = regime_manager.last_volatility
                         except Exception as e:
-                            logger.debug(f"⚠️ Не удалось получить волатильность из regime_manager: {e}")
-                    
+                            logger.debug(
+                                f"⚠️ Не удалось получить волатильность из regime_manager: {e}"
+                            )
+
                     # Отключаем POST_ONLY при высокой волатильности (>0.5%)
                     if volatility is not None and volatility > 0.5:
                         logger.warning(
@@ -1305,7 +1313,9 @@ class FuturesOrderExecutor:
             if post_only:
                 logger.info(f"POST_ONLY enabled {symbol} (maker fee 0.02%)")
             else:
-                logger.info(f"POST_ONLY disabled {symbol} (быстрое исполнение, taker fee 0.05%)")
+                logger.info(
+                    f"POST_ONLY disabled {symbol} (быстрое исполнение, taker fee 0.05%)"
+                )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ценовые лимиты перед размещением ордера
             # ✅ ИСПРАВЛЕНИЕ: Используем уже полученные price_limits из проверки свежести цены

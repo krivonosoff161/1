@@ -2316,11 +2316,13 @@ class FuturesScalpingOrchestrator:
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Создаем signal с режимом и strength для передачи в initialize_trailing_stop
                 signal_with_regime = {"regime": regime} if regime else {}
-                
+
                 # ✅ ИСПРАВЛЕНИЕ: Получаем strength из активной позиции или метаданных
                 signal_strength = 0.0
                 if symbol in self.active_positions:
-                    signal_strength = self.active_positions[symbol].get("signal_strength", 0.0)
+                    signal_strength = self.active_positions[symbol].get(
+                        "signal_strength", 0.0
+                    )
                 if signal_strength == 0.0:
                     # Пробуем получить из PositionRegistry
                     try:
