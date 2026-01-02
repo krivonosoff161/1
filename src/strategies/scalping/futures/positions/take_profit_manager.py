@@ -132,6 +132,54 @@ class TakeProfitManager:
                                 )
                                 return False  # Не закрываем
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Проверка min_holding перед закрытием по TP
+            # Проверяем время удержания позиции перед закрытием по TP
+            from datetime import datetime, timezone
+            
+            min_holding_seconds = None
+            time_since_open = None
+            
+            try:
+                # Получаем min_holding_seconds из метаданных позиции
+                if self.position_registry:
+                    metadata = await self.position_registry.get_metadata(symbol)
+                    if metadata:
+                        if hasattr(metadata, "min_holding_seconds"):
+                            min_holding_seconds = metadata.min_holding_seconds
+                        elif isinstance(metadata, dict):
+                            min_holding_seconds = metadata.get("min_holding_seconds")
+                        
+                        # Получаем entry_time из метаданных
+                        entry_time = None
+                        if hasattr(metadata, "entry_time"):
+                            entry_time = metadata.entry_time
+                        elif isinstance(metadata, dict):
+                            entry_time = metadata.get("entry_time")
+                        
+                        if entry_time and min_holding_seconds:
+                            if isinstance(entry_time, datetime):
+                                if entry_time.tzinfo is None:
+                                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                                time_since_open = (datetime.now(timezone.utc) - entry_time).total_seconds()
+                            elif isinstance(entry_time, (int, float)):
+                                # Unix timestamp
+                                entry_timestamp = float(entry_time)
+                                if entry_timestamp > 1000000000000:  # milliseconds
+                                    entry_timestamp = entry_timestamp / 1000.0
+                                time_since_open = datetime.now(timezone.utc).timestamp() - entry_timestamp
+                            
+                            # Проверяем min_holding
+                            if time_since_open is not None and min_holding_seconds and time_since_open < min_holding_seconds:
+                                logger.debug(
+                                    f"⏱️ TP заблокирован для {symbol}: "
+                                    f"время удержания {time_since_open:.1f} сек < {min_holding_seconds:.1f} сек "
+                                    f"(PnL {pnl_percent:.2f}% >= TP {tp_percent:.2f}%)"
+                                )
+                                return False  # TP заблокирован из-за min_holding
+            except Exception as e:
+                logger.debug(f"⚠️ Ошибка проверки min_holding для TP {symbol}: {e}")
+                # Продолжаем без проверки min_holding при ошибке
+
             # Проверяем достижение TP
             if pnl_percent >= tp_percent:
                 logger.info(
@@ -193,3 +241,5 @@ class TakeProfitManager:
             return 2.0  # Fallback
         except Exception:
             return 2.0  # Fallback
+
+

@@ -474,6 +474,10 @@ class FuturesRiskManager:
                     f"→ blocked for {self._block_duration_minutes} min"
                 )
 
+    def get_consecutive_losses(self, symbol: str) -> int:
+        """Получить количество последовательных убытков для символа."""
+        return self.pair_loss_streak.get(symbol, 0)
+
     def is_symbol_blocked(self, symbol: str) -> bool:
         """Проверяет, заблокирован ли символ из-за серии убытков."""
         if symbol not in self.pair_block_until:

@@ -75,12 +75,24 @@ class StopLossManager:
             if size == 0 or entry_price == 0 or current_price == 0:
                 return False
 
-            # ✅ Проверяем только если TSL не активен
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): TSL НЕ блокирует проверку SL
+            # Проверяем SL параллельно с TSL, используя более строгий (безопасный) уровень
+            effective_sl_percent = None
             if self.orchestrator:
                 if hasattr(self.orchestrator, "trailing_sl_coordinator"):
                     tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
-                    if tsl:
-                        return False  # TSL активен - проверка SL не нужна
+                    if tsl and hasattr(tsl, 'is_active') and tsl.is_active():
+                        # Получаем TSL loss_cut уровень
+                        tsl_loss_cut = getattr(tsl, 'loss_cut_percent', None)
+                        if tsl_loss_cut is not None:
+                            # Используем более строгий (более безопасный) уровень между SL и TSL loss_cut
+                            sl_percent_base = self._get_sl_percent(symbol, position.get("regime") or "ranging")
+                            effective_sl_percent = min(sl_percent_base, tsl_loss_cut)
+                            logger.debug(
+                                f"🔒 SL+TSL для {symbol}: SL={sl_percent_base:.2%}, TSL loss_cut={tsl_loss_cut:.2%}, "
+                                f"effective={effective_sl_percent:.2%}"
+                            )
+                        # Продолжаем проверку SL ниже (НЕ блокируем)
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Защита от преждевременного закрытия
             # Проверяем время удержания позиции перед закрытием по SL
@@ -121,7 +133,7 @@ class StopLossManager:
 
             # Получаем режим для адаптивного SL
             regime = position.get("regime") or "ranging"
-            sl_percent = self._get_sl_percent(symbol, regime)
+            sl_percent = effective_sl_percent if effective_sl_percent is not None else self._get_sl_percent(symbol, regime)
 
             # Рассчитываем PnL% от маржи
             try:

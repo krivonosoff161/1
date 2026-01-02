@@ -278,6 +278,23 @@ class SignalCoordinator:
                     f"(из конфига)"
                 )
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Проверка consecutive losses по символу
+                if self.risk_manager:
+                    symbol_consecutive_losses = self.risk_manager.get_consecutive_losses(symbol)
+                    max_consecutive = getattr(
+                        self.scalping_config, "max_consecutive_losses_per_symbol", None
+                    ) or getattr(
+                        self.risk_manager, "_max_consecutive_losses", 3
+                    )
+                    
+                    if symbol_consecutive_losses >= max_consecutive:
+                        logger.warning(
+                            f"🚫 БЛОКИРОВКА СИГНАЛА: {symbol} {side.upper()} - "
+                            f"{symbol_consecutive_losses} последовательных убытков для символа "
+                            f"(лимит: {max_consecutive})"
+                        )
+                        continue
+
                 if strength < min_strength:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличиваем счетчик блокировок
                     self._block_stats["low_strength"] += 1

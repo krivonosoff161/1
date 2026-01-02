@@ -79,6 +79,7 @@ class PnLCalculator:
         entry_order_type: str = "market",
         entry_post_only: bool = False,
         exit_order_type: str = "market",
+        exit_post_only: bool = False,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Добавлен параметр exit_post_only
     ) -> Dict[str, Any]:
         """
         Рассчитать PnL для позиции.
@@ -112,6 +113,7 @@ class PnLCalculator:
                 entry_order_type=entry_order_type,
                 entry_post_only=entry_post_only,
                 exit_order_type=exit_order_type,
+                exit_post_only=exit_post_only,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Передаем exit_post_only
             )
 
             total_commission = entry_commission + exit_commission
@@ -205,6 +207,7 @@ class PnLCalculator:
         entry_order_type: str,
         entry_post_only: bool,
         exit_order_type: str,
+        exit_post_only: bool = False,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Добавлен параметр exit_post_only
     ) -> Tuple[float, float]:
         """
         Рассчитать комиссии для entry и exit.
@@ -217,6 +220,7 @@ class PnLCalculator:
             entry_order_type: Тип entry ордера
             entry_post_only: Post-only для entry
             exit_order_type: Тип exit ордера
+            exit_post_only: Post-only для exit (✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 30.12.2025)
 
         Returns:
             (entry_commission, exit_commission)
@@ -230,9 +234,13 @@ class PnLCalculator:
 
         entry_commission = notional_entry * entry_commission_rate
 
-        # Exit комиссия (обычно taker, так как MARKET ордер)
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Exit комиссия зависит от типа exit ордера
+        # Если exit ордер limit с post_only → maker, иначе → taker
         notional_exit = size_in_coins * exit_price
-        exit_commission_rate = self.taker_fee_rate  # По умолчанию taker
+        if exit_order_type == "limit" and exit_post_only:
+            exit_commission_rate = self.maker_fee_rate  # 0.02% для maker
+        else:
+            exit_commission_rate = self.taker_fee_rate  # 0.05% для taker (по умолчанию)
         exit_commission = notional_exit * exit_commission_rate
 
         return entry_commission, exit_commission

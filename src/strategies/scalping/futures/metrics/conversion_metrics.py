@@ -361,3 +361,4 @@ class ConversionMetrics:
         self.signals_by_regime.clear()
         self.signals_by_type.clear()
         logger.info("✅ ConversionMetrics: Все метрики сброшены")
+

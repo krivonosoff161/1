@@ -511,7 +511,37 @@ class FuturesPositionManager:
             if isinstance(side, str):
                 side = side.lower()
             entry_price = float(position.get("avgPx", "0"))
-            current_price = float(position.get("markPx", "0"))
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Fallback для entry_price == 0.0
+            if entry_price == 0.0:
+                if hasattr(self, "data_registry") and self.data_registry:
+                    try:
+                        fallback_price = await self.data_registry.get_price(symbol)
+                        if fallback_price and fallback_price > 0:
+                            entry_price = fallback_price
+                            logger.warning(
+                                f"⚠️ PositionManager: entry_price=0.0 для {symbol}, используем fallback из DataRegistry: {entry_price:.4f}"
+                            )
+                    except Exception as e:
+                        logger.debug(f"⚠️ PositionManager: Ошибка получения fallback цены для {symbol}: {e}")
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Используем bid/ask avg для точного PnL расчета
+            current_price = float(position.get("markPx", "0"))  # Fallback
+            try:
+                price_limits = await self.client.get_price_limits(symbol)
+                if price_limits:
+                    best_bid = price_limits.get("best_bid", 0)
+                    best_ask = price_limits.get("best_ask", 0)
+                    if best_bid > 0 and best_ask > 0:
+                        # Используем среднее bid/ask для более точного расчета PnL
+                        current_price = (best_bid + best_ask) / 2.0
+                    elif price_limits.get("current_price", 0) > 0:
+                        # Fallback на current_price если bid/ask недоступны
+                        current_price = price_limits.get("current_price")
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить цену из стакана для {symbol}, используем markPx: {e}"
+                )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало управления позицией
             logger.debug(
@@ -2212,20 +2242,22 @@ class FuturesPositionManager:
             if isinstance(side, str):
                 side = side.lower()
             entry_price = float(position.get("avgPx", "0"))
-            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для скальпинга, markPx только как fallback
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Используем bid/ask avg для точного PnL расчета
             current_price = float(position.get("markPx", "0"))  # Fallback
             try:
                 price_limits = await self.client.get_price_limits(symbol)
                 if price_limits:
-                    actual_price = price_limits.get("current_price", 0)
-                    if actual_price > 0:
-                        current_price = actual_price
-                        logger.debug(
-                            f"✅ Используем актуальную цену из стакана для TP проверки {symbol}: {current_price:.2f}"
-                        )
+                    best_bid = price_limits.get("best_bid", 0)
+                    best_ask = price_limits.get("best_ask", 0)
+                    if best_bid > 0 and best_ask > 0:
+                        # Используем среднее bid/ask для более точного расчета PnL
+                        current_price = (best_bid + best_ask) / 2.0
+                    elif price_limits.get("current_price", 0) > 0:
+                        # Fallback на current_price если bid/ask недоступны
+                        current_price = price_limits.get("current_price")
             except Exception as e:
                 logger.debug(
-                    f"⚠️ Не удалось получить актуальную цену для {symbol}, используем markPx: {e}"
+                    f"⚠️ Не удалось получить цену из стакана для {symbol}, используем markPx: {e}"
                 )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало проверки
@@ -6684,42 +6716,12 @@ class FuturesPositionManager:
                             commission_config, "trading_fee_rate", 0.001
                         )
 
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Правильный расчет комиссии при частичном закрытии
-                    # Комиссия за вход уже была уплачена за всю позицию при открытии
-                    # При частичном закрытии нужно учитывать:
-                    # 1. Пропорциональную комиссию за вход для закрываемой части
-                    # 2. Комиссию за выход для закрываемой части
-                    total_size_coins = (
-                        abs(current_size) * ct_val
-                    )  # Общий размер позиции в монетах
-
-                    if total_size_coins > 0:
-                        # Пропорциональная комиссия за вход для закрываемой части
-                        entry_commission_proportional = (
-                            (close_size_coins / total_size_coins)
-                            * total_size_coins
-                            * entry_price
-                            * commission_rate
-                        )
-
-                        # Комиссия за выход для закрываемой части
-                        exit_commission = (
-                            close_size_coins * current_price * commission_rate
-                        )
-
-                        # Итого комиссия для частичного закрытия
-                        partial_commission = (
-                            entry_commission_proportional + exit_commission
-                        )
-                    else:
-                        # Fallback: если не можем определить total_size, используем старый расчет
-                        partial_commission = (
-                            close_size_coins * current_price * commission_rate * 2
-                        )
-                        logger.warning(
-                            f"⚠️ [PARTIAL_TP_COMMISSION] {symbol}: Не удалось определить total_size, "
-                            f"используем fallback расчет комиссии"
-                        )
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Пропорциональная комиссия на partial_size
+                    # Комиссия рассчитывается как на отдельную сделку: entry + exit для partial_size
+                    # Формула: commission = (partial_size * entry_price) * fee_rate * 2 (entry + exit)
+                    partial_commission = (
+                        close_size_coins * entry_price * commission_rate * 2  # entry + exit
+                    )
 
                     net_partial_pnl = partial_pnl - partial_commission
 

@@ -126,3 +126,4 @@ reversal_score=X/7 (порог=Y), trend_against=Z.ZZ (порог=W.WW)
 
 
 
+
