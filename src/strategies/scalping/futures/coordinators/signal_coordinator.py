@@ -637,7 +637,10 @@ class SignalCoordinator:
                     blocked_count += 1
                     self._block_stats["other"] += 1
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Логирование статистики обработки сигналов
+            # ✅ ИСПРАВЛЕНО (03.01.2026): Логирование статистики обработки сигналов
+            total_signals = len(
+                signals
+            )  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Определяем total_signals
             if total_signals > 0:
                 conversion_rate = (
                     (processed_count / total_signals) * 100
@@ -1650,10 +1653,30 @@ class SignalCoordinator:
                                         )
                                         rsi = indicators.get("rsi", 50)
 
+                                    # ✅ НОВОЕ (03.01.2026): Детальное логирование причин отсутствия сигналов
+                                    macd_hist = "N/A"
+                                    atr_value_log = "N/A"
+                                    try:
+                                        if indicators:
+                                            macd_dict = indicators.get("macd", {})
+                                            if isinstance(macd_dict, dict):
+                                                macd_hist = macd_dict.get(
+                                                    "histogram", "N/A"
+                                                )
+                                            atr = indicators.get("atr")
+                                            if atr is not None and atr > 0:
+                                                atr_value_log = f"{atr:.2f}"
+                                    except Exception:
+                                        pass
+
                                     logger.warning(
-                                        f"🚫 НЕТ СИГНАЛОВ: {symbol} - signal_generator.generate_signals() вернул 0 сигналов. "
-                                        f"Причины: ADX={adx_value:.1f} ({adx_trend}), RSI={rsi:.1f}, "
-                                        f"возможные причины: все фильтры заблокировали, нет подходящих условий, режим рынка"
+                                        f"🚫 НЕТ СИГНАЛОВ: {symbol} - signal_generator.generate_signals() вернул 0 сигналов | "
+                                        f"Индикаторы: ADX={adx_value:.1f} ({adx_trend}), RSI={rsi:.1f}, "
+                                        f"MACD_hist={macd_hist}, ATR={atr_value_log} | "
+                                        f"Возможные причины: индикаторы не дали сигналов (значения вне порогов), "
+                                        f"все фильтры заблокировали сигналы, режим рынка ({adx_trend}) не подходит, "
+                                        f"нет подходящих условий | "
+                                        f"Источник: SignalGenerator.generate_signals() -> _generate_base_signals()"
                                     )
                                 else:
                                     logger.warning(
@@ -2369,6 +2392,49 @@ class SignalCoordinator:
                     f"Проверьте баланс, лимиты маржи или min_position_usd в конфиге."
                 )
                 return False
+
+            # ✅ НОВОЕ (03.01.2026): Детальное логирование размера позиции и маржи перед открытием
+            try:
+                # Получаем балансовый профиль
+                balance_profile = self.config_manager.get_balance_profile(balance)
+                balance_profile_name = (
+                    balance_profile.get("name", "unknown")
+                    if isinstance(balance_profile, dict)
+                    else "unknown"
+                )
+
+                # Получаем режим
+                current_regime = signal.get("regime") or regime or "unknown"
+
+                # Конвертируем размер из контрактов в монеты и USD
+                try:
+                    details = await self.client.get_instrument_details(symbol)
+                    ct_val = float(details.get("ctVal", 0.01))
+                    size_in_coins = position_size * ct_val
+                    notional_usd = size_in_coins * price
+                    margin_usd = (
+                        notional_usd / leverage_config if leverage_config > 0 else 0.0
+                    )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Ошибка получения деталей инструмента для логирования: {e}"
+                    )
+                    size_in_coins = position_size * 0.01  # Fallback
+                    notional_usd = size_in_coins * price
+                    margin_usd = (
+                        notional_usd / leverage_config if leverage_config > 0 else 0.0
+                    )
+
+                logger.info(
+                    f"📊 [PARAMS] {symbol} ({current_regime}): РАСЧЕТ РАЗМЕРА ПОЗИЦИИ | "
+                    f"Баланс: ${balance:.2f} (профиль: {balance_profile_name}), "
+                    f"Размер: {position_size:.6f} контрактов ({size_in_coins:.6f} монет), "
+                    f"Notional: ${notional_usd:.2f} USD, Леверидж: {leverage_config}x, "
+                    f"Маржа: ${margin_usd:.2f} USD | "
+                    f"Источник: RiskManager.calculate_position_size()"
+                )
+            except Exception as e:
+                logger.debug(f"⚠️ Ошибка логирования размера позиции: {e}")
 
             # ✅ НОВОЕ (26.12.2025): Детальное логирование всех проверок перед открытием
             logger.info("=" * 80)

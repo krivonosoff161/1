@@ -511,7 +511,7 @@ class FuturesPositionManager:
             if isinstance(side, str):
                 side = side.lower()
             entry_price = float(position.get("avgPx", "0"))
-            
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Fallback для entry_price == 0.0
             if entry_price == 0.0:
                 if hasattr(self, "data_registry") and self.data_registry:
@@ -523,8 +523,10 @@ class FuturesPositionManager:
                                 f"⚠️ PositionManager: entry_price=0.0 для {symbol}, используем fallback из DataRegistry: {entry_price:.4f}"
                             )
                     except Exception as e:
-                        logger.debug(f"⚠️ PositionManager: Ошибка получения fallback цены для {symbol}: {e}")
-            
+                        logger.debug(
+                            f"⚠️ PositionManager: Ошибка получения fallback цены для {symbol}: {e}"
+                        )
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Используем bid/ask avg для точного PnL расчета
             current_price = float(position.get("markPx", "0"))  # Fallback
             try:
@@ -2761,11 +2763,45 @@ class FuturesPositionManager:
                         tp_percent = self._get_adaptive_tp_percent(
                             symbol, regime, current_price
                         )
-                        if pnl_percent >= tp_percent:
-                            logger.info(
-                                f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}%"
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Учитываем комиссии при проверке TP
+                        # Получаем комиссию из конфига
+                        commission_config = getattr(
+                            self.scalping_config, "commission", {}
+                        )
+                        if isinstance(commission_config, dict):
+                            commission_rate = commission_config.get(
+                                "trading_fee_rate", 0.0002
                             )
-                            await self._close_position_by_reason(position, "tp")
+                        else:
+                            commission_rate = getattr(
+                                commission_config, "trading_fee_rate", 0.0002
+                            )
+                        leverage_fallback = (
+                            getattr(self.scalping_config, "leverage", 5) or 5
+                        )
+                        # Комиссия от маржи: commission_rate * leverage * 2 (вход + выход)
+                        commission_pct_from_margin = (
+                            commission_rate * leverage_fallback * 2 * 100
+                        )
+                        slippage_buffer_pct = (
+                            commission_config.get("slippage_buffer_percent", 0.15)
+                            if isinstance(commission_config, dict)
+                            else 0.15
+                        )
+                        # Добавляем комиссии и slippage к TP для сравнения с Gross PnL
+                        tp_percent_with_commission = (
+                            tp_percent
+                            + commission_pct_from_margin
+                            + slippage_buffer_pct
+                        )
+                        if pnl_percent >= tp_percent_with_commission:
+                            # Проверяем, что Net PnL (после комиссий) положительный
+                            net_pnl_percent = pnl_percent - commission_pct_from_margin
+                            if net_pnl_percent > 0:
+                                logger.info(
+                                    f"🎯 TP достигнут для {symbol}: Gross PnL {pnl_percent:.2f}% >= TP {tp_percent:.2f}% + комиссия {commission_pct_from_margin:.2f}% + slippage {slippage_buffer_pct:.2f}% = {tp_percent_with_commission:.2f}% (Net PnL: {net_pnl_percent:.2f}%)"
+                                )
+                                await self._close_position_by_reason(position, "tp")
                         return
                     except Exception as e:
                         logger.debug(
@@ -2879,11 +2915,68 @@ class FuturesPositionManager:
                             tp_percent = self._get_adaptive_tp_percent(
                                 symbol, regime, current_price
                             )
-                            if pnl_percent >= tp_percent:
-                                logger.info(
-                                    f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}%"
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Учитываем комиссии при проверке TP
+                            # Получаем комиссию из конфига (используем существующий commission_config если есть)
+                            try:
+                                commission_config_fallback = getattr(
+                                    self.scalping_config, "commission", {}
                                 )
-                                await self._close_position_by_reason(position, "tp")
+                                if isinstance(commission_config_fallback, dict):
+                                    commission_rate_fallback = (
+                                        commission_config_fallback.get(
+                                            "trading_fee_rate", 0.0002
+                                        )
+                                    )
+                                else:
+                                    commission_rate_fallback = getattr(
+                                        commission_config_fallback,
+                                        "trading_fee_rate",
+                                        0.0002,
+                                    )
+                                leverage_fallback = (
+                                    getattr(self.scalping_config, "leverage", 5) or 5
+                                )
+                                # Комиссия от маржи: commission_rate * leverage * 2 (вход + выход)
+                                commission_pct_from_margin = (
+                                    commission_rate_fallback
+                                    * leverage_fallback
+                                    * 2
+                                    * 100
+                                )
+                                slippage_buffer_pct = (
+                                    commission_config_fallback.get(
+                                        "slippage_buffer_percent", 0.15
+                                    )
+                                    if isinstance(commission_config_fallback, dict)
+                                    else 0.15
+                                )
+                                # Добавляем комиссии и slippage к TP для сравнения с Gross PnL
+                                tp_percent_with_commission = (
+                                    tp_percent
+                                    + commission_pct_from_margin
+                                    + slippage_buffer_pct
+                                )
+                                if pnl_percent >= tp_percent_with_commission:
+                                    # Проверяем, что Net PnL (после комиссий) положительный
+                                    net_pnl_percent = (
+                                        pnl_percent - commission_pct_from_margin
+                                    )
+                                    if net_pnl_percent > 0:
+                                        logger.info(
+                                            f"🎯 TP достигнут для {symbol}: Gross PnL {pnl_percent:.2f}% >= TP {tp_percent:.2f}% + комиссия {commission_pct_from_margin:.2f}% + slippage {slippage_buffer_pct:.2f}% = {tp_percent_with_commission:.2f}% (Net PnL: {net_pnl_percent:.2f}%)"
+                                        )
+                                        await self._close_position_by_reason(
+                                            position, "tp"
+                                        )
+                            except Exception as e:
+                                logger.debug(
+                                    f"⚠️ Ошибка расчета комиссий для TP {symbol}: {e}, используем без комиссий"
+                                )
+                                if pnl_percent >= tp_percent:
+                                    logger.info(
+                                        f"🎯 TP достигнут для {symbol}: {pnl_percent:.2f}%"
+                                    )
+                                    await self._close_position_by_reason(position, "tp")
                             return
 
                 # ✅ ПРАВИЛЬНЫЙ РАСЧЕТ: PnL% от маржи (как на бирже!)
@@ -6720,7 +6813,10 @@ class FuturesPositionManager:
                     # Комиссия рассчитывается как на отдельную сделку: entry + exit для partial_size
                     # Формула: commission = (partial_size * entry_price) * fee_rate * 2 (entry + exit)
                     partial_commission = (
-                        close_size_coins * entry_price * commission_rate * 2  # entry + exit
+                        close_size_coins
+                        * entry_price
+                        * commission_rate
+                        * 2  # entry + exit
                     )
 
                     net_partial_pnl = partial_pnl - partial_commission

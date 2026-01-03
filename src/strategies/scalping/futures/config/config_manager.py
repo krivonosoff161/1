@@ -1319,36 +1319,18 @@ class ConfigManager:
 
         fallback_params = self.get_fallback_risk_params()
 
-        # ✅ ИСПРАВЛЕНО (25.12.2025): Улучшенная валидация с проверкой всех источников
+        # ✅ ИСПРАВЛЕНО (03.01.2026): Улучшенная валидация параметров
+        # Параметры уже объединены в params (adaptive_params из get_adaptive_risk_params),
+        # поэтому просто проверяем наличие и используем fallback если отсутствует
         for param in required_params:
             if param not in validated or validated[param] is None:
-                # ✅ НОВОЕ: Проверяем все возможные источники перед использованием fallback
-                # Пробуем получить из базовых параметров
-                if param in base_params and base_params[param] is not None:
-                    validated[param] = base_params[param]
-                    logger.debug(
-                        f"✅ Параметр {param} получен из базовых параметров для режима={regime}, профиль={profile_name}"
-                    )
-                # Пробуем получить из параметров баланса
-                elif param in balance_params and balance_params[param] is not None:
-                    validated[param] = balance_params[param]
-                    logger.debug(
-                        f"✅ Параметр {param} получен из параметров баланса для режима={regime}, профиль={profile_name}"
-                    )
-                # Пробуем получить из параметров режима
-                elif param in regime_params and regime_params[param] is not None:
-                    validated[param] = regime_params[param]
-                    logger.debug(
-                        f"✅ Параметр {param} получен из параметров режима для режима={regime}, профиль={profile_name}"
-                    )
-                else:
-                    # Fallback только если параметр не найден ни в одном источнике
-                    logger.warning(
-                        f"⚠️ Параметр {param} не найден в конфиге для режима={regime}, профиль={profile_name}, "
-                        f"используем fallback значение: {fallback_params[param]}. "
-                        f"Добавьте параметр в config_futures.yaml: risk.by_regime.{regime}.{param} или risk.by_balance.{profile_name}.{param}"
-                    )
-                    validated[param] = fallback_params[param]
+                # Fallback если параметр не найден в объединенных параметрах
+                logger.warning(
+                    f"⚠️ Параметр {param} не найден в конфиге для режима={regime}, профиль={profile_name}, "
+                    f"используем fallback значение: {fallback_params[param]}. "
+                    f"Добавьте параметр в config_futures.yaml: risk.by_regime.{regime}.{param} или risk.by_balance.{profile_name}.{param}"
+                )
+                validated[param] = fallback_params[param]
             elif (
                 not isinstance(validated[param], (int, float)) or validated[param] <= 0
             ):
@@ -1602,6 +1584,21 @@ class ConfigManager:
             # 6. Валидация параметров
             adaptive_params = self.validate_risk_params(
                 adaptive_params, regime, profile_name
+            )
+
+            # ✅ НОВОЕ (03.01.2026): Логирование адаптивных параметров риска на уровне INFO
+            max_loss_pct = adaptive_params.get("max_loss_per_trade_percent", 2.0)
+            max_margin_pct = adaptive_params.get("max_margin_percent", 80.0)
+            max_margin_safety_pct = adaptive_params.get(
+                "max_margin_safety_percent", 90.0
+            )
+
+            logger.info(
+                f"📊 [PARAMS] {symbol if symbol else 'GLOBAL'} ({regime if regime else 'N/A'}): "
+                f"АДАПТИВНЫЕ ПАРАМЕТРЫ РИСКА | Балансовый профиль: {profile_name}, "
+                f"max_loss={max_loss_pct}%, max_margin={max_margin_pct}%, "
+                f"max_margin_safety={max_margin_safety_pct}% | "
+                f"Источник: ConfigManager.get_adaptive_risk_params()"
             )
 
             logger.debug(

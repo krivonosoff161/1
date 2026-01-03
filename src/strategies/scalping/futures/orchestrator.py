@@ -2457,7 +2457,25 @@ class FuturesScalpingOrchestrator:
                     )
                     continue  # Пропускаем обработку закрытия
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Проверяем, что бот сам закрыл позицию
+                # Если позиция в _closing_positions_cache, значит она была закрыта ботом, а не внешне
+                if (
+                    hasattr(self, "_closing_positions_cache")
+                    and symbol in self._closing_positions_cache
+                ):
+                    logger.debug(
+                        f"🔍 {symbol}: Позиция закрыта ботом (в _closing_positions_cache), "
+                        f"не логируем как внешнее закрытие"
+                    )
+                    # Удаляем из кэша, так как уже обработали
+                    try:
+                        del self._closing_positions_cache[symbol]
+                    except KeyError:
+                        pass
+                    continue  # Пропускаем обработку как внешнее закрытие
+
                 # 🔴 КРИТИЧНОЕ ЛОГИРОВАНИЕ: Exchange-side closure (только если это действительно закрытие)
+                # Только если позиция НЕ в кэше - это действительно внешнее закрытие
                 logger.critical("=" * 80)
                 logger.critical(f"🚨 ОБНАРУЖЕНО ЗАКРЫТИЕ НА БИРЖЕ: {symbol}")
                 logger.critical("=" * 80)
@@ -3904,12 +3922,13 @@ class FuturesScalpingOrchestrator:
                 self.initial_balance - current_balance
             ) / self.initial_balance
 
-            # ✅ ИСПРАВЛЕНО (25.12.2025): Получаем адаптивный max_drawdown_percent
+            # ✅ ИСПРАВЛЕНО (03.01.2026): Получаем адаптивный max_drawdown_percent
             # Проверяем, инициализирован ли signal_generator перед использованием
             # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения risk_params
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): symbol=None (глобальная проверка), balance=current_balance
             if self.parameter_provider:
                 adaptive_risk_params = self.parameter_provider.get_risk_params(
-                    symbol, balance, regime
+                    symbol=None, balance=current_balance, regime=regime
                 )
             else:
                 adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
@@ -4046,12 +4065,13 @@ class FuturesScalpingOrchestrator:
                 self.initial_balance - current_balance
             ) / self.initial_balance
 
-            # ✅ ИСПРАВЛЕНО (25.12.2025): Получаем адаптивный max_drawdown_percent
+            # ✅ ИСПРАВЛЕНО (03.01.2026): Получаем адаптивный max_drawdown_percent
             # Проверяем, инициализирован ли signal_generator перед использованием
             # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения risk_params
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): symbol=None (глобальная проверка), balance=current_balance
             if self.parameter_provider:
                 adaptive_risk_params = self.parameter_provider.get_risk_params(
-                    symbol, balance, regime
+                    symbol=None, balance=current_balance, regime=regime
                 )
             else:
                 adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
@@ -4722,16 +4742,12 @@ class FuturesScalpingOrchestrator:
             except Exception as e:
                 logger.error(f"Ошибка закрытия позиции {symbol}: {e}")
             finally:
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Убираем из TTLCache (автоматически через TTL, но можно вручную)
-                # TTLCache автоматически удалит через 60 секунд, но удаляем сразу для освобождения места
-                if (
-                    hasattr(self, "_closing_positions_cache")
-                    and symbol in self._closing_positions_cache
-                ):
-                    try:
-                        del self._closing_positions_cache[symbol]
-                    except KeyError:
-                        pass  # Уже удалено
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): НЕ удаляем из TTLCache здесь!
+                # Символ должен остаться в cache до синхронизации с биржей в _sync_positions_with_exchange()
+                # TTLCache автоматически удалит через 60 секунд, что достаточно для синхронизации
+                # Удаление происходит в _sync_positions_with_exchange() после обработки (строка 2469)
+                # Это предотвращает race condition: символ удаляется из cache ДО синхронизации
+                pass  # Блок finally должен содержать код, но здесь ничего делать не нужно
 
     @property
     def active_positions(self) -> Dict[str, Dict[str, Any]]:

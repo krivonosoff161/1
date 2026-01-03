@@ -469,6 +469,43 @@ class TrailingSLCoordinator:
                 else:  # Это секунды
                     entry_timestamp_for_tsl = float(entry_time_obj)
 
+        # ✅ НОВОЕ (03.01.2026): Логирование TP/SL параметров при открытии позиции
+        try:
+            if self.parameter_provider:
+                exit_params = self.parameter_provider.get_exit_params(
+                    symbol=symbol, regime=regime
+                )
+                if exit_params:
+                    tp_atr_mult = exit_params.get("tp_atr_multiplier")
+                    sl_atr_mult = exit_params.get("sl_atr_multiplier")
+                    max_holding = exit_params.get("max_holding_minutes")
+                    min_holding = exit_params.get("min_holding_minutes")
+
+                    # Форматируем значения для логирования
+                    tp_atr_str = (
+                        f"{tp_atr_mult:.2f}" if tp_atr_mult is not None else "N/A"
+                    )
+                    sl_atr_str = (
+                        f"{sl_atr_mult:.2f}" if sl_atr_mult is not None else "N/A"
+                    )
+                    max_holding_str = (
+                        f"{max_holding:.1f}" if max_holding is not None else "N/A"
+                    )
+                    min_holding_str = (
+                        f"{min_holding:.1f}" if min_holding is not None else "N/A"
+                    )
+
+                    logger.info(
+                        f"📊 [PARAMS] {symbol} ({regime or 'unknown'}): TP/SL ПАРАМЕТРЫ ПРИ ОТКРЫТИИ | "
+                        f"tp_atr_multiplier={tp_atr_str}, sl_atr_multiplier={sl_atr_str}, "
+                        f"max_holding={max_holding_str}мин, min_holding={min_holding_str}мин | "
+                        f"Источник: ParameterProvider.get_exit_params()"
+                    )
+        except Exception as e:
+            logger.debug(
+                f"⚠️ Ошибка логирования TP/SL параметров при открытии для {symbol}: {e}"
+            )
+
         # ✅ ЭТАП 4.4: Инициализируем с правильной стороной (long/short) и entry_timestamp
         tsl.initialize(
             entry_price=entry_price,

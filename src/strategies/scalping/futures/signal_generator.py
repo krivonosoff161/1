@@ -2423,6 +2423,46 @@ class FuturesSignalGenerator:
                         f"strength={final_strength:.3f})"
                     )
 
+            # ✅ НОВОЕ (03.01.2026): Логирование значений индикаторов перед генерацией сигналов
+            try:
+                rsi_value = indicators.get("rsi")
+                macd_dict = indicators.get("macd", {})
+                macd_hist = (
+                    macd_dict.get("histogram") if isinstance(macd_dict, dict) else None
+                )
+                atr_value = indicators.get("atr")
+
+                # Получаем режим для логирования
+                current_regime_for_log = "unknown"
+                try:
+                    if self.data_registry:
+                        regime_data = await self.data_registry.get_regime(symbol)
+                        if regime_data:
+                            current_regime_for_log = regime_data.get(
+                                "regime", "unknown"
+                            )
+                except Exception:
+                    pass
+
+                # ✅ ИСПРАВЛЕНИЕ (03.01.2026): Правильное форматирование значений (нельзя использовать тернарный оператор в f-string format specifier)
+                rsi_str = f"{rsi_value:.1f}" if rsi_value is not None else "N/A"
+                macd_str = f"{macd_hist:.3f}" if macd_hist is not None else "N/A"
+                atr_str = (
+                    f"{atr_value:.2f}"
+                    if atr_value is not None and atr_value > 0
+                    else "N/A"
+                )
+
+                logger.info(
+                    f"📊 [INDICATORS] {symbol} ({current_regime_for_log}): Значения индикаторов | "
+                    f"ADX={adx_value:.1f} ({adx_trend}), RSI={rsi_str}, MACD_hist={macd_str}, ATR={atr_str} | "
+                    f"Источник: MarketData.indicators -> DataRegistry/IndicatorProvider"
+                )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Ошибка логирования значений индикаторов для {symbol}: {e}"
+                )
+
             # ✅ НОВОЕ (27.12.2025): Детальное логирование статистики генерации сигналов
             total_generated = sum(stats["generated"] for stats in signal_stats.values())
             if total_generated == 0:

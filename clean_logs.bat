@@ -106,14 +106,34 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '
 if errorlevel 1 (
   echo [ERROR] Failed to create zip: "%ZIP_FILE%"
   echo Stage folder kept: "%STAGE_DIR%"
+  echo [WARNING] Логи сохранены в staging папке, но ZIP не создан!
   goto end_fail
 )
 
-echo [OK] Zip created: %ZIP_FILE%
+REM ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Проверяем, что ZIP файл действительно создан перед удалением staging
+if not exist "%ZIP_FILE%" (
+  echo [ERROR] ZIP файл не найден после создания: "%ZIP_FILE%"
+  echo Stage folder kept: "%STAGE_DIR%"
+  echo [WARNING] Логи сохранены в staging папке, но ZIP не найден!
+  goto end_fail
+)
 
+REM ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Проверяем размер ZIP файла (должен быть > 0)
+for %%I in ("%ZIP_FILE%") do set ZIP_SIZE=%%~zI
+if !ZIP_SIZE! LEQ 0 (
+  echo [ERROR] ZIP файл пустой (размер 0): "%ZIP_FILE%"
+  echo Stage folder kept: "%STAGE_DIR%"
+  echo [WARNING] Логи сохранены в staging папке, но ZIP пустой!
+  goto end_fail
+)
+
+echo [OK] Zip created: %ZIP_FILE% (size: !ZIP_SIZE! bytes)
+
+REM ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Удаляем staging ТОЛЬКО если ZIP создан и валиден
 rmdir /S /Q "%STAGE_DIR%" >nul 2>&1
 if errorlevel 1 (
   echo [WARNING] Failed to remove staging folder: "%STAGE_DIR%"
+  echo [INFO] Staging folder будет удален вручную или при следующем запуске
 ) else (
   echo [OK] Staging folder removed.
 )

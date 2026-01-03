@@ -205,13 +205,19 @@ class FilterManager:
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш перед расчетом
         if self.adx_filter:
             try:
+                signal_side_str = signal.get("side", "").upper()
+                signal_type_str = signal.get("type", "unknown")
+
                 # Пытаемся получить из кэша
                 cached_adx_result = self._get_cached_filter_result(symbol, "adx")
                 if cached_adx_result is not None:
                     # Используем кэш - ADX меняется медленно
                     if not cached_adx_result:
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} отфильтрован: ADX Filter (из кэша)"
+                        # ✅ НОВОЕ (03.01.2026): Детальное логирование блокировки из кэша
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - BLOCKED (из кэша) | "
+                            f"Режим: {regime or 'unknown'} | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
                         )
                         return None
                     else:
@@ -219,6 +225,12 @@ class FilterManager:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("ADX")
+                        # ✅ НОВОЕ (03.01.2026): Детальное логирование прохождения из кэша
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - PASSED (из кэша) | "
+                            f"Режим: {regime or 'unknown'} | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
+                        )
                 else:
                     # Кэша нет - вычисляем и сохраняем
                     signal = await self._apply_adx_filter(
@@ -228,6 +240,7 @@ class FilterManager:
                         # Сохраняем в кэш: False = отфильтрован
                         self._set_cached_filter_result(symbol, "adx", False)
                         # ✅ НОВОЕ: Причина фильтрации уже сохранена в signal["filter_reason"] в _apply_adx_filter
+                        # Детальное логирование происходит в _apply_adx_filter
                         logger.debug(f"🔍 Сигнал {symbol} отфильтрован: ADX Filter")
                         return None
                     else:
@@ -257,6 +270,7 @@ class FilterManager:
                 signal_side = signal.get("side", "").lower()
 
                 # Если ADX > 20 (сильный тренд) и направление против сигнала - блокируем
+                signal_type_str = signal.get("type", "unknown")
                 if adx_value and adx_value > 20:
                     if (
                         signal_side == "buy"
@@ -265,8 +279,11 @@ class FilterManager:
                         and di_minus > di_plus
                     ):
                         # LONG сигнал, но тренд вниз (DI- > DI+)
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} LONG отфильтрован: тренд вниз (ADX={adx_value:.1f}, DI-={di_minus:.1f} > DI+={di_plus:.1f})"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} LONG): ADX Direction Filter - BLOCKED | "
+                            f"Сильный нисходящий тренд против LONG сигнала: ADX={adx_value:.1f} > 20.0, "
+                            f"DI-={di_minus:.1f} > DI+={di_plus:.1f} | "
+                            f"Источник: MarketData.indicators (дополнительная проверка направления тренда)"
                         )
                         return None
                     elif (
@@ -276,8 +293,11 @@ class FilterManager:
                         and di_plus > di_minus
                     ):
                         # SHORT сигнал, но тренд вверх (DI+ > DI-)
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} SHORT отфильтрован: тренд вверх (ADX={adx_value:.1f}, DI+={di_plus:.1f} > DI-={di_minus:.1f})"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} SHORT): ADX Direction Filter - BLOCKED | "
+                            f"Сильный восходящий тренд против SHORT сигнала: ADX={adx_value:.1f} > 20.0, "
+                            f"DI+={di_plus:.1f} > DI-={di_minus:.1f} | "
+                            f"Источник: MarketData.indicators (дополнительная проверка направления тренда)"
                         )
                         return None
         except Exception as e:
@@ -288,12 +308,25 @@ class FilterManager:
             self.volatility_filter and not is_impulse
         ):  # Импульсы могут обходить волатильность
             try:
+                signal_side_str = signal.get("side", "").upper()
+                signal_type_str = signal.get("type", "unknown")
                 volatility_params = filters_profile.get("volatility", {})
-                if not await self._apply_volatility_filter(
+                volatility_result = await self._apply_volatility_filter(
                     symbol, signal, market_data, volatility_params
-                ):
-                    logger.debug(f"🔍 Сигнал {symbol} отфильтрован Volatility фильтром")
+                )
+                if not volatility_result:
+                    logger.info(
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Volatility Filter - BLOCKED | "
+                        f"Режим: {regime or 'unknown'}, Параметры: {volatility_params} | "
+                        f"Источник: VolatilityFilter (проверка волатильности рынка)"
+                    )
                     return None
+                else:
+                    logger.debug(
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Volatility Filter - PASSED | "
+                        f"Режим: {regime or 'unknown'}, Параметры: {volatility_params} | "
+                        f"Источник: VolatilityFilter (проверка волатильности рынка)"
+                    )
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Volatility фильтра для {symbol}: {e}")
 
@@ -304,20 +337,29 @@ class FilterManager:
         bypass_mtf = bool(is_impulse and impulse_relax.get("allow_mtf_bypass", False))
         if self.mtf_filter and not bypass_mtf:
             try:
+                signal_side_str = signal.get("side", "").upper()
+                signal_type_str = signal.get("type", "unknown")
+
                 # Пытаемся получить из кэша
                 cached_mtf_result = self._get_cached_filter_result(symbol, "mtf")
                 if cached_mtf_result is not None:
                     # Используем кэш - MTF меняется медленно
                     if not cached_mtf_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: MTF Filter (из кэша)"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): MTF Filter - BLOCKED (из кэша) | "
+                            f"Режим: {regime or 'unknown'} | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("MTF")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): MTF Filter - PASSED (из кэша) | "
+                            f"Режим: {regime or 'unknown'} | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
+                        )
                 else:
                     # Кэша нет - вычисляем и сохраняем
                     mtf_params = filters_profile.get("mtf", {})
@@ -327,15 +369,21 @@ class FilterManager:
                     # Сохраняем в кэш
                     self._set_cached_filter_result(symbol, "mtf", mtf_result)
                     if not mtf_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: MTF Filter"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): MTF Filter - BLOCKED | "
+                            f"Режим: {regime or 'unknown'}, Параметры: {mtf_params} | "
+                            f"Источник: MTFFilter.is_signal_valid() -> Multi-Timeframe анализ"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("MTF")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): MTF Filter - PASSED | "
+                            f"Режим: {regime or 'unknown'}, Параметры: {mtf_params} | "
+                            f"Источник: MTFFilter.is_signal_valid() -> Multi-Timeframe анализ"
+                        )
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка MTF фильтра для {symbol}: {e}")
 
@@ -345,10 +393,16 @@ class FilterManager:
         )
         if self.correlation_filter and not bypass_correlation:
             try:
-                if not await self._apply_correlation_filter(symbol, signal):
-                    signal_type = signal.get("type", "unknown")
-                    logger.debug(
-                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Correlation Filter"
+                signal_side_str = signal.get("side", "").upper()
+                signal_type_str = signal.get("type", "unknown")
+                correlation_result = await self._apply_correlation_filter(
+                    symbol, signal
+                )
+                if not correlation_result:
+                    logger.info(
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Correlation Filter - BLOCKED | "
+                        f"Режим: {regime or 'unknown'} | "
+                        f"Источник: CorrelationFilter.is_signal_valid() -> Анализ корреляции с текущими позициями"
                     )
                     return None
                 else:
@@ -356,6 +410,11 @@ class FilterManager:
                     if "filters_passed" not in signal:
                         signal["filters_passed"] = []
                     signal["filters_passed"].append("Correlation")
+                    logger.debug(
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Correlation Filter - PASSED | "
+                        f"Режим: {regime or 'unknown'} | "
+                        f"Источник: CorrelationFilter.is_signal_valid() -> Анализ корреляции с текущими позициями"
+                    )
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Correlation фильтра для {symbol}: {e}")
 
@@ -365,20 +424,30 @@ class FilterManager:
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш перед расчетом
         if self.pivot_points_filter:
             try:
+                signal_side_str = signal.get("side", "").upper()
+                signal_type_str = signal.get("type", "unknown")
+                signal_price = signal.get("price", 0.0)
+
                 # Пытаемся получить из кэша
                 cached_pivot_result = self._get_cached_filter_result(symbol, "pivot")
                 if cached_pivot_result is not None:
                     # Используем кэш - Pivot Points меняются медленно (раз в день)
                     if not cached_pivot_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Pivot Points Filter (из кэша)"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Pivot Points Filter - BLOCKED (из кэша) | "
+                            f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'} | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s, Pivot Points обновляются раз в день)"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("PivotPoints")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Pivot Points Filter - PASSED (из кэша) | "
+                            f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'} | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
+                        )
                 else:
                     # Кэша нет - вычисляем и сохраняем
                     pivot_params = filters_profile.get("pivot_points", {})
@@ -388,15 +457,21 @@ class FilterManager:
                     # Сохраняем в кэш
                     self._set_cached_filter_result(symbol, "pivot", pivot_result)
                     if not pivot_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Pivot Points Filter"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Pivot Points Filter - BLOCKED | "
+                            f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'}, Параметры: {pivot_params} | "
+                            f"Источник: PivotPointsFilter.is_signal_valid() -> Анализ уровней pivot points"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("PivotPoints")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Pivot Points Filter - PASSED | "
+                            f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'}, Параметры: {pivot_params} | "
+                            f"Источник: PivotPointsFilter.is_signal_valid() -> Анализ уровней pivot points"
+                        )
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Pivot Points фильтра для {symbol}: {e}")
 
@@ -404,6 +479,10 @@ class FilterManager:
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш перед расчетом (TTL 60s для тяжелых фильтров)
         if self.volume_profile_filter:
             try:
+                signal_side_str = signal.get("side", "").upper()
+                signal_type_str = signal.get("type", "unknown")
+                signal_price = signal.get("price", 0.0)
+
                 # Пытаемся получить из кэша (используем медленный TTL 60s)
                 cached_vp_result = self._get_cached_filter_result(
                     symbol, "volume_profile", use_slow_ttl=True
@@ -411,15 +490,21 @@ class FilterManager:
                 if cached_vp_result is not None:
                     # Используем кэш - Volume Profile меняется медленно (historical data)
                     if not cached_vp_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Volume Profile Filter (из кэша, TTL 60s)"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Volume Profile Filter - BLOCKED (из кэша) | "
+                            f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'} | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s, Volume Profile обновляется медленно)"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("VolumeProfile")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Volume Profile Filter - PASSED (из кэша) | "
+                            f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'} | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s)"
+                        )
                 else:
                     # Кэша нет - вычисляем и сохраняем
                     vp_params = filters_profile.get("volume_profile", {})
@@ -429,15 +514,21 @@ class FilterManager:
                     # Сохраняем в кэш
                     self._set_cached_filter_result(symbol, "volume_profile", vp_result)
                     if not vp_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Volume Profile Filter"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Volume Profile Filter - BLOCKED | "
+                            f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'}, Параметры: {vp_params} | "
+                            f"Источник: VolumeProfileFilter.is_signal_valid() -> Анализ объемного профиля (historical data)"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("VolumeProfile")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Volume Profile Filter - PASSED | "
+                            f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'}, Параметры: {vp_params} | "
+                            f"Источник: VolumeProfileFilter.is_signal_valid() -> Анализ объемного профиля (historical data)"
+                        )
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Volume Profile фильтра для {symbol}: {e}")
 
@@ -448,6 +539,9 @@ class FilterManager:
         )
         if self.liquidity_filter:
             try:
+                signal_side_str = signal.get("side", "").upper()
+                signal_type_str = signal.get("type", "unknown")
+
                 # Пытаемся получить из кэша (используем медленный TTL 60s)
                 cached_liquidity_result = self._get_cached_filter_result(
                     symbol, "liquidity", use_slow_ttl=True
@@ -455,15 +549,21 @@ class FilterManager:
                 if cached_liquidity_result is not None:
                     # Используем кэш - Liquidity меняется медленно (API calls)
                     if not cached_liquidity_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Liquidity Filter (из кэша, TTL 60s)"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Liquidity Filter - BLOCKED (из кэша) | "
+                            f"Режим: {regime or 'unknown'}, Relax: {liquidity_relax:.2f}x | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s, Liquidity обновляется через API)"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("Liquidity")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Liquidity Filter - PASSED (из кэша) | "
+                            f"Режим: {regime or 'unknown'}, Relax: {liquidity_relax:.2f}x | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s)"
+                        )
                 else:
                     # Кэша нет - вычисляем и сохраняем
                     liquidity_params = filters_profile.get("liquidity", {})
@@ -475,15 +575,21 @@ class FilterManager:
                         symbol, "liquidity", liquidity_result
                     )
                     if not liquidity_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Liquidity Filter"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Liquidity Filter - BLOCKED | "
+                            f"Режим: {regime or 'unknown'}, Параметры: {liquidity_params}, Relax: {liquidity_relax:.2f}x | "
+                            f"Источник: LiquidityFilter -> API запрос данных о ликвидности"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("Liquidity")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Liquidity Filter - PASSED | "
+                            f"Режим: {regime or 'unknown'}, Параметры: {liquidity_params}, Relax: {liquidity_relax:.2f}x | "
+                            f"Источник: LiquidityFilter -> API запрос данных о ликвидности"
+                        )
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Liquidity фильтра для {symbol}: {e}")
 
@@ -496,6 +602,9 @@ class FilterManager:
         )
         if self.order_flow_filter:
             try:
+                signal_side_str = signal.get("side", "").upper()
+                signal_type_str = signal.get("type", "unknown")
+
                 # Пытаемся получить из кэша (используем медленный TTL 60s)
                 cached_of_result = self._get_cached_filter_result(
                     symbol, "order_flow", use_slow_ttl=True
@@ -503,15 +612,21 @@ class FilterManager:
                 if cached_of_result is not None:
                     # Используем кэш - Order Flow меняется медленно (API calls)
                     if not cached_of_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Order Flow Filter (из кэша, TTL 60s)"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Order Flow Filter - BLOCKED (из кэша) | "
+                            f"Режим: {regime or 'unknown'}, Relax: {order_flow_relax:.2f}x | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s, Order Flow обновляется через API)"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("OrderFlow")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Order Flow Filter - PASSED (из кэша) | "
+                            f"Режим: {regime or 'unknown'}, Relax: {order_flow_relax:.2f}x | "
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s)"
+                        )
                 else:
                     # Кэша нет - вычисляем и сохраняем
                     order_flow_params = filters_profile.get("order_flow", {})
@@ -521,28 +636,38 @@ class FilterManager:
                     # Сохраняем в кэш
                     self._set_cached_filter_result(symbol, "order_flow", of_result)
                     if not of_result:
-                        signal_type = signal.get("type", "unknown")
-                        logger.debug(
-                            f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Order Flow Filter"
+                        logger.info(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Order Flow Filter - BLOCKED | "
+                            f"Режим: {regime or 'unknown'}, Параметры: {order_flow_params}, Relax: {order_flow_relax:.2f}x | "
+                            f"Источник: OrderFlowFilter -> API запрос данных о потоке ордеров"
                         )
                         return None
                     else:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("OrderFlow")
+                        logger.debug(
+                            f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Order Flow Filter - PASSED | "
+                            f"Режим: {regime or 'unknown'}, Параметры: {order_flow_params}, Relax: {order_flow_relax:.2f}x | "
+                            f"Источник: OrderFlowFilter -> API запрос данных о потоке ордеров"
+                        )
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Order Flow фильтра для {symbol}: {e}")
 
         # 9. Funding Rate Filter (проверка funding rate)
         if self.funding_rate_filter:
             try:
+                signal_side_str = signal.get("side", "").upper()
+                signal_type_str = signal.get("type", "unknown")
                 funding_params = filters_profile.get("funding", {})
-                if not await self._apply_funding_rate_filter(
+                funding_result = await self._apply_funding_rate_filter(
                     symbol, signal, funding_params
-                ):
-                    signal_type = signal.get("type", "unknown")
-                    logger.debug(
-                        f"🔍 Сигнал {symbol} ({signal_type}) отфильтрован: Funding Rate Filter"
+                )
+                if not funding_result:
+                    logger.info(
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Funding Rate Filter - BLOCKED | "
+                        f"Режим: {regime or 'unknown'}, Параметры: {funding_params} | "
+                        f"Источник: FundingRateFilter -> API запрос funding rate"
                     )
                     return None
                 else:
@@ -550,6 +675,11 @@ class FilterManager:
                     if "filters_passed" not in signal:
                         signal["filters_passed"] = []
                     signal["filters_passed"].append("FundingRate")
+                    logger.debug(
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Funding Rate Filter - PASSED | "
+                        f"Режим: {regime or 'unknown'}, Параметры: {funding_params} | "
+                        f"Источник: FundingRateFilter -> API запрос funding rate"
+                    )
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка Funding Rate фильтра для {symbol}: {e}")
 
@@ -652,6 +782,24 @@ class FilterManager:
             symbol, order_side, candles_dict
         )
 
+        # ✅ НОВОЕ (03.01.2026): Получаем параметры конфигурации для логирования
+        adx_threshold_config = (
+            self.adx_filter.config.adx_threshold
+            if self.adx_filter and self.adx_filter.config
+            else 25.0
+        )
+        di_difference_config = (
+            self.adx_filter.config.di_difference
+            if self.adx_filter and self.adx_filter.config
+            else 5.0
+        )
+        adx_period_config = (
+            self.adx_filter.config.adx_period
+            if self.adx_filter and self.adx_filter.config
+            else 14
+        )
+        signal_type_str = signal.get("type", "unknown")
+
         if not adx_result.allowed:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Адаптация к режиму рынка
             regime_lower = (regime or "").lower()
@@ -660,8 +808,11 @@ class FilterManager:
             if regime_lower == "ranging":
                 # В ranging режиме низкий ADX - это нормально, не блокируем
                 logger.info(
-                    f"✅ ADX фильтр для {symbol} (RANGING): пропущен сигнал {signal_side_str.upper()} "
-                    f"несмотря на низкий ADX={adx_result.adx_value:.1f} (в ranging это нормально)"
+                    f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - PASSED (RANGING режим) | "
+                    f"ADX={adx_result.adx_value:.1f} (низкий ADX нормален для ranging), "
+                    f"+DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f} | "
+                    f"Конфиг: threshold={adx_threshold_config:.1f}, di_diff={di_difference_config:.1f}, period={adx_period_config} | "
+                    f"Источник: ADXFilter.check_trend_strength() -> MarketData.indicators"
                 )
                 return signal  # Пропускаем сигнал в ranging режиме
 
@@ -669,10 +820,13 @@ class FilterManager:
             elif regime_lower == "trending":
                 # В trending режиме требуем сильный тренд
                 if adx_result.adx_value < 18.0:
-                    filter_reason = f"ADX={adx_result.adx_value:.1f} < 18.0 (требуется сильный тренд)"
+                    filter_reason = f"ADX={adx_result.adx_value:.1f} < 18.0 (требуется сильный тренд для TRENDING режима)"
                     logger.info(
-                        f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol} (TRENDING): "
-                        f"{filter_reason}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f}"
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - BLOCKED (TRENDING режим) | "
+                        f"{filter_reason} | "
+                        f"ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f} | "
+                        f"Конфиг: threshold={adx_threshold_config:.1f}, di_diff={di_difference_config:.1f}, period={adx_period_config} | "
+                        f"Источник: ADXFilter.check_trend_strength() -> MarketData.indicators"
                     )
                     signal["filter_reason"] = f"ADX Filter: {filter_reason}"
                     return None
@@ -680,8 +834,11 @@ class FilterManager:
                     # ADX достаточен, но сигнал против тренда - блокируем
                     filter_reason = f"сигнал против тренда ({adx_result.reason if hasattr(adx_result, 'reason') else 'ADX не разрешил'})"
                     logger.info(
-                        f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol} (TRENDING): "
-                        f"{filter_reason}, ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f}"
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - BLOCKED (TRENDING режим) | "
+                        f"{filter_reason} | "
+                        f"ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f} | "
+                        f"Конфиг: threshold={adx_threshold_config:.1f}, di_diff={di_difference_config:.1f}, period={adx_period_config} | "
+                        f"Источник: ADXFilter.check_trend_strength() -> MarketData.indicators"
                     )
                     signal["filter_reason"] = f"ADX Filter: {filter_reason}"
                     return None
@@ -690,33 +847,45 @@ class FilterManager:
             elif regime_lower == "choppy":
                 # В choppy режиме блокируем только если очень сильный тренд против сигнала
                 if adx_result.adx_value > 30.0:
-                    filter_reason = f"очень сильный тренд против сигнала (ADX={adx_result.adx_value:.1f} > 30.0)"
+                    filter_reason = f"очень сильный тренд против сигнала (ADX={adx_result.adx_value:.1f} > 30.0 для CHOPPY режима)"
                     logger.info(
-                        f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol} (CHOPPY): "
-                        f"{filter_reason}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f}"
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - BLOCKED (CHOPPY режим) | "
+                        f"{filter_reason} | "
+                        f"ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f} | "
+                        f"Конфиг: threshold={adx_threshold_config:.1f}, di_diff={di_difference_config:.1f}, period={adx_period_config} | "
+                        f"Источник: ADXFilter.check_trend_strength() -> MarketData.indicators"
                     )
                     signal["filter_reason"] = f"ADX Filter: {filter_reason}"
                     return None
                 else:
                     # В choppy режиме слабый тренд - пропускаем
                     logger.info(
-                        f"✅ ADX фильтр для {symbol} (CHOPPY): пропущен сигнал {signal_side_str.upper()} "
-                        f"несмотря на ADX={adx_result.adx_value:.1f} (в choppy это нормально)"
+                        f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - PASSED (CHOPPY режим) | "
+                        f"ADX={adx_result.adx_value:.1f} (слабый тренд нормален для choppy), "
+                        f"+DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f} | "
+                        f"Конфиг: threshold={adx_threshold_config:.1f}, di_diff={di_difference_config:.1f}, period={adx_period_config} | "
+                        f"Источник: ADXFilter.check_trend_strength() -> MarketData.indicators"
                     )
                     return signal
 
             # ✅ Неизвестный режим: используем стандартную логику
             else:
                 filter_reason = f"сигнал против тренда ({adx_result.reason if hasattr(adx_result, 'reason') else 'ADX не разрешил'})"
-                logger.debug(
-                    f"🚫 ADX заблокировал {signal_side_str.upper()} сигнал для {symbol}: "
-                    f"{filter_reason}, ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f}"
+                logger.info(
+                    f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - BLOCKED (режим={regime_lower or 'unknown'}) | "
+                    f"{filter_reason} | "
+                    f"ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f} | "
+                    f"Конфиг: threshold={adx_threshold_config:.1f}, di_diff={di_difference_config:.1f}, period={adx_period_config} | "
+                    f"Источник: ADXFilter.check_trend_strength() -> MarketData.indicators"
                 )
                 signal["filter_reason"] = f"ADX Filter: {filter_reason}"
                 return None
         else:
-            logger.debug(
-                f"✅ ADX подтвердил {signal_side_str.upper()} сигнал для {symbol}"
+            logger.info(
+                f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - PASSED | "
+                f"ADX={adx_result.adx_value:.1f}, +DI={adx_result.plus_di:.1f}, -DI={adx_result.minus_di:.1f} | "
+                f"Конфиг: threshold={adx_threshold_config:.1f}, di_diff={di_difference_config:.1f}, period={adx_period_config} | "
+                f"Источник: ADXFilter.check_trend_strength() -> MarketData.indicators"
             )
 
         return signal

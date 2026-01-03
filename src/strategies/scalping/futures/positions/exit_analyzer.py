@@ -823,6 +823,13 @@ class ExitAnalyzer:
                                 tp_max_percent = float(
                                     regime_config.get("tp_max_percent", 2.2)
                                 )
+                                # ✅ НОВОЕ (03.01.2026): Логирование источника TP параметров при использовании fallback
+                                logger.info(
+                                    f"📊 [PARAMS] {symbol} ({regime}): TP параметры "
+                                    f"tp_percent={tp_percent:.2f}%, tp_atr_multiplier={tp_atr_multiplier:.2f}, "
+                                    f"tp_min={tp_min_percent:.2f}%, tp_max={tp_max_percent:.2f}% | "
+                                    f"Источник: symbol_profiles.{symbol}.{regime} (fallback)"
+                                )
                             except (TypeError, ValueError) as e:
                                 logger.warning(
                                     f"⚠️ ExitAnalyzer: Не удалось преобразовать tp_percent={regime_config.get('tp_percent')} "
@@ -856,6 +863,13 @@ class ExitAnalyzer:
                                 tp_max_percent = float(
                                     regime_config.get("tp_max_percent", 2.2)
                                 )
+                                # ✅ НОВОЕ (03.01.2026): Логирование источника TP параметров при использовании fallback
+                                logger.info(
+                                    f"📊 [PARAMS] {symbol} ({regime}): TP параметры "
+                                    f"tp_percent={tp_percent:.2f}%, tp_atr_multiplier={tp_atr_multiplier:.2f}, "
+                                    f"tp_min={tp_min_percent:.2f}%, tp_max={tp_max_percent:.2f}% | "
+                                    f"Источник: by_regime.{regime} (fallback)"
+                                )
                             except (TypeError, ValueError) as e:
                                 logger.warning(
                                     f"⚠️ ExitAnalyzer: Не удалось преобразовать tp_percent={regime_config.get('tp_percent')} "
@@ -869,6 +883,13 @@ class ExitAnalyzer:
                     # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float
                     try:
                         tp_percent = float(tp_percent_raw)
+                        # ✅ НОВОЕ (03.01.2026): Логирование источника TP параметров при использовании глобального fallback
+                        logger.info(
+                            f"📊 [PARAMS] {symbol} ({regime}): TP параметры "
+                            f"tp_percent={tp_percent:.2f}%, tp_atr_multiplier={tp_atr_multiplier:.2f}, "
+                            f"tp_min={tp_min_percent:.2f}%, tp_max={tp_max_percent:.2f}% | "
+                            f"Источник: scalping_config.tp_percent (глобальный fallback)"
+                        )
                     except (TypeError, ValueError):
                         tp_percent = 2.4
             except Exception as e:
@@ -1068,8 +1089,12 @@ class ExitAnalyzer:
                                     sl_min_percent = float(
                                         regime_config.get("sl_min_percent", 0.6)
                                     )
-                                    logger.debug(
-                                        f"✅ ExitAnalyzer: SL% для {symbol} ({regime}) получен из adaptive_regime: {sl_percent:.2f}%"
+                                    # ✅ НОВОЕ (03.01.2026): Логирование источника SL параметров при использовании fallback
+                                    logger.info(
+                                        f"📊 [PARAMS] {symbol} ({regime}): SL параметры "
+                                        f"sl_percent={sl_percent:.2f}%, sl_atr_multiplier={sl_atr_multiplier:.2f}, "
+                                        f"sl_min={sl_min_percent:.2f}% | "
+                                        f"Источник: adaptive_regime.{regime} (fallback)"
                                     )
                                 except (TypeError, ValueError) as e:
                                     logger.warning(
@@ -1101,8 +1126,12 @@ class ExitAnalyzer:
                                     sl_min_percent = float(
                                         regime_config.get("sl_min_percent", 0.6)
                                     )
-                                    logger.debug(
-                                        f"✅ ExitAnalyzer: SL% для {symbol} ({regime}) получен из by_regime: {sl_percent:.2f}%"
+                                    # ✅ НОВОЕ (03.01.2026): Логирование источника SL параметров при использовании fallback
+                                    logger.info(
+                                        f"📊 [PARAMS] {symbol} ({regime}): SL параметры "
+                                        f"sl_percent={sl_percent:.2f}%, sl_atr_multiplier={sl_atr_multiplier:.2f}, "
+                                        f"sl_min={sl_min_percent:.2f}% | "
+                                        f"Источник: by_regime.{regime} (fallback)"
                                     )
                                 except (TypeError, ValueError) as e:
                                     logger.warning(
@@ -1116,6 +1145,13 @@ class ExitAnalyzer:
                     # ✅ ИСПРАВЛЕНИЕ: Явное преобразование в float
                     try:
                         sl_percent = float(sl_percent_raw)
+                        # ✅ НОВОЕ (03.01.2026): Логирование источника SL параметров при использовании глобального fallback
+                        logger.info(
+                            f"📊 [PARAMS] {symbol} ({regime}): SL параметры "
+                            f"sl_percent={sl_percent:.2f}%, sl_atr_multiplier={sl_atr_multiplier:.2f}, "
+                            f"sl_min={sl_min_percent:.2f}% | "
+                            f"Источник: scalping_config.sl_percent (глобальный fallback)"
+                        )
                     except (TypeError, ValueError):
                         sl_percent = 2.0
             except Exception as e:
@@ -2144,6 +2180,132 @@ class ExitAnalyzer:
                 gross_pnl_percent, "gross_pnl_percent", 0.0
             )
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Emergency Loss Protection - ПЕРВАЯ ЗАЩИТА
+            # Проверяется ПЕРВОЙ, перед всеми другими проверками (соответствует приоритету 1 в ExitDecisionCoordinator)
+            # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
+            # TRENDING: более высокий порог (-4.0%), так как тренды могут иметь большие просадки
+            emergency_loss_threshold = -4.0  # Для trending режима (было -2.5)
+
+            # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
+            emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
+            emergency_commission_buffer = self._get_commission_buffer(
+                position, metadata
+            )
+            adjusted_emergency_threshold = (
+                emergency_loss_threshold
+                - emergency_spread_buffer
+                - emergency_commission_buffer
+            )
+
+            # ✅ НОВОЕ (26.12.2025): Минимальное время удержания перед emergency close
+            min_holding_seconds = 120.0  # TRENDING: 120 секунд (2 минуты)
+            if pnl_percent < adjusted_emergency_threshold:
+                # Проверяем минимальное время удержания
+                if entry_time:
+                    try:
+                        if isinstance(entry_time, str):
+                            entry_time_dt = datetime.fromisoformat(
+                                entry_time.replace("Z", "+00:00")
+                            )
+                        else:
+                            entry_time_dt = entry_time
+
+                        if entry_time_dt.tzinfo is None:
+                            entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
+                        elif entry_time_dt.tzinfo != timezone.utc:
+                            entry_time_dt = entry_time_dt.astimezone(timezone.utc)
+
+                        holding_seconds = (
+                            datetime.now(timezone.utc) - entry_time_dt
+                        ).total_seconds()
+
+                        if holding_seconds < min_holding_seconds:
+                            logger.debug(
+                                f"⏳ ExitAnalyzer TRENDING: Emergency close заблокирован для {symbol} - "
+                                f"время удержания {holding_seconds:.1f}с < минимум {min_holding_seconds:.1f}с "
+                                f"(PnL={pnl_percent:.2f}% < порог={emergency_loss_threshold:.1f}%)"
+                            )
+                            # Не закрываем, если не прошло минимальное время
+                            # Продолжаем с другими проверками
+                        else:
+                            # Прошло минимальное время - закрываем по Emergency Loss Protection
+                            logger.warning(
+                                f"🚨 ExitAnalyzer TRENDING: Критический убыток {pnl_percent:.2f}% для {symbol} "
+                                f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
+                                f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
+                                f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                            )
+                            self._record_metrics_on_close(
+                                symbol=symbol,
+                                reason="emergency_loss_protection",
+                                pnl_percent=pnl_percent,
+                                entry_time=entry_time,
+                            )
+                            return {
+                                "action": "close",
+                                "reason": "emergency_loss_protection",
+                                "pnl_pct": pnl_percent,
+                                "regime": regime,
+                                "emergency": True,
+                                "threshold": emergency_loss_threshold,
+                                "adjusted_threshold": adjusted_emergency_threshold,
+                                "spread_buffer": emergency_spread_buffer,
+                                "commission_buffer": emergency_commission_buffer,
+                            }
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ ExitAnalyzer TRENDING: Ошибка проверки времени удержания для {symbol}: {e}"
+                        )
+                        # В случае ошибки разрешаем emergency close (безопаснее)
+                        logger.warning(
+                            f"🚨 ExitAnalyzer TRENDING: Критический убыток {pnl_percent:.2f}% для {symbol} "
+                            f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
+                            f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
+                            f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                        )
+                        self._record_metrics_on_close(
+                            symbol=symbol,
+                            reason="emergency_loss_protection",
+                            pnl_percent=pnl_percent,
+                            entry_time=entry_time,
+                        )
+                        return {
+                            "action": "close",
+                            "reason": "emergency_loss_protection",
+                            "pnl_pct": pnl_percent,
+                            "regime": regime,
+                            "emergency": True,
+                            "threshold": emergency_loss_threshold,
+                            "adjusted_threshold": adjusted_emergency_threshold,
+                            "spread_buffer": emergency_spread_buffer,
+                            "commission_buffer": emergency_commission_buffer,
+                        }
+                else:
+                    # Нет entry_time, но убыток критический - закрываем
+                    logger.warning(
+                        f"🚨 ExitAnalyzer TRENDING: Критический убыток {pnl_percent:.2f}% для {symbol} "
+                        f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
+                        f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
+                        f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                    )
+                    self._record_metrics_on_close(
+                        symbol=symbol,
+                        reason="emergency_loss_protection",
+                        pnl_percent=pnl_percent,
+                        entry_time=entry_time,
+                    )
+                    return {
+                        "action": "close",
+                        "reason": "emergency_loss_protection",
+                        "pnl_pct": pnl_percent,
+                        "regime": regime,
+                        "emergency": True,
+                        "threshold": emergency_loss_threshold,
+                        "adjusted_threshold": adjusted_emergency_threshold,
+                        "spread_buffer": emergency_spread_buffer,
+                        "commission_buffer": emergency_commission_buffer,
+                    }
+
             # 3. Проверка TP (Take Profit)
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для адаптивного TP
             tp_percent = self._get_tp_percent(
@@ -2631,81 +2793,6 @@ class ExitAnalyzer:
                         "regime": regime,
                     }
 
-            # 9. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Emergency Loss Protection - ПОСЛЕДНЯЯ ЗАЩИТА
-            # Проверяется в самом конце, после всех других проверок (Smart Close, TP, Max Holding)
-            # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
-            # TRENDING: более высокий порог (-4.0%), так как тренды могут иметь большие просадки
-            emergency_loss_threshold = -4.0  # Для trending режима (было -2.5)
-
-            # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
-            emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
-            emergency_commission_buffer = self._get_commission_buffer(
-                position, metadata
-            )
-            adjusted_emergency_threshold = (
-                emergency_loss_threshold
-                - emergency_spread_buffer
-                - emergency_commission_buffer
-            )
-
-            # ✅ НОВОЕ (26.12.2025): Минимальное время удержания перед emergency close
-            min_holding_seconds = 120.0  # TRENDING: 120 секунд (2 минуты)
-            if pnl_percent < adjusted_emergency_threshold:
-                # Проверяем минимальное время удержания
-                if entry_time:
-                    try:
-                        if isinstance(entry_time, str):
-                            entry_time_dt = datetime.fromisoformat(
-                                entry_time.replace("Z", "+00:00")
-                            )
-                        else:
-                            entry_time_dt = entry_time
-
-                        if entry_time_dt.tzinfo is None:
-                            entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
-                        elif entry_time_dt.tzinfo != timezone.utc:
-                            entry_time_dt = entry_time_dt.astimezone(timezone.utc)
-
-                        holding_seconds = (
-                            datetime.now(timezone.utc) - entry_time_dt
-                        ).total_seconds()
-
-                        if holding_seconds < min_holding_seconds:
-                            logger.debug(
-                                f"⏳ ExitAnalyzer TRENDING: Emergency close заблокирован для {symbol} - "
-                                f"время удержания {holding_seconds:.1f}с < минимум {min_holding_seconds:.1f}с "
-                                f"(PnL={pnl_percent:.2f}% < порог={emergency_loss_threshold:.1f}%)"
-                            )
-                            return None
-                    except Exception as e:
-                        logger.debug(
-                            f"⚠️ ExitAnalyzer TRENDING: Ошибка проверки времени удержания для {symbol}: {e}"
-                        )
-
-                logger.warning(
-                    f"🚨 ExitAnalyzer TRENDING: Критический убыток {pnl_percent:.2f}% для {symbol} "
-                    f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
-                    f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
-                    f"генерируем экстренное закрытие (последняя защита после всех проверок)"
-                )
-                self._record_metrics_on_close(
-                    symbol=symbol,
-                    reason="emergency_loss_protection",
-                    pnl_percent=pnl_percent,
-                    entry_time=entry_time,
-                )
-                return {
-                    "action": "close",
-                    "reason": "emergency_loss_protection",
-                    "pnl_pct": pnl_percent,
-                    "regime": regime,
-                    "emergency": True,
-                    "threshold": emergency_loss_threshold,
-                    "adjusted_threshold": adjusted_emergency_threshold,
-                    "spread_buffer": emergency_spread_buffer,
-                    "commission_buffer": emergency_commission_buffer,
-                }
-
             # Нет причин для закрытия или продления
             return None
 
@@ -2826,6 +2913,140 @@ class ExitAnalyzer:
                 f"current_price={current_price:.2f}, side={position_side}, "
                 f"Gross PnL%={gross_format}% (для SL), Net PnL%={net_format}% (с комиссией), entry_time={entry_time}"
             )
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Emergency Loss Protection - ПЕРВАЯ ЗАЩИТА
+            # Проверяется ПЕРВОЙ, перед всеми другими проверками (соответствует приоритету 1 в ExitDecisionCoordinator)
+            # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Пороги emergency_loss_protection адаптируются по режимам
+            # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличены пороги для уменьшения частоты emergency close
+            # RANGING: более низкий порог (-2.5%), так как в ranging режиме позиции должны закрываться быстрее
+            emergency_loss_threshold = -2.5  # Для ranging режима (было -1.5)
+
+            # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
+            emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
+            emergency_commission_buffer = self._get_commission_buffer(
+                position, metadata
+            )
+            # Скорректируем порог вниз (сделаем более строгим), чтобы учесть дополнительные потери при закрытии
+            adjusted_emergency_threshold = (
+                emergency_loss_threshold
+                - emergency_spread_buffer
+                - emergency_commission_buffer
+            )
+
+            # ✅ НОВОЕ (26.12.2025): Минимальное время удержания перед emergency close
+            min_holding_seconds = 60.0  # RANGING: 60 секунд (1 минута)
+            if net_pnl_percent < adjusted_emergency_threshold:
+                # Проверяем минимальное время удержания
+                if entry_time:
+                    try:
+                        if isinstance(entry_time, str):
+                            entry_time_dt = datetime.fromisoformat(
+                                entry_time.replace("Z", "+00:00")
+                            )
+                        else:
+                            entry_time_dt = entry_time
+
+                        # Убеждаемся, что entry_time в UTC
+                        if entry_time_dt.tzinfo is None:
+                            entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
+                        elif entry_time_dt.tzinfo != timezone.utc:
+                            entry_time_dt = entry_time_dt.astimezone(timezone.utc)
+
+                        holding_seconds = (
+                            datetime.now(timezone.utc) - entry_time_dt
+                        ).total_seconds()
+
+                        if holding_seconds < min_holding_seconds:
+                            logger.debug(
+                                f"⏳ ExitAnalyzer RANGING: Emergency close заблокирован для {symbol} - "
+                                f"время удержания {holding_seconds:.1f}с < минимум {min_holding_seconds:.1f}с "
+                                f"(PnL={net_pnl_percent:.2f}% < порог={emergency_loss_threshold:.1f}%)"
+                            )
+                            # Не закрываем, если не прошло минимальное время
+                            # Продолжаем с другими проверками
+                        else:
+                            # Прошло минимальное время - закрываем по Emergency Loss Protection
+                            logger.warning(
+                                f"🚨 ExitAnalyzer RANGING: Критический убыток {net_pnl_percent:.2f}% для {symbol} "
+                                f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
+                                f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
+                                f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                            )
+                            # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
+                            self._record_metrics_on_close(
+                                symbol=symbol,
+                                reason="emergency_loss_protection",
+                                pnl_percent=net_pnl_percent,
+                                entry_time=entry_time,
+                            )
+                            return {
+                                "action": "close",
+                                "reason": "emergency_loss_protection",
+                                "pnl_pct": net_pnl_percent,
+                                "gross_pnl_pct": gross_pnl_percent,
+                                "regime": regime,  # ✅ ПРАВКА #15: Логирование regime
+                                "emergency": True,
+                                "threshold": emergency_loss_threshold,
+                                "adjusted_threshold": adjusted_emergency_threshold,
+                                "spread_buffer": emergency_spread_buffer,
+                                "commission_buffer": emergency_commission_buffer,
+                            }
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ ExitAnalyzer RANGING: Ошибка проверки времени удержания для {symbol}: {e}"
+                        )
+                        # В случае ошибки разрешаем emergency close (безопаснее)
+                        logger.warning(
+                            f"🚨 ExitAnalyzer RANGING: Критический убыток {net_pnl_percent:.2f}% для {symbol} "
+                            f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
+                            f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
+                            f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                        )
+                        self._record_metrics_on_close(
+                            symbol=symbol,
+                            reason="emergency_loss_protection",
+                            pnl_percent=net_pnl_percent,
+                            entry_time=entry_time,
+                        )
+                        return {
+                            "action": "close",
+                            "reason": "emergency_loss_protection",
+                            "pnl_pct": net_pnl_percent,
+                            "gross_pnl_pct": gross_pnl_percent,
+                            "regime": regime,
+                            "emergency": True,
+                            "threshold": emergency_loss_threshold,
+                            "adjusted_threshold": adjusted_emergency_threshold,
+                            "spread_buffer": emergency_spread_buffer,
+                            "commission_buffer": emergency_commission_buffer,
+                        }
+                else:
+                    # Нет entry_time, но убыток критический - закрываем
+                    logger.warning(
+                        f"🚨 ExitAnalyzer RANGING: Критический убыток {net_pnl_percent:.2f}% для {symbol} "
+                        f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
+                        f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
+                        f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                    )
+                    self._record_metrics_on_close(
+                        symbol=symbol,
+                        reason="emergency_loss_protection",
+                        pnl_percent=net_pnl_percent,
+                        entry_time=entry_time,
+                    )
+                    return {
+                        "action": "close",
+                        "reason": "emergency_loss_protection",
+                        "pnl_pct": net_pnl_percent,
+                        "gross_pnl_pct": gross_pnl_percent,
+                        "regime": regime,
+                        "emergency": True,
+                        "threshold": emergency_loss_threshold,
+                        "adjusted_threshold": adjusted_emergency_threshold,
+                        "spread_buffer": emergency_spread_buffer,
+                        "commission_buffer": emergency_commission_buffer,
+                    }
 
             # 2.3. ✅ ГРОК: Проверка peak_profit с absolute threshold - не блокировать для малых прибылей
             # Применяем только для прибылей > 0.5% чтобы избежать блокировки микроприбылей
@@ -3736,89 +3957,6 @@ class ExitAnalyzer:
                 f"текущий Net PnL%={net_pnl_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%), время: {time_info}"
             )
 
-            # 8. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Emergency Loss Protection - ПОСЛЕДНЯЯ ЗАЩИТА
-            # Проверяется в самом конце, после всех других проверок (Smart Close, TP, Max Holding)
-            # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Пороги emergency_loss_protection адаптируются по режимам
-            # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличены пороги для уменьшения частоты emergency close
-            # RANGING: более низкий порог (-2.5%), так как в ranging режиме позиции должны закрываться быстрее
-            emergency_loss_threshold = -2.5  # Для ranging режима (было -1.5)
-
-            # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
-            emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
-            emergency_commission_buffer = self._get_commission_buffer(
-                position, metadata
-            )
-            # Скорректируем порог вниз (сделаем более строгим), чтобы учесть дополнительные потери при закрытии
-            adjusted_emergency_threshold = (
-                emergency_loss_threshold
-                - emergency_spread_buffer
-                - emergency_commission_buffer
-            )
-
-            # ✅ НОВОЕ (26.12.2025): Минимальное время удержания перед emergency close
-            min_holding_seconds = 60.0  # RANGING: 60 секунд (1 минута)
-            if net_pnl_percent < adjusted_emergency_threshold:
-                # Проверяем минимальное время удержания
-                if entry_time:
-                    try:
-                        if isinstance(entry_time, str):
-                            entry_time_dt = datetime.fromisoformat(
-                                entry_time.replace("Z", "+00:00")
-                            )
-                        else:
-                            entry_time_dt = entry_time
-
-                        # Убеждаемся, что entry_time в UTC
-                        if entry_time_dt.tzinfo is None:
-                            entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
-                        elif entry_time_dt.tzinfo != timezone.utc:
-                            entry_time_dt = entry_time_dt.astimezone(timezone.utc)
-
-                        holding_seconds = (
-                            datetime.now(timezone.utc) - entry_time_dt
-                        ).total_seconds()
-
-                        if holding_seconds < min_holding_seconds:
-                            logger.debug(
-                                f"⏳ ExitAnalyzer RANGING: Emergency close заблокирован для {symbol} - "
-                                f"время удержания {holding_seconds:.1f}с < минимум {min_holding_seconds:.1f}с "
-                                f"(PnL={net_pnl_percent:.2f}% < порог={emergency_loss_threshold:.1f}%)"
-                            )
-                            # Не закрываем, если не прошло минимальное время
-                            return None
-                    except Exception as e:
-                        logger.debug(
-                            f"⚠️ ExitAnalyzer RANGING: Ошибка проверки времени удержания для {symbol}: {e}"
-                        )
-                        # В случае ошибки разрешаем emergency close (безопаснее)
-
-                logger.warning(
-                    f"🚨 ExitAnalyzer RANGING: Критический убыток {net_pnl_percent:.2f}% для {symbol} "
-                    f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
-                    f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
-                    f"генерируем экстренное закрытие (последняя защита после всех проверок)"
-                )
-                # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
-                self._record_metrics_on_close(
-                    symbol=symbol,
-                    reason="emergency_loss_protection",
-                    pnl_percent=net_pnl_percent,
-                    entry_time=entry_time,
-                )
-                return {
-                    "action": "close",
-                    "reason": "emergency_loss_protection",
-                    "pnl_pct": net_pnl_percent,
-                    "gross_pnl_pct": gross_pnl_percent,
-                    "regime": regime,  # ✅ ПРАВКА #15: Логирование regime
-                    "emergency": True,
-                    "threshold": emergency_loss_threshold,
-                    "adjusted_threshold": adjusted_emergency_threshold,
-                    "spread_buffer": emergency_spread_buffer,
-                    "commission_buffer": emergency_commission_buffer,
-                }
-
             return None
 
         except Exception as e:
@@ -3909,6 +4047,132 @@ class ExitAnalyzer:
             gross_pnl_percent = self._to_float(
                 gross_pnl_percent, "gross_pnl_percent", 0.0
             )
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Emergency Loss Protection - ПЕРВАЯ ЗАЩИТА
+            # Проверяется ПЕРВОЙ, перед всеми другими проверками (соответствует приоритету 1 в ExitDecisionCoordinator)
+            # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
+            # CHOPPY: средний порог (-2.0%), так как в choppy режиме высокая волатильность
+            emergency_loss_threshold = -2.0  # Для choppy режима (было -1.5)
+
+            # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
+            emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
+            emergency_commission_buffer = self._get_commission_buffer(
+                position, metadata
+            )
+            adjusted_emergency_threshold = (
+                emergency_loss_threshold
+                - emergency_spread_buffer
+                - emergency_commission_buffer
+            )
+
+            # ✅ НОВОЕ (26.12.2025): Минимальное время удержания перед emergency close
+            min_holding_seconds = 30.0  # CHOPPY: 30 секунд
+            if pnl_percent < adjusted_emergency_threshold:
+                # Проверяем минимальное время удержания
+                if entry_time:
+                    try:
+                        if isinstance(entry_time, str):
+                            entry_time_dt = datetime.fromisoformat(
+                                entry_time.replace("Z", "+00:00")
+                            )
+                        else:
+                            entry_time_dt = entry_time
+
+                        if entry_time_dt.tzinfo is None:
+                            entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
+                        elif entry_time_dt.tzinfo != timezone.utc:
+                            entry_time_dt = entry_time_dt.astimezone(timezone.utc)
+
+                        holding_seconds = (
+                            datetime.now(timezone.utc) - entry_time_dt
+                        ).total_seconds()
+
+                        if holding_seconds < min_holding_seconds:
+                            logger.debug(
+                                f"⏳ ExitAnalyzer CHOPPY: Emergency close заблокирован для {symbol} - "
+                                f"время удержания {holding_seconds:.1f}с < минимум {min_holding_seconds:.1f}с "
+                                f"(PnL={pnl_percent:.2f}% < порог={emergency_loss_threshold:.1f}%)"
+                            )
+                            # Не закрываем, если не прошло минимальное время
+                            # Продолжаем с другими проверками
+                        else:
+                            # Прошло минимальное время - закрываем по Emergency Loss Protection
+                            logger.warning(
+                                f"🚨 ExitAnalyzer CHOPPY: Критический убыток {pnl_percent:.2f}% для {symbol} "
+                                f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
+                                f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
+                                f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                            )
+                            self._record_metrics_on_close(
+                                symbol=symbol,
+                                reason="emergency_loss_protection",
+                                pnl_percent=pnl_percent,
+                                entry_time=entry_time,
+                            )
+                            return {
+                                "action": "close",
+                                "reason": "emergency_loss_protection",
+                                "pnl_pct": pnl_percent,
+                                "regime": regime,
+                                "emergency": True,
+                                "threshold": emergency_loss_threshold,
+                                "adjusted_threshold": adjusted_emergency_threshold,
+                                "spread_buffer": emergency_spread_buffer,
+                                "commission_buffer": emergency_commission_buffer,
+                            }
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ ExitAnalyzer CHOPPY: Ошибка проверки времени удержания для {symbol}: {e}"
+                        )
+                        # В случае ошибки разрешаем emergency close (безопаснее)
+                        logger.warning(
+                            f"🚨 ExitAnalyzer CHOPPY: Критический убыток {pnl_percent:.2f}% для {symbol} "
+                            f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
+                            f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
+                            f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                        )
+                        self._record_metrics_on_close(
+                            symbol=symbol,
+                            reason="emergency_loss_protection",
+                            pnl_percent=pnl_percent,
+                            entry_time=entry_time,
+                        )
+                        return {
+                            "action": "close",
+                            "reason": "emergency_loss_protection",
+                            "pnl_pct": pnl_percent,
+                            "regime": regime,
+                            "emergency": True,
+                            "threshold": emergency_loss_threshold,
+                            "adjusted_threshold": adjusted_emergency_threshold,
+                            "spread_buffer": emergency_spread_buffer,
+                            "commission_buffer": emergency_commission_buffer,
+                        }
+                else:
+                    # Нет entry_time, но убыток критический - закрываем
+                    logger.warning(
+                        f"🚨 ExitAnalyzer CHOPPY: Критический убыток {pnl_percent:.2f}% для {symbol} "
+                        f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
+                        f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
+                        f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                    )
+                    self._record_metrics_on_close(
+                        symbol=symbol,
+                        reason="emergency_loss_protection",
+                        pnl_percent=pnl_percent,
+                        entry_time=entry_time,
+                    )
+                    return {
+                        "action": "close",
+                        "reason": "emergency_loss_protection",
+                        "pnl_pct": pnl_percent,
+                        "regime": regime,
+                        "emergency": True,
+                        "threshold": emergency_loss_threshold,
+                        "adjusted_threshold": adjusted_emergency_threshold,
+                        "spread_buffer": emergency_spread_buffer,
+                        "commission_buffer": emergency_commission_buffer,
+                    }
 
             # 2.5. ✅ ГРОК: Проверка peak_profit с absolute threshold - не блокировать для малых прибылей
             if (
@@ -4305,81 +4569,6 @@ class ExitAnalyzer:
                     "minutes_in_position": minutes_in_position,
                     "max_holding_minutes": max_holding_minutes,
                     "regime": regime,
-                }
-
-            # 8. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Emergency Loss Protection - ПОСЛЕДНЯЯ ЗАЩИТА
-            # Проверяется в самом конце, после всех других проверок (Smart Close, TP, Max Holding)
-            # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
-            # CHOPPY: средний порог (-2.0%), так как в choppy режиме высокая волатильность
-            emergency_loss_threshold = -2.0  # Для choppy режима (было -1.5)
-
-            # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
-            emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
-            emergency_commission_buffer = self._get_commission_buffer(
-                position, metadata
-            )
-            adjusted_emergency_threshold = (
-                emergency_loss_threshold
-                - emergency_spread_buffer
-                - emergency_commission_buffer
-            )
-
-            # ✅ НОВОЕ (26.12.2025): Минимальное время удержания перед emergency close
-            min_holding_seconds = 30.0  # CHOPPY: 30 секунд
-            if pnl_percent < adjusted_emergency_threshold:
-                # Проверяем минимальное время удержания
-                if entry_time:
-                    try:
-                        if isinstance(entry_time, str):
-                            entry_time_dt = datetime.fromisoformat(
-                                entry_time.replace("Z", "+00:00")
-                            )
-                        else:
-                            entry_time_dt = entry_time
-
-                        if entry_time_dt.tzinfo is None:
-                            entry_time_dt = entry_time_dt.replace(tzinfo=timezone.utc)
-                        elif entry_time_dt.tzinfo != timezone.utc:
-                            entry_time_dt = entry_time_dt.astimezone(timezone.utc)
-
-                        holding_seconds = (
-                            datetime.now(timezone.utc) - entry_time_dt
-                        ).total_seconds()
-
-                        if holding_seconds < min_holding_seconds:
-                            logger.debug(
-                                f"⏳ ExitAnalyzer CHOPPY: Emergency close заблокирован для {symbol} - "
-                                f"время удержания {holding_seconds:.1f}с < минимум {min_holding_seconds:.1f}с "
-                                f"(PnL={pnl_percent:.2f}% < порог={emergency_loss_threshold:.1f}%)"
-                            )
-                            return None
-                    except Exception as e:
-                        logger.debug(
-                            f"⚠️ ExitAnalyzer CHOPPY: Ошибка проверки времени удержания для {symbol}: {e}"
-                        )
-
-                logger.warning(
-                    f"🚨 ExitAnalyzer CHOPPY: Критический убыток {pnl_percent:.2f}% для {symbol} "
-                    f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
-                    f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
-                    f"генерируем экстренное закрытие (последняя защита после всех проверок)"
-                )
-                self._record_metrics_on_close(
-                    symbol=symbol,
-                    reason="emergency_loss_protection",
-                    pnl_percent=pnl_percent,
-                    entry_time=entry_time,
-                )
-                return {
-                    "action": "close",
-                    "reason": "emergency_loss_protection",
-                    "pnl_pct": pnl_percent,
-                    "regime": regime,
-                    "emergency": True,
-                    "threshold": emergency_loss_threshold,
-                    "adjusted_threshold": adjusted_emergency_threshold,
-                    "spread_buffer": emergency_spread_buffer,
-                    "commission_buffer": emergency_commission_buffer,
                 }
 
             # В choppy режиме не продлеваем TP - быстрые закрытия
