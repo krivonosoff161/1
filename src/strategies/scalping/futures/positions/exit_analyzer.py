@@ -777,7 +777,7 @@ class ExitAnalyzer:
                         balance = self.client.get_balance()
                     except Exception:
                         pass  # Если не удалось получить баланс, продолжаем без него
-                
+
                 exit_params = self.parameter_provider.get_exit_params(
                     symbol, regime, balance=balance, current_pnl=current_pnl
                 )
@@ -1023,7 +1023,7 @@ class ExitAnalyzer:
                         balance = self.client.get_balance()
                     except Exception:
                         pass  # Если не удалось получить баланс, продолжаем без него
-                
+
                 exit_params = self.parameter_provider.get_exit_params(
                     symbol, regime, balance=balance
                 )
@@ -3715,7 +3715,11 @@ class ExitAnalyzer:
             # ✅ НОВОЕ (05.01.2026): Передаем current_pnl для адаптивного расширения TP
             # ✅ ИСПРАВЛЕНО: Для TP используем Net PnL (реальная прибыль после комиссий)
             tp_percent = await self._get_tp_percent(
-                symbol, "ranging", current_price, market_data, current_pnl=net_pnl_percent
+                symbol,
+                "ranging",
+                current_price,
+                market_data,
+                current_pnl=net_pnl_percent,
             )
             # ✅ ИСПРАВЛЕНО: Используем helper функцию для безопасной конвертации
             tp_percent = self._to_float(tp_percent, "tp_percent", 2.4)

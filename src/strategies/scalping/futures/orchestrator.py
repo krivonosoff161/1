@@ -120,7 +120,7 @@ class FuturesScalpingOrchestrator:
         self.parameter_provider = ParameterProvider(
             config_manager=self.config_manager,
             regime_manager=None,  # Пока None, будет установлен позже
-            data_registry=None,   # Пока None, будет установлен позже
+            data_registry=None,  # Пока None, будет установлен позже
         )
         logger.info("✅ ParameterProvider инициализирован в orchestrator")
 

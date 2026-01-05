@@ -349,7 +349,7 @@ class AdaptiveRegimeManager:
             confidence_str = str(confidence)
         else:
             confidence_str = "N/A"
-        
+
         logger.info(
             f"🧠 Regime scoring for {self.symbol if hasattr(self, 'symbol') else 'UNKNOWN'}: "
             f"CHOPPY={choppy_score:.2f}, TRENDING={trending_score:.2f}, RANGING={ranging_score:.2f}, "
@@ -966,8 +966,14 @@ class AdaptiveRegimeManager:
                 # В choppy режиме требуем больше подтверждений (выше confidence)
                 confidence = signal.get("confidence", 0)
                 # ✅ ИСПРАВЛЕНО (05.01.2026): Проверка типа confidence перед форматированием
-                if isinstance(confidence, (int, float)) and confidence < 0.7:  # Требуем минимум 70% уверенности
-                    confidence_str = f"{confidence:.2f}" if isinstance(confidence, (int, float)) else str(confidence)
+                if (
+                    isinstance(confidence, (int, float)) and confidence < 0.7
+                ):  # Требуем минимум 70% уверенности
+                    confidence_str = (
+                        f"{confidence:.2f}"
+                        if isinstance(confidence, (int, float))
+                        else str(confidence)
+                    )
                     logger.debug(
                         f"🔍 Сигнал отфильтрован ARM (choppy): confidence={confidence_str} < 0.7"
                     )

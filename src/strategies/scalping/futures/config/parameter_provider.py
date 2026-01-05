@@ -305,14 +305,17 @@ class ParameterProvider:
             adaptive_params = base_params.copy()
 
             # Получаем базовые множители
-            tp_base = base_params.get('tp_atr_multiplier', 2.0)
-            sl_base = base_params.get('sl_atr_multiplier', 1.5)
+            tp_base = base_params.get("tp_atr_multiplier", 2.0)
+            sl_base = base_params.get("sl_atr_multiplier", 1.5)
 
             # Адаптация по балансу (главный фактор)
             if balance is not None:
-                balance_factor_tp, balance_factor_sl = self._calculate_balance_adaptation_factors(balance)
-                adaptive_params['tp_atr_multiplier'] = tp_base * balance_factor_tp
-                adaptive_params['sl_atr_multiplier'] = sl_base * balance_factor_sl
+                (
+                    balance_factor_tp,
+                    balance_factor_sl,
+                ) = self._calculate_balance_adaptation_factors(balance)
+                adaptive_params["tp_atr_multiplier"] = tp_base * balance_factor_tp
+                adaptive_params["sl_atr_multiplier"] = sl_base * balance_factor_sl
 
                 logger.debug(
                     f"💰 [ADAPTIVE] {symbol}: Баланс ${balance:.0f} → "
@@ -324,7 +327,7 @@ class ParameterProvider:
             if current_pnl is not None:
                 pnl_factor = self._calculate_pnl_adaptation_factor(current_pnl)
                 if pnl_factor != 1.0:
-                    adaptive_params['tp_atr_multiplier'] *= pnl_factor
+                    adaptive_params["tp_atr_multiplier"] *= pnl_factor
                     logger.debug(
                         f"📈 [ADAPTIVE] {symbol}: P&L {current_pnl:.1f}% → "
                         f"TP расширение ×{pnl_factor:.3f} = {adaptive_params['tp_atr_multiplier']:.2f}"
@@ -334,15 +337,19 @@ class ParameterProvider:
             if drawdown is not None:
                 drawdown_factor = self._calculate_drawdown_adaptation_factor(drawdown)
                 if drawdown_factor != 1.0:
-                    adaptive_params['sl_atr_multiplier'] *= drawdown_factor
+                    adaptive_params["sl_atr_multiplier"] *= drawdown_factor
                     logger.debug(
                         f"📉 [ADAPTIVE] {symbol}: Просадка {drawdown:.1f}% → "
                         f"SL ужесточение ×{drawdown_factor:.3f} = {adaptive_params['sl_atr_multiplier']:.2f}"
                     )
 
             # Ограничения на финальные значения
-            adaptive_params['tp_atr_multiplier'] = min(max(adaptive_params['tp_atr_multiplier'], 1.0), 5.0)
-            adaptive_params['sl_atr_multiplier'] = min(max(adaptive_params['sl_atr_multiplier'], 0.5), 3.0)
+            adaptive_params["tp_atr_multiplier"] = min(
+                max(adaptive_params["tp_atr_multiplier"], 1.0), 5.0
+            )
+            adaptive_params["sl_atr_multiplier"] = min(
+                max(adaptive_params["sl_atr_multiplier"], 0.5), 3.0
+            )
 
             # Логирование итоговых адаптивных параметров
             logger.info(
@@ -940,7 +947,9 @@ class ParameterProvider:
             return {}
 
         base_tp = exit_params.get("tp_atr_multiplier", 2.0)
-        extension_threshold = pnl_config.get("extension_threshold", 0.8)  # 80% от базового TP
+        extension_threshold = pnl_config.get(
+            "extension_threshold", 0.8
+        )  # 80% от базового TP
         max_extension = pnl_config.get("max_extension", 0.5)  # Макс +0.5x
         extension_factor = pnl_config.get("extension_factor", 0.3)  # Коэффициент
 
@@ -1032,14 +1041,17 @@ class ParameterProvider:
             adaptive_params = base_params.copy()
 
             # Получаем базовые множители
-            tp_base = base_params.get('tp_atr_multiplier', 2.0)
-            sl_base = base_params.get('sl_atr_multiplier', 1.5)
+            tp_base = base_params.get("tp_atr_multiplier", 2.0)
+            sl_base = base_params.get("sl_atr_multiplier", 1.5)
 
             # Адаптация по балансу (главный фактор)
             if balance is not None:
-                balance_factor_tp, balance_factor_sl = self._calculate_balance_adaptation_factors(balance)
-                adaptive_params['tp_atr_multiplier'] = tp_base * balance_factor_tp
-                adaptive_params['sl_atr_multiplier'] = sl_base * balance_factor_sl
+                (
+                    balance_factor_tp,
+                    balance_factor_sl,
+                ) = self._calculate_balance_adaptation_factors(balance)
+                adaptive_params["tp_atr_multiplier"] = tp_base * balance_factor_tp
+                adaptive_params["sl_atr_multiplier"] = sl_base * balance_factor_sl
 
                 logger.debug(
                     f"💰 [ADAPTIVE] {symbol}: Баланс ${balance:.0f} → "
@@ -1051,7 +1063,7 @@ class ParameterProvider:
             if current_pnl is not None:
                 pnl_factor = self._calculate_pnl_adaptation_factor(current_pnl)
                 if pnl_factor != 1.0:
-                    adaptive_params['tp_atr_multiplier'] *= pnl_factor
+                    adaptive_params["tp_atr_multiplier"] *= pnl_factor
                     logger.debug(
                         f"📈 [ADAPTIVE] {symbol}: P&L {current_pnl:.1f}% → "
                         f"TP расширение ×{pnl_factor:.3f} = {adaptive_params['tp_atr_multiplier']:.2f}"
@@ -1061,15 +1073,19 @@ class ParameterProvider:
             if drawdown is not None:
                 drawdown_factor = self._calculate_drawdown_adaptation_factor(drawdown)
                 if drawdown_factor != 1.0:
-                    adaptive_params['sl_atr_multiplier'] *= drawdown_factor
+                    adaptive_params["sl_atr_multiplier"] *= drawdown_factor
                     logger.debug(
                         f"📉 [ADAPTIVE] {symbol}: Просадка {drawdown:.1f}% → "
                         f"SL ужесточение ×{drawdown_factor:.3f} = {adaptive_params['sl_atr_multiplier']:.2f}"
                     )
 
             # Ограничения на финальные значения
-            adaptive_params['tp_atr_multiplier'] = min(max(adaptive_params['tp_atr_multiplier'], 1.0), 5.0)
-            adaptive_params['sl_atr_multiplier'] = min(max(adaptive_params['sl_atr_multiplier'], 0.5), 3.0)
+            adaptive_params["tp_atr_multiplier"] = min(
+                max(adaptive_params["tp_atr_multiplier"], 1.0), 5.0
+            )
+            adaptive_params["sl_atr_multiplier"] = min(
+                max(adaptive_params["sl_atr_multiplier"], 0.5), 3.0
+            )
 
             # Логирование итоговых адаптивных параметров
             logger.info(
@@ -1087,7 +1103,9 @@ class ParameterProvider:
             )
             return base_params
 
-    def _calculate_balance_adaptation_factors(self, balance: float) -> tuple[float, float]:
+    def _calculate_balance_adaptation_factors(
+        self, balance: float
+    ) -> tuple[float, float]:
         """
         Рассчитать коэффициенты адаптации по балансу (плавная интерполяция).
 
@@ -1101,12 +1119,12 @@ class ParameterProvider:
         LARGE_THRESHOLD = 3500  # >= $3500 - агрессивный
 
         # Коэффициенты для каждого диапазона
-        SMALL_TP = 0.9   # Консервативный TP для низких балансов
-        SMALL_SL = 0.9   # Ужесточенный SL для низких балансов
+        SMALL_TP = 0.9  # Консервативный TP для низких балансов
+        SMALL_SL = 0.9  # Ужесточенный SL для низких балансов
         MEDIUM_TP = 1.0  # Стандартный TP
         MEDIUM_SL = 1.0  # Стандартный SL
-        LARGE_TP = 1.1   # Агрессивный TP для высоких балансов
-        LARGE_SL = 1.0   # Стандартный SL для высоких балансов
+        LARGE_TP = 1.1  # Агрессивный TP для высоких балансов
+        LARGE_SL = 1.0  # Стандартный SL для высоких балансов
 
         if balance < SMALL_THRESHOLD:
             # От $500 до SMALL_THRESHOLD: интерполяция от консервативного к стандартному
