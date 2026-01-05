@@ -1,0 +1,4181 @@
+{
+  "timestamp": "2026-01-05T22:21:27.243305",
+  "total_tests": 125,
+  "results": {
+    "1": {
+      "test_id": 1,
+      "regime": "ranging",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:25.763378"
+    },
+    "2": {
+      "test_id": 2,
+      "regime": "ranging",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:25.773873"
+    },
+    "3": {
+      "test_id": 3,
+      "regime": "ranging",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:25.785108"
+    },
+    "4": {
+      "test_id": 4,
+      "regime": "ranging",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:25.794449"
+    },
+    "5": {
+      "test_id": 5,
+      "regime": "ranging",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:25.806000"
+    },
+    "6": {
+      "test_id": 6,
+      "regime": "ranging",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:25.818029"
+    },
+    "7": {
+      "test_id": 7,
+      "regime": "ranging",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:25.832056"
+    },
+    "8": {
+      "test_id": 8,
+      "regime": "ranging",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:25.845115"
+    },
+    "9": {
+      "test_id": 9,
+      "regime": "ranging",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:25.866220"
+    },
+    "10": {
+      "test_id": 10,
+      "regime": "ranging",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:25.889401"
+    },
+    "11": {
+      "test_id": 11,
+      "regime": "ranging",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:25.912711"
+    },
+    "12": {
+      "test_id": 12,
+      "regime": "ranging",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:25.932172"
+    },
+    "13": {
+      "test_id": 13,
+      "regime": "ranging",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:25.950738"
+    },
+    "14": {
+      "test_id": 14,
+      "regime": "ranging",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:25.967101"
+    },
+    "15": {
+      "test_id": 15,
+      "regime": "ranging",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:25.986313"
+    },
+    "16": {
+      "test_id": 16,
+      "regime": "ranging",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.006842"
+    },
+    "17": {
+      "test_id": 17,
+      "regime": "ranging",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.018033"
+    },
+    "18": {
+      "test_id": 18,
+      "regime": "ranging",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.028985"
+    },
+    "19": {
+      "test_id": 19,
+      "regime": "ranging",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.040010"
+    },
+    "20": {
+      "test_id": 20,
+      "regime": "ranging",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.051546"
+    },
+    "21": {
+      "test_id": 21,
+      "regime": "ranging",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.064056"
+    },
+    "22": {
+      "test_id": 22,
+      "regime": "ranging",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.077508"
+    },
+    "23": {
+      "test_id": 23,
+      "regime": "ranging",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.088870"
+    },
+    "24": {
+      "test_id": 24,
+      "regime": "ranging",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.100126"
+    },
+    "25": {
+      "test_id": 25,
+      "regime": "ranging",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.5,
+        "min_holding_time": 300,
+        "atr_multiplier": 1.0,
+        "trend_strength_min": 0.3,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.110132"
+    },
+    "26": {
+      "test_id": 26,
+      "regime": "bullish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.122919"
+    },
+    "27": {
+      "test_id": 27,
+      "regime": "bullish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.135092"
+    },
+    "28": {
+      "test_id": 28,
+      "regime": "bullish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.150115"
+    },
+    "29": {
+      "test_id": 29,
+      "regime": "bullish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.163655"
+    },
+    "30": {
+      "test_id": 30,
+      "regime": "bullish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.172183"
+    },
+    "31": {
+      "test_id": 31,
+      "regime": "bullish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.179173"
+    },
+    "32": {
+      "test_id": 32,
+      "regime": "bullish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.192614"
+    },
+    "33": {
+      "test_id": 33,
+      "regime": "bullish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.200114"
+    },
+    "34": {
+      "test_id": 34,
+      "regime": "bullish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.212280"
+    },
+    "35": {
+      "test_id": 35,
+      "regime": "bullish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.220146"
+    },
+    "36": {
+      "test_id": 36,
+      "regime": "bullish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.229168"
+    },
+    "37": {
+      "test_id": 37,
+      "regime": "bullish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.239390"
+    },
+    "38": {
+      "test_id": 38,
+      "regime": "bullish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.246897"
+    },
+    "39": {
+      "test_id": 39,
+      "regime": "bullish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.256654"
+    },
+    "40": {
+      "test_id": 40,
+      "regime": "bullish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.267179"
+    },
+    "41": {
+      "test_id": 41,
+      "regime": "bullish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.278737"
+    },
+    "42": {
+      "test_id": 42,
+      "regime": "bullish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.304834"
+    },
+    "43": {
+      "test_id": 43,
+      "regime": "bullish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.322067"
+    },
+    "44": {
+      "test_id": 44,
+      "regime": "bullish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.338113"
+    },
+    "45": {
+      "test_id": 45,
+      "regime": "bullish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.350381"
+    },
+    "46": {
+      "test_id": 46,
+      "regime": "bullish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.362914"
+    },
+    "47": {
+      "test_id": 47,
+      "regime": "bullish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.377445"
+    },
+    "48": {
+      "test_id": 48,
+      "regime": "bullish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.389054"
+    },
+    "49": {
+      "test_id": 49,
+      "regime": "bullish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.401182"
+    },
+    "50": {
+      "test_id": 50,
+      "regime": "bullish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.412819"
+    },
+    "51": {
+      "test_id": 51,
+      "regime": "bearish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.425355"
+    },
+    "52": {
+      "test_id": 52,
+      "regime": "bearish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.448929"
+    },
+    "53": {
+      "test_id": 53,
+      "regime": "bearish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.464948"
+    },
+    "54": {
+      "test_id": 54,
+      "regime": "bearish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.478214"
+    },
+    "55": {
+      "test_id": 55,
+      "regime": "bearish",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.489423"
+    },
+    "56": {
+      "test_id": 56,
+      "regime": "bearish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.498206"
+    },
+    "57": {
+      "test_id": 57,
+      "regime": "bearish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.507399"
+    },
+    "58": {
+      "test_id": 58,
+      "regime": "bearish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.513904"
+    },
+    "59": {
+      "test_id": 59,
+      "regime": "bearish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.523130"
+    },
+    "60": {
+      "test_id": 60,
+      "regime": "bearish",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.530436"
+    },
+    "61": {
+      "test_id": 61,
+      "regime": "bearish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.538723"
+    },
+    "62": {
+      "test_id": 62,
+      "regime": "bearish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.553278"
+    },
+    "63": {
+      "test_id": 63,
+      "regime": "bearish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.563801"
+    },
+    "64": {
+      "test_id": 64,
+      "regime": "bearish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.576349"
+    },
+    "65": {
+      "test_id": 65,
+      "regime": "bearish",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.586383"
+    },
+    "66": {
+      "test_id": 66,
+      "regime": "bearish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.600500"
+    },
+    "67": {
+      "test_id": 67,
+      "regime": "bearish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.610028"
+    },
+    "68": {
+      "test_id": 68,
+      "regime": "bearish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.618035"
+    },
+    "69": {
+      "test_id": 69,
+      "regime": "bearish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.626877"
+    },
+    "70": {
+      "test_id": 70,
+      "regime": "bearish",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.634133"
+    },
+    "71": {
+      "test_id": 71,
+      "regime": "bearish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.642711"
+    },
+    "72": {
+      "test_id": 72,
+      "regime": "bearish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.658229"
+    },
+    "73": {
+      "test_id": 73,
+      "regime": "bearish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.665733"
+    },
+    "74": {
+      "test_id": 74,
+      "regime": "bearish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.675270"
+    },
+    "75": {
+      "test_id": 75,
+      "regime": "bearish",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 2.0,
+        "min_holding_time": 600,
+        "atr_multiplier": 1.2,
+        "trend_strength_min": 0.5,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.681778"
+    },
+    "76": {
+      "test_id": 76,
+      "regime": "sideways",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.692317"
+    },
+    "77": {
+      "test_id": 77,
+      "regime": "sideways",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.700662"
+    },
+    "78": {
+      "test_id": 78,
+      "regime": "sideways",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.709051"
+    },
+    "79": {
+      "test_id": 79,
+      "regime": "sideways",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.717021"
+    },
+    "80": {
+      "test_id": 80,
+      "regime": "sideways",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.727496"
+    },
+    "81": {
+      "test_id": 81,
+      "regime": "sideways",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.734627"
+    },
+    "82": {
+      "test_id": 82,
+      "regime": "sideways",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.751391"
+    },
+    "83": {
+      "test_id": 83,
+      "regime": "sideways",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.768808"
+    },
+    "84": {
+      "test_id": 84,
+      "regime": "sideways",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.779342"
+    },
+    "85": {
+      "test_id": 85,
+      "regime": "sideways",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:26.790101"
+    },
+    "86": {
+      "test_id": 86,
+      "regime": "sideways",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.798636"
+    },
+    "87": {
+      "test_id": 87,
+      "regime": "sideways",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.808158"
+    },
+    "88": {
+      "test_id": 88,
+      "regime": "sideways",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.818679"
+    },
+    "89": {
+      "test_id": 89,
+      "regime": "sideways",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.827600"
+    },
+    "90": {
+      "test_id": 90,
+      "regime": "sideways",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:26.835311"
+    },
+    "91": {
+      "test_id": 91,
+      "regime": "sideways",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.843458"
+    },
+    "92": {
+      "test_id": 92,
+      "regime": "sideways",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.861114"
+    },
+    "93": {
+      "test_id": 93,
+      "regime": "sideways",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.872187"
+    },
+    "94": {
+      "test_id": 94,
+      "regime": "sideways",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.880687"
+    },
+    "95": {
+      "test_id": 95,
+      "regime": "sideways",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:26.894351"
+    },
+    "96": {
+      "test_id": 96,
+      "regime": "sideways",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.909090"
+    },
+    "97": {
+      "test_id": 97,
+      "regime": "sideways",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.920725"
+    },
+    "98": {
+      "test_id": 98,
+      "regime": "sideways",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.931559"
+    },
+    "99": {
+      "test_id": 99,
+      "regime": "sideways",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.947823"
+    },
+    "100": {
+      "test_id": 100,
+      "regime": "sideways",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 1.2,
+        "min_holding_time": 900,
+        "atr_multiplier": 0.8,
+        "trend_strength_min": 0.1,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:26.959342"
+    },
+    "101": {
+      "test_id": 101,
+      "regime": "volatile",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:26.967856"
+    },
+    "102": {
+      "test_id": 102,
+      "regime": "volatile",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:27.001825"
+    },
+    "103": {
+      "test_id": 103,
+      "regime": "volatile",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:27.021939"
+    },
+    "104": {
+      "test_id": 104,
+      "regime": "volatile",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:27.034198"
+    },
+    "105": {
+      "test_id": 105,
+      "regime": "volatile",
+      "pair": "XRP-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 10,
+        "position_size_min": 10,
+        "volatility_factor": 1.2,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 11,
+        "win_rate": 0.18181818181818182,
+        "total_pnl": -2.3543999999999996,
+        "avg_trade_pnl": -0.2140363636363636,
+        "max_drawdown": 2.3543999999999996,
+        "profit_factor": 0.20227688554584264,
+        "gross_profit": 0.597,
+        "gross_loss": 2.9514
+      },
+      "timestamp": "2026-01-05T22:21:27.045744"
+    },
+    "106": {
+      "test_id": 106,
+      "regime": "volatile",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:27.054270"
+    },
+    "107": {
+      "test_id": 107,
+      "regime": "volatile",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:27.061776"
+    },
+    "108": {
+      "test_id": 108,
+      "regime": "volatile",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:27.070281"
+    },
+    "109": {
+      "test_id": 109,
+      "regime": "volatile",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:27.078070"
+    },
+    "110": {
+      "test_id": 110,
+      "regime": "volatile",
+      "pair": "ETH-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 5,
+        "position_size_min": 0.01,
+        "volatility_factor": 1.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 19,
+        "win_rate": 0.3157894736842105,
+        "total_pnl": -9.795879350000016,
+        "avg_trade_pnl": -0.5155725973684219,
+        "max_drawdown": 11.955079350000014,
+        "profit_factor": 0.3623321807270503,
+        "gross_profit": 5.9833,
+        "gross_loss": 16.5133
+      },
+      "timestamp": "2026-01-05T22:21:27.085578"
+    },
+    "111": {
+      "test_id": 111,
+      "regime": "volatile",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:27.094456"
+    },
+    "112": {
+      "test_id": 112,
+      "regime": "volatile",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:27.112628"
+    },
+    "113": {
+      "test_id": 113,
+      "regime": "volatile",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:27.122155"
+    },
+    "114": {
+      "test_id": 114,
+      "regime": "volatile",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:27.130249"
+    },
+    "115": {
+      "test_id": 115,
+      "regime": "volatile",
+      "pair": "SOL-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 8,
+        "position_size_min": 0.1,
+        "volatility_factor": 1.5,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 8,
+        "win_rate": 0.375,
+        "total_pnl": 0.26700000000000035,
+        "avg_trade_pnl": 0.033375000000000044,
+        "max_drawdown": 3.2681,
+        "profit_factor": 1.0680844553243576,
+        "gross_profit": 4.1886,
+        "gross_loss": 3.9215999999999998
+      },
+      "timestamp": "2026-01-05T22:21:27.140295"
+    },
+    "116": {
+      "test_id": 116,
+      "regime": "volatile",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:27.146659"
+    },
+    "117": {
+      "test_id": 117,
+      "regime": "volatile",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:27.156145"
+    },
+    "118": {
+      "test_id": 118,
+      "regime": "volatile",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:27.164688"
+    },
+    "119": {
+      "test_id": 119,
+      "regime": "volatile",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:27.174225"
+    },
+    "120": {
+      "test_id": 120,
+      "regime": "volatile",
+      "pair": "DOGE-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 15,
+        "position_size_min": 100,
+        "volatility_factor": 2.0,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 5,
+        "win_rate": 0.2,
+        "total_pnl": 2.6783,
+        "avg_trade_pnl": 0.53566,
+        "max_drawdown": 3.2683,
+        "profit_factor": 1.8194780160939938,
+        "gross_profit": 5.9466,
+        "gross_loss": 3.2683
+      },
+      "timestamp": "2026-01-05T22:21:27.181770"
+    },
+    "121": {
+      "test_id": 121,
+      "regime": "volatile",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:27.191359"
+    },
+    "122": {
+      "test_id": 122,
+      "regime": "volatile",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "profit_target_multiplier": 3.0,
+        "max_holding_time": 3600,
+        "trailing_stop": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:27.208885"
+    },
+    "123": {
+      "test_id": 123,
+      "regime": "volatile",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "rebound_strength_min": 0.6,
+        "entry_delay": 30,
+        "confirmation_period": 60
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:27.222945"
+    },
+    "124": {
+      "test_id": 124,
+      "regime": "volatile",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "optimal_entry_hours": [
+          8,
+          12,
+          16,
+          20
+        ],
+        "avoid_hours": [
+          2,
+          6,
+          14,
+          18
+        ],
+        "session_weight": 1.5
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:27.231594"
+    },
+    "125": {
+      "test_id": 125,
+      "regime": "volatile",
+      "pair": "BTC-USDT",
+      "parameters": {
+        "risk_per_trade": 0.01,
+        "max_open_positions": 3,
+        "min_volume": 1000,
+        "max_slippage": 0.001,
+        "tp_sl_ratio": 3.0,
+        "min_holding_time": 180,
+        "atr_multiplier": 1.5,
+        "trend_strength_min": 0.7,
+        "leverage_max": 3,
+        "position_size_min": 0.001,
+        "volatility_factor": 0.8,
+        "dynamic_tp_sl": true,
+        "volatility_adjustment": true,
+        "market_regime_filter": true
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542,
+        "profit_factor": 0.0,
+        "gross_profit": 0,
+        "gross_loss": 0.542
+      },
+      "timestamp": "2026-01-05T22:21:27.243305"
+    }
+  }
+}

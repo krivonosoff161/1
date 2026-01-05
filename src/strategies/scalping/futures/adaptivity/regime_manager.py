@@ -342,10 +342,18 @@ class AdaptiveRegimeManager:
         trend_strength_percent = getattr(self.config, "trend_strength_percent", 2.0)
 
         # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (29.12.2025): Улучшен формат лога scoring режима
+        # ✅ ИСПРАВЛЕНО (05.01.2026): Проверка типа confidence перед форматированием
+        if isinstance(confidence, (int, float)):
+            confidence_str = f"{confidence:.1%}"
+        elif confidence is not None:
+            confidence_str = str(confidence)
+        else:
+            confidence_str = "N/A"
+        
         logger.info(
             f"🧠 Regime scoring for {self.symbol if hasattr(self, 'symbol') else 'UNKNOWN'}: "
             f"CHOPPY={choppy_score:.2f}, TRENDING={trending_score:.2f}, RANGING={ranging_score:.2f}, "
-            f"selected={regime.value.upper()} (confidence={confidence:.1%}), "
+            f"selected={regime.value.upper()} (confidence={confidence_str}), "
             f"ADX={adx_val:.1f}, volatility={volatility_str}, "
             f"trend_deviation={trend_deviation:.2%}, volume_ratio={vol_ratio:.2f}x"
         )
@@ -957,11 +965,18 @@ class AdaptiveRegimeManager:
             if self.current_regime == RegimeType.CHOPPY:
                 # В choppy режиме требуем больше подтверждений (выше confidence)
                 confidence = signal.get("confidence", 0)
-                if confidence < 0.7:  # Требуем минимум 70% уверенности
+                # ✅ ИСПРАВЛЕНО (05.01.2026): Проверка типа confidence перед форматированием
+                if isinstance(confidence, (int, float)) and confidence < 0.7:  # Требуем минимум 70% уверенности
+                    confidence_str = f"{confidence:.2f}" if isinstance(confidence, (int, float)) else str(confidence)
                     logger.debug(
-                        f"🔍 Сигнал отфильтрован ARM (choppy): confidence={confidence:.2f} < 0.7"
+                        f"🔍 Сигнал отфильтрован ARM (choppy): confidence={confidence_str} < 0.7"
                     )
                     return False
+                elif not isinstance(confidence, (int, float)):
+                    # Если confidence не число, пропускаем проверку
+                    logger.debug(
+                        f"🔍 Сигнал в CHOPPY режиме: confidence не число ({type(confidence).__name__}), пропускаем проверку"
+                    )
 
             return True
 
@@ -1063,15 +1078,29 @@ class AdaptiveRegimeManager:
         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         logger.info(f"   Old regime: {old.value.upper()}")
         logger.info(f"   New regime: {new.value.upper()}")
-        logger.info(f"   Confidence: {detection.confidence:.1%}")
+        # ✅ ИСПРАВЛЕНО (05.01.2026): Проверка типа confidence перед форматированием
+        if isinstance(detection.confidence, (int, float)):
+            confidence_str = f"{detection.confidence:.1%}"
+        elif detection.confidence is not None:
+            confidence_str = str(detection.confidence)
+        else:
+            confidence_str = "N/A"
+        logger.info(f"   Confidence: {confidence_str}")
         logger.info(f"   Reason: {detection.reason}")
         logger.info("")
         logger.info("📊 Market Indicators:")
         for key, value in detection.indicators.items():
+            # ✅ ИСПРАВЛЕНО (05.01.2026): Проверка типа value перед форматированием
             if "percent" in key or "volatility" in key or "deviation" in key:
-                logger.info(f"   {key}: {value:.3%}")
+                if isinstance(value, (int, float)):
+                    logger.info(f"   {key}: {value:.3%}")
+                else:
+                    logger.info(f"   {key}: {value}")
             else:
-                logger.info(f"   {key}: {value:.2f}")
+                if isinstance(value, (int, float)):
+                    logger.info(f"   {key}: {value:.2f}")
+                else:
+                    logger.info(f"   {key}: {value}")
         logger.info("")
 
         # Логируем новые параметры

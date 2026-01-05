@@ -1,0 +1,941 @@
+{
+  "results": [
+    {
+      "test_id": "adaptive_BTC-USDT_500_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 500,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 50,
+        "margin_used": 75.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.6,
+        "sl_atr_multiplier": 1.2000000000000002,
+        "adaptations": {
+          "balance_factor_tp": 0.8,
+          "balance_factor_sl": 0.8,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:31.972752"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_500_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 500,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 50,
+        "margin_used": 75.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.6,
+        "sl_atr_multiplier": 1.2000000000000002,
+        "adaptations": {
+          "balance_factor_tp": 0.8,
+          "balance_factor_sl": 0.8,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:31.984755"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_800_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 800,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 50,
+        "margin_used": 120.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.6600000000000001,
+        "sl_atr_multiplier": 1.245,
+        "adaptations": {
+          "balance_factor_tp": 0.8300000000000001,
+          "balance_factor_sl": 0.8300000000000001,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:31.998752"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_800_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 800,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 50,
+        "margin_used": 120.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.6600000000000001,
+        "sl_atr_multiplier": 1.245,
+        "adaptations": {
+          "balance_factor_tp": 0.8300000000000001,
+          "balance_factor_sl": 0.8300000000000001,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.009767"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_1000_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 1000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 50,
+        "margin_used": 150.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.7000000000000002,
+        "sl_atr_multiplier": 1.2750000000000001,
+        "adaptations": {
+          "balance_factor_tp": 0.8500000000000001,
+          "balance_factor_sl": 0.8500000000000001,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.019754"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_1000_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 1000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 50,
+        "margin_used": 150.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.7000000000000002,
+        "sl_atr_multiplier": 1.2750000000000001,
+        "adaptations": {
+          "balance_factor_tp": 0.8500000000000001,
+          "balance_factor_sl": 0.8500000000000001,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.031899"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_1500_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 1500,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 150,
+        "margin_used": 225.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.8,
+        "sl_atr_multiplier": 1.35,
+        "adaptations": {
+          "balance_factor_tp": 0.9,
+          "balance_factor_sl": 0.9,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.044621"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_1500_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 1500,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 150,
+        "margin_used": 225.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.8,
+        "sl_atr_multiplier": 1.35,
+        "adaptations": {
+          "balance_factor_tp": 0.9,
+          "balance_factor_sl": 0.9,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.057620"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_2000_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 2000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 150,
+        "margin_used": 300.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.85,
+        "sl_atr_multiplier": 1.3875000000000002,
+        "adaptations": {
+          "balance_factor_tp": 0.925,
+          "balance_factor_sl": 0.925,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.071618"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_2000_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 2000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 150,
+        "margin_used": 300.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.85,
+        "sl_atr_multiplier": 1.3875000000000002,
+        "adaptations": {
+          "balance_factor_tp": 0.925,
+          "balance_factor_sl": 0.925,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.083623"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_2500_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 2500,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 150,
+        "margin_used": 375.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.9,
+        "sl_atr_multiplier": 1.4249999999999998,
+        "adaptations": {
+          "balance_factor_tp": 0.95,
+          "balance_factor_sl": 0.95,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.096575"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_2500_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 2500,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 150,
+        "margin_used": 375.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.9,
+        "sl_atr_multiplier": 1.4249999999999998,
+        "adaptations": {
+          "balance_factor_tp": 0.95,
+          "balance_factor_sl": 0.95,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.105712"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_3000_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 3000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 150,
+        "margin_used": 450.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.95,
+        "sl_atr_multiplier": 1.4625,
+        "adaptations": {
+          "balance_factor_tp": 0.975,
+          "balance_factor_sl": 0.975,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.119637"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_3000_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 3000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 150,
+        "margin_used": 450.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 1.95,
+        "sl_atr_multiplier": 1.4625,
+        "adaptations": {
+          "balance_factor_tp": 0.975,
+          "balance_factor_sl": 0.975,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.131950"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_3500_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 3500,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 300,
+        "margin_used": 525.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "adaptations": {
+          "balance_factor_tp": 1.0,
+          "balance_factor_sl": 1.0,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.146958"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_3500_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 3500,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 300,
+        "margin_used": 525.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "adaptations": {
+          "balance_factor_tp": 1.0,
+          "balance_factor_sl": 1.0,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.156956"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_4000_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 4000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 300,
+        "margin_used": 600.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 2.066666666666667,
+        "sl_atr_multiplier": 1.5,
+        "adaptations": {
+          "balance_factor_tp": 1.0333333333333334,
+          "balance_factor_sl": 1.0,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.173360"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_4000_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 4000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 300,
+        "margin_used": 600.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 2.066666666666667,
+        "sl_atr_multiplier": 1.5,
+        "adaptations": {
+          "balance_factor_tp": 1.0333333333333334,
+          "balance_factor_sl": 1.0,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.190496"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_5000_-5.0_0.0_ranging",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 5000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 300,
+        "margin_used": 750.0,
+        "regime": "ranging"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 2.2,
+        "sl_atr_multiplier": 1.5,
+        "adaptations": {
+          "balance_factor_tp": 1.1,
+          "balance_factor_sl": 1.0,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.202581"
+    },
+    {
+      "test_id": "adaptive_BTC-USDT_5000_-5.0_0.0_trending",
+      "symbol": "BTC-USDT",
+      "scenario": {
+        "balance": 5000,
+        "current_pnl": -5.0,
+        "drawdown": 0.0,
+        "position_size": 300,
+        "margin_used": 750.0,
+        "regime": "trending"
+      },
+      "base_params": {
+        "tp_atr_multiplier": 2.0,
+        "sl_atr_multiplier": 1.5,
+        "max_holding_minutes": 30,
+        "min_holding_minutes": 1.0
+      },
+      "adaptive_params": {
+        "tp_atr_multiplier": 2.2,
+        "sl_atr_multiplier": 1.5,
+        "adaptations": {
+          "balance_factor_tp": 1.1,
+          "balance_factor_sl": 1.0,
+          "pnl_factor": 1.0,
+          "drawdown_factor": 1.0
+        }
+      },
+      "metrics": {
+        "total_trades": 2,
+        "win_rate": 0.0,
+        "total_pnl": -0.542,
+        "avg_trade_pnl": -0.271,
+        "max_drawdown": 0.542
+      },
+      "timestamp": "2026-01-06T00:19:32.212582"
+    }
+  ],
+  "analysis": {
+    "balance_analysis": {
+      "very_low": {
+        "count": 4,
+        "avg_win_rate": 0.0,
+        "avg_pnl": -0.542,
+        "avg_tp_multiplier": 1.6300000000000001,
+        "balance_range": "$500-$800 (очень низкий)"
+      },
+      "low": {
+        "count": 4,
+        "avg_win_rate": 0.0,
+        "avg_pnl": -0.542,
+        "avg_tp_multiplier": 1.75,
+        "balance_range": "$1000-$1500 (низкий)"
+      },
+      "medium": {
+        "count": 6,
+        "avg_win_rate": 0.0,
+        "avg_pnl": -0.5419999999999999,
+        "avg_tp_multiplier": 1.8999999999999997,
+        "balance_range": "$2000-$3000 (средний)"
+      },
+      "high": {
+        "count": 6,
+        "avg_win_rate": 0.0,
+        "avg_pnl": -0.5419999999999999,
+        "avg_tp_multiplier": 2.0888888888888886,
+        "balance_range": "$3500-$5000 (высокий)"
+      }
+    },
+    "top_performers": [
+      {
+        "test_id": "adaptive_BTC-USDT_500_-5.0_0.0_ranging",
+        "symbol": "BTC-USDT",
+        "scenario": {
+          "balance": 500,
+          "current_pnl": -5.0,
+          "drawdown": 0.0,
+          "position_size": 50,
+          "margin_used": 75.0,
+          "regime": "ranging"
+        },
+        "base_params": {
+          "tp_atr_multiplier": 2.0,
+          "sl_atr_multiplier": 1.5,
+          "max_holding_minutes": 30,
+          "min_holding_minutes": 1.0
+        },
+        "adaptive_params": {
+          "tp_atr_multiplier": 1.6,
+          "sl_atr_multiplier": 1.2000000000000002,
+          "adaptations": {
+            "balance_factor_tp": 0.8,
+            "balance_factor_sl": 0.8,
+            "pnl_factor": 1.0,
+            "drawdown_factor": 1.0
+          }
+        },
+        "metrics": {
+          "total_trades": 2,
+          "win_rate": 0.0,
+          "total_pnl": -0.542,
+          "avg_trade_pnl": -0.271,
+          "max_drawdown": 0.542
+        },
+        "timestamp": "2026-01-06T00:19:31.972752"
+      },
+      {
+        "test_id": "adaptive_BTC-USDT_500_-5.0_0.0_trending",
+        "symbol": "BTC-USDT",
+        "scenario": {
+          "balance": 500,
+          "current_pnl": -5.0,
+          "drawdown": 0.0,
+          "position_size": 50,
+          "margin_used": 75.0,
+          "regime": "trending"
+        },
+        "base_params": {
+          "tp_atr_multiplier": 2.0,
+          "sl_atr_multiplier": 1.5,
+          "max_holding_minutes": 30,
+          "min_holding_minutes": 1.0
+        },
+        "adaptive_params": {
+          "tp_atr_multiplier": 1.6,
+          "sl_atr_multiplier": 1.2000000000000002,
+          "adaptations": {
+            "balance_factor_tp": 0.8,
+            "balance_factor_sl": 0.8,
+            "pnl_factor": 1.0,
+            "drawdown_factor": 1.0
+          }
+        },
+        "metrics": {
+          "total_trades": 2,
+          "win_rate": 0.0,
+          "total_pnl": -0.542,
+          "avg_trade_pnl": -0.271,
+          "max_drawdown": 0.542
+        },
+        "timestamp": "2026-01-06T00:19:31.984755"
+      },
+      {
+        "test_id": "adaptive_BTC-USDT_800_-5.0_0.0_ranging",
+        "symbol": "BTC-USDT",
+        "scenario": {
+          "balance": 800,
+          "current_pnl": -5.0,
+          "drawdown": 0.0,
+          "position_size": 50,
+          "margin_used": 120.0,
+          "regime": "ranging"
+        },
+        "base_params": {
+          "tp_atr_multiplier": 2.0,
+          "sl_atr_multiplier": 1.5,
+          "max_holding_minutes": 30,
+          "min_holding_minutes": 1.0
+        },
+        "adaptive_params": {
+          "tp_atr_multiplier": 1.6600000000000001,
+          "sl_atr_multiplier": 1.245,
+          "adaptations": {
+            "balance_factor_tp": 0.8300000000000001,
+            "balance_factor_sl": 0.8300000000000001,
+            "pnl_factor": 1.0,
+            "drawdown_factor": 1.0
+          }
+        },
+        "metrics": {
+          "total_trades": 2,
+          "win_rate": 0.0,
+          "total_pnl": -0.542,
+          "avg_trade_pnl": -0.271,
+          "max_drawdown": 0.542
+        },
+        "timestamp": "2026-01-06T00:19:31.998752"
+      },
+      {
+        "test_id": "adaptive_BTC-USDT_800_-5.0_0.0_trending",
+        "symbol": "BTC-USDT",
+        "scenario": {
+          "balance": 800,
+          "current_pnl": -5.0,
+          "drawdown": 0.0,
+          "position_size": 50,
+          "margin_used": 120.0,
+          "regime": "trending"
+        },
+        "base_params": {
+          "tp_atr_multiplier": 2.0,
+          "sl_atr_multiplier": 1.5,
+          "max_holding_minutes": 30,
+          "min_holding_minutes": 1.0
+        },
+        "adaptive_params": {
+          "tp_atr_multiplier": 1.6600000000000001,
+          "sl_atr_multiplier": 1.245,
+          "adaptations": {
+            "balance_factor_tp": 0.8300000000000001,
+            "balance_factor_sl": 0.8300000000000001,
+            "pnl_factor": 1.0,
+            "drawdown_factor": 1.0
+          }
+        },
+        "metrics": {
+          "total_trades": 2,
+          "win_rate": 0.0,
+          "total_pnl": -0.542,
+          "avg_trade_pnl": -0.271,
+          "max_drawdown": 0.542
+        },
+        "timestamp": "2026-01-06T00:19:32.009767"
+      },
+      {
+        "test_id": "adaptive_BTC-USDT_1000_-5.0_0.0_ranging",
+        "symbol": "BTC-USDT",
+        "scenario": {
+          "balance": 1000,
+          "current_pnl": -5.0,
+          "drawdown": 0.0,
+          "position_size": 50,
+          "margin_used": 150.0,
+          "regime": "ranging"
+        },
+        "base_params": {
+          "tp_atr_multiplier": 2.0,
+          "sl_atr_multiplier": 1.5,
+          "max_holding_minutes": 30,
+          "min_holding_minutes": 1.0
+        },
+        "adaptive_params": {
+          "tp_atr_multiplier": 1.7000000000000002,
+          "sl_atr_multiplier": 1.2750000000000001,
+          "adaptations": {
+            "balance_factor_tp": 0.8500000000000001,
+            "balance_factor_sl": 0.8500000000000001,
+            "pnl_factor": 1.0,
+            "drawdown_factor": 1.0
+          }
+        },
+        "metrics": {
+          "total_trades": 2,
+          "win_rate": 0.0,
+          "total_pnl": -0.542,
+          "avg_trade_pnl": -0.271,
+          "max_drawdown": 0.542
+        },
+        "timestamp": "2026-01-06T00:19:32.019754"
+      }
+    ],
+    "total_tests": 20,
+    "valid_tests": 20
+  },
+  "timestamp": "2026-01-06T00:19:32.212582"
+}

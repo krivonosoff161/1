@@ -159,6 +159,55 @@ class ConversionMetrics:
                 signal["status"] = "executed"
                 break
 
+    def record_position_closed(
+        self,
+        symbol: str,
+        reason: str,
+        pnl: Optional[float] = None,
+        signal_type: Optional[str] = None,
+        regime: Optional[str] = None,
+    ) -> None:
+        """
+        Записать закрытие позиции.
+
+        ✅ ИСПРАВЛЕНО (05.01.2026): Добавлен метод для записи закрытия позиций.
+
+        Args:
+            symbol: Торговый символ
+            reason: Причина закрытия (tp, sl, tsl, emergency_loss, etc.)
+            pnl: PnL в процентах
+            signal_type: Тип сигнала (опционально, для связи с историей)
+            regime: Режим рынка (опционально, для статистики)
+        """
+        # Обновляем статистику по режимам
+        if regime:
+            if regime not in self.signals_by_regime:
+                self.signals_by_regime[regime] = defaultdict(int)
+            self.signals_by_regime[regime]["closed"] = (
+                self.signals_by_regime[regime].get("closed", 0) + 1
+            )
+
+        # Обновляем статистику по типам сигналов
+        if signal_type:
+            if signal_type not in self.signals_by_type:
+                self.signals_by_type[signal_type] = defaultdict(int)
+            self.signals_by_type[signal_type]["closed"] = (
+                self.signals_by_type[signal_type].get("closed", 0) + 1
+            )
+
+        # Обновляем историю - ищем последний executed сигнал для этого символа
+        for signal in reversed(self._signals_history):
+            if (
+                signal.get("symbol") == symbol
+                and signal.get("status") == "executed"
+                and (not signal_type or signal.get("signal_type") == signal_type)
+            ):
+                signal["status"] = "closed"
+                signal["exit_reason"] = reason
+                if pnl is not None:
+                    signal["pnl"] = pnl
+                break
+
     def get_conversion_rate(
         self, symbol: Optional[str] = None, period_hours: int = 24
     ) -> Dict[str, float]:

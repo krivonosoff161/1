@@ -1935,9 +1935,16 @@ class SignalCoordinator:
                         signal_strength = symbol_signal.get("strength", 0)
                         confidence = symbol_signal.get("confidence", 0)
                         regime = symbol_signal.get("regime", "unknown")
+                        # ✅ ИСПРАВЛЕНО (05.01.2026): Проверка типа confidence перед форматированием
+                        if isinstance(confidence, (int, float)):
+                            confidence_str = f"{confidence:.1%}"
+                        elif confidence is not None:
+                            confidence_str = str(confidence)
+                        else:
+                            confidence_str = "N/A"
                         logger.info(
                             f"📊 Signal generated: {symbol} {side_str}, "
-                            f"strength={signal_strength:.2f}, confidence={confidence:.1%}, "
+                            f"strength={signal_strength:.2f}, confidence={confidence_str}, "
                             f"regime={regime}, price={price:.2f}"
                         )
 

@@ -1,6 +1,34 @@
 # Конфигурация для Futures торговли
 # Основные параметры торгового бота для Futures
 
+# ✅ НОВОЕ (06.01.2026): Адаптивные параметры выхода
+adaptive_exit_params:
+  enabled: true  # Включить адаптивные TP/SL параметры
+  balance_adaptation:
+    # Пороги для плавной интерполяции
+    small_threshold: 1500  # < $1500 - консервативный подход
+    large_threshold: 3500  # >= $3500 - агрессивный подход
+    # Коэффициенты для разных диапазонов
+    small:
+      tp_multiplier: 0.9   # Консервативный TP
+      sl_multiplier: 0.9   # Ужесточенный SL
+    medium:
+      tp_multiplier: 1.0   # Стандартный TP
+      sl_multiplier: 1.0   # Стандартный SL
+    large:
+      tp_multiplier: 1.1   # Агрессивный TP
+      sl_multiplier: 1.0   # Стандартный SL
+  pnl_adaptation:
+    enabled: true
+    extension_threshold: 5.0  # > 5% P&L - расширять TP
+    max_extension: 0.5         # Максимальное расширение +0.5x
+    extension_factor: 0.3      # Коэффициент расширения
+  drawdown_adaptation:
+    enabled: true
+    tightening_threshold: 5.0  # > 5% просадки - ужесточать SL
+    max_tightening: 0.3        # Максимальное ужесточение +0.3x
+    tightening_factor: 0.1     # Коэффициент ужесточения
+
 # API настройки
 api:
   okx:
@@ -1413,6 +1441,36 @@ exit_params:
       ranging: 0.80   # ✅ RANGING: Более строгий порог (0.80) - нужен сильный тренд против - оставляем как есть
       trending: 0.60  # ✅ TRENDING: Менее строгий порог (0.60) - быстрее выход против тренда - оставляем как есть
       choppy: 0.90    # ✅ CHOPPY: Максимально строгий порог (0.90) - только при очень сильном тренде против - оставляем как есть
+
+# ✅ НОВОЕ (05.01.2026): Адаптивные параметры выхода (TP/SL)
+adaptive_exit_params:
+  enabled: true  # Включить/выключить адаптацию
+  
+  # Адаптация по балансу
+  balance_adaptation:
+    small:  # balance < $1,500
+      tp_multiplier: 0.9  # Консервативный TP (90% от базового)
+      sl_multiplier: 0.9  # Ужесточенный SL (90% от базового)
+    medium:  # $1,500 <= balance < $3,500
+      tp_multiplier: 1.0  # Стандартный TP
+      sl_multiplier: 1.0  # Стандартный SL
+    large:  # balance >= $3,500
+      tp_multiplier: 1.1  # Агрессивный TP (110% от базового)
+      sl_multiplier: 1.0  # Стандартный SL
+  
+  # Адаптация по P&L (расширение TP при сильном P&L)
+  pnl_adaptation:
+    enabled: true
+    extension_threshold: 0.8  # Расширять TP если P&L > 80% от базового TP
+    max_extension: 0.5  # Максимальное расширение TP (в ATR множителях)
+    extension_factor: 0.3  # Коэффициент расширения (30% от избыточного P&L)
+  
+  # Адаптация по просадке (ужесточение SL при большой просадке) - ФАЗА 2
+  drawdown_adaptation:
+    enabled: false  # Фаза 2 - будет включено позже
+    tightening_threshold: 5.0  # Ужесточать SL если просадка > 5%
+    max_tightening: 0.3  # Максимальное ужесточение SL (в ATR множителях)
+    tightening_factor: 0.1  # Коэффициент ужесточения (10% от избыточной просадки)
 
 # Параметры Futures-специфичных модулей
 futures_modules:

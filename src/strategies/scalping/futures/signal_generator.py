@@ -2827,10 +2827,17 @@ class FuturesSignalGenerator:
                             if market_direction == "bearish" and signal_side == "LONG":
                                 blocked_by_adx["LONG"] += 1
                                 signal_type = signal.get("type", "unknown")
+                                # ✅ ИСПРАВЛЕНО (05.01.2026): Проверка типа confidence перед форматированием
+                                if isinstance(confidence, (int, float)):
+                                    confidence_str = f"{confidence:.2f}"
+                                elif confidence is not None:
+                                    confidence_str = str(confidence)
+                                else:
+                                    confidence_str = "N/A"
                                 logger.warning(
                                     f"🚫 {signal_symbol} {signal_side} ({signal_type}): Сигнал заблокирован - против ADX тренда "
                                     f"(ADX={adx_value_from_analyzer:.1f} >= {adx_blocking_threshold:.1f} для режима {current_regime_for_adx}, "
-                                    f"direction={market_direction}, confidence={confidence:.2f})"
+                                    f"direction={market_direction}, confidence={confidence_str})"
                                 )
                                 continue  # Пропускаем этот сигнал
                             elif (
@@ -2838,10 +2845,17 @@ class FuturesSignalGenerator:
                             ):
                                 blocked_by_adx["SHORT"] += 1
                                 signal_type = signal.get("type", "unknown")
+                                # ✅ ИСПРАВЛЕНО (05.01.2026): Проверка типа confidence перед форматированием
+                                if isinstance(confidence, (int, float)):
+                                    confidence_str = f"{confidence:.2f}"
+                                elif confidence is not None:
+                                    confidence_str = str(confidence)
+                                else:
+                                    confidence_str = "N/A"
                                 logger.warning(
                                     f"🚫 {signal_symbol} {signal_side} ({signal_type}): Сигнал заблокирован - против ADX тренда "
                                     f"(ADX={adx_value_from_analyzer:.1f} >= {adx_blocking_threshold:.1f} для режима {current_regime_for_adx}, "
-                                    f"direction={market_direction}, confidence={confidence:.2f})"
+                                    f"direction={market_direction}, confidence={confidence_str})"
                                 )
                                 continue  # Пропускаем этот сигнал
                     except Exception as e:

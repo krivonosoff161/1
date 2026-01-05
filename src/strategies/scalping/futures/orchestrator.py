@@ -117,9 +117,12 @@ class FuturesScalpingOrchestrator:
         self.config_manager = ConfigManager(config, raw_config_dict=raw_config_dict)
 
         # ✅ НОВОЕ (26.12.2025): Инициализация ParameterProvider - единая точка получения параметров
-        # ParameterProvider будет создан после regime_manager, поэтому пока передаем None
-        # Будет обновлен после инициализации signal_generator и regime_manager
-        self.parameter_provider = None  # Будет инициализирован позже
+        self.parameter_provider = ParameterProvider(
+            config_manager=self.config_manager,
+            regime_manager=None,  # Пока None, будет установлен позже
+            data_registry=None,   # Пока None, будет установлен позже
+        )
+        logger.info("✅ ParameterProvider инициализирован в orchestrator")
 
         # ✅ РЕФАКТОРИНГ: Настройка логирования через LoggerFactory
         LoggerFactory.setup_futures_logging(

@@ -738,25 +738,28 @@ class ExitAnalyzer:
         else:
             return gross_profit_pct
 
-    def _get_tp_percent(
+    async def _get_tp_percent(
         self,
         symbol: str,
         regime: str,
         current_price: Optional[float] = None,
         market_data: Optional[Any] = None,
+        current_pnl: Optional[float] = None,
     ) -> float:
         """
         Получение TP% из конфига по символу и режиму.
         # ГРОК ФИКС: Поддержка ATR-based TP (max(1.5%, 2.5*ATR_1m) для ranging)
+        # ✅ НОВОЕ (05.01.2026): Поддержка адаптивных параметров на основе контекста
 
         Args:
             symbol: Торговый символ
             regime: Режим рынка (trending, ranging, choppy)
             current_price: Текущая цена (для ATR расчета)
             market_data: Рыночные данные (для ATR)
+            current_pnl: Текущий P&L позиции в % (для адаптивного расширения TP)
 
         Returns:
-            TP% для использования
+            TP% для использования (адаптивный если передан контекст)
         """
         tp_percent = 2.4  # Fallback значение
         tp_atr_multiplier = 2.5
@@ -764,9 +767,20 @@ class ExitAnalyzer:
         tp_max_percent = 2.2  # ✅ ГРОК ФИКС: Максимальный TP 2.2%
 
         # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения параметров
+        # ✅ НОВОЕ (05.01.2026): Передаем контекст для адаптивных параметров
         if self.parameter_provider:
             try:
-                exit_params = self.parameter_provider.get_exit_params(symbol, regime)
+                # Получаем контекст для адаптации
+                balance = None
+                if self.client:
+                    try:
+                        balance = self.client.get_balance()
+                    except Exception:
+                        pass  # Если не удалось получить баланс, продолжаем без него
+                
+                exit_params = self.parameter_provider.get_exit_params(
+                    symbol, regime, balance=balance, current_pnl=current_pnl
+                )
                 if exit_params:
                     if "tp_percent" in exit_params:
                         tp_percent = self._to_float(
@@ -999,9 +1013,20 @@ class ExitAnalyzer:
         sl_min_percent = 0.6
 
         # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения параметров
+        # ✅ НОВОЕ (05.01.2026): Передаем контекст для адаптивных параметров
         if self.parameter_provider:
             try:
-                exit_params = self.parameter_provider.get_exit_params(symbol, regime)
+                # Получаем контекст для адаптации
+                balance = None
+                if self.client:
+                    try:
+                        balance = self.client.get_balance()
+                    except Exception:
+                        pass  # Если не удалось получить баланс, продолжаем без него
+                
+                exit_params = self.parameter_provider.get_exit_params(
+                    symbol, regime, balance=balance
+                )
                 if exit_params:
                     if "sl_percent" in exit_params:
                         sl_percent = self._to_float(
@@ -2413,8 +2438,9 @@ class ExitAnalyzer:
 
             # 3. Проверка TP (Take Profit)
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для адаптивного TP
-            tp_percent = self._get_tp_percent(
-                symbol, "trending", current_price, market_data
+            # ✅ НОВОЕ (05.01.2026): Передаем current_pnl для адаптивного расширения TP
+            tp_percent = await self._get_tp_percent(
+                symbol, "trending", current_price, market_data, current_pnl=pnl_percent
             )
             try:
                 tp_percent = float(tp_percent) if tp_percent is not None else 2.4
@@ -3686,9 +3712,10 @@ class ExitAnalyzer:
 
             # 3. Проверка TP (Take Profit) - в ranging режиме закрываем сразу
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для адаптивного TP
+            # ✅ НОВОЕ (05.01.2026): Передаем current_pnl для адаптивного расширения TP
             # ✅ ИСПРАВЛЕНО: Для TP используем Net PnL (реальная прибыль после комиссий)
-            tp_percent = self._get_tp_percent(
-                symbol, "ranging", current_price, market_data
+            tp_percent = await self._get_tp_percent(
+                symbol, "ranging", current_price, market_data, current_pnl=net_pnl_percent
             )
             # ✅ ИСПРАВЛЕНО: Используем helper функцию для безопасной конвертации
             tp_percent = self._to_float(tp_percent, "tp_percent", 2.4)
@@ -4703,8 +4730,9 @@ class ExitAnalyzer:
 
             # 3. Проверка TP (Take Profit) - в choppy режиме закрываем сразу (меньший TP)
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для адаптивного TP
-            tp_percent = self._get_tp_percent(
-                symbol, "choppy", current_price, market_data
+            # ✅ НОВОЕ (05.01.2026): Передаем current_pnl для адаптивного расширения TP
+            tp_percent = await self._get_tp_percent(
+                symbol, "choppy", current_price, market_data, current_pnl=pnl_percent
             )
             try:
                 tp_percent = float(tp_percent) if tp_percent is not None else 2.4
