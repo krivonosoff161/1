@@ -30,24 +30,22 @@ class ATRProvider:
         self._atr_cache: Dict[str, float] = {}
         # Время последнего обновления: symbol -> timestamp
         self._cache_timestamps: Dict[str, float] = {}
-        # TTL кэша: 60 секунд (✅ УВЕЛИЧЕНО 28.12.2025 для уменьшения запросов)
-        self._cache_ttl_seconds = 60.0
+        # ✅ ИСПРАВЛЕНИЕ #23 (04.01.2026): Уменьшено TTL кэша с 60 до 30 секунд для более быстрого обновления
+        self._cache_ttl_seconds = 30.0
 
-    def get_atr(self, symbol: str, fallback: Optional[float] = None) -> Optional[float]:
+    def get_atr(self, symbol: str) -> Optional[float]:
         """
         Получить ATR значение для символа (синхронно).
 
         Приоритет:
         1. Кэш (если свежий)
         2. DataRegistry._indicators (если доступен)
-        3. Fallback значение
 
         Args:
             symbol: Торговый символ
-            fallback: Значение по умолчанию если ATR не найден
 
         Returns:
-            ATR значение или None
+            ATR значение или None (БЕЗ FALLBACK)
         """
         import time
 
@@ -93,9 +91,12 @@ class ATRProvider:
                                     )
                                     return atr_float
                                 else:
-                                    logger.debug(
-                                        f"⚠️ ATRProvider: ATR найден для {symbol}, но равен 0 или отрицательный: {atr_float}"
+                                    # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Если ATR=0.0, возвращаем None (БЕЗ FALLBACK)
+                                    logger.error(
+                                        f"❌ ATRProvider: ATR найден для {symbol}, но равен 0 или отрицательный: {atr_float} - "
+                                        f"возвращаем None (БЕЗ FALLBACK)"
                                     )
+                                    return None
                             except (ValueError, TypeError) as e:
                                 logger.debug(
                                     f"⚠️ ATRProvider: Ошибка конвертации ATR для {symbol}: {e}, value={atr_value}"
@@ -114,14 +115,11 @@ class ATRProvider:
                     f"⚠️ ATRProvider: Ошибка получения ATR из DataRegistry для {symbol}: {e}"
                 )
 
-        # 3. Fallback
-        if fallback is not None:
-            logger.debug(
-                f"⚠️ ATRProvider: ATR не найден для {symbol}, используем fallback: {fallback:.6f}"
-            )
-            return fallback
-
-        logger.debug(f"⚠️ ATRProvider: ATR не найден для {symbol}, возвращаем None")
+        # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: БЕЗ FALLBACK - возвращаем None если ATR не найден
+        logger.error(
+            f"❌ ATRProvider: ATR не найден для {symbol} (проверены: кэш, DataRegistry._indicators) - "
+            f"возвращаем None (БЕЗ FALLBACK)"
+        )
         return None
 
     def update_atr(self, symbol: str, atr_value: float) -> None:

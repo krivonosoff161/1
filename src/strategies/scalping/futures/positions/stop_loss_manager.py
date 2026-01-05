@@ -75,26 +75,105 @@ class StopLossManager:
             if size == 0 or entry_price == 0 or current_price == 0:
                 return False
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): TSL НЕ блокирует проверку SL
-            # Проверяем SL параллельно с TSL, используя более строгий (безопасный) уровень
-            effective_sl_percent = None
-            if self.orchestrator:
-                if hasattr(self.orchestrator, "trailing_sl_coordinator"):
-                    tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
-                    if tsl and hasattr(tsl, 'is_active') and tsl.is_active():
-                        # Получаем TSL loss_cut уровень
-                        tsl_loss_cut = getattr(tsl, 'loss_cut_percent', None)
-                        if tsl_loss_cut is not None:
-                            # Используем более строгий (более безопасный) уровень между SL и TSL loss_cut
-                            sl_percent_base = self._get_sl_percent(symbol, position.get("regime") or "ranging")
-                            effective_sl_percent = min(sl_percent_base, tsl_loss_cut)
-                            logger.debug(
-                                f"🔒 SL+TSL для {symbol}: SL={sl_percent_base:.2%}, TSL loss_cut={tsl_loss_cut:.2%}, "
-                                f"effective={effective_sl_percent:.2%}"
-                            )
-                        # Продолжаем проверку SL ниже (НЕ блокируем)
+            # ✅ ИСПРАВЛЕНИЕ #6 (04.01.2026): Параллельная проверка TSL и SL
+            # Проверяем TSL и SL параллельно, используя более строгий (ближайший к цене) стоп
+            tsl_result = None
+            sl_result = None
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Защита от преждевременного закрытия
+            # Получаем режим для адаптивного SL
+            regime = position.get("regime") or "ranging"
+            sl_percent_base = self._get_sl_percent(symbol, regime)
+
+            # Проверяем TSL параллельно
+            if self.orchestrator and hasattr(
+                self.orchestrator, "trailing_sl_coordinator"
+            ):
+                try:
+                    # Получаем TSL результат через check_position
+                    tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+                    if tsl and hasattr(tsl, "is_active") and tsl.is_active():
+                        # Проверяем TSL loss_cut
+                        tsl_loss_cut = getattr(tsl, "loss_cut_percent", None)
+                        if tsl_loss_cut is not None:
+                            # Рассчитываем TSL stop price
+                            position_side = position.get("posSide", "long").lower()
+                            if position_side == "long":
+                                tsl_stop_price = entry_price * (
+                                    1 - tsl_loss_cut / 100.0
+                                )
+                                tsl_triggered = current_price <= tsl_stop_price
+                            else:
+                                tsl_stop_price = entry_price * (
+                                    1 + tsl_loss_cut / 100.0
+                                )
+                                tsl_triggered = current_price >= tsl_stop_price
+
+                            if tsl_triggered:
+                                tsl_result = {
+                                    "should_close": True,
+                                    "stop_price": tsl_stop_price,
+                                    "reason": "tsl_loss_cut",
+                                    "loss_cut_percent": tsl_loss_cut,
+                                }
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка проверки TSL для {symbol}: {e}")
+
+            # Проверяем статический SL параллельно
+            try:
+                position_side = position.get("posSide", "long").lower()
+                if position_side == "long":
+                    sl_stop_price = entry_price * (1 - sl_percent_base / 100.0)
+                    sl_triggered = current_price <= sl_stop_price
+                else:
+                    sl_stop_price = entry_price * (1 + sl_percent_base / 100.0)
+                    sl_triggered = current_price >= sl_stop_price
+
+                if sl_triggered:
+                    sl_result = {
+                        "should_close": True,
+                        "stop_price": sl_stop_price,
+                        "reason": "static_sl",
+                        "sl_percent": sl_percent_base,
+                    }
+            except Exception as e:
+                logger.debug(f"⚠️ Ошибка проверки статического SL для {symbol}: {e}")
+
+            # Используем более строгий (ближайший к цене) стоп
+            if tsl_result and sl_result:
+                position_side = position.get("posSide", "long").lower()
+                if position_side == "long":
+                    # Для лонга используем более высокий стоп (более строгий)
+                    use_tsl = tsl_result["stop_price"] > sl_result["stop_price"]
+                else:
+                    # Для шорта используем более низкий стоп (более строгий)
+                    use_tsl = tsl_result["stop_price"] < sl_result["stop_price"]
+
+                selected_result = tsl_result if use_tsl else sl_result
+                logger.debug(
+                    f"🔒 SL+TSL для {symbol}: TSL stop={tsl_result['stop_price']:.2f}, "
+                    f"SL stop={sl_result['stop_price']:.2f}, используем {'TSL' if use_tsl else 'SL'}"
+                )
+            else:
+                selected_result = tsl_result or sl_result
+
+            # Если выбран результат для закрытия, закрываем позицию
+            if selected_result and selected_result.get("should_close"):
+                logger.warning(
+                    f"🚨 {selected_result['reason'].upper()} сработал для {symbol}: "
+                    f"цена={current_price:.2f}, stop={selected_result['stop_price']:.2f}"
+                )
+                if self.close_position_callback:
+                    await self.close_position_callback(
+                        position, selected_result["reason"]
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"⚠️ close_position_callback не установлен для {symbol}"
+                    )
+                    return False
+
+            # ✅ ИСПРАВЛЕНИЕ #5 (04.01.2026): Проверка min_hold_seconds_before_sl
             # Проверяем время удержания позиции перед закрытием по SL
             import time
             from datetime import datetime, timezone
@@ -119,21 +198,36 @@ class StopLossManager:
                     f"⚠️ Ошибка расчета времени удержания для SL проверки {symbol}: {e}"
                 )
 
-            # Минимальное время удержания перед закрытием по SL (30 секунд)
-            min_hold_seconds_before_sl = 30.0
-            if (
-                time_since_open is not None
-                and time_since_open < min_hold_seconds_before_sl
-            ):
-                logger.debug(
-                    f"⏱️ SL проверка для {symbol}: позиция открыта {time_since_open:.1f} сек назад < {min_hold_seconds_before_sl} сек, "
-                    f"пропускаем проверку SL (защита от преждевременного закрытия)"
-                )
-                return False
+            # Получаем min_hold_seconds из metadata
+            min_hold_seconds_before_sl = 30.0  # Fallback
+            if self.position_registry:
+                try:
+                    metadata = await self.position_registry.get_metadata(symbol)
+                    if metadata and metadata.min_holding_seconds:
+                        min_hold_seconds_before_sl = metadata.min_holding_seconds
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Ошибка получения min_holding_seconds для {symbol}: {e}"
+                    )
 
-            # Получаем режим для адаптивного SL
-            regime = position.get("regime") or "ranging"
-            sl_percent = effective_sl_percent if effective_sl_percent is not None else self._get_sl_percent(symbol, regime)
+            # Если TSL или SL сработали, проверяем min_hold_seconds
+            if selected_result and selected_result.get("should_close"):
+                if (
+                    time_since_open is not None
+                    and time_since_open < min_hold_seconds_before_sl
+                ):
+                    logger.debug(
+                        f"⏱️ {selected_result['reason'].upper()} заблокирован для {symbol}: "
+                        f"позиция открыта {time_since_open:.1f} сек < {min_hold_seconds_before_sl:.1f} сек "
+                        f"(защита от преждевременного закрытия)"
+                    )
+                    return False
+                # Если min_hold_seconds пройден, закрываем (уже обработано выше)
+                return True
+
+            # Если ни TSL, ни SL не сработали, продолжаем проверку PnL для статического SL
+            # (на случай если TSL не активен)
+            sl_percent = sl_percent_base
 
             # Рассчитываем PnL% от маржи
             try:

@@ -412,7 +412,11 @@ class IndicatorManager:
 
         for name, indicator in self.indicators.items():
             try:
-                if isinstance(indicator, ATR):
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: TALibATR не является подклассом ATR,
+                # но требует те же параметры (highs, lows, closes)
+                # Проверяем по имени класса или по количеству параметров метода calculate
+                indicator_class_name = indicator.__class__.__name__
+                if isinstance(indicator, ATR) or indicator_class_name == "TALibATR":
                     result = indicator.calculate(highs, lows, closes)
                 elif isinstance(indicator, VolumeIndicator):
                     result = indicator.calculate(volumes)

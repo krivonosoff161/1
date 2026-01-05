@@ -118,9 +118,9 @@ class MarginMonitor:
                     if margin_data:
                         used_margin = margin_data.get("used", 0.0)
                     if balance_data:
-                        current_balance = balance_data.get(
-                            "equity", balance_data.get("total", 0.0)
-                        )
+                        # ✅ ИСПРАВЛЕНО: DataRegistry.get_balance() возвращает {"balance": float, "profile": str, "updated_at": datetime}
+                        # НЕ "equity" или "total"!
+                        current_balance = balance_data.get("balance", 0.0)
                     logger.debug(
                         f"✅ MarginMonitor: Данные получены из data_registry "
                         f"(balance=${current_balance:.2f}, used_margin=${used_margin:.2f})"
@@ -130,12 +130,12 @@ class MarginMonitor:
                         f"⚠️ MarginMonitor: Не удалось получить баланс из data_registry: {e}"
                     )
 
-            # Fallback: если не получили данные
+            # ✅ ИСПРАВЛЕНИЕ #21 (04.01.2026): Убираем fallback баланс
             if current_balance == 0.0:
-                logger.warning(
-                    "⚠️ MarginMonitor: Не удалось получить баланс, используем fallback 1000.0"
+                logger.error(
+                    "❌ MarginMonitor: Не удалось получить баланс, позиция считается небезопасной"
                 )
-                current_balance = 1000.0  # Fallback
+                return False  # Не используем fallback 1000.0
 
             # ✅ Рассчитываем требуемую маржу (с учетом leverage)
             # ✅ ИСПРАВЛЕНО (28.12.2025): RiskConfig не имеет метода .get(), используем getattr()

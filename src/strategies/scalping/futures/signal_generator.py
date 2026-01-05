@@ -1455,42 +1455,98 @@ class FuturesSignalGenerator:
                     if not market_data:
                         return []
 
-                    # ✅ ОПТИМИЗАЦИЯ: Определяем режим один раз и передаем как параметр
-                    current_regime = "ranging"  # Fallback
+                    # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #7: Определяем режим ПЕРЕД генерацией сигналов (БЕЗ FALLBACK)
+                    current_regime = None
                     regime_manager = (
                         self.regime_managers.get(symbol) or self.regime_manager
                     )
 
-                    if (
-                        regime_manager
-                        and market_data.ohlcv_data
-                        and len(market_data.ohlcv_data) >= 50
-                    ):
-                        try:
-                            # Берем последнюю цену закрытия как current_price
-                            current_price = market_data.ohlcv_data[-1].close
-                            # ✅ ВАЖНО: Проверяем что current_price это число
-                            if (
-                                not isinstance(current_price, (int, float))
-                                or current_price <= 0
-                            ):
-                                current_price = 0.0
+                    if not regime_manager:
+                        logger.error(
+                            f"❌ [REGIME] {symbol}: RegimeManager недоступен - ПРОПУСКАЕМ генерацию сигналов"
+                        )
+                        return []
 
-                            # Обновляем режим на основе свежих данных (detect_regime не async)
-                            detection_result = regime_manager.detect_regime(
+                    if not market_data or not market_data.ohlcv_data:
+                        logger.error(
+                            f"❌ [REGIME] {symbol}: market_data или свечи отсутствуют - ПРОПУСКАЕМ генерацию сигналов"
+                        )
+                        return []
+
+                    if len(market_data.ohlcv_data) < 50:
+                        logger.error(
+                            f"❌ [REGIME] {symbol}: Недостаточно свечей для определения режима "
+                            f"({len(market_data.ohlcv_data)} < 50) - ПРОПУСКАЕМ генерацию сигналов"
+                        )
+                        return []
+
+                    try:
+                        # Берем последнюю цену закрытия как current_price
+                        current_price = market_data.ohlcv_data[-1].close
+                        # ✅ ВАЖНО: Проверяем что current_price это число
+                        if (
+                            not isinstance(current_price, (int, float))
+                            or current_price <= 0
+                        ):
+                            logger.error(
+                                f"❌ [REGIME] {symbol}: Невалидная цена закрытия (current_price={current_price}) - "
+                                f"ПРОПУСКАЕМ генерацию сигналов"
+                            )
+                            return []
+
+                        # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #7: Вызываем update_regime() (async, сохраняет режим в DataRegistry)
+                        # detect_regime() только определяет режим, но не сохраняет его
+                        # update_regime() определяет И сохраняет режим в DataRegistry
+                        if hasattr(regime_manager, "update_regime"):
+                            new_regime = await regime_manager.update_regime(
                                 market_data.ohlcv_data, current_price
                             )
-                            regime_obj = regime_manager.get_current_regime()
-                            if regime_obj:
-                                current_regime = (
-                                    regime_obj.lower()
-                                    if isinstance(regime_obj, str)
-                                    else str(regime_obj).lower()
-                                )
-                        except Exception as e:
-                            logger.warning(
-                                f"⚠️ Ошибка обновления режима ARM для {symbol}: {e}"
+                            # update_regime возвращает None если режим не изменился, или новый режим если изменился
+                            # В любом случае режим должен быть сохранен в DataRegistry (строки 770-774 в regime_manager.py)
+                            logger.debug(
+                                f"✅ [REGIME] {symbol}: update_regime() вызван, режим должен быть сохранен в DataRegistry"
                             )
+                        else:
+                            logger.error(
+                                f"❌ [REGIME] {symbol}: RegimeManager не имеет метода update_regime() - "
+                                f"ПРОПУСКАЕМ генерацию сигналов"
+                            )
+                            return []
+
+                        # Проверяем что режим сохранен в DataRegistry
+                        if self.data_registry:
+                            regime_data = await self.data_registry.get_regime(symbol)
+                            if not regime_data or not regime_data.get("regime"):
+                                logger.error(
+                                    f"❌ [REGIME] {symbol}: Режим не найден в DataRegistry после update_regime() - "
+                                    f"ПРОПУСКАЕМ генерацию сигналов"
+                                )
+                                return []
+
+                            current_regime = regime_data.get("regime")
+                            logger.debug(
+                                f"✅ [REGIME] {symbol}: Режим определен и сохранен: {current_regime}"
+                            )
+                        else:
+                            # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #7: DataRegistry обязателен для сохранения режима
+                            logger.error(
+                                f"❌ [REGIME] {symbol}: DataRegistry недоступен после update_regime() - "
+                                f"ПРОПУСКАЕМ генерацию сигналов (БЕЗ FALLBACK)"
+                            )
+                            return []
+
+                    except Exception as e:
+                        logger.error(
+                            f"❌ [REGIME] {symbol}: Ошибка определения режима: {e} - ПРОПУСКАЕМ генерацию сигналов",
+                            exc_info=True,
+                        )
+                        return []
+
+                    if not current_regime:
+                        logger.error(
+                            f"❌ [REGIME] {symbol}: Режим не определен после detect_regime - ПРОПУСКАЕМ генерацию сигналов"
+                        )
+                        return []
 
                     # Генерируем сигналы для текущего символа (передаем уже полученные данные и режим)
                     symbol_signals = await self._generate_symbol_signals(
@@ -1899,8 +1955,42 @@ class FuturesSignalGenerator:
         try:
             signals = []
 
+            # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Проверяем валидность market_data и свечей ПЕРЕД расчетом индикаторов (БЕЗ FALLBACK)
+            if not market_data or not market_data.ohlcv_data:
+                logger.error(
+                    f"❌ [ATR] {symbol}: market_data или свечи отсутствуют - ПРОПУСКАЕМ генерацию сигналов"
+                )
+                return []
+
+            candles = market_data.ohlcv_data
+            min_candles_required = 15  # period=14 + 1 для ATR
+            if len(candles) < min_candles_required:
+                logger.error(
+                    f"❌ [ATR] {symbol}: Недостаточно свечей для расчета ATR "
+                    f"({len(candles)} < {min_candles_required}) - ПРОПУСКАЕМ генерацию сигналов"
+                )
+                return []
+
+            # Проверяем валидность свечей (все цены > 0)
+            invalid_candles = [
+                i
+                for i, c in enumerate(candles)
+                if c.high <= 0 or c.low <= 0 or c.close <= 0
+            ]
+            if invalid_candles:
+                logger.error(
+                    f"❌ [ATR] {symbol}: Найдены невалидные свечи (индексы: {invalid_candles[:5]}) - "
+                    f"ПРОПУСКАЕМ генерацию сигналов"
+                )
+                return []
+
             # Технические индикаторы
             indicator_results = self.indicator_manager.calculate_all(market_data)
+
+            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем результат расчета индикаторов
+            logger.debug(
+                f"🔍 [INDICATORS] {symbol}: indicator_manager.calculate_all вернул {len(indicator_results)} индикаторов: {list(indicator_results.keys())}"
+            )
 
             # ✅ ИСПРАВЛЕНИЕ: Конвертируем IndicatorResult в простой dict с значениями
             # indicator_results содержит объекты IndicatorResult, нужно извлечь значения
@@ -1935,8 +2025,38 @@ class FuturesSignalGenerator:
                     # Если уже dict
                     indicators[name.lower()] = result
                 else:
-                    # Fallback
+                    # ✅ ИСПРАВЛЕНО: БЕЗ FALLBACK - просто сохраняем как есть, но логируем неожиданный тип
                     indicators[name.lower()] = result
+                    logger.debug(
+                        f"⚠️ [INDICATORS] {symbol}: Неожиданный тип результата для {name}: {type(result)}"
+                    )
+
+            # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Проверяем ATR после расчета (БЕЗ FALLBACK)
+            atr_value = indicators.get("atr") or indicators.get("atr_14")
+            if atr_value is None or atr_value <= 0:
+                logger.error(
+                    f"❌ [ATR] {symbol}: ATR не рассчитан или равен 0/None (value={atr_value}) - "
+                    f"ПРОПУСКАЕМ генерацию сигналов. Количество свечей: {len(candles)}, "
+                    f"indicator_results keys: {list(indicator_results.keys())}"
+                )
+                return []
+
+            # ✅ УДАЛЕНО: Проверка ADX здесь некорректна - ADX еще не получен из DataRegistry/fallback
+            # Проверка ADX будет выполнена ПОСЛЕ получения из DataRegistry/fallback (строка ~2290)
+
+            # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #8: Обновляем market_data.indicators для совместимости
+            if not hasattr(market_data, "indicators"):
+                market_data.indicators = {}
+            market_data.indicators.update(indicators)
+            if not market_data.indicators:
+                logger.error(
+                    f"❌ [INDICATORS] {symbol}: market_data.indicators пуст после обновления - "
+                    f"ПРОПУСКАЕМ генерацию сигналов"
+                )
+                return []
+            logger.debug(
+                f"✅ [INDICATORS] {symbol}: market_data.indicators обновлен, ключи: {list(market_data.indicators.keys())}"
+            )
 
             # ✅ НОВОЕ: Сохраняем индикаторы в DataRegistry
             if self.data_registry:
@@ -1960,15 +2080,13 @@ class FuturesSignalGenerator:
                                     break
 
                         if value is not None and isinstance(value, (int, float)):
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Сохраняем ATR даже если value = 0.0
-                            # Fallback ATR может вернуть 0.0, но это валидное значение (недостаточно данных)
-                            # ATRProvider будет использовать fallback=5.0 если ATR не найден или = 0.0
+                            # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: НЕ сохраняем ATR=0.0 в DataRegistry (БЕЗ FALLBACK)
                             if key == "atr":
                                 if value == 0.0:
-                                    logger.debug(
-                                        f"⚠️ ATR для {symbol} равен 0.0 (fallback вернул 0.0 - недостаточно данных), "
-                                        f"сохраняем в DataRegistry (ATRProvider использует fallback=5.0)"
+                                    logger.error(
+                                        f"❌ [ATR] {symbol}: ATR равен 0.0 - НЕ сохраняем в DataRegistry (БЕЗ FALLBACK)"
                                     )
+                                    # ✅ НЕ сохраняем ATR=0.0 (это проверено выше и вернет пустой список)
                                 else:
                                     found_key = (
                                         atr_key if "atr_key" in locals() else key
@@ -1976,8 +2094,7 @@ class FuturesSignalGenerator:
                                     logger.debug(
                                         f"📊 Сохранение ATR для {symbol}: {value:.6f} (найден по ключу: {found_key})"
                                     )
-                                # ✅ Сохраняем ATR даже если = 0.0 (для диагностики)
-                                indicators_for_registry[key] = value
+                                    indicators_for_registry[key] = value
                             elif value > 0:
                                 indicators_for_registry[key] = value
                         elif key == "atr":
@@ -2028,35 +2145,49 @@ class FuturesSignalGenerator:
                         f"⚠️ Ошибка сохранения индикаторов в DataRegistry для {symbol}: {e}"
                     )
 
+            # ✅ ИСПРАВЛЕНИЕ #31 (04.01.2026): Детальное логирование значений индикаторов при генерации сигналов
             rsi_val = indicators.get("rsi", "N/A")
             macd_val = indicators.get("macd", {})
             if isinstance(macd_val, dict):
                 macd_line = macd_val.get("macd", 0)
                 signal_line = macd_val.get("signal", 0)
                 histogram = macd_line - signal_line
-                macd_str = (
-                    f"macd={macd_line}, signal={signal_line}, histogram={histogram}"
-                )
+                macd_str = f"macd={macd_line:.4f}, signal={signal_line:.4f}, histogram={histogram:.4f}"
             else:
                 macd_str = str(macd_val)
 
-            # Добавляем EMA и BB для диагностики
-            ema_12 = indicators.get("ema_12", 0)
-            ema_26 = indicators.get("ema_26", 0)
-            bb = indicators.get("bollinger_bands", {})
-            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов вместо цены закрытия свечи
-            # Это синхронизирует цену сигнала с текущей рыночной ценой
-            candle_close_price = (
-                market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
-            )
-            current_price = await self._get_current_market_price(
-                symbol, candle_close_price
-            )
+            # ✅ ИСПРАВЛЕНО: Получаем EMA и BB БЕЗ fallback - показываем реальное состояние
+            ema_12 = indicators.get("ema_12")
+            ema_26 = indicators.get("ema_26")
+            atr_val = indicators.get("atr") or indicators.get("atr_14")
+            bb_data = indicators.get("bollinger_bands")
+            bb_upper = bb_data.get("upper") if isinstance(bb_data, dict) else None
+            bb_lower = bb_data.get("lower") if isinstance(bb_data, dict) else None
+            bb_middle = bb_data.get("middle") if isinstance(bb_data, dict) else None
 
-            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование всех индикаторов (экономия ~30% логов)
-            # Логируем только при генерации реальных сигналов (INFO уровень)
-            # logger.debug(f"📊 Индикаторы для {symbol}: цена=${current_price:.2f}, RSI={rsi_val}")
+            # Логируем проблемы с индикаторами
+            if ema_12 is None:
+                logger.warning(
+                    f"⚠️ [EMA] {symbol}: EMA_12 НЕ РАССЧИТАН (индикатор отсутствует в indicators)"
+                )
+            if ema_26 is None:
+                logger.warning(
+                    f"⚠️ [EMA] {symbol}: EMA_26 НЕ РАССЧИТАН (индикатор отсутствует в indicators)"
+                )
+            if bb_data is None or not isinstance(bb_data, dict):
+                logger.warning(
+                    f"⚠️ [BB] {symbol}: Bollinger Bands НЕ РАССЧИТАН (bb_data={bb_data})"
+                )
+            if (
+                ema_12 is not None
+                and ema_26 is not None
+                and abs(ema_12 - ema_26) < 0.0001
+            ):
+                logger.warning(
+                    f"⚠️ [EMA] {symbol}: EMA_12 и EMA_26 ОДИНАКОВЫЕ ({ema_12:.6f}) - возможно, недостаточно данных или ошибка расчета"
+                )
 
+            # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #1: Получаем ADX и ATR из DataRegistry ДО логирования
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Получаем ADX тренд ДО генерации сигналов
             # ✅ ПРИОРИТЕТ 1: Читаем ADX из DataRegistry (где он уже сохранен per-symbol)
             # ✅ ПРИОРИТЕТ 2: Если нет в DataRegistry - рассчитываем из свечей через adx_filter (fallback)
@@ -2067,22 +2198,18 @@ class FuturesSignalGenerator:
             adx_threshold = 20.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Снижен дефолтный порог с 25 до 20
             adx_from_registry = False  # Флаг, откуда взят ADX
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала пытаемся получить ADX из DataRegistry
+            # ✅ ИСПРАВЛЕНО: Получаем ADX из DataRegistry ДО логирования
             if self.data_registry:
                 try:
                     indicators_from_registry = await self.data_registry.get_indicators(
                         symbol
                     )
                     if indicators_from_registry:
+                        # Получаем ADX из DataRegistry
                         adx_from_reg = indicators_from_registry.get("adx")
-                        adx_plus_di_from_reg = indicators_from_registry.get(
-                            "adx_plus_di"
-                        )
-                        adx_minus_di_from_reg = indicators_from_registry.get(
-                            "adx_minus_di"
-                        )
-
-                        # Проверяем, что ADX валидный (не 0.0 и не None)
+                        # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #1: НЕ используем ADX=0.0
+                        if adx_from_reg == 0.0:
+                            adx_from_reg = None
                         if (
                             adx_from_reg
                             and isinstance(adx_from_reg, (int, float))
@@ -2090,25 +2217,39 @@ class FuturesSignalGenerator:
                         ):
                             adx_value = float(adx_from_reg)
                             adx_plus_di = (
-                                float(adx_plus_di_from_reg)
-                                if adx_plus_di_from_reg
+                                float(indicators_from_registry.get("adx_plus_di", 0))
+                                if indicators_from_registry.get("adx_plus_di")
                                 else 0.0
                             )
                             adx_minus_di = (
-                                float(adx_minus_di_from_reg)
-                                if adx_minus_di_from_reg
+                                float(indicators_from_registry.get("adx_minus_di", 0))
+                                if indicators_from_registry.get("adx_minus_di")
                                 else 0.0
                             )
                             adx_from_registry = True
-                            logger.debug(
-                                f"✅ ADX для {symbol} получен из DataRegistry: ADX={adx_value:.2f}, +DI={adx_plus_di:.2f}, -DI={adx_minus_di:.2f}"
-                            )
+
+                        # ✅ ИСПРАВЛЕНО: Получаем ATR из DataRegistry (если не получен из indicators)
+                        if atr_val == 0 or atr_val is None:
+                            atr_from_reg = indicators_from_registry.get("atr")
+                            if atr_from_reg and atr_from_reg > 0:
+                                atr_val = atr_from_reg
+                            else:
+                                # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #1: Используем ATRProvider с fallback
+                                if hasattr(self, "atr_provider") and self.atr_provider:
+                                    try:
+                                        atr_from_provider = self.atr_provider.get_atr(
+                                            symbol
+                                        )  # БЕЗ FALLBACK
+                                        if atr_from_provider and atr_from_provider > 0:
+                                            atr_val = atr_from_provider
+                                    except Exception:
+                                        pass
                 except Exception as e:
                     logger.debug(
-                        f"⚠️ Не удалось получить ADX из DataRegistry для {symbol}: {e}, используем fallback"
+                        f"⚠️ Не удалось получить ADX/ATR из DataRegistry для логирования {symbol}: {e}"
                     )
 
-            # ✅ FALLBACK: Если ADX не получен из DataRegistry, рассчитываем через adx_filter
+            # ✅ FALLBACK: Если ADX не получен из DataRegistry, рассчитываем через adx_filter ПЕРЕД определением тренда
             if (
                 not adx_from_registry
                 and self.adx_filter
@@ -2157,13 +2298,29 @@ class FuturesSignalGenerator:
                         f"сигналы будут генерироваться без учета ADX"
                     )
 
-            # ✅ Определяем направление тренда на основе ADX значений
-            if adx_value > 0:
-                adx_threshold = (
-                    self.adx_filter.config.adx_threshold if self.adx_filter else 20.0
-                )  # ✅ ИСПРАВЛЕНО: Снижен дефолт с 25 до 20
+            # ✅ ИСПРАВЛЕНО: Для логирования используем актуальное значение adx_value (может быть обновлено через fallback)
+            adx_for_log = (
+                adx_value
+                if adx_value > 0
+                else indicators.get("adx", indicators.get("adx_proxy", 0))
+            )
 
-                if adx_value >= adx_threshold:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем ADX после получения из DataRegistry/fallback - БЛОКИРУЕМ если ADX=0.0
+            if adx_value <= 0 or adx_for_log <= 0:
+                logger.error(
+                    f"❌ [ADX] {symbol}: ADX не рассчитан или равен 0 после получения из DataRegistry/fallback "
+                    f"(adx_value={adx_value}, adx_for_log={adx_for_log}, adx_from_registry={adx_from_registry}) - "
+                    f"ПРОПУСКАЕМ генерацию сигналов. Бот НЕ ДОЛЖЕН работать без валидного ADX! "
+                    f"Количество свечей: {len(candles)}, indicator_results keys: {list(indicator_results.keys())}"
+                )
+                return []
+
+            # ✅ ИСПРАВЛЕНО: Определяем направление тренда ДО логирования (после fallback)
+            if adx_value > 0:
+                adx_threshold_for_trend = (
+                    self.adx_filter.config.adx_threshold if self.adx_filter else 20.0
+                )
+                if adx_value >= adx_threshold_for_trend:
                     # Сильный тренд
                     di_difference = (
                         self.adx_filter.config.di_difference if self.adx_filter else 5.0
@@ -2178,16 +2335,55 @@ class FuturesSignalGenerator:
                     # Слабый тренд (ADX < threshold)
                     adx_trend = "ranging"
 
-                logger.debug(
-                    f"📊 ADX тренд для {symbol}: {adx_trend}, "
-                    f"ADX={adx_value:.1f}, +DI={adx_plus_di:.1f}, -DI={adx_minus_di:.1f} "
-                    f"(источник: {'DataRegistry' if adx_from_registry else 'adx_filter'})"
-                )
-            else:
-                logger.warning(
-                    f"⚠️ ADX для {symbol} недоступен (adx_value={adx_value}), "
-                    f"сигналы будут генерироваться без учета ADX тренда"
-                )
+            # Получаем текущую цену для логирования
+            current_price_log = 0.0
+            if market_data and market_data.ohlcv_data:
+                current_price_log = market_data.ohlcv_data[-1].close
+
+            # ✅ ИСПРАВЛЕНО: Правильное форматирование RSI (сначала проверяем тип, потом форматируем)
+            rsi_str = (
+                f"{rsi_val:.2f}" if isinstance(rsi_val, (int, float)) else str(rsi_val)
+            )
+
+            # Форматируем значения БЕЗ fallback на 0
+            ema_12_str = f"{ema_12:.2f}" if ema_12 is not None else "НЕ РАССЧИТАН"
+            ema_26_str = f"{ema_26:.2f}" if ema_26 is not None else "НЕ РАССЧИТАН"
+            bb_upper_str = f"{bb_upper:.2f}" if bb_upper is not None else "НЕ РАССЧИТАН"
+            bb_middle_str = (
+                f"{bb_middle:.2f}" if bb_middle is not None else "НЕ РАССЧИТАН"
+            )
+            bb_lower_str = f"{bb_lower:.2f}" if bb_lower is not None else "НЕ РАССЧИТАН"
+            atr_val_str = (
+                f"{atr_val:.2f}"
+                if atr_val is not None and atr_val > 0
+                else "НЕ РАССЧИТАН"
+            )
+
+            logger.info(
+                f"📊 [INDICATORS] {symbol}: Значения индикаторов при генерации сигналов | "
+                f"Цена: ${current_price_log:.2f} | "
+                f"RSI: {rsi_str} | "
+                f"MACD: {macd_str} | "
+                f"ADX: {adx_for_log:.2f} (+DI={adx_plus_di:.2f}, -DI={adx_minus_di:.2f}, trend={adx_trend or 'НЕ ОПРЕДЕЛЕН'}) | "
+                f"ATR: {atr_val_str} | "
+                f"EMA: 12={ema_12_str}, 26={ema_26_str} | "
+                f"BB: upper={bb_upper_str}, middle={bb_middle_str}, lower={bb_lower_str}"
+            )
+            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов вместо цены закрытия свечи
+            # Это синхронизирует цену сигнала с текущей рыночной ценой
+            candle_close_price = (
+                market_data.ohlcv_data[-1].close if market_data.ohlcv_data else 0.0
+            )
+            current_price = await self._get_current_market_price(
+                symbol, candle_close_price
+            )
+
+            # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование всех индикаторов (экономия ~30% логов)
+            # Логируем только при генерации реальных сигналов (INFO уровень)
+            # logger.debug(f"📊 Индикаторы для {symbol}: цена=${current_price:.2f}, RSI={rsi_val}")
+
+            # ✅ ИСПРАВЛЕНО: ADX и тренд уже определены ДО логирования (строки 2097-2167)
+            # Fallback через adx_filter и определение тренда выполняются перед логированием
 
             # ✅ НОВОЕ (27.12.2025): Счетчики для детального логирования
             signal_stats = {
@@ -2430,32 +2626,82 @@ class FuturesSignalGenerator:
                 macd_hist = (
                     macd_dict.get("histogram") if isinstance(macd_dict, dict) else None
                 )
-                atr_value = indicators.get("atr")
+                atr_value_from_indicators = indicators.get("atr")
 
-                # Получаем режим для логирования
-                current_regime_for_log = "unknown"
+                # ✅ ИСПРАВЛЕНО: Получаем ATR из DataRegistry ДО логирования (как ADX)
+                atr_value_for_log = atr_value_from_indicators
+                if (
+                    atr_value_for_log is None or atr_value_for_log == 0
+                ) and self.data_registry:
+                    try:
+                        indicators_from_registry = (
+                            await self.data_registry.get_indicators(symbol)
+                        )
+                        if indicators_from_registry:
+                            atr_from_reg = indicators_from_registry.get("atr")
+                            if atr_from_reg and atr_from_reg > 0:
+                                atr_value_for_log = atr_from_reg
+                            else:
+                                logger.warning(
+                                    f"⚠️ [ATR] {symbol}: ATR в DataRegistry = {atr_from_reg} (невалидное значение)"
+                                )
+                        else:
+                            logger.warning(
+                                f"⚠️ [ATR] {symbol}: Индикаторы не найдены в DataRegistry для {symbol}"
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"❌ [ATR] {symbol}: ОШИБКА получения ATR из DataRegistry: {e}",
+                            exc_info=True,
+                        )
+
+                if atr_value_for_log is None or atr_value_for_log == 0:
+                    logger.warning(
+                        f"⚠️ [ATR] {symbol}: ATR НЕ РАССЧИТАН (значение={atr_value_for_log}, источник=indicators/DataRegistry) - возможно, недостаточно данных для расчета"
+                    )
+
+                # ✅ ИСПРАВЛЕНО: Получаем режим БЕЗ fallback - показываем реальное состояние
+                current_regime_for_log = None
                 try:
                     if self.data_registry:
                         regime_data = await self.data_registry.get_regime(symbol)
                         if regime_data:
-                            current_regime_for_log = regime_data.get(
-                                "regime", "unknown"
+                            current_regime_for_log = regime_data.get("regime")
+                        else:
+                            logger.warning(
+                                f"⚠️ [REGIME] {symbol}: Режим НЕ найден в DataRegistry (regime_data=None)"
                             )
-                except Exception:
-                    pass
+                    else:
+                        logger.warning(
+                            f"⚠️ [REGIME] {symbol}: DataRegistry недоступен для получения режима"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"❌ [REGIME] {symbol}: ОШИБКА получения режима из DataRegistry: {e}",
+                        exc_info=True,
+                    )
+
+                # Логируем режим или отсутствие режима
+                regime_str = (
+                    current_regime_for_log if current_regime_for_log else "НЕ ОПРЕДЕЛЕН"
+                )
+                if not current_regime_for_log:
+                    logger.warning(
+                        f"⚠️ [REGIME] {symbol}: Режим НЕ определен - возможно, еще не был рассчитан RegimeManager"
+                    )
 
                 # ✅ ИСПРАВЛЕНИЕ (03.01.2026): Правильное форматирование значений (нельзя использовать тернарный оператор в f-string format specifier)
                 rsi_str = f"{rsi_value:.1f}" if rsi_value is not None else "N/A"
                 macd_str = f"{macd_hist:.3f}" if macd_hist is not None else "N/A"
                 atr_str = (
-                    f"{atr_value:.2f}"
-                    if atr_value is not None and atr_value > 0
+                    f"{atr_value_for_log:.2f}"
+                    if atr_value_for_log is not None and atr_value_for_log > 0
                     else "N/A"
                 )
 
                 logger.info(
-                    f"📊 [INDICATORS] {symbol} ({current_regime_for_log}): Значения индикаторов | "
-                    f"ADX={adx_value:.1f} ({adx_trend}), RSI={rsi_str}, MACD_hist={macd_str}, ATR={atr_str} | "
+                    f"📊 [INDICATORS] {symbol} ({regime_str}): Значения индикаторов | "
+                    f"ADX={adx_value:.1f} ({adx_trend or 'НЕ ОПРЕДЕЛЕН'}), RSI={rsi_str}, MACD_hist={macd_str}, ATR={atr_str} | "
                     f"Источник: MarketData.indicators -> DataRegistry/IndicatorProvider"
                 )
             except Exception as e:
@@ -6447,25 +6693,30 @@ class FuturesSignalGenerator:
             min_strength = float(min_strength) if min_strength is not None else 0.3
 
             # ✅ НОВОЕ (03.01.2026): Детальное логирование источников min_signal_strength
+            # ✅ ИСПРАВЛЕНО: Получаем symbol из первого сигнала для логирования
+            first_symbol = signals[0].get("symbol", "UNKNOWN") if signals else "UNKNOWN"
             source_info = "unknown"
             if thresholds_config_min and thresholds_config_min.get(
                 "min_signal_strength"
             ):
-                source_info = f"by_symbol[{symbol}]"
-            elif hasattr(self.scalping_config, "by_symbol") and symbol:
+                source_info = f"thresholds_config"
+            elif (
+                hasattr(self.scalping_config, "by_symbol") and first_symbol != "UNKNOWN"
+            ):
                 by_symbol = getattr(self.scalping_config, "by_symbol", {})
-                if isinstance(by_symbol, dict) and symbol in by_symbol:
-                    source_info = f"by_symbol[{symbol}]"
+                if isinstance(by_symbol, dict) and first_symbol in by_symbol:
+                    source_info = f"by_symbol[{first_symbol}]"
             elif regime_name_min_strength:
                 source_info = f"min_signal_strength_{regime_name_min_strength}"
             else:
                 source_info = "scalping_config.min_signal_strength"
 
-            logger.info(
-                f"📊 [PARAMS] {symbol} ({regime_name_min_strength or 'default'}): "
-                f"min_signal_strength={min_strength:.2f} | "
-                f"Источник: {source_info}"
-            )
+            if signals:  # Логируем только если есть сигналы
+                logger.info(
+                    f"📊 [PARAMS] {first_symbol} ({regime_name_min_strength or 'default'}): "
+                    f"min_signal_strength={min_strength:.2f} | "
+                    f"Источник: {source_info}"
+                )
 
             filtered_signals = [
                 s for s in signals if s.get("strength", 0) >= min_strength

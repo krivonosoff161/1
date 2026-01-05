@@ -1159,9 +1159,16 @@ class FuturesScalpingOrchestrator:
                         )
                         leverage_set = True
                     except Exception as e:
-                        logger.warning(
-                            f"⚠️ Не удалось установить leverage для {symbol} (long): {e}"
-                        )
+                        error_str = str(e)
+                        if "50004" in error_str or "timeout" in error_str.lower():
+                            logger.error(
+                                f"❌ [LEVERAGE_TIMEOUT] {symbol} (long): API endpoint request timeout (50004) - "
+                                f"проверьте соединение с биржей. Leverage может быть не установлен."
+                            )
+                        else:
+                            logger.warning(
+                                f"⚠️ Не удалось установить leverage для {symbol} (long): {e}"
+                            )
 
                     # ✅ ИСПРАВЛЕНИЕ: Задержка для избежания rate limit (429)
                     # ✅ АДАПТИВНО: Задержка из конфига (адаптивная по режиму)

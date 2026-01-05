@@ -1050,9 +1050,9 @@ class OKXFuturesClient:
         if pos_side:
             data["posSide"] = pos_side
 
-        # ✅ ИСПРАВЛЕНИЕ: Retry логика для обработки rate limit (429)
-        max_retries = 3
-        retry_delay = 0.5  # 500ms
+        # ✅ ИСПРАВЛЕНИЕ: Retry логика для обработки rate limit (429) и timeout (50004)
+        max_retries = 5  # ✅ Увеличено с 3 до 5 для timeout ошибок
+        retry_delay = 1.0  # ✅ Увеличено с 0.5 до 1.0 секунды
 
         for attempt in range(max_retries):
             try:
@@ -1062,29 +1062,42 @@ class OKXFuturesClient:
                     data=data,
                 )
             except RuntimeError as e:
-                # Проверяем, является ли это ошибкой rate limit (429)
+                # ✅ ИСПРАВЛЕНО: Обрабатываем rate limit (429) и timeout (50004)
                 error_str = str(e)
-                if (
+                is_rate_limit = (
                     "429" in error_str
                     or "Too Many Requests" in error_str
                     or "rate limit" in error_str.lower()
-                ):
+                )
+                is_timeout = (
+                    "50004" in error_str
+                    or "timeout" in error_str.lower()
+                    or "API endpoint request timeout" in error_str
+                )
+
+                if is_rate_limit or is_timeout:
                     if attempt < max_retries - 1:
                         # Увеличиваем задержку с каждой попыткой (exponential backoff)
                         delay = retry_delay * (2**attempt)
+                        error_type = (
+                            "timeout (50004)" if is_timeout else "rate limit (429)"
+                        )
                         logger.warning(
-                            f"⚠️ Rate limit (429) при установке leverage для {symbol}, "
+                            f"⚠️ {error_type} при установке leverage для {symbol}, "
                             f"повторная попытка {attempt + 1}/{max_retries} через {delay:.1f}с..."
                         )
                         await asyncio.sleep(delay)
                         continue
                     else:
+                        error_type = (
+                            "timeout (50004)" if is_timeout else "rate limit (429)"
+                        )
                         logger.error(
-                            f"❌ Не удалось установить leverage для {symbol} после {max_retries} попыток: {e}"
+                            f"❌ Не удалось установить leverage для {symbol} после {max_retries} попыток ({error_type}): {e}"
                         )
                         raise
                 else:
-                    # Это не ошибка rate limit, пробрасываем дальше
+                    # Это не ошибка rate limit или timeout, пробрасываем дальше
                     raise
 
     # ---------- Orders ----------

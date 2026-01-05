@@ -187,6 +187,43 @@ class FuturesOrderExecutor:
             # Определение типа ордера
             order_type = self._determine_order_type(signal)
 
+            # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #4: Проверка дельты цены ПЕРЕД размещением ордера
+            # Получаем текущую цену для проверки дельты
+            current_price_for_check = 0.0
+            signal_price = signal.get("price", 0.0) if signal else 0.0
+            try:
+                price_limits = await self.client.get_price_limits(symbol)
+                if price_limits:
+                    current_price_for_check = price_limits.get("current_price", 0)
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить текущую цену для проверки дельты: {e}"
+                )
+
+            # Проверяем дельту между ценой сигнала и текущей ценой
+            price_delta_pct = 0.0
+            if current_price_for_check > 0 and signal_price > 0:
+                price_delta_pct = (
+                    abs(signal_price - current_price_for_check)
+                    / current_price_for_check
+                    * 100
+                )
+
+            # ✅ Если дельта > 1% - используем market ордер для быстрого исполнения
+            if price_delta_pct > 1.0:
+                logger.warning(
+                    f"⚠️ ПРОБЛЕМА #4: Большая дельта цены для {symbol}: {price_delta_pct:.2f}% "
+                    f"(signal_price={signal_price:.2f}, current_price={current_price_for_check:.2f}), "
+                    f"используем market ордер для быстрого исполнения"
+                )
+                order_type = "market"
+            elif price_delta_pct > 0.5:
+                logger.info(
+                    f"💰 Дельта цены для {symbol}: {price_delta_pct:.2f}% "
+                    f"(signal_price={signal_price:.2f}, current_price={current_price_for_check:.2f}), "
+                    f"используем limit ордер с уменьшенным offset"
+                )
+
             # Расчет цены для лимитных ордеров
             price = None
             if order_type == "limit":
@@ -265,20 +302,19 @@ class FuturesOrderExecutor:
 
     def _determine_order_type(self, signal: Dict[str, Any]) -> str:
         """Определение типа ордера на основе сигнала"""
-        # ✅ ИЗМЕНЕНО (03.01.2026): Переключение на market ордера для мгновенного исполнения
-        # Market ордера дают актуальный вход без потери времени на мониторинг limit ордеров
-        # Комиссия выше (0.05% вместо 0.02%), но не критична при профите $4-7
+        # ✅ ИСПРАВЛЕНО (04.01.2026): Используем limit ордера для экономии комиссий
+        # Market ордера имеют комиссию 0.05% (taker), limit ордера - 0.02% (maker)
+        # Экономия: $108/месяц при 200 сделках/день
         signal_type = signal.get(
-            "type", "market"
-        )  # ✅ ИЗМЕНЕНО: "market" вместо "limit" для мгновенного исполнения
+            "type", "limit"
+        )  # ✅ ИСПРАВЛЕНО: "limit" вместо "market" для экономии комиссий
 
         # Если signal_type это тип ордера (market, limit, oco) - используем его
         if signal_type in ["market", "limit", "oco"]:
             return signal_type
 
-        # ✅ ИЗМЕНЕНО: Используем market по умолчанию для мгновенного исполнения
-        # Это решает проблему потери времени и несоответствия анализа и входа
-        return "market"  # ✅ ИЗМЕНЕНО: "market" вместо "limit"
+        # ✅ ИСПРАВЛЕНО: Используем limit по умолчанию для экономии комиссий
+        return "limit"  # ✅ ИСПРАВЛЕНО: "limit" вместо "market"
 
     async def _calculate_limit_price(
         self,
@@ -612,18 +648,27 @@ class FuturesOrderExecutor:
             # Получаем лимиты цены биржи (включая лучшие цены из стакана)
             price_limits = await self.client.get_price_limits(symbol)
 
-            # ✅ НОВОЕ: Проверка свежести цены (не старше 1 секунды)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверка свежести цены (не старше 0.5 секунды для скальпинга)
             if price_limits:
                 price_timestamp = price_limits.get("timestamp", 0)
                 if price_timestamp > 0:
                     price_age = time.time() - price_timestamp
-                    if price_age > 1.0:  # Цена старше 1 секунды
+                    if (
+                        price_age > 0.5
+                    ):  # Цена старше 0.5 секунды - обновляем для скальпинга
                         logger.warning(
                             f"⚠️ Цена для {symbol} устарела ({price_age:.2f} сек), "
-                            f"обновляем данные..."
+                            f"обновляем данные перед размещением ордера..."
                         )
                         # Обновляем цену
                         price_limits = await self.client.get_price_limits(symbol)
+                        # Обновляем переменные после обновления
+                        if price_limits:
+                            best_bid = price_limits.get("best_bid", 0)
+                            best_ask = price_limits.get("best_ask", 0)
+                            current_price = price_limits.get("current_price", 0)
+                            max_buy_price = price_limits.get("max_buy_price", 0)
+                            min_sell_price = price_limits.get("min_sell_price", 0)
 
             if not price_limits:
                 logger.warning(
@@ -665,9 +710,10 @@ class FuturesOrderExecutor:
                 logger.error(f"❌ Неверная текущая цена для {symbol}: {current_price}")
                 return 0.0
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для скальпинга ВСЕГДА используем актуальную цену из стакана
-            # НЕ используем signal_price как base_price - это может привести к размещению ордеров далеко от рынка
-            # Для скальпинга критична скорость и точность цены - используем best_ask/best_bid или current_price
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): НИКОГДА не используем signal_price для расчета лимитной цены!
+            # signal_price может быть устаревшим (например, 92728 для BTC, а текущая цена 91359)
+            # Это приводит к размещению ордеров далеко от рынка (1.46% разница!)
+            # ВСЕГДА используем актуальную цену из стакана (best_ask/best_bid или current_price)
             signal_price = None
             if signal:
                 signal_price = signal.get("price", 0.0)
@@ -677,29 +723,26 @@ class FuturesOrderExecutor:
                         if current_price > 0
                         else 100
                     )
-                    # ✅ ИСПРАВЛЕНО: Более строгая проверка для скальпинга (0.1% вместо 0.5%)
-                    if price_diff_pct < 0.1:  # Разница < 0.1% - сигнал актуален
+                    # Логируем для отладки, но НЕ используем signal_price для расчета!
+                    if price_diff_pct < 0.1:
                         logger.debug(
                             f"💰 signal['price']={signal_price:.2f} актуальна для {symbol} {side} "
-                            f"(разница с current_price={current_price:.2f} составляет {price_diff_pct:.3f}%)"
+                            f"(разница с current_price={current_price:.2f} составляет {price_diff_pct:.3f}%), "
+                            f"но используем current_price из стакана"
                         )
-                        # ✅ НОВОЕ: Используем signal_price только как fallback, если best_ask/best_bid недоступны
-                        # Основная логика использует best_ask/best_bid для точности
-                        base_price = signal_price
                     else:
                         logger.warning(
                             f"⚠️ signal['price']={signal_price:.2f} устарела для {symbol} {side} "
                             f"(разница с current_price={current_price:.2f} составляет {price_diff_pct:.3f}%), "
-                            f"используем current_price"
+                            f"используем current_price из стакана"
                         )
-                        base_price = current_price
-                else:
-                    base_price = current_price
-            else:
-                base_price = current_price
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для скальпинга ПРИОРИТЕТ - best_ask/best_bid, НЕ base_price
-            # base_price используется только как fallback если best_ask/best_bid недоступны
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ВСЕГДА используем current_price, НЕ signal_price!
+            # base_price используется только для логирования и финальной проверки разницы
+            base_price = current_price
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для скальпинга ПРИОРИТЕТ - best_ask/best_bid, затем current_price
+            # base_price НЕ используется для расчета лимитной цены, только для проверок
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем правильную логику для SELL и BUY
             # ✅ НОВОЕ: Используем настраиваемый offset из конфига
@@ -823,7 +866,9 @@ class FuturesOrderExecutor:
                         f"limit_price={limit_price:.2f} (>= best_ask={best_ask:.2f})"
                     )
                 elif base_price > 0:
-                    # ✅ Fallback: используем base_price только если current_price недоступен
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): base_price = current_price (НЕ signal_price!)
+                    # Если current_price недоступен, но base_price есть - это значит current_price был установлен выше
+                    # Используем base_price (который = current_price) с минимальным offset
                     min_offset = max(offset_percent, 0.01)  # Минимальный offset 0.01%
                     limit_price = base_price * (1 + min_offset / 100.0)
 
@@ -835,10 +880,10 @@ class FuturesOrderExecutor:
                         )
                         limit_price = best_ask * (1 + min_offset / 100.0)
 
-                    logger.debug(
-                        f"💰 Используем base_price (fallback) для {symbol} BUY: "
+                    logger.info(
+                        f"💰 Используем base_price (current_price) для {symbol} BUY: "
                         f"base={base_price:.2f}, offset={min_offset:.3f}%, "
-                        f"limit_price={limit_price:.2f}"
+                        f"limit_price={limit_price:.2f} (>= best_ask={best_ask:.2f})"
                     )
                 else:
                     # Fallback: используем best_ask даже если устарел
@@ -851,17 +896,29 @@ class FuturesOrderExecutor:
                     )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Финальная проверка для BUY
-                # 1. Проверяем лимит биржи max_buy_price
+                # 1. Проверяем лимит биржи max_buy_price (ВСЕГДА)
                 # 2. Убеждаемся, что цена >= best_ask (для гарантии исполнения)
                 # 3. Убеждаемся, что цена >= best_bid (защита от ошибок)
 
-                # Проверка 1: Лимит биржи
-                if limit_price > max_buy_price:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем лимит биржи max_buy_price ВСЕГДА
+                # Это критично для предотвращения ошибки 51006 (Order price is not within the price limit)
+                if max_buy_price > 0:
+                    if limit_price > max_buy_price:
+                        logger.warning(
+                            f"⚠️ Лимитная цена для {symbol} BUY ({limit_price:.2f}) превышает лимит биржи ({max_buy_price:.2f}), "
+                            f"корректируем до {max_buy_price * 0.999:.2f} (0.1% ниже лимита для безопасности)"
+                        )
+                        limit_price = (
+                            max_buy_price * 0.999
+                        )  # 0.1% ниже лимита для безопасности
+                        logger.info(
+                            f"✅ Лимитная цена для {symbol} BUY скорректирована: {limit_price:.2f} "
+                            f"(было {limit_price:.2f}, max_buy_price={max_buy_price:.2f})"
+                        )
+                else:
                     logger.warning(
-                        f"⚠️ Лимитная цена для {symbol} BUY ({limit_price:.2f}) превышает лимит биржи ({max_buy_price:.2f}), "
-                        f"корректируем до {max_buy_price:.2f}"
+                        f"⚠️ max_buy_price недоступен для {symbol} BUY, пропускаем проверку лимита биржи"
                     )
-                    limit_price = max_buy_price
 
                 # Проверка 2: Должна быть >= best_ask для гарантии исполнения
                 if best_ask > 0 and limit_price < best_ask:
@@ -940,7 +997,9 @@ class FuturesOrderExecutor:
                         f"limit_price={limit_price:.2f} (<= best_bid={best_bid:.2f})"
                     )
                 elif base_price > 0:
-                    # ✅ Fallback: используем base_price только если current_price недоступен
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): base_price = current_price (НЕ signal_price!)
+                    # Если current_price недоступен, но base_price есть - это значит current_price был установлен выше
+                    # Используем base_price (который = current_price) с минимальным offset
                     min_offset = max(offset_percent, 0.01)
                     limit_price = base_price * (1 - min_offset / 100.0)
 
@@ -952,10 +1011,10 @@ class FuturesOrderExecutor:
                         )
                         limit_price = best_bid * (1 - min_offset / 100.0)
 
-                    logger.debug(
-                        f"💰 Используем base_price (fallback) для {symbol} SELL: "
+                    logger.info(
+                        f"💰 Используем base_price (current_price) для {symbol} SELL: "
                         f"base={base_price:.2f}, offset={min_offset:.3f}%, "
-                        f"limit_price={limit_price:.2f}"
+                        f"limit_price={limit_price:.2f} (<= best_bid={best_bid:.2f})"
                     )
                 else:
                     # Fallback: используем best_bid даже если устарел
@@ -968,35 +1027,29 @@ class FuturesOrderExecutor:
                     )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Финальная проверка для SELL
-                # 1. Проверяем лимит биржи min_sell_price
+                # 1. Проверяем лимит биржи min_sell_price (ВСЕГДА, независимо от состояния best_bid)
                 # 2. Убеждаемся, что цена <= best_bid (для гарантии исполнения)
                 # 3. Убеждаемся, что цена <= best_ask (защита от ошибок)
 
-                # Проверка 1: Лимит биржи
-                if use_best_bid and best_bid > 0:
-                    # best_bid актуален, можно использовать min_sell_price
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем лимит биржи min_sell_price ВСЕГДА
+                # Это критично для предотвращения ошибки 51006 (Order price is not within the price limit)
+                if min_sell_price > 0:
                     if limit_price < min_sell_price:
                         logger.warning(
                             f"⚠️ Лимитная цена для {symbol} SELL ({limit_price:.2f}) ниже лимита биржи ({min_sell_price:.2f}), "
-                            f"корректируем до {min_sell_price * 1.0001:.2f}"
+                            f"корректируем до {min_sell_price * 1.001:.2f} (0.1% выше лимита для безопасности)"
                         )
                         limit_price = (
-                            min_sell_price * 1.0001
-                        )  # Немного выше лимита для безопасности
-                elif current_price > 0:
-                    # best_bid устарел, НЕ используем min_sell_price (он тоже устарел)
-                    logger.debug(
-                        f"💰 Не используем min_sell_price для {symbol} SELL "
-                        f"(best_bid устарел, min_sell_price тоже устарел)"
-                    )
-                else:
-                    # Fallback: используем min_sell_price
-                    if limit_price < min_sell_price:
-                        logger.warning(
-                            f"⚠️ Лимитная цена для {symbol} SELL ({limit_price:.2f}) ниже лимита биржи ({min_sell_price:.2f}), "
-                            f"корректируем до {min_sell_price * 1.0001:.2f}"
+                            min_sell_price * 1.001
+                        )  # 0.1% выше лимита для безопасности
+                        logger.info(
+                            f"✅ Лимитная цена для {symbol} SELL скорректирована: {limit_price:.2f} "
+                            f"(было {limit_price:.2f}, min_sell_price={min_sell_price:.2f})"
                         )
-                        limit_price = min_sell_price * 1.0001
+                else:
+                    logger.warning(
+                        f"⚠️ min_sell_price недоступен для {symbol} SELL, пропускаем проверку лимита биржи"
+                    )
 
                 # Проверка 2: Должна быть <= best_bid для гарантии исполнения
                 if best_bid > 0 and limit_price > best_bid:
@@ -1018,25 +1071,34 @@ class FuturesOrderExecutor:
             # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что цена в допустимом диапазоне
             # Финальная проверка лимитов биржи уже выполнена выше
 
-            # ✅ ИСПРАВЛЕНО: Проверяем разницу между limit_price и base_price (0.2% для скальпинга)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем разницу между limit_price и актуальной ценой из стакана
+            # Используем best_ask/best_bid для проверки, а не base_price (который может быть устаревшим)
+            reference_price = 0.0
+            if side.lower() == "buy":
+                reference_price = best_ask if best_ask > 0 else current_price
+            else:
+                reference_price = best_bid if best_bid > 0 else current_price
+
             price_diff_pct = (
-                abs(limit_price - base_price) / base_price * 100
-                if base_price > 0
+                abs(limit_price - reference_price) / reference_price * 100
+                if reference_price > 0
                 else 0
             )
-            if (
-                price_diff_pct > 0.2
-            ):  # ✅ ИСПРАВЛЕНО: Если разница > 0.2% - это проблема для скальпинга!
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если разница > 0.2% - это проблема для скальпинга!
+            # Это означает что ордер размещен далеко от рынка
+            if price_diff_pct > 0.2:
                 logger.error(
-                    f"❌ КРИТИЧЕСКАЯ ОШИБКА: Лимитная цена для {symbol} {side} слишком далеко от базовой! "
-                    f"limit_price={limit_price:.2f}, base_price={base_price:.2f}, "
+                    f"❌ КРИТИЧЕСКАЯ ОШИБКА: Лимитная цена для {symbol} {side} слишком далеко от рынка! "
+                    f"limit_price={limit_price:.2f}, reference_price={reference_price:.2f} "
+                    f"(best_{'ask' if side.lower() == 'buy' else 'bid'}={best_ask if side.lower() == 'buy' else best_bid:.2f}), "
                     f"разница={price_diff_pct:.2f}%, offset={offset_percent:.3f}%, режим={regime or 'N/A'}"
                 )
-                # ✅ НОВОЕ: Корректируем цену до безопасного значения
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Корректируем цену до безопасного значения от reference_price
                 if side.lower() == "buy":
-                    limit_price = base_price * 1.001  # Максимум 0.1% выше
+                    limit_price = reference_price * 1.001  # Максимум 0.1% выше
                 else:
-                    limit_price = base_price * 0.999  # Максимум 0.1% ниже
+                    limit_price = reference_price * 0.999  # Максимум 0.1% ниже
                 logger.warning(
                     f"⚠️ Цена скорректирована до безопасного значения: {limit_price:.2f} "
                     f"(было {limit_price:.2f}, разница была {price_diff_pct:.2f}%)"
@@ -1052,10 +1114,10 @@ class FuturesOrderExecutor:
             offset_type = "adaptive" if adaptive_offset_pct is not None else "config"
             logger.info(
                 f"💰 Лимитная цена для {symbol} {side}: {limit_price:.2f} "
-                f"(best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, base_price={base_price:.2f}, "
-                f"signal_price={signal_price if signal_price else 'N/A'}, current_price={current_price:.2f}, "
+                f"(best_bid={best_bid:.2f}, best_ask={best_ask:.2f}, current_price={current_price:.2f}, "
+                f"signal_price={signal_price if signal_price else 'N/A'} [НЕ ИСПОЛЬЗУЕТСЯ], "
                 f"spread={spread:.6f} ({spread_pct:.4f}%), offset={offset_used:.4f}% ({offset_type}), "
-                f"режим={regime or 'default'}, разница={price_diff_pct:.2f}%, "
+                f"режим={regime or 'default'}, разница от рынка={price_diff_pct:.2f}%, "
                 f"лимиты: max_buy={max_buy_price:.2f}, min_sell={min_sell_price:.2f})"
             )
             logger.debug(
@@ -1982,8 +2044,17 @@ class FuturesOrderExecutor:
                 sl_multiplier = regime_params.get("sl_atr_multiplier", 0.4)
             else:
                 # Fallback на конфигурацию
-                tp_multiplier = float(self.scalping_config.get("tp_percent", 0.3))
-                sl_multiplier = float(self.scalping_config.get("sl_percent", 0.2))
+                # ✅ ИСПРАВЛЕНО: Проверяем как dict и как Pydantic модель
+                if isinstance(self.scalping_config, dict):
+                    tp_multiplier = float(self.scalping_config.get("tp_percent", 0.3))
+                    sl_multiplier = float(self.scalping_config.get("sl_percent", 0.2))
+                else:
+                    tp_multiplier = float(
+                        getattr(self.scalping_config, "tp_percent", 0.3)
+                    )
+                    sl_multiplier = float(
+                        getattr(self.scalping_config, "sl_percent", 0.2)
+                    )
 
             # ✅ ОБРАБОТКА КОНФЛИКТА RSI/EMA: Ужесточаем TP/SL для быстрого скальпа
             has_conflict = signal.get("has_conflict", False)
@@ -2182,7 +2253,13 @@ class FuturesOrderExecutor:
             if hasattr(self.scalping_config, "adaptive_regime"):
                 adaptive_regime = getattr(self.scalping_config, "adaptive_regime", None)
             elif isinstance(self.scalping_config, dict):
-                adaptive_regime = self.scalping_config.get("adaptive_regime", {})
+                # ✅ ИСПРАВЛЕНО: Проверяем как dict и как Pydantic модель
+                if isinstance(self.scalping_config, dict):
+                    adaptive_regime = self.scalping_config.get("adaptive_regime", {})
+                else:
+                    adaptive_regime = (
+                        getattr(self.scalping_config, "adaptive_regime", {}) or {}
+                    )
 
             if not adaptive_regime:
                 logger.warning(

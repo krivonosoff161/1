@@ -279,16 +279,16 @@ class ExitDecisionCoordinator:
             if not self.smart_exit_coordinator:
                 return None
 
+            # ✅ ИСПРАВЛЕНИЕ #9 (04.01.2026): Используем правильный метод check_position()
             # Получаем решение от Smart Exit Coordinator
-            # (нужно проверить методы SmartExitCoordinator)
-            if hasattr(self.smart_exit_coordinator, "should_close"):
-                should_close, reason = await self.smart_exit_coordinator.should_close(
-                    symbol, position, metadata, market_data, current_price, regime
+            if hasattr(self.smart_exit_coordinator, "check_position"):
+                smart_result = await self.smart_exit_coordinator.check_position(
+                    symbol, position
                 )
-                if should_close:
+                if smart_result and smart_result.get("action") == "close":
                     return {
                         "action": "close",
-                        "reason": f"smart_exit_{reason}",
+                        "reason": smart_result.get("reason", "smart_exit"),
                         "current_price": current_price,
                     }
 

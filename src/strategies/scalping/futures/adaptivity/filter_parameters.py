@@ -54,9 +54,9 @@ class AdaptiveFilterParameters:
         self.data_registry = data_registry
         self.trading_statistics = trading_statistics
 
-        # Агрессивное кэширование (60 секунд)
+        # ✅ ИСПРАВЛЕНИЕ #23 (04.01.2026): Уменьшено TTL кэша с 60 до 15 секунд для более быстрого обновления
         self._cache: Dict[str, Tuple[float, float]] = {}  # {key: (value, timestamp)}
-        self._cache_ttl = 60.0
+        self._cache_ttl = 15.0
 
         # Метрики для валидации
         self.metrics = {

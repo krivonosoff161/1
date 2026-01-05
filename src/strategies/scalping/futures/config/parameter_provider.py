@@ -575,6 +575,11 @@ class ParameterProvider:
         """
         Получить текущий режим рынка для символа.
 
+        ✅ ИСПРАВЛЕНИЕ #22 (04.01.2026): Логируем fallback режим "ranging"
+        """
+        """
+        Получить текущий режим рынка для символа.
+
         Args:
             symbol: Торговый символ
 
@@ -599,11 +604,14 @@ class ParameterProvider:
                     )
 
         except Exception as e:
-            logger.debug(
+            logger.warning(
                 f"⚠️ ParameterProvider: Ошибка определения режима для {symbol}: {e}"
             )
 
-        # Fallback на ranging
+        # ✅ ИСПРАВЛЕНИЕ #22 (04.01.2026): Логируем fallback режим "ranging"
+        logger.warning(
+            f"⚠️ ParameterProvider: Режим не определен для {symbol}, используется fallback 'ranging'"
+        )
         return "ranging"
 
     def _get_default_regime_params(self) -> Dict[str, Any]:

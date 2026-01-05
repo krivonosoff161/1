@@ -712,11 +712,14 @@ class SignalCoordinator:
                 balance, current_price
             )
 
+            # ✅ ИСПРАВЛЕНИЕ #32 (04.01.2026): Улучшенное логирование validate_signal (INFO/WARNING)
             # Проверка минимального размера
             min_size = self.scalping_config.min_position_size
             if max_size < min_size:
                 logger.warning(
-                    f"Максимальный размер позиции {max_size:.6f} меньше минимального {min_size:.6f}"
+                    f"🚫 [VALIDATION] {symbol} {side.upper()}: Сигнал заблокирован - "
+                    f"максимальный размер позиции {max_size:.6f} < минимального {min_size:.6f} | "
+                    f"Баланс: ${balance:.2f}, Цена: ${current_price:.2f}"
                 )
                 return False
 
@@ -734,13 +737,23 @@ class SignalCoordinator:
             )
 
             if not is_valid:
-                logger.warning(f"Сигнал не прошел валидацию: {reason}")
+                logger.warning(
+                    f"🚫 [VALIDATION] {symbol} {side.upper()}: Сигнал заблокирован - "
+                    f"Slippage Guard: {reason} | "
+                    f"Размер: {max_size:.6f}, Цена: ${current_price:.2f}"
+                )
                 return False
 
+            logger.debug(
+                f"✅ [VALIDATION] {symbol} {side.upper()}: Сигнал прошел валидацию | "
+                f"Размер: {max_size:.6f}, Цена: ${current_price:.2f}, Баланс: ${balance:.2f}"
+            )
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка валидации сигнала: {e}")
+            logger.error(
+                f"❌ [VALIDATION] {symbol}: Ошибка валидации сигнала: {e}", exc_info=True
+            )
             return False
 
     async def execute_signal(self, signal: Dict[str, Any]):
@@ -809,9 +822,10 @@ class SignalCoordinator:
                     if (signal_is_long and pos_is_long) or (
                         signal_is_short and pos_is_short
                     ):
-                        logger.debug(
-                            f"⚠️ Позиция {symbol} {pos_side.upper()} уже открыта, "
-                            f"сигнал в том же направлении - пропускаем"
+                        logger.info(
+                            f"🚫 [VALIDATION] {symbol} {side.upper()}: Сигнал заблокирован - "
+                            f"позиция {pos_side.upper()} уже открыта (size={abs(float(symbol_positions[0].get('pos', '0'))):.6f}), "
+                            f"сигнал в том же направлении"
                         )
                         return
 
@@ -872,7 +886,8 @@ class SignalCoordinator:
                 ]
                 if len(open_position_orders) > 0:
                     logger.warning(
-                        f"⚠️ Уже есть {len(open_position_orders)} активных ордеров для {symbol}, пропускаем"
+                        f"🚫 [VALIDATION] {symbol} {side.upper()}: Сигнал заблокирован - "
+                        f"уже есть {len(open_position_orders)} активных ордеров для открытия позиции"
                     )
                     return
             except Exception as e:
@@ -1531,11 +1546,10 @@ class SignalCoordinator:
                                     await self.signal_generator._get_market_data(symbol)
                                 )
                                 if market_data:
-                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Берем ADX из DataRegistry, а не из market_data.indicators
-                                    # market_data.indicators не содержит ADX, он хранится отдельно в DataRegistry
-                                    adx_value = 0.0
-                                    adx_trend = "unknown"
-                                    rsi = 50.0
+                                    # ✅ ИСПРАВЛЕНО: Берем ADX из DataRegistry БЕЗ fallback - показываем реальное состояние
+                                    adx_value = None
+                                    adx_trend = None
+                                    rsi = None
 
                                     # Пытаемся получить ADX из DataRegistry
                                     if self.data_registry:
@@ -1549,6 +1563,9 @@ class SignalCoordinator:
                                                 adx_from_reg = (
                                                     indicators_from_registry.get("adx")
                                                 )
+                                                # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #1: НЕ используем ADX=0.0 (считаем что его нет для fallback)
+                                                if adx_from_reg == 0.0:
+                                                    adx_from_reg = None
                                                 if (
                                                     adx_from_reg
                                                     and isinstance(
@@ -1590,91 +1607,210 @@ class SignalCoordinator:
                                                 f"⚠️ Не удалось получить ADX из DataRegistry для {symbol}: {e}"
                                             )
 
-                                    # Если ADX не получили из DataRegistry, берем из market_data.indicators (fallback)
-                                    if adx_value == 0.0:
-                                        indicators = (
-                                            market_data.indicators
-                                            if hasattr(market_data, "indicators")
-                                            else {}
-                                        )
-                                        adx_value = indicators.get(
-                                            "adx", indicators.get("adx_proxy", 0)
-                                        )
-                                        rsi = indicators.get("rsi", 50)
-
-                                        # Пытаемся определить тренд через adx_filter (fallback)
+                                    # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #8: Получаем индикаторы из DataRegistry (приоритет) или market_data.indicators
+                                    indicators_from_registry = None
+                                    if self.data_registry:
                                         try:
-                                            if (
-                                                self.signal_generator.adx_filter
-                                                and market_data.ohlcv_data
-                                            ):
-                                                candles_dict = []
-                                                for candle in market_data.ohlcv_data:
-                                                    candles_dict.append(
-                                                        {
-                                                            "high": candle.high,
-                                                            "low": candle.low,
-                                                            "close": candle.close,
-                                                        }
-                                                    )
-                                                from src.strategies.modules.adx_filter import \
-                                                    OrderSide
-
-                                                buy_result = self.signal_generator.adx_filter.check_trend_strength(
-                                                    symbol, OrderSide.BUY, candles_dict
+                                            indicators_from_registry = (
+                                                await self.data_registry.get_indicators(
+                                                    symbol
                                                 )
-                                                adx_value_check = buy_result.adx_value
-                                                adx_plus_di = buy_result.plus_di
-                                                adx_minus_di = buy_result.minus_di
+                                            )
+                                            if indicators_from_registry:
+                                                logger.debug(
+                                                    f"✅ [INDICATORS] {symbol}: Индикаторы получены из DataRegistry, ключи: {list(indicators_from_registry.keys())}"
+                                                )
+                                        except Exception as e:
+                                            logger.error(
+                                                f"❌ [INDICATORS] {symbol}: Ошибка получения индикаторов из DataRegistry: {e}",
+                                                exc_info=True,
+                                            )
 
-                                                if adx_value_check > 0:
-                                                    adx_value = adx_value_check
-
-                                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Снижен порог ADX с 25 до 20
-                                                if adx_value >= 20.0:
-                                                    if adx_plus_di > adx_minus_di + 5.0:
-                                                        adx_trend = "bullish"
-                                                    elif (
-                                                        adx_minus_di > adx_plus_di + 5.0
-                                                    ):
-                                                        adx_trend = "bearish"
-                                                    else:
-                                                        adx_trend = "ranging"
-                                                else:
-                                                    adx_trend = "ranging"
-                                        except Exception:
-                                            pass
-                                    else:
-                                        # Если ADX получен из DataRegistry, берем RSI из indicators
-                                        indicators = (
+                                    # Если DataRegistry недоступен, используем market_data.indicators
+                                    if not indicators_from_registry:
+                                        indicators_from_registry = (
                                             market_data.indicators
                                             if hasattr(market_data, "indicators")
                                             else {}
                                         )
-                                        rsi = indicators.get("rsi", 50)
+                                        if indicators_from_registry:
+                                            logger.debug(
+                                                f"⚠️ [INDICATORS] {symbol}: Используем market_data.indicators (DataRegistry недоступен), ключи: {list(indicators_from_registry.keys())}"
+                                            )
+                                        else:
+                                            logger.error(
+                                                f"❌ [INDICATORS] {symbol}: Индикаторы недоступны ни в DataRegistry, ни в market_data.indicators - ПРОПУСКАЕМ проверку сигналов"
+                                            )
 
-                                    # ✅ НОВОЕ (03.01.2026): Детальное логирование причин отсутствия сигналов
-                                    macd_hist = "N/A"
-                                    atr_value_log = "N/A"
-                                    try:
-                                        if indicators:
-                                            macd_dict = indicators.get("macd", {})
-                                            if isinstance(macd_dict, dict):
-                                                macd_hist = macd_dict.get(
-                                                    "histogram", "N/A"
+                                    # Используем indicators_from_registry для получения RSI, MACD, ATR
+                                    if indicators_from_registry:
+                                        if adx_value is None or adx_value == 0.0:
+                                            adx_value = indicators_from_registry.get(
+                                                "adx"
+                                            ) or indicators_from_registry.get(
+                                                "adx_proxy"
+                                            )
+                                            if adx_value is None:
+                                                logger.warning(
+                                                    f"⚠️ [ADX] {symbol}: ADX НЕ найден в индикаторах"
                                                 )
-                                            atr = indicators.get("atr")
+                                        rsi = indicators_from_registry.get("rsi")
+                                        if rsi is None:
+                                            logger.warning(
+                                                f"⚠️ [RSI] {symbol}: RSI НЕ найден в индикаторах"
+                                            )
+                                    else:
+                                        # Если индикаторы недоступны, логируем и продолжаем (не блокируем)
+                                        logger.error(
+                                            f"❌ [INDICATORS] {symbol}: Не удалось получить индикаторы - используем только ADX из DataRegistry"
+                                        )
+
+                                    # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #8: Получаем MACD и ATR из indicators_from_registry (БЕЗ FALLBACK)
+                                    macd_hist = None
+                                    atr_value_log = None
+                                    try:
+                                        if not indicators_from_registry:
+                                            logger.error(
+                                                f"❌ [INDICATORS] {symbol}: indicators_from_registry пуст для получения MACD/ATR"
+                                            )
+                                        else:
+                                            macd_dict = indicators_from_registry.get(
+                                                "macd"
+                                            )
+                                            if macd_dict and isinstance(
+                                                macd_dict, dict
+                                            ):
+                                                macd_hist = macd_dict.get("histogram")
+                                                if macd_hist is None:
+                                                    logger.warning(
+                                                        f"⚠️ [MACD] {symbol}: MACD histogram НЕ найден в indicators.macd"
+                                                    )
+                                            else:
+                                                logger.warning(
+                                                    f"⚠️ [MACD] {symbol}: MACD НЕ найден в indicators или не является dict (macd_dict={macd_dict})"
+                                                )
+
+                                            atr = indicators_from_registry.get(
+                                                "atr"
+                                            ) or indicators_from_registry.get("atr_14")
                                             if atr is not None and atr > 0:
                                                 atr_value_log = f"{atr:.2f}"
-                                    except Exception:
-                                        pass
+                                            else:
+                                                logger.warning(
+                                                    f"⚠️ [ATR] {symbol}: ATR НЕ найден в indicators или равен 0/None (atr={atr})"
+                                                )
+                                    except Exception as e:
+                                        logger.error(
+                                            f"❌ [INDICATORS] {symbol}: ОШИБКА получения MACD/ATR: {e}",
+                                            exc_info=True,
+                                        )
+
+                                    # Получаем статусы фильтров из FilterManager для детального логирования
+                                    filter_statuses = []
+                                    try:
+                                        if (
+                                            hasattr(
+                                                self.signal_generator, "filter_manager"
+                                            )
+                                            and self.signal_generator.filter_manager
+                                        ):
+                                            filter_manager = (
+                                                self.signal_generator.filter_manager
+                                            )
+                                            # Проверяем кэш фильтров для определения их статуса
+                                            cache = filter_manager.filter_cache.get(
+                                                symbol, {}
+                                            )
+                                            if cache:
+                                                cache_age = time.time() - cache.get(
+                                                    "ts", 0
+                                                )
+                                                if cache_age < 30:  # Кэш актуален
+                                                    if cache.get("adx") is False:
+                                                        filter_statuses.append(
+                                                            "ADX Filter BLOCKED (из кэша)"
+                                                        )
+                                                    elif cache.get("adx") is True:
+                                                        filter_statuses.append(
+                                                            "ADX Filter PASSED (из кэша)"
+                                                        )
+
+                                                    if cache.get("mtf") is False:
+                                                        filter_statuses.append(
+                                                            "MTF Filter BLOCKED (из кэша)"
+                                                        )
+                                                    elif cache.get("mtf") is True:
+                                                        filter_statuses.append(
+                                                            "MTF Filter PASSED (из кэша)"
+                                                        )
+
+                                                    if cache.get("pivot") is False:
+                                                        filter_statuses.append(
+                                                            "Pivot Filter BLOCKED (из кэша)"
+                                                        )
+                                                    elif cache.get("pivot") is True:
+                                                        filter_statuses.append(
+                                                            "Pivot Filter PASSED (из кэша)"
+                                                        )
+
+                                                    if (
+                                                        cache.get("volume_profile")
+                                                        is False
+                                                    ):
+                                                        filter_statuses.append(
+                                                            "VolumeProfile Filter BLOCKED (из кэша)"
+                                                        )
+                                                    elif (
+                                                        cache.get("volume_profile")
+                                                        is True
+                                                    ):
+                                                        filter_statuses.append(
+                                                            "VolumeProfile Filter PASSED (из кэша)"
+                                                        )
+
+                                    except Exception as e:
+                                        logger.debug(
+                                            f"⚠️ Ошибка получения статусов фильтров для {symbol}: {e}"
+                                        )
+
+                                    filter_status_str = (
+                                        ", ".join(filter_statuses)
+                                        if filter_statuses
+                                        else "статусы фильтров недоступны (кэш пуст или устарел)"
+                                    )
+
+                                    # Форматируем значения БЕЗ fallback
+                                    adx_value_str = (
+                                        f"{adx_value:.1f}"
+                                        if adx_value is not None
+                                        else "НЕ РАССЧИТАН"
+                                    )
+                                    adx_trend_str = (
+                                        adx_trend if adx_trend else "НЕ ОПРЕДЕЛЕН"
+                                    )
+                                    rsi_str = (
+                                        f"{rsi:.1f}"
+                                        if rsi is not None
+                                        else "НЕ РАССЧИТАН"
+                                    )
+                                    macd_hist_str = (
+                                        f"{macd_hist:.3f}"
+                                        if macd_hist is not None
+                                        else "НЕ РАССЧИТАН"
+                                    )
+                                    atr_value_log_str = (
+                                        atr_value_log
+                                        if atr_value_log
+                                        else "НЕ РАССЧИТАН"
+                                    )
 
                                     logger.warning(
                                         f"🚫 НЕТ СИГНАЛОВ: {symbol} - signal_generator.generate_signals() вернул 0 сигналов | "
-                                        f"Индикаторы: ADX={adx_value:.1f} ({adx_trend}), RSI={rsi:.1f}, "
-                                        f"MACD_hist={macd_hist}, ATR={atr_value_log} | "
-                                        f"Возможные причины: индикаторы не дали сигналов (значения вне порогов), "
-                                        f"все фильтры заблокировали сигналы, режим рынка ({adx_trend}) не подходит, "
+                                        f"Индикаторы: ADX={adx_value_str} ({adx_trend_str}), RSI={rsi_str}, "
+                                        f"MACD_hist={macd_hist_str}, ATR={atr_value_log_str} | "
+                                        f"Фильтры: {filter_status_str} | "
+                                        f"Возможные причины: индикаторы не дали сигналов (значения вне порогов: RSI не в 30-70, MACD нет crossover), "
+                                        f"фильтры заблокировали сигналы (если были сгенерированы), режим рынка ({adx_trend_str}) не подходит, "
                                         f"нет подходящих условий | "
                                         f"Источник: SignalGenerator.generate_signals() -> _generate_base_signals()"
                                     )
@@ -2243,6 +2379,15 @@ class SignalCoordinator:
                         leverage_config = getattr(self.scalping_config, "leverage", 10)
 
                     # ✅ ИТЕРАЦИЯ 2: Пересчитываем notional = margin * leverage
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверка на None перед умножением
+                    if base_margin_usd is None or leverage_config is None:
+                        logger.error(
+                            f"❌ [LEVERAGE] {symbol}: base_margin_usd={base_margin_usd} или leverage_config={leverage_config} равен None - "
+                            f"не можем рассчитать notional, используем стандартный расчет"
+                        )
+                        raise ValueError(
+                            f"base_margin_usd или leverage_config равен None для {symbol}"
+                        )
                     estimated_notional_usd = base_margin_usd * leverage_config
 
                     # ✅ КРИТИЧНО: Снижаем плечо для ETH при большом notional (>$200) для защиты от ADL
@@ -2256,11 +2401,26 @@ class SignalCoordinator:
                             )
                             leverage_config = max_leverage_for_eth
                             # Пересчитываем notional с новым leverage
-                            estimated_notional_usd = base_margin_usd * leverage_config
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверка на None перед умножением
+                            if (
+                                base_margin_usd is not None
+                                and leverage_config is not None
+                            ):
+                                estimated_notional_usd = (
+                                    base_margin_usd * leverage_config
+                                )
 
+                    # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование расчета leverage для каждой пары
+                    volatility_str = (
+                        f"{volatility*100:.2f}%" if volatility is not None else "N/A"
+                    )
                     logger.info(
-                        f"📊 [LEVERAGE_ITERATIVE] {symbol}: Margin=${base_margin_usd:.2f}, "
-                        f"Leverage={leverage_config}x, Notional=${estimated_notional_usd:.2f}"
+                        f"📊 [PARAMS_LEVERAGE] {symbol} ({regime}): Расчет leverage | "
+                        f"Базовая маржа=${base_margin_usd:.2f} (профиль: {balance_profile or 'unknown'}), "
+                        f"Волатильность={volatility_str}, "
+                        f"Адаптивный leverage={leverage_config}x, "
+                        f"Notional=${estimated_notional_usd:.2f} | "
+                        f"Источник: AdaptiveLeverage.calculate_leverage()"
                     )
             except Exception as e:
                 logger.debug(
@@ -2292,12 +2452,14 @@ class SignalCoordinator:
                         f"Добавьте leverage в config_futures.yaml!"
                     )
                     leverage_config = 3
-                # ✅ УЛУЧШЕНИЕ: Детальное логирование левериджа
+                # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование фиксированного leverage для каждой пары
                 volatility_str = f"{volatility*100:.2f}%" if volatility else "N/A"
                 logger.info(
-                    f"📊 [LEVERAGE_FINAL] {symbol}: Фиксированный леверидж={leverage_config}x (из конфига) | "
-                    f"сила={signal.get('strength', 0.5):.2f}, режим={regime}, "
-                    f"волатильность={volatility_str}"
+                    f"📊 [PARAMS_LEVERAGE] {symbol} ({regime}): Фиксированный leverage | "
+                    f"leverage={leverage_config}x (из конфига), "
+                    f"сила сигнала={signal.get('strength', 0.5):.2f}, "
+                    f"волатильность={volatility_str} | "
+                    f"Источник: scalping_config.leverage (фиксированный, AdaptiveLeverage недоступен)"
                 )
                 # ✅ ИСПРАВЛЕНИЕ: Добавляем leverage в signal для использования в risk_manager
                 signal["leverage"] = leverage_config
@@ -2406,11 +2568,15 @@ class SignalCoordinator:
                 # Получаем режим
                 current_regime = signal.get("regime") or regime or "unknown"
 
-                # Конвертируем размер из контрактов в монеты и USD
+                # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #2: Конвертируем размер из МОНЕТ в контракты и USD для логирования
                 try:
                     details = await self.client.get_instrument_details(symbol)
                     ct_val = float(details.get("ctVal", 0.01))
-                    size_in_coins = position_size * ct_val
+                    # ✅ position_size уже в МОНЕТАХ (из RiskManager), конвертируем в контракты для логов
+                    size_in_coins = position_size  # ✅ position_size уже в монетах!
+                    size_in_contracts = (
+                        position_size / ct_val if ct_val > 0 else 0
+                    )  # Для логов
                     notional_usd = size_in_coins * price
                     margin_usd = (
                         notional_usd / leverage_config if leverage_config > 0 else 0.0
@@ -2419,7 +2585,8 @@ class SignalCoordinator:
                     logger.debug(
                         f"⚠️ Ошибка получения деталей инструмента для логирования: {e}"
                     )
-                    size_in_coins = position_size * 0.01  # Fallback
+                    size_in_coins = position_size  # ✅ position_size уже в монетах!
+                    size_in_contracts = position_size / 0.01  # Fallback для логов
                     notional_usd = size_in_coins * price
                     margin_usd = (
                         notional_usd / leverage_config if leverage_config > 0 else 0.0
@@ -2428,7 +2595,7 @@ class SignalCoordinator:
                 logger.info(
                     f"📊 [PARAMS] {symbol} ({current_regime}): РАСЧЕТ РАЗМЕРА ПОЗИЦИИ | "
                     f"Баланс: ${balance:.2f} (профиль: {balance_profile_name}), "
-                    f"Размер: {position_size:.6f} контрактов ({size_in_coins:.6f} монет), "
+                    f"Размер: {size_in_contracts:.6f} контрактов ({size_in_coins:.6f} монет), "
                     f"Notional: ${notional_usd:.2f} USD, Леверидж: {leverage_config}x, "
                     f"Маржа: ${margin_usd:.2f} USD | "
                     f"Источник: RiskManager.calculate_position_size()"
@@ -2843,6 +3010,38 @@ class SignalCoordinator:
                     )
                 except Exception:
                     pass
+
+            # ✅ ИСПРАВЛЕНИЕ #30 (04.01.2026): Итоговое логирование размера позиции перед открытием
+            try:
+                # Конвертируем размер из контрактов в монеты и USD для логирования
+                try:
+                    details = await self.client.get_instrument_details(symbol)
+                    ct_val = float(details.get("ctVal", 0.01))
+                    size_in_coins = position_size * ct_val
+                    notional_usd = size_in_coins * price
+                    margin_usd = (
+                        notional_usd / leverage_config if leverage_config > 0 else 0.0
+                    )
+                except Exception:
+                    size_in_coins = position_size * 0.01  # Fallback
+                    notional_usd = size_in_coins * price
+                    margin_usd = (
+                        notional_usd / leverage_config if leverage_config > 0 else 0.0
+                    )
+
+                logger.info(
+                    f"💰 ИТОГОВЫЙ РАЗМЕР ПОЗИЦИИ ПЕРЕД ОТКРЫТИЕМ: {symbol} {signal.get('side', 'N/A').upper()} | "
+                    f"Размер: {position_size:.6f} контрактов ({size_in_coins:.6f} монет) | "
+                    f"Notional: ${notional_usd:.2f} USD | "
+                    f"Маржа: ${margin_usd:.2f} USD (леверидж: {leverage_config}x) | "
+                    f"Цена входа: ${price:.2f} | "
+                    f"Баланс: ${balance:.2f} (профиль: {balance_profile or 'unknown'}) | "
+                    f"Режим: {regime or 'unknown'}"
+                )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Ошибка итогового логирования размера позиции для {symbol}: {e}"
+                )
 
             # ✅ НОВОЕ: Используем EntryManager для централизованного открытия позиций
             # EntryManager откроет позицию через order_executor и зарегистрирует в PositionRegistry
@@ -3365,7 +3564,7 @@ class SignalCoordinator:
                 # Сохраняем в active_positions
                 if symbol not in self.active_positions_ref:
                     self.active_positions_ref[symbol] = {}
-                from datetime import timezone
+                # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #5: Удален локальный импорт timezone (используется глобальный из строки 13)
 
                 entry_time = datetime.now(timezone.utc)
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем режим из сигнала для сохранения в позиции

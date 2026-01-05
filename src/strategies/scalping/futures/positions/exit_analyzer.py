@@ -899,38 +899,22 @@ class ExitAnalyzer:
         # ATR-based TP обеспечивает адаптацию к волатильности рынка
         if current_price and current_price > 0:
             try:
-                # Используем ATRProvider для получения ATR (синхронно)
-                atr_1m = self.atr_provider.get_atr(symbol, fallback=5.0)
+                # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Используем ATRProvider БЕЗ fallback
+                if not self.atr_provider:
+                    logger.error(
+                        f"❌ [ATR] {symbol}: ATRProvider недоступен для расчета TP/SL - ПРОПУСКАЕМ расчет"
+                    )
+                    return None, None
 
-                # Если ATR не найден в кэше, пробуем получить из market_data как fallback
-                if atr_1m is None and market_data:
-                    try:
-                        # Пробуем разные ключи для ATR в market_data
-                        if isinstance(market_data, dict):
-                            atr_1m = (
-                                market_data.get("atr")
-                                or market_data.get("atr_1m")
-                                or market_data.get("atr_14")
-                                or market_data.get("ATR")
-                            )
-                        elif hasattr(market_data, "get"):
-                            atr_1m = (
-                                market_data.get("atr")
-                                or market_data.get("atr_1m")
-                                or market_data.get("atr_14")
-                                or market_data.get("ATR")
-                            )
-                        if atr_1m:
-                            atr_1m = float(atr_1m)
-                            # Обновляем кэш в ATRProvider
-                            self.atr_provider.update_atr(symbol, atr_1m)
-                            logger.debug(
-                                f"✅ [ATR_TP] {symbol}: ATR получен из market_data и обновлен в кэше: {atr_1m:.6f}"
-                            )
-                    except Exception as e:
-                        logger.debug(
-                            f"⚠️ [ATR_TP] {symbol}: Не удалось получить ATR из market_data: {e}"
-                        )
+                atr_1m = self.atr_provider.get_atr(symbol)  # БЕЗ FALLBACK
+                if atr_1m is None:
+                    logger.error(
+                        f"❌ [ATR] {symbol}: ATR не найден через ATRProvider для расчета TP/SL - ПРОПУСКАЕМ расчет"
+                    )
+                    return None, None
+
+                # ✅ ИСПРАВЛЕНО: ATR найден через ATRProvider, продолжаем расчет TP/SL
+                # БЕЗ FALLBACK - если ATR не найден, уже вернули None выше
 
                 if atr_1m and atr_1m > 0:
                     # ✅ ГРОК ФИКС: ATR-based TP: max(1.5%, 2.5*ATR_1m) для ranging с per-symbol adjustment
@@ -953,6 +937,17 @@ class ExitAnalyzer:
                         tp_min_percent, min(tp_max_percent, atr_tp_percent)
                     )
 
+                    # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование расчета TP для каждой пары
+                    logger.info(
+                        f"📊 [PARAMS_TP] {symbol} ({regime}): ATR-based TP расчет | "
+                        f"ATR_1m={atr_1m:.6f}, ATR%={atr_pct:.4f}%, "
+                        f"base_multiplier={tp_atr_multiplier:.2f}, per_symbol_mult={symbol_mult:.2f} ({symbol}), "
+                        f"atr_tp_before_symbol={atr_tp_percent/symbol_mult:.4f}%, "
+                        f"atr_tp_after_symbol={atr_tp_percent:.4f}%, "
+                        f"min={tp_min_percent:.2f}%, max={tp_max_percent:.2f}%, "
+                        f"FINAL TP={tp_percent:.2f}% | "
+                        f"Источник: ATR-based расчет с per-symbol adjustment"
+                    )
                     logger.debug(
                         f"✅ [ATR_TP] {symbol}: ATR-based TP | "
                         f"ATR_1m={atr_1m:.6f}, ATR%={atr_pct:.4f}%, "
@@ -1161,42 +1156,27 @@ class ExitAnalyzer:
         # ATR-based SL обеспечивает адаптацию к волатильности рынка
         if current_price and current_price > 0:
             try:
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Используем ATRProvider для синхронного доступа к ATR
-                # ATRProvider.get_atr() не принимает аргумент timeframe, только symbol и fallback
+                # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Используем ATRProvider БЕЗ fallback
                 atr_1m = None
-                if self.atr_provider:
-                    atr_1m = self.atr_provider.get_atr(symbol, fallback=5.0)
-                    if atr_1m:
+                if not self.atr_provider:
+                    logger.error(
+                        f"❌ [ATR_SL] {symbol}: ATRProvider недоступен - ПРОПУСКАЕМ расчет SL"
+                    )
+                    return None
+                else:
+                    atr_1m = self.atr_provider.get_atr(symbol)  # БЕЗ FALLBACK
+                    if atr_1m is None:
+                        logger.error(
+                            f"❌ [ATR_SL] {symbol}: ATR не найден через ATRProvider - ПРОПУСКАЕМ расчет SL"
+                        )
+                        return None
+                    else:
                         logger.debug(
                             f"✅ [ATR_SL] {symbol}: ATR получен через ATRProvider: {atr_1m:.6f}"
                         )
 
-                # Fallback: пробуем получить ATR из market_data
-                if atr_1m is None and market_data:
-                    try:
-                        if isinstance(market_data, dict):
-                            atr_1m = (
-                                market_data.get("atr")
-                                or market_data.get("atr_1m")
-                                or market_data.get("atr_14")
-                                or market_data.get("ATR")
-                            )
-                        elif hasattr(market_data, "get"):
-                            atr_1m = (
-                                market_data.get("atr")
-                                or market_data.get("atr_1m")
-                                or market_data.get("atr_14")
-                                or market_data.get("ATR")
-                            )
-                        if atr_1m:
-                            atr_1m = float(atr_1m)
-                            logger.debug(
-                                f"✅ [ATR_SL] {symbol}: ATR получен из market_data: {atr_1m:.6f}"
-                            )
-                    except Exception as e:
-                        logger.debug(
-                            f"⚠️ [ATR_SL] {symbol}: Не удалось получить ATR из market_data: {e}"
-                        )
+                # ✅ ИСПРАВЛЕНО: ATR найден через ATRProvider, продолжаем расчет SL
+                # БЕЗ FALLBACK - если ATR не найден, уже вернули None выше
 
                 # ✅ ИСПРАВЛЕНО (28.12.2025): Удален проблемный fallback через IndicatorManager.get_indicator()
                 # IndicatorManager не имеет метода get_indicator(), используем только ATRProvider и fallback на фиксированный SL
@@ -1204,11 +1184,22 @@ class ExitAnalyzer:
                 # ✅ ИСПРАВЛЕНО: Используем ATR для расчета SL если доступен
                 if atr_1m and atr_1m > 0:
                     # ATR-based SL: max(min_percent, ATR% * multiplier)
-                    atr_sl_percent = (atr_1m / current_price) * 100 * sl_atr_multiplier
+                    atr_pct = (atr_1m / current_price) * 100
+                    atr_sl_percent = atr_pct * sl_atr_multiplier
                     sl_percent = max(sl_min_percent, atr_sl_percent)
+
+                    # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование расчета SL для каждой пары
+                    logger.info(
+                        f"📊 [PARAMS_SL] {symbol} ({regime}): ATR-based SL расчет | "
+                        f"ATR_1m={atr_1m:.6f}, ATR%={atr_pct:.4f}%, "
+                        f"multiplier={sl_atr_multiplier:.2f}, "
+                        f"atr_sl={atr_sl_percent:.4f}%, min={sl_min_percent:.2f}%, "
+                        f"FINAL SL={sl_percent:.2f}% | "
+                        f"Источник: ATR-based расчет"
+                    )
                     logger.debug(
                         f"✅ [ATR_SL] {symbol}: ATR-based SL | "
-                        f"ATR_1m={atr_1m:.6f}, ATR%={(atr_1m/current_price)*100:.4f}%, "
+                        f"ATR_1m={atr_1m:.6f}, ATR%={atr_pct:.4f}%, "
                         f"multiplier={sl_atr_multiplier:.2f}, min={sl_min_percent:.2f}%, "
                         f"final SL={sl_percent:.2f}%"
                     )
@@ -1789,6 +1780,13 @@ class ExitAnalyzer:
             True если обнаружен разворот, False если нет
         """
         reversal_detected = False
+        order_flow_reversal = False
+        mtf_reversal = False
+
+        # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование проверки разворота
+        logger.info(
+            f"🔍 [REVERSAL_CHECK] {symbol} {position_side.upper()}: Начало проверки признаков разворота"
+        )
 
         # Проверка Order Flow разворота
         if self.order_flow:
@@ -1797,6 +1795,12 @@ class ExitAnalyzer:
                 avg_delta = self.order_flow.get_avg_delta(periods=10)
                 reversal_threshold = 0.15  # 15% изменение delta
 
+                logger.info(
+                    f"🔍 [REVERSAL_CHECK] {symbol} {position_side.upper()}: Order Flow данные | "
+                    f"current_delta={current_delta:.3f}, avg_delta={avg_delta:.3f}, "
+                    f"threshold={reversal_threshold:.3f}"
+                )
+
                 if position_side.lower() == "long":
                     # Для LONG: разворот = delta был положительным и стал отрицательным
                     if (
@@ -1804,9 +1808,17 @@ class ExitAnalyzer:
                         and avg_delta > reversal_threshold
                     ):
                         reversal_detected = True
-                        logger.debug(
-                            f"🔄 ExitAnalyzer: Order Flow разворот обнаружен для {symbol} LONG: "
-                            f"delta {avg_delta:.3f} -> {current_delta:.3f}"
+                        order_flow_reversal = True
+                        logger.info(
+                            f"🔄 [REVERSAL_CHECK] {symbol} LONG: Order Flow разворот ОБНАРУЖЕН | "
+                            f"delta {avg_delta:.3f} -> {current_delta:.3f} "
+                            f"(был положительным, стал отрицательным)"
+                        )
+                    else:
+                        logger.info(
+                            f"✅ [REVERSAL_CHECK] {symbol} LONG: Order Flow разворот НЕ обнаружен | "
+                            f"current_delta={current_delta:.3f}, avg_delta={avg_delta:.3f} "
+                            f"(условия не выполнены)"
                         )
                 elif position_side.lower() == "short":
                     # Для SHORT: разворот = delta был отрицательным и стал положительным
@@ -1815,25 +1827,51 @@ class ExitAnalyzer:
                         and avg_delta < -reversal_threshold
                     ):
                         reversal_detected = True
-                        logger.debug(
-                            f"🔄 ExitAnalyzer: Order Flow разворот обнаружен для {symbol} SHORT: "
-                            f"delta {avg_delta:.3f} -> {current_delta:.3f}"
+                        order_flow_reversal = True
+                        logger.info(
+                            f"🔄 [REVERSAL_CHECK] {symbol} SHORT: Order Flow разворот ОБНАРУЖЕН | "
+                            f"delta {avg_delta:.3f} -> {current_delta:.3f} "
+                            f"(был отрицательным, стал положительным)"
+                        )
+                    else:
+                        logger.info(
+                            f"✅ [REVERSAL_CHECK] {symbol} SHORT: Order Flow разворот НЕ обнаружен | "
+                            f"current_delta={current_delta:.3f}, avg_delta={avg_delta:.3f} "
+                            f"(условия не выполнены)"
                         )
             except Exception as e:
-                logger.debug(
-                    f"⚠️ ExitAnalyzer: Ошибка проверки Order Flow разворота для {symbol}: {e}"
+                logger.warning(
+                    f"⚠️ [REVERSAL_CHECK] {symbol} {position_side.upper()}: Ошибка проверки Order Flow разворота: {e}"
                 )
+        else:
+            logger.info(
+                f"⚠️ [REVERSAL_CHECK] {symbol} {position_side.upper()}: Order Flow недоступен"
+            )
 
         # Проверка MTF разворота
         if self.mtf_filter and not reversal_detected:
             try:
                 # MTF фильтр может показывать разворот тренда на более высоком таймфрейме
                 # Пока упрощенная проверка - можно расширить позже
+                logger.info(
+                    f"🔍 [REVERSAL_CHECK] {symbol} {position_side.upper()}: MTF фильтр доступен, "
+                    f"но проверка разворота еще не реализована (TODO)"
+                )
                 pass  # TODO: Реализовать проверку MTF разворота
             except Exception as e:
-                logger.debug(
-                    f"⚠️ ExitAnalyzer: Ошибка проверки MTF разворота для {symbol}: {e}"
+                logger.warning(
+                    f"⚠️ [REVERSAL_CHECK] {symbol} {position_side.upper()}: Ошибка проверки MTF разворота: {e}"
                 )
+        elif not self.mtf_filter:
+            logger.info(
+                f"⚠️ [REVERSAL_CHECK] {symbol} {position_side.upper()}: MTF фильтр недоступен"
+            )
+
+        # ✅ ИТОГОВОЕ ЛОГИРОВАНИЕ
+        logger.info(
+            f"🔍 [REVERSAL_CHECK] {symbol} {position_side.upper()}: ИТОГ проверки разворота | "
+            f"reversal_detected={reversal_detected}, order_flow={order_flow_reversal}, mtf={mtf_reversal}"
+        )
 
         return reversal_detected
 
@@ -2228,12 +2266,78 @@ class ExitAnalyzer:
                             # Не закрываем, если не прошло минимальное время
                             # Продолжаем с другими проверками
                         else:
-                            # Прошло минимальное время - закрываем по Emergency Loss Protection
+                            # Прошло минимальное время - проверяем признаки разворота перед emergency close
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем признаки разворота перед emergency close
+                            reversal_detected = await self._check_reversal_signals(
+                                symbol, position_side
+                            )
+                            if reversal_detected:
+                                logger.info(
+                                    f"🔄 ExitAnalyzer TRENDING: Обнаружен разворот для {symbol} {position_side.upper()}, "
+                                    f"но убыток критический ({pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
+                                    f"Используем Smart Close для комплексного анализа..."
+                                )
+                                smart_close_sl_percent = self._get_sl_percent(
+                                    symbol, "trending", current_price, market_data
+                                )
+                                logger.info(
+                                    f"🔍 ExitAnalyzer TRENDING: Запуск Smart Close анализа для {symbol} {position_side.upper()} | "
+                                    f"PnL={pnl_percent:.2f}%, SL={smart_close_sl_percent:.2f}%, режим={regime}"
+                                )
+                                smart_close = (
+                                    await self._should_force_close_by_smart_analysis(
+                                        symbol,
+                                        position_side,
+                                        pnl_percent,
+                                        smart_close_sl_percent,
+                                        regime,
+                                        metadata,
+                                        position,
+                                    )
+                                )
+                                logger.info(
+                                    f"🔍 ExitAnalyzer TRENDING: Результат Smart Close для {symbol} {position_side.upper()}: "
+                                    f"smart_close={smart_close}"
+                                )
+                                if smart_close:
+                                    logger.warning(
+                                        f"🚨 ExitAnalyzer TRENDING: Smart Close рекомендует закрыть {symbol} "
+                                        f"несмотря на признаки разворота (убыток {pnl_percent:.2f}% критический)"
+                                    )
+                                    self._record_metrics_on_close(
+                                        symbol=symbol,
+                                        reason="emergency_loss_protection_smart_close",
+                                        pnl_percent=pnl_percent,
+                                        entry_time=entry_time,
+                                    )
+                                    return {
+                                        "action": "close",
+                                        "reason": "emergency_loss_protection_smart_close",
+                                        "pnl_pct": pnl_percent,
+                                        "regime": regime,
+                                        "emergency": True,
+                                        "reversal_detected": True,
+                                        "smart_close": True,
+                                    }
+                                else:
+                                    logger.info(
+                                        f"✅ ExitAnalyzer TRENDING: Smart Close рекомендует ДЕРЖАТЬ {symbol} "
+                                        f"из-за признаков разворота (убыток {pnl_percent:.2f}%, но есть шанс восстановления)"
+                                    )
+                                    return {
+                                        "action": "hold",
+                                        "reason": "emergency_loss_protection_reversal_detected",
+                                        "pnl_pct": pnl_percent,
+                                        "regime": regime,
+                                        "reversal_detected": True,
+                                    }
+
+                            # Нет признаков разворота - закрываем по Emergency Loss Protection
                             logger.warning(
                                 f"🚨 ExitAnalyzer TRENDING: Критический убыток {pnl_percent:.2f}% для {symbol} "
                                 f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
                                 f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
-                                f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                                f"нет признаков разворота - генерируем экстренное закрытие (первая защита, приоритет 1)"
                             )
                             self._record_metrics_on_close(
                                 symbol=symbol,
@@ -2251,6 +2355,7 @@ class ExitAnalyzer:
                                 "adjusted_threshold": adjusted_emergency_threshold,
                                 "spread_buffer": emergency_spread_buffer,
                                 "commission_buffer": emergency_commission_buffer,
+                                "reversal_detected": False,
                             }
                     except Exception as e:
                         logger.debug(
@@ -2508,10 +2613,67 @@ class ExitAnalyzer:
                     if position_side == "long"
                     else entry_price * (1 + sl_percent / 100)
                 )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем признаки разворота перед SL close
+                reversal_detected = await self._check_reversal_signals(
+                    symbol, position_side
+                )
+                if reversal_detected:
+                    logger.info(
+                        f"🔄 ExitAnalyzer TRENDING: Обнаружен разворот для {symbol} {position_side.upper()}, "
+                        f"но SL достигнут (Gross PnL={gross_pnl_percent:.2f}% <= {sl_threshold:.2f}%). "
+                        f"Используем Smart Close для комплексного анализа..."
+                    )
+                    smart_close = await self._should_force_close_by_smart_analysis(
+                        symbol,
+                        position_side,
+                        gross_pnl_percent,
+                        sl_percent,
+                        regime,
+                        metadata,
+                        position,
+                    )
+                    if smart_close:
+                        logger.warning(
+                            f"🛑 ExitAnalyzer TRENDING: Smart Close рекомендует закрыть {symbol} по SL "
+                            f"несмотря на признаки разворота (убыток {gross_pnl_percent:.2f}% критический)"
+                        )
+                        self._record_metrics_on_close(
+                            symbol=symbol,
+                            reason="sl_reached_smart_close",
+                            pnl_percent=gross_pnl_percent,
+                            entry_time=entry_time,
+                        )
+                        return {
+                            "action": "close",
+                            "reason": "sl_reached_smart_close",
+                            "pnl_pct": gross_pnl_percent,
+                            "net_pnl_pct": pnl_percent,
+                            "sl_percent": sl_percent,
+                            "spread_buffer": spread_buffer,
+                            "regime": regime,
+                            "reversal_detected": True,
+                            "smart_close": True,
+                        }
+                    else:
+                        logger.info(
+                            f"✅ ExitAnalyzer TRENDING: Smart Close рекомендует ДЕРЖАТЬ {symbol} "
+                            f"из-за признаков разворота (SL достигнут, но есть шанс восстановления)"
+                        )
+                        return {
+                            "action": "hold",
+                            "reason": "sl_reached_reversal_detected",
+                            "pnl_pct": gross_pnl_percent,
+                            "net_pnl_pct": pnl_percent,
+                            "sl_percent": sl_percent,
+                            "spread_buffer": spread_buffer,
+                            "regime": regime,
+                            "reversal_detected": True,
+                        }
+
                 logger.info(
                     f"🛑 SL reached for {symbol}: current={current_price:.2f} <= SL={sl_price:.2f}, "
                     f"PnL={gross_pnl_percent:.2f}% (gross), {pnl_percent:.2f}% (net), "
-                    f"time={minutes_in_position:.1f} min, regime={regime}"
+                    f"time={minutes_in_position:.1f} min, regime={regime}, нет признаков разворота"
                 )
                 self._record_metrics_on_close(
                     symbol=symbol,
@@ -2527,6 +2689,7 @@ class ExitAnalyzer:
                     "sl_percent": sl_percent,
                     "spread_buffer": spread_buffer,
                     "regime": regime,
+                    "reversal_detected": False,
                 }
 
             # 6.1. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Smart Close проверяется ПЕРЕД max_holding
@@ -2661,9 +2824,23 @@ class ExitAnalyzer:
             minutes_in_position = self._get_time_in_position_minutes(metadata, position)
             max_holding_minutes = self._get_max_holding_minutes("trending", symbol)
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Конвертируем max_holding_minutes в float перед сравнением
+            try:
+                max_holding_minutes_float = (
+                    float(max_holding_minutes)
+                    if max_holding_minutes is not None
+                    else 120.0
+                )
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"⚠️ ExitAnalyzer TRENDING: Не удалось преобразовать max_holding_minutes={max_holding_minutes} в float, используем 120.0"
+                )
+                max_holding_minutes_float = 120.0
+
             if (
                 minutes_in_position is not None
-                and minutes_in_position >= max_holding_minutes
+                and isinstance(minutes_in_position, (int, float))
+                and float(minutes_in_position) >= max_holding_minutes_float
             ):
                 # Время превышено - проверяем, есть ли сильные сигналы держать
                 trend_data = await self._analyze_trend_strength(symbol)
@@ -2779,19 +2956,52 @@ class ExitAnalyzer:
                             "regime": regime,
                         }
 
-                    # Нет сильных сигналов, но позиция в прибыли >= min_profit_to_close - закрываем по времени
+                    # Нет сильных сигналов, но позиция в прибыли >= min_profit_to_close - проверяем признаки разворота
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем признаки разворота перед закрытием по времени
                     logger.info(
-                        f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
-                        f"нет сильных сигналов держать (trend_strength={trend_strength:.2f}, pnl={pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}%) - закрываем"
+                        f"🔍 ExitAnalyzer TRENDING: Проверка разворота перед закрытием по времени для {symbol} {position_side.upper()} | "
+                        f"время={minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                        f"PnL={pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}%"
                     )
-                    return {
-                        "action": "close",
-                        "reason": "max_holding_no_signals",
-                        "pnl_pct": pnl_percent,
-                        "minutes_in_position": minutes_in_position,
-                        "max_holding_minutes": max_holding_minutes,
-                        "regime": regime,
-                    }
+                    reversal_detected = await self._check_reversal_signals(
+                        symbol, position_side
+                    )
+                    logger.info(
+                        f"🔍 ExitAnalyzer TRENDING: Результат проверки разворота для {symbol} {position_side.upper()}: "
+                        f"reversal_detected={reversal_detected}"
+                    )
+                    if reversal_detected:
+                        # Есть признаки разворота - закрываем по времени
+                        logger.info(
+                            f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                            f"прибыль={pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}%, "
+                            f"обнаружен разворот - закрываем по времени"
+                        )
+                        return {
+                            "action": "close",
+                            "reason": "max_holding_no_signals_reversal",
+                            "pnl_pct": pnl_percent,
+                            "minutes_in_position": minutes_in_position,
+                            "max_holding_minutes": max_holding_minutes,
+                            "regime": regime,
+                            "reversal_detected": True,
+                        }
+                    else:
+                        # Нет признаков разворота - закрываем по времени
+                        logger.info(
+                            f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
+                            f"нет сильных сигналов держать (trend_strength={trend_strength:.2f}, pnl={pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}%), "
+                            f"нет признаков разворота - закрываем по времени"
+                        )
+                        return {
+                            "action": "close",
+                            "reason": "max_holding_no_signals",
+                            "pnl_pct": pnl_percent,
+                            "minutes_in_position": minutes_in_position,
+                            "max_holding_minutes": max_holding_minutes,
+                            "regime": regime,
+                            "reversal_detected": False,
+                        }
 
             # Нет причин для закрытия или продления
             return None
@@ -2966,12 +3176,91 @@ class ExitAnalyzer:
                             # Не закрываем, если не прошло минимальное время
                             # Продолжаем с другими проверками
                         else:
-                            # Прошло минимальное время - закрываем по Emergency Loss Protection
+                            # Прошло минимальное время - проверяем признаки разворота перед emergency close
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем признаки разворота перед emergency close
+                            # Если есть признаки разворота в нашу пользу - НЕ закрываем, даем позиции шанс восстановиться
+                            logger.info(
+                                f"🔍 ExitAnalyzer RANGING: Проверка разворота перед emergency close для {symbol} {position_side.upper()} | "
+                                f"Net PnL={net_pnl_percent:.2f}%, порог={adjusted_emergency_threshold:.2f}%, "
+                                f"время удержания={holding_seconds:.1f}с"
+                            )
+                            reversal_detected = await self._check_reversal_signals(
+                                symbol, position_side
+                            )
+                            logger.info(
+                                f"🔍 ExitAnalyzer RANGING: Результат проверки разворота для {symbol} {position_side.upper()}: "
+                                f"reversal_detected={reversal_detected}"
+                            )
+                            if reversal_detected:
+                                logger.info(
+                                    f"🔄 ExitAnalyzer RANGING: Обнаружен разворот для {symbol} {position_side.upper()}, "
+                                    f"но убыток критический ({net_pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
+                                    f"Используем Smart Close для комплексного анализа..."
+                                )
+                                # Используем Smart Close для более умного решения
+                                smart_close_sl_percent = self._get_sl_percent(
+                                    symbol, "ranging", current_price, market_data
+                                )
+                                logger.info(
+                                    f"🔍 ExitAnalyzer RANGING: Запуск Smart Close анализа для {symbol} {position_side.upper()} | "
+                                    f"Gross PnL={gross_pnl_percent:.2f}%, SL={smart_close_sl_percent:.2f}%, режим={regime}"
+                                )
+                                smart_close = (
+                                    await self._should_force_close_by_smart_analysis(
+                                        symbol,
+                                        position_side,
+                                        gross_pnl_percent,
+                                        smart_close_sl_percent,
+                                        regime,
+                                        metadata,
+                                        position,
+                                    )
+                                )
+                                logger.info(
+                                    f"🔍 ExitAnalyzer RANGING: Результат Smart Close для {symbol} {position_side.upper()}: "
+                                    f"smart_close={smart_close}"
+                                )
+                                if smart_close:
+                                    logger.warning(
+                                        f"🚨 ExitAnalyzer RANGING: Smart Close рекомендует закрыть {symbol} "
+                                        f"несмотря на признаки разворота (убыток {gross_pnl_percent:.2f}% критический)"
+                                    )
+                                    self._record_metrics_on_close(
+                                        symbol=symbol,
+                                        reason="emergency_loss_protection_smart_close",
+                                        pnl_percent=net_pnl_percent,
+                                        entry_time=entry_time,
+                                    )
+                                    return {
+                                        "action": "close",
+                                        "reason": "emergency_loss_protection_smart_close",
+                                        "pnl_pct": net_pnl_percent,
+                                        "gross_pnl_pct": gross_pnl_percent,
+                                        "regime": regime,
+                                        "emergency": True,
+                                        "reversal_detected": True,
+                                        "smart_close": True,
+                                    }
+                                else:
+                                    logger.info(
+                                        f"✅ ExitAnalyzer RANGING: Smart Close рекомендует ДЕРЖАТЬ {symbol} "
+                                        f"из-за признаков разворота (убыток {gross_pnl_percent:.2f}%, но есть шанс восстановления)"
+                                    )
+                                    return {
+                                        "action": "hold",
+                                        "reason": "emergency_loss_protection_reversal_detected",
+                                        "pnl_pct": net_pnl_percent,
+                                        "gross_pnl_pct": gross_pnl_percent,
+                                        "regime": regime,
+                                        "reversal_detected": True,
+                                    }
+
+                            # Нет признаков разворота - закрываем по Emergency Loss Protection
                             logger.warning(
                                 f"🚨 ExitAnalyzer RANGING: Критический убыток {net_pnl_percent:.2f}% для {symbol} "
                                 f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
                                 f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
-                                f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                                f"нет признаков разворота - генерируем экстренное закрытие (первая защита, приоритет 1)"
                             )
                             # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
                             self._record_metrics_on_close(
@@ -2991,6 +3280,7 @@ class ExitAnalyzer:
                                 "adjusted_threshold": adjusted_emergency_threshold,
                                 "spread_buffer": emergency_spread_buffer,
                                 "commission_buffer": emergency_commission_buffer,
+                                "reversal_detected": False,
                             }
                     except Exception as e:
                         logger.debug(
@@ -3189,11 +3479,87 @@ class ExitAnalyzer:
                     # Для SHORT: effective SL выше расчетного (учитываем slippage при закрытии)
                     effective_sl = sl_price + (slippage_pct / 100 * entry_price)
 
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем признаки разворота перед SL close
+                # Если есть признаки разворота в нашу пользу - НЕ закрываем, даем позиции шанс восстановиться
+                logger.info(
+                    f"🔍 ExitAnalyzer TRENDING: Проверка разворота перед SL close для {symbol} {position_side.upper()} | "
+                    f"Gross PnL={gross_pnl_percent:.2f}%, SL threshold={sl_threshold:.2f}%, "
+                    f"SL={sl_percent:.2f}%"
+                )
+                reversal_detected = await self._check_reversal_signals(
+                    symbol, position_side
+                )
+                logger.info(
+                    f"🔍 ExitAnalyzer TRENDING: Результат проверки разворота для {symbol} {position_side.upper()}: "
+                    f"reversal_detected={reversal_detected}"
+                )
+                if reversal_detected:
+                    logger.info(
+                        f"🔄 ExitAnalyzer RANGING: Обнаружен разворот для {symbol} {position_side.upper()}, "
+                        f"но SL достигнут (Gross PnL={gross_pnl_percent:.2f}% <= {sl_threshold:.2f}%). "
+                        f"Используем Smart Close для комплексного анализа..."
+                    )
+                    # Используем Smart Close для более умного решения
+                    logger.info(
+                        f"🔍 ExitAnalyzer TRENDING: Запуск Smart Close анализа для {symbol} {position_side.upper()} | "
+                        f"Gross PnL={gross_pnl_percent:.2f}%, SL={sl_percent:.2f}%, режим={regime}"
+                    )
+                    smart_close = await self._should_force_close_by_smart_analysis(
+                        symbol,
+                        position_side,
+                        gross_pnl_percent,
+                        sl_percent,
+                        regime,
+                        metadata,
+                        position,
+                    )
+                    logger.info(
+                        f"🔍 ExitAnalyzer TRENDING: Результат Smart Close для {symbol} {position_side.upper()}: "
+                        f"smart_close={smart_close}"
+                    )
+                    if smart_close:
+                        logger.warning(
+                            f"🛑 ExitAnalyzer RANGING: Smart Close рекомендует закрыть {symbol} по SL "
+                            f"несмотря на признаки разворота (убыток {gross_pnl_percent:.2f}% критический)"
+                        )
+                        self._record_metrics_on_close(
+                            symbol=symbol,
+                            reason="sl_reached_smart_close",
+                            pnl_percent=gross_pnl_percent,
+                            entry_time=entry_time,
+                        )
+                        return {
+                            "action": "close",
+                            "reason": "sl_reached_smart_close",
+                            "pnl_pct": gross_pnl_percent,
+                            "net_pnl_pct": net_pnl_percent,
+                            "sl_percent": sl_percent,
+                            "spread_buffer": spread_buffer,
+                            "regime": regime,
+                            "reversal_detected": True,
+                            "smart_close": True,
+                        }
+                    else:
+                        logger.info(
+                            f"✅ ExitAnalyzer RANGING: Smart Close рекомендует ДЕРЖАТЬ {symbol} "
+                            f"из-за признаков разворота (SL достигнут, но есть шанс восстановления)"
+                        )
+                        return {
+                            "action": "hold",
+                            "reason": "sl_reached_reversal_detected",
+                            "pnl_pct": gross_pnl_percent,
+                            "net_pnl_pct": net_pnl_percent,
+                            "sl_percent": sl_percent,
+                            "spread_buffer": spread_buffer,
+                            "regime": regime,
+                            "reversal_detected": True,
+                        }
+
                 logger.info(
                     f"🛑 SL reached for {symbol}: current={current_price:.2f} <= SL={sl_price:.2f} "
                     f"(effective_SL={effective_sl:.2f} с учетом slippage {slippage_pct}%), "
                     f"PnL={gross_pnl_percent:.2f}% (gross), {net_pnl_percent:.2f}% (net), "
-                    f"time={minutes_in_position:.1f} min, regime={regime}"
+                    f"time={minutes_in_position:.1f} min, regime={regime}, нет признаков разворота"
                 )
                 # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
                 self._record_metrics_on_close(
@@ -3213,6 +3579,7 @@ class ExitAnalyzer:
                     "entry_regime": metadata.regime
                     if metadata and hasattr(metadata, "regime")
                     else regime,
+                    "reversal_detected": False,
                 }
 
             # 2.6. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Smart Close проверяется ПЕРЕД TP
@@ -3868,21 +4235,82 @@ class ExitAnalyzer:
                         "regime": regime,
                     }
 
-                # Время превышено и позиция в прибыли >= min_profit_to_close - закрываем
+                # Время превышено и позиция в прибыли >= min_profit_to_close - проверяем признаки разворота
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем признаки разворота перед закрытием по времени
+                # Если есть признаки разворота против нас - закрываем, если в нашу пользу - продлеваем
                 logger.info(
-                    f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
-                    f"(базовое: {max_holding_minutes:.1f} мин), Net прибыль={net_pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}% "
-                    f"(Gross PnL {gross_pnl_percent:.2f}%) - закрываем по времени"
+                    f"🔍 ExitAnalyzer RANGING: Проверка разворота и силы тренда перед закрытием по времени для {symbol} {position_side.upper()} | "
+                    f"время={minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                    f"Net PnL={net_pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}%"
                 )
-                return {
-                    "action": "close",
-                    "reason": "max_holding_exceeded",
-                    "pnl_pct": net_pnl_percent,  # Net PnL для логирования
-                    "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
-                    "minutes_in_position": minutes_in_position,
-                    "max_holding_minutes": actual_max_holding,
-                    "regime": regime,
-                }
+                reversal_detected = await self._check_reversal_signals(
+                    symbol, position_side
+                )
+                logger.info(
+                    f"🔍 ExitAnalyzer RANGING: Результат проверки разворота для {symbol} {position_side.upper()}: "
+                    f"reversal_detected={reversal_detected}"
+                )
+                trend_data = await self._analyze_trend_strength(symbol)
+                trend_strength = (
+                    trend_data.get("trend_strength", 0) if trend_data else 0
+                )
+                logger.info(
+                    f"🔍 ExitAnalyzer RANGING: Результат анализа силы тренда для {symbol} {position_side.upper()}: "
+                    f"trend_strength={trend_strength:.2f}"
+                )
+
+                if reversal_detected:
+                    # Есть признаки разворота - закрываем по времени
+                    logger.info(
+                        f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                        f"Net прибыль={net_pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}%, "
+                        f"обнаружен разворот - закрываем по времени"
+                    )
+                    return {
+                        "action": "close",
+                        "reason": "max_holding_exceeded_reversal",
+                        "pnl_pct": net_pnl_percent,
+                        "gross_pnl_pct": gross_pnl_percent,
+                        "minutes_in_position": minutes_in_position,
+                        "max_holding_minutes": actual_max_holding,
+                        "regime": regime,
+                        "reversal_detected": True,
+                    }
+                elif trend_strength >= 0.7:
+                    # Сильный тренд в нашу пользу - продлеваем время
+                    logger.info(
+                        f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
+                        f"Net прибыль={net_pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}%, "
+                        f"сильный тренд (strength={trend_strength:.2f}) - продлеваем время"
+                    )
+                    return {
+                        "action": "extend_tp",
+                        "reason": "max_holding_strong_trend",
+                        "pnl_pct": net_pnl_percent,
+                        "gross_pnl_pct": gross_pnl_percent,
+                        "minutes_in_position": minutes_in_position,
+                        "max_holding_minutes": actual_max_holding,
+                        "trend_strength": trend_strength,
+                        "regime": regime,
+                    }
+                else:
+                    # Нет признаков разворота, тренд не сильный - закрываем по времени
+                    logger.info(
+                        f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
+                        f"(базовое: {max_holding_minutes:.1f} мин), Net прибыль={net_pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}% "
+                        f"(Gross PnL {gross_pnl_percent:.2f}%), нет признаков разворота, тренд слабый (strength={trend_strength:.2f}) - закрываем по времени"
+                    )
+                    return {
+                        "action": "close",
+                        "reason": "max_holding_exceeded",
+                        "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                        "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
+                        "minutes_in_position": minutes_in_position,
+                        "max_holding_minutes": actual_max_holding,
+                        "regime": regime,
+                        "reversal_detected": False,
+                        "trend_strength": trend_strength,
+                    }
             elif minutes_in_position is not None and isinstance(
                 minutes_in_position, (int, float)
             ):
@@ -4096,12 +4524,70 @@ class ExitAnalyzer:
                             # Не закрываем, если не прошло минимальное время
                             # Продолжаем с другими проверками
                         else:
-                            # Прошло минимальное время - закрываем по Emergency Loss Protection
+                            # Прошло минимальное время - проверяем признаки разворота перед emergency close
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем признаки разворота перед emergency close
+                            reversal_detected = await self._check_reversal_signals(
+                                symbol, position_side
+                            )
+                            if reversal_detected:
+                                logger.info(
+                                    f"🔄 ExitAnalyzer CHOPPY: Обнаружен разворот для {symbol} {position_side.upper()}, "
+                                    f"но убыток критический ({pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
+                                    f"Используем Smart Close для комплексного анализа..."
+                                )
+                                smart_close_sl_percent = self._get_sl_percent(
+                                    symbol, "choppy", current_price, market_data
+                                )
+                                smart_close = (
+                                    await self._should_force_close_by_smart_analysis(
+                                        symbol,
+                                        position_side,
+                                        pnl_percent,
+                                        smart_close_sl_percent,
+                                        regime,
+                                        metadata,
+                                        position,
+                                    )
+                                )
+                                if smart_close:
+                                    logger.warning(
+                                        f"🚨 ExitAnalyzer CHOPPY: Smart Close рекомендует закрыть {symbol} "
+                                        f"несмотря на признаки разворота (убыток {pnl_percent:.2f}% критический)"
+                                    )
+                                    self._record_metrics_on_close(
+                                        symbol=symbol,
+                                        reason="emergency_loss_protection_smart_close",
+                                        pnl_percent=pnl_percent,
+                                        entry_time=entry_time,
+                                    )
+                                    return {
+                                        "action": "close",
+                                        "reason": "emergency_loss_protection_smart_close",
+                                        "pnl_pct": pnl_percent,
+                                        "regime": regime,
+                                        "emergency": True,
+                                        "reversal_detected": True,
+                                        "smart_close": True,
+                                    }
+                                else:
+                                    logger.info(
+                                        f"✅ ExitAnalyzer CHOPPY: Smart Close рекомендует ДЕРЖАТЬ {symbol} "
+                                        f"из-за признаков разворота (убыток {pnl_percent:.2f}%, но есть шанс восстановления)"
+                                    )
+                                    return {
+                                        "action": "hold",
+                                        "reason": "emergency_loss_protection_reversal_detected",
+                                        "pnl_pct": pnl_percent,
+                                        "regime": regime,
+                                        "reversal_detected": True,
+                                    }
+
+                            # Нет признаков разворота - закрываем по Emergency Loss Protection
                             logger.warning(
                                 f"🚨 ExitAnalyzer CHOPPY: Критический убыток {pnl_percent:.2f}% для {symbol} "
                                 f"(порог: {emergency_loss_threshold:.1f}%, скорректирован: {adjusted_emergency_threshold:.2f}% "
                                 f"с учетом spread={emergency_spread_buffer:.3f}% + commission={emergency_commission_buffer:.3f}%), "
-                                f"генерируем экстренное закрытие (первая защита, приоритет 1)"
+                                f"нет признаков разворота - генерируем экстренное закрытие (первая защита, приоритет 1)"
                             )
                             self._record_metrics_on_close(
                                 symbol=symbol,
@@ -4119,6 +4605,7 @@ class ExitAnalyzer:
                                 "adjusted_threshold": adjusted_emergency_threshold,
                                 "spread_buffer": emergency_spread_buffer,
                                 "commission_buffer": emergency_commission_buffer,
+                                "reversal_detected": False,
                             }
                     except Exception as e:
                         logger.debug(
@@ -4650,14 +5137,20 @@ class ExitAnalyzer:
         return None
 
     async def _get_atr(self, symbol: str, period: int = 14) -> Optional[float]:
-        """Получить ATR для символа через ATRProvider"""
-        # ✅ ИСПРАВЛЕНО: Используем ATRProvider вместо самостоятельного расчета
-        if self.atr_provider:
-            atr = self.atr_provider.get_atr(symbol, fallback=5.0)
-            if atr:
-                return atr
-        # Fallback: если ATRProvider не доступен, возвращаем fallback значение
-        return 5.0
+        """Получить ATR для символа через ATRProvider (БЕЗ FALLBACK)"""
+        # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Используем ATRProvider БЕЗ fallback
+        if not self.atr_provider:
+            logger.error(
+                f"❌ [ATR] {symbol}: ATRProvider недоступен - возвращаем None (БЕЗ FALLBACK)"
+            )
+            return None
+
+        atr = self.atr_provider.get_atr(symbol)
+        if atr is None:
+            logger.error(
+                f"❌ [ATR] {symbol}: ATR не найден через ATRProvider - возвращаем None (БЕЗ FALLBACK)"
+            )
+        return atr
 
     async def _get_volume_profile(
         self, symbol: str, lookback: int = 48

@@ -35,7 +35,7 @@ class TrailingStopLoss:
         initial_trail: float = 0.05,
         max_trail: float = 0.2,
         min_trail: float = 0.02,
-        trading_fee_rate: float = 0.0010,  # ✅ ОБНОВЛЕНО: 0.10% на круг (0.05% вход + 0.05% выход для taker на OKX)
+        trading_fee_rate: float = 0.0004,  # ✅ ИСПРАВЛЕНО (04.01.2026): 0.04% на круг (0.02% вход + 0.02% выход для maker на OKX)
         loss_cut_percent: Optional[float] = None,
         timeout_loss_percent: Optional[float] = None,
         timeout_minutes: Optional[float] = None,

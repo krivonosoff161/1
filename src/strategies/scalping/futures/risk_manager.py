@@ -1191,8 +1191,10 @@ class FuturesRiskManager:
                 adaptive_risk_params.get("max_margin_safety_percent", 90.0) / 100.0
             )
 
-            # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем все ограничения размера позиции
-            logger.info(f"📊 ДЕТАЛЬНЫЙ РАСЧЕТ РАЗМЕРА ПОЗИЦИИ для {symbol}:")
+            # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование расчета margin для каждой пары
+            logger.info(
+                f"📊 [PARAMS_MARGIN] {symbol} ({symbol_regime or 'unknown'}): ДЕТАЛЬНЫЙ РАСЧЕТ МАРЖИ:"
+            )
             logger.info(
                 f"  1. Балансовый профиль: {balance_profile['name']}, баланс=${balance:.2f}"
             )
@@ -1203,7 +1205,8 @@ class FuturesRiskManager:
                 f"  3. Лимиты из конфига: min=${min_usd_size:.2f}, max=${max_usd_size:.2f} (notional)"
             )
             logger.info(
-                f"  4. Леверидж: {leverage}x → маржа до ограничений: ${margin_required_initial:.2f}"
+                f"  4. Леверидж: {leverage}x → маржа до ограничений: ${margin_required_initial:.2f} "
+                f"(расчет: ${base_usd_size:.2f} / {leverage}x = ${margin_required_initial:.2f})"
             )
             logger.info(
                 f"  5. Использованная маржа: ${used_margin:.2f}, доступная: ${balance - used_margin:.2f}"
