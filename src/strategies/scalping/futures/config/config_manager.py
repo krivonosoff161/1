@@ -597,7 +597,7 @@ class ConfigManager:
             "regime_multiplier": 1.0,  # ✅ НОВОЕ: Множитель режима (из конфига, fallback)
             "trend_strength_boost": 1.0,  # ✅ НОВОЕ: Буст при сильном тренде (из конфига, fallback)
             "check_interval_seconds": 1.5,  # ✅ АДАПТИВНО: Интервал проверки TSL (fallback)
-            "min_critical_hold_seconds": 30.0,  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (fallback)
+            "min_critical_hold_seconds": 60.0,  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (fallback, увеличено с 30 до 60 сек 06.01.2026)
             "short_reversal_min_duration": 30,  # ✅ АДАПТИВНО: Short reversal protection (fallback)
             "short_reversal_max_percent": 0.5,  # ✅ АДАПТИВНО: Short reversal protection (fallback)
             "trail_growth_low_multiplier": 1.5,  # ✅ АДАПТИВНО: Trail growth (fallback)

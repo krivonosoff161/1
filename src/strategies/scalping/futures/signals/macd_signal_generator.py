@@ -114,10 +114,12 @@ class MACDSignalGenerator:
                                 regime_confidence, "macd_signal", 0.65
                             )
 
+            # ✅ ИСПРАВЛЕНО (06.01.2026): MACD всегда сохраняется как dict в DataRegistry
+            # Обрабатываем как dict (основной формат) и fallback на scalar (для backward compatibility)
             macd = indicators.get("macd", {})
             macd_line = macd.get("macd", 0) if isinstance(macd, dict) else macd
             signal_line = macd.get("signal", 0) if isinstance(macd, dict) else 0
-            # ✅ ИСПРАВЛЕНИЕ: Правильно вычисляем histogram
+            # Правильно вычисляем histogram
             histogram = (
                 macd.get("histogram", macd_line - signal_line)
                 if isinstance(macd, dict)

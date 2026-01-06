@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# flake8: noqa
 """
 Тест адаптивных параметров - интеграционный тест ParameterProvider
 """
@@ -18,7 +19,7 @@ def test_adaptive_integration():
 
     try:
         # Загружаем конфигурацию
-        config = BotConfig("config/config_futures.yaml")
+        config = BotConfig.load_from_file("config/config_futures.yaml")
         print("✅ BotConfig загружен")
 
         # Загружаем raw config для ConfigManager

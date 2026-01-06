@@ -1,3 +1,4 @@
+# flake8: noqa
 """
 Trailing Stop Loss для Futures торговли.
 
@@ -166,6 +167,8 @@ class TrailingStopLoss:
         if side == "long":
             self.highest_price = entry_price
             self.lowest_price = float("inf")
+            # ✅ ИСПРАВЛЕНО (06.01.2026): Сбрасываем флаг активации при инициализации
+            self._trailing_activated = False
         else:  # short
             self.highest_price = 0.0
             self.lowest_price = entry_price
@@ -245,15 +248,27 @@ class TrailingStopLoss:
                 self.highest_price = current_price
                 # Армирование: до достижения min_profit_to_close не усиливаем трейл
                 trail_multiplier = None  # Инициализируем для логирования
-                if (
+                was_below_threshold = (
                     getattr(self, "min_profit_to_close", None) is not None
                     and profit_pct_total < self.min_profit_to_close
-                ):
+                )
+                if was_below_threshold:
                     self.current_trail = max(self.current_trail, self.initial_trail)
                     trail_multiplier = (
                         1.0  # Не используем multiplier, оставляем initial_trail
                     )
                 else:
+                    # ✅ ИСПРАВЛЕНО (06.01.2026): Логируем активацию Trailing Stop
+                    if getattr(
+                        self, "min_profit_to_close", None
+                    ) is not None and not hasattr(self, "_trailing_activated"):
+                        # Первый раз достигли min_profit_to_close - активируем усиленный трейлинг
+                        self._trailing_activated = True
+                        logger.info(
+                            f"✅ Trailing Stop АКТИВИРОВАН для {getattr(self, '_symbol', 'UNKNOWN')}: "
+                            f"прибыль {profit_pct_total:.2%} >= {self.min_profit_to_close:.2%} "
+                            f"(initial_trail={self.initial_trail:.2%}, будет усиливаться)"
+                        )
                     # Увеличиваем трейл при росте цены
                     # ✅ АДАПТИВНО: Используем trail_growth multipliers из конфига вместо захардкоженного 2.0
                     # Адаптируем множитель по уровню прибыли (low/medium/high)
@@ -282,15 +297,27 @@ class TrailingStopLoss:
                 self.lowest_price = current_price
                 # Армирование: до достижения min_profit_to_close не усиливаем трейл
                 trail_multiplier = None  # Инициализируем для логирования
-                if (
+                was_below_threshold = (
                     getattr(self, "min_profit_to_close", None) is not None
                     and profit_pct_total < self.min_profit_to_close
-                ):
+                )
+                if was_below_threshold:
                     self.current_trail = max(self.current_trail, self.initial_trail)
                     trail_multiplier = (
                         1.0  # Не используем multiplier, оставляем initial_trail
                     )
                 else:
+                    # ✅ ИСПРАВЛЕНО (06.01.2026): Логируем активацию Trailing Stop
+                    if getattr(
+                        self, "min_profit_to_close", None
+                    ) is not None and not hasattr(self, "_trailing_activated"):
+                        # Первый раз достигли min_profit_to_close - активируем усиленный трейлинг
+                        self._trailing_activated = True
+                        logger.info(
+                            f"✅ Trailing Stop АКТИВИРОВАН для {getattr(self, '_symbol', 'UNKNOWN')}: "
+                            f"прибыль {profit_pct_total:.2%} >= {self.min_profit_to_close:.2%} "
+                            f"(initial_trail={self.initial_trail:.2%}, будет усиливаться)"
+                        )
                     # Увеличиваем трейл при падении цены
                     # ✅ АДАПТИВНО: Используем trail_growth multipliers из конфига вместо захардкоженного 2.0
                     # Адаптируем множитель по уровню прибыли (low/medium/high)
@@ -594,8 +621,10 @@ class TrailingStopLoss:
             critical_loss_cut_from_price = loss_cut_from_price * 2.0
 
             # ✅ 1. Критический убыток (2x loss_cut) - приоритет #1
+            # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличена минимальная задержка с 5 до 60 секунд для критического loss_cut
+            # Это дает позициям время на восстановление после кратковременных просадок
             if profit_pct <= -critical_loss_cut_from_price:
-                min_critical_hold_seconds = self.min_critical_hold_seconds or 5.0
+                min_critical_hold_seconds = self.min_critical_hold_seconds or 60.0
 
                 if seconds_in_position < min_critical_hold_seconds:
                     logger.debug(
@@ -644,9 +673,10 @@ class TrailingStopLoss:
 
             # ✅ 2. Обычный loss_cut - приоритет #2 (ПЕРЕД MIN_HOLDING!)
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличена минимальная задержка с 5 до 30 секунд
-            # Это предотвращает преждевременное закрытие из-за спреда/комиссии сразу после открытия
+            # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличена минимальная задержка с 30 до 90 секунд
+            # Это предотвращает преждевременное закрытие из-за спреда/комиссии и дает время на восстановление
             if profit_pct <= -loss_cut_from_price:
-                min_loss_cut_hold_seconds = 30.0  # ✅ ИСПРАВЛЕНО: Увеличено с 5 до 30 секунд для защиты от преждевременного закрытия
+                min_loss_cut_hold_seconds = 90.0  # ✅ ИСПРАВЛЕНО: Увеличено с 30 до 90 секунд для защиты от преждевременного закрытия
 
                 if seconds_in_position >= min_loss_cut_hold_seconds:
                     # ✅ Закрываем по loss_cut, независимо от MIN_HOLDING

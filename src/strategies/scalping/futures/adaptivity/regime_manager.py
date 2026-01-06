@@ -1079,9 +1079,15 @@ class AdaptiveRegimeManager:
         detection: RegimeDetectionResult,
     ) -> None:
         """Логирует переключение режима."""
+        # ✅ ИСПРАВЛЕНО (06.01.2026): Добавляем краткую статистику при переключении
+        time_in_old = datetime.utcnow() - self.regime_start_time
+        total_switches = sum(self.regime_switches.values())
         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         logger.info("🔄 MARKET REGIME SWITCH")
         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logger.info(f"🔄 ARM: Режим изменился {old.value.upper()} → {new.value.upper()}")
+        logger.info(f"   Время в старом режиме: {time_in_old}")
+        logger.info(f"   Всего переключений: {total_switches + 1}")
         logger.info(f"   Old regime: {old.value.upper()}")
         logger.info(f"   New regime: {new.value.upper()}")
         # ✅ ИСПРАВЛЕНО (05.01.2026): Проверка типа confidence перед форматированием

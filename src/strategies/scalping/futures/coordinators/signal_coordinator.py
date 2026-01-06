@@ -1552,11 +1552,13 @@ class SignalCoordinator:
                                     rsi = None
 
                                     # Пытаемся получить ADX из DataRegistry
+                                    # ✅ ИСПРАВЛЕНО (06.01.2026): Отключаем check_freshness для получения ADX в логировании
+                                    # чтобы не получать None из-за TTL 1 секунда
                                     if self.data_registry:
                                         try:
                                             indicators_from_registry = (
                                                 await self.data_registry.get_indicators(
-                                                    symbol
+                                                    symbol, check_freshness=False
                                                 )
                                             )
                                             if indicators_from_registry:
@@ -1608,12 +1610,13 @@ class SignalCoordinator:
                                             )
 
                                     # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #8: Получаем индикаторы из DataRegistry (приоритет) или market_data.indicators
+                                    # ✅ ИСПРАВЛЕНО (06.01.2026): Отключаем check_freshness для логирования, чтобы видеть реальные значения
                                     indicators_from_registry = None
                                     if self.data_registry:
                                         try:
                                             indicators_from_registry = (
                                                 await self.data_registry.get_indicators(
-                                                    symbol
+                                                    symbol, check_freshness=False
                                                 )
                                             )
                                             if indicators_from_registry:
@@ -1674,21 +1677,24 @@ class SignalCoordinator:
                                                 f"❌ [INDICATORS] {symbol}: indicators_from_registry пуст для получения MACD/ATR"
                                             )
                                         else:
-                                            macd_dict = indicators_from_registry.get(
-                                                "macd"
-                                            )
-                                            if macd_dict and isinstance(
-                                                macd_dict, dict
-                                            ):
+                                            # ✅ ИСПРАВЛЕНО (06.01.2026): Получаем MACD из indicators_from_registry как dict
+                                            # MACD всегда сохраняется как dict в DataRegistry
+                                            macd_dict = indicators_from_registry.get("macd")
+                                            if macd_dict and isinstance(macd_dict, dict):
                                                 macd_hist = macd_dict.get("histogram")
                                                 if macd_hist is None:
                                                     logger.warning(
                                                         f"⚠️ [MACD] {symbol}: MACD histogram НЕ найден в indicators.macd"
                                                     )
                                             else:
-                                                logger.warning(
-                                                    f"⚠️ [MACD] {symbol}: MACD НЕ найден в indicators или не является dict (macd_dict={macd_dict})"
-                                                )
+                                                # Fallback: пытаемся получить отдельные значения (для backward compatibility со старыми данными)
+                                                macd_hist = indicators_from_registry.get("macd_histogram")
+                                                if macd_hist is None:
+                                                    logger.warning(
+                                                        f"⚠️ [MACD] {symbol}: MACD НЕ найден в indicators (ни как dict, ни как отдельные значения). "
+                                                        f"macd_dict={type(macd_dict).__name__ if macd_dict else None}, "
+                                                        f"macd_histogram={indicators_from_registry.get('macd_histogram')}"
+                                                    )
 
                                             atr = indicators_from_registry.get(
                                                 "atr"

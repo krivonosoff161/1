@@ -2104,19 +2104,20 @@ class FuturesSignalGenerator:
                                 f"type={type(value)}, indicators keys={list(indicators.keys())}"
                             )
 
-                    # MACD (сложный индикатор - сохраняем как отдельные значения)
+                    # MACD (сложный индикатор - сохраняем ТОЛЬКО как DICT)
+                    # ✅ ИСПРАВЛЕНО (06.01.2026): Унифицирован формат - всегда dict для консистентности
                     if "macd" in indicators:
                         macd_data = indicators["macd"]
                         if isinstance(macd_data, dict):
-                            indicators_for_registry["macd"] = macd_data.get("macd", 0)
-                            indicators_for_registry["macd_signal"] = macd_data.get(
-                                "signal", 0
-                            )
-                            indicators_for_registry["macd_histogram"] = macd_data.get(
-                                "histogram", 0
-                            )
-                        else:
+                            # Сохраняем весь dict - это основной формат
                             indicators_for_registry["macd"] = macd_data
+                        else:
+                            # Если MACD не dict (скаляр) - оборачиваем в dict
+                            indicators_for_registry["macd"] = {
+                                "macd": macd_data,
+                                "signal": 0,
+                                "histogram": 0
+                            }
 
                     # Bollinger Bands (сложный индикатор - сохраняем как отдельные значения)
                     if "bollinger_bands" in indicators:
@@ -5355,11 +5356,109 @@ class FuturesSignalGenerator:
         body_abs = abs(body)
         body_ratio = body_abs / atr_value
 
+        # ✅ ИСПРАВЛЕНО (06.01.2026): Улучшенный фильтр объема (рекомендация Copilot)
+        # Проверяем объем относительно SMA20 вместо среднего по lookback
+        vol_cur = current_candle.volume
+        vol_sma20 = sum(c.volume for c in candles[-20:]) / 20 if len(candles) >= 20 else 0
+        if vol_sma20 > 0 and vol_cur < vol_sma20 * 1.1:
+            # Блокируем низкообъемные сигналы (шум)
+            logger.debug(
+                f"🚫 Импульсный сигнал {symbol} заблокирован: низкий объем "
+                f"(текущий={vol_cur:.0f}, SMA20={vol_sma20:.0f}, ratio={vol_cur/vol_sma20:.2f} < 1.1)"
+            )
+            return []
+
         avg_volume = sum(c.volume for c in prev_candles) / max(len(prev_candles), 1)
         if (
             avg_volume <= 0
             or current_candle.volume < avg_volume * detection_values["min_volume_ratio"]
         ):
+            return []
+
+        # ✅ ИСПРАВЛЕНО (06.01.2026): ADX gate перед добавлением импульсных сигналов (рекомендация Copilot)
+        # Повышаем требования к ADX в зависимости от режима
+        adx_min_required = 20.0  # По умолчанию для trending
+        if regime_key == "ranging":
+            adx_min_required = 30.0
+        elif regime_key == "choppy":
+            adx_min_required = 40.0
+        
+        if adx_value is None or adx_value < adx_min_required:
+            logger.debug(
+                f"🚫 Импульсный сигнал {symbol} заблокирован: ADX={adx_value:.1f} < {adx_min_required:.1f} "
+                f"(режим={regime_key})"
+            )
+            return []
+
+        # ✅ ИСПРАВЛЕНО (06.01.2026): Мульти-индикаторное подтверждение (рекомендация Copilot)
+        # Система scoring для проверки качества сигнала
+        score = 0
+        confirmation_details = []
+
+        # 1. MACD crossover (вес 3)
+        macd_data = indicators.get("macd") or indicators.get("MACD")
+        if macd_data and isinstance(macd_data, dict):
+            macd_line = macd_data.get("macd", 0)
+            signal_line = macd_data.get("signal", 0)
+            histogram = macd_data.get("histogram", 0)
+            
+            if direction == "buy":
+                macd_crossover = macd_line > signal_line and histogram > 0
+            else:  # sell
+                macd_crossover = macd_line < signal_line and histogram < 0
+            
+            if macd_crossover:
+                score += 3
+                confirmation_details.append("MACD crossover")
+
+        # 2. RSI overbought/oversold (вес 2)
+        rsi_value = indicators.get("rsi") or indicators.get("RSI")
+        if rsi_value is not None:
+            rsi_overbought = rsi_value > 70
+            rsi_oversold = rsi_value < 30
+            
+            if direction == "buy" and rsi_oversold:
+                score += 2
+                confirmation_details.append("RSI oversold")
+            elif direction == "sell" and rsi_overbought:
+                score += 2
+                confirmation_details.append("RSI overbought")
+
+        # 3. Bollinger Bands breakout (вес 1)
+        bb_data = indicators.get("bollinger_bands") or indicators.get("BollingerBands")
+        if bb_data and isinstance(bb_data, dict):
+            bb_upper = bb_data.get("upper", 0)
+            bb_lower = bb_data.get("lower", 0)
+            current_price = current_candle.close
+            
+            if direction == "buy":
+                bb_breakout = current_price > bb_upper
+            else:  # sell
+                bb_breakout = current_price < bb_lower
+            
+            if bb_breakout:
+                score += 1
+                confirmation_details.append("BB breakout")
+
+        # 4. EMA crossover (вес 1)
+        ema_fast = indicators.get("ema_fast") or indicators.get("ema_9") or indicators.get("EMA_FAST")
+        ema_slow = indicators.get("ema_slow") or indicators.get("ema_21") or indicators.get("EMA_SLOW")
+        if ema_fast is not None and ema_slow is not None:
+            if direction == "buy":
+                ema_crossover = ema_fast > ema_slow and current_candle.close > ema_fast
+            else:  # sell
+                ema_crossover = ema_fast < ema_slow and current_candle.close < ema_fast
+            
+            if ema_crossover:
+                score += 1
+                confirmation_details.append("EMA crossover")
+
+        # Требуем минимум 4 балла (хотя бы 2 подтверждения)
+        if score < 4:
+            logger.debug(
+                f"🚫 Импульсный сигнал {symbol} {direction.upper()} заблокирован: "
+                f"недостаточно подтверждений (score={score}/4, подтверждения={', '.join(confirmation_details) if confirmation_details else 'нет'})"
+            )
             return []
 
         pivot_level = None
@@ -5399,7 +5498,8 @@ class FuturesSignalGenerator:
 
         logger.info(
             f"🚀 Импульсный сигнал {symbol} {direction.upper()}: тело/ATR={body_ratio:.2f}, "
-            f"объём x{meta['volume_ratio']:.2f}, пробой уровня {pivot_level:.4f}"
+            f"объём x{meta['volume_ratio']:.2f}, пробой уровня {pivot_level:.4f}, "
+            f"подтверждения: {', '.join(confirmation_details)} (score={score})"
         )
 
         relax_cfg = getattr(config, "relax", None)

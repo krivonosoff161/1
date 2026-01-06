@@ -1030,6 +1030,30 @@ class FuturesScalpingOrchestrator:
 
         self.is_running = False
 
+        # ✅ ИСПРАВЛЕНО (06.01.2026): Логируем статистику режимов перед остановкой
+        if hasattr(self, "signal_generator") and self.signal_generator:
+            # Общий regime_manager
+            if hasattr(self.signal_generator, "regime_manager") and self.signal_generator.regime_manager:
+                try:
+                    # Обновляем время в текущем режиме перед логированием
+                    time_in_current = datetime.utcnow() - self.signal_generator.regime_manager.regime_start_time
+                    self.signal_generator.regime_manager.time_in_regime[self.signal_generator.regime_manager.current_regime] += time_in_current
+                    self.signal_generator.regime_manager.log_statistics()
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка логирования статистики режимов: {e}")
+            
+            # Per-symbol regime_managers
+            if hasattr(self.signal_generator, "regime_managers") and self.signal_generator.regime_managers:
+                for symbol, regime_manager in self.signal_generator.regime_managers.items():
+                    try:
+                        # Обновляем время в текущем режиме перед логированием
+                        time_in_current = datetime.utcnow() - regime_manager.regime_start_time
+                        regime_manager.time_in_regime[regime_manager.current_regime] += time_in_current
+                        logger.info(f"\n📊 Статистика режимов для {symbol}:")
+                        regime_manager.log_statistics()
+                    except Exception as e:
+                        logger.warning(f"⚠️ Ошибка логирования статистики режимов для {symbol}: {e}")
+
         # ✅ РЕФАКТОРИНГ: Остановка TradingControlCenter
         if hasattr(self, "trading_control_center") and self.trading_control_center:
             await self.trading_control_center.stop()

@@ -155,13 +155,14 @@ class SmartExitCoordinator:
                         return False  # Блокируем закрытие
 
             # 2. Проверка MACD - разворот сигнала
+            # ✅ ИСПРАВЛЕНО (06.01.2026): MACD всегда сохраняется как dict в DataRegistry
             macd = indicators.get("MACD") or indicators.get("macd")
             if macd:
                 if isinstance(macd, dict):
                     macd_line = macd.get("macd", 0)
                     signal_line = macd.get("signal", 0)
                 else:
-                    # Если MACD сохранен как отдельные значения
+                    # Fallback: если MACD сохранен как отдельные значения (для backward compatibility)
                     macd_line = indicators.get("macd", 0)
                     signal_line = indicators.get("macd_signal", 0)
 
