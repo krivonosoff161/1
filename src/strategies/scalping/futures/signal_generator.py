@@ -1881,9 +1881,9 @@ class FuturesSignalGenerator:
 
             import aiohttp
 
-            # Получаем последние 200 свечей 1m для инициализации буфера
+            # ✅ ИСПРАВЛЕНО (06.01.2026): Загружаем 500 свечей 1m для инициализации буфера (с лучшей прогревом ATR/BB)
             inst_id = f"{symbol}-SWAP"
-            url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar=1m&limit=200"
+            url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar=1m&limit=500"
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
