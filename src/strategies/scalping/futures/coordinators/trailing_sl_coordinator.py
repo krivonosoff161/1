@@ -472,8 +472,10 @@ class TrailingSLCoordinator:
         # ✅ НОВОЕ (03.01.2026): Логирование TP/SL параметров при открытии позиции
         try:
             if self.parameter_provider:
+                # ✅ НОВОЕ (07.01.2026): Передаем контекст для адаптивных параметров
+                # ℹ️ Функция синхронна, поэтому balance=None (адаптивные параметры будут использованы в exit_analyzer)
                 exit_params = self.parameter_provider.get_exit_params(
-                    symbol=symbol, regime=regime
+                    symbol=symbol, regime=regime, balance=None
                 )
                 if exit_params:
                     tp_atr_mult = exit_params.get("tp_atr_multiplier")
@@ -779,6 +781,42 @@ class TrailingSLCoordinator:
                 )
                 # Продолжаем обновление при ошибке
 
+            # ✅ ДИНАМИЧЕСКИЙ TSL: Адаптация distance на основе ADX и режима
+            tsl_mode = "normal"
+            distance_multiplier = 1.0
+            adx_value = None
+
+            try:
+                # Получаем ADX для анализа силы тренда
+                if self.fast_adx:
+                    adx_value = self.fast_adx.get_current_adx()
+                    if adx_value and adx_value > 0:
+                        # Freeze режим: ADX > 35 (сильный тренд) - расширяем distance на 30-50%
+                        if adx_value > 35:
+                            tsl_mode = "freeze"
+                            distance_multiplier = 1.4  # +40% воздуха для откатов
+                            logger.debug(
+                                f"🔵 [TSL_MODE] {symbol}: FREEZE режим | ADX={adx_value:.1f} > 35 | "
+                                f"distance_mult={distance_multiplier:.1f}x (даём воздух для откатов)"
+                            )
+                        # Tight режим: ADX < 25 (слабый/ranging) - ужесточаем distance на 20-30%
+                        elif adx_value < 25:
+                            tsl_mode = "tight"
+                            distance_multiplier = 0.75  # -25% для быстрой фиксации
+                            logger.debug(
+                                f"🟡 [TSL_MODE] {symbol}: TIGHT режим | ADX={adx_value:.1f} < 25 | "
+                                f"distance_mult={distance_multiplier:.1f}x (жёстче фиксируем)"
+                            )
+                        # Normal режим: ADX 25-35 - стандартная логика
+                        else:
+                            logger.debug(
+                                f"🟢 [TSL_MODE] {symbol}: NORMAL режим | ADX={adx_value:.1f} [25-35]"
+                            )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ [TSL_MODE] Ошибка определения режима TSL для {symbol}: {e}"
+                )
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Передаем margin и unrealizedPnl в update() для правильного расчета от маржи
             tsl.update(
                 current_price,
@@ -787,6 +825,22 @@ class TrailingSLCoordinator:
             )
 
             stop_loss = tsl.get_stop_loss()
+
+            # ✅ ДИНАМИЧЕСКИЙ TSL: Применяем distance_multiplier к stop_loss если режим не normal
+            if tsl_mode != "normal" and stop_loss and entry_price > 0:
+                # Рассчитываем текущую distance
+                current_distance = abs(stop_loss - entry_price) / entry_price
+                # Применяем multiplier
+                new_distance = current_distance * distance_multiplier
+                # Корректируем stop_loss
+                if position_side.lower() == "long":
+                    stop_loss = entry_price * (1 - new_distance)
+                else:  # short
+                    stop_loss = entry_price * (1 + new_distance)
+                logger.debug(
+                    f"🔧 [TSL_ADJUST] {symbol}: distance {current_distance:.3%} → {new_distance:.3%}, "
+                    f"stop_loss корректирован под {tsl_mode} режим"
+                )
 
             profit_pct = tsl.get_profit_pct(
                 current_price,
@@ -936,11 +990,19 @@ class TrailingSLCoordinator:
                     f"{trend_strength:.2f}" if trend_strength is not None else "N/A"
                 )
                 regime_str = market_regime or "N/A"
+                adx_str = f"{adx_value:.1f}" if adx_value is not None else "N/A"
+                distance_pct = (
+                    abs(current_price - stop_loss) / current_price * 100
+                    if stop_loss and current_price > 0
+                    else 0.0
+                )
+
                 logger.info(
-                    f"📊 TrailingSL {symbol}: price={current_price:.2f}, entry={entry_price:.2f}, "
-                    f"{extremum_label}={extremum:.2f}, stop={stop_loss:.2f}, "
-                    f"profit={profit_pct:.2%} (net), gross={profit_pct_gross:.2%}, "
-                    f"trend={trend_str}, regime={regime_str}"
+                    f"🔄 [TSL_UPDATE] {symbol}: sl={stop_loss:.4f}, mode={tsl_mode}, "
+                    f"ADX={adx_str}, distance={distance_pct:.2f}%, regime={regime_str} | "
+                    f"price={current_price:.2f}, entry={entry_price:.2f}, "
+                    f"{extremum_label}={extremum:.2f}, profit={profit_pct:.2%} (net), "
+                    f"gross={profit_pct_gross:.2%}, trend={trend_str}"
                 )
 
             if not self._has_position(symbol):

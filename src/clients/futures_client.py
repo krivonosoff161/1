@@ -79,6 +79,9 @@ class OKXFuturesClient:
         self._instrument_info_cache_ttl: float = (
             300.0  # TTL 5 минут (instrument info меняется редко)
         )
+        # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Управление сессией для предотвращения keep-alive проблем
+        self._session_created_at: Optional[float] = None
+        self._session_max_age: float = 60.0  # Пересоздавать сессию каждые 60 секунд
 
     async def close(self):
         """Корректное закрытие клиента и сессии"""
@@ -142,8 +145,31 @@ class OKXFuturesClient:
             "x-simulated-trading": "1" if self.sandbox else "0",
         }
 
-        if not self.session or self.session.closed:
-            self.session = aiohttp.ClientSession()
+        # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Управление сессией с force_close для предотвращения keep-alive проблем
+        now = time.time()
+        if (
+            not self.session
+            or self.session.closed
+            or (
+                self._session_created_at
+                and now - self._session_created_at > self._session_max_age
+            )
+        ):
+            if self.session and not self.session.closed:
+                await self.session.close()
+                await asyncio.sleep(0.1)  # Даем время на корректное закрытие
+
+            # Создаем новый connector с force_close=True для предотвращения проблем с keep-alive
+            connector = aiohttp.TCPConnector(
+                limit=10,  # Лимит соединений
+                limit_per_host=10,  # Лимит на хост
+                force_close=True,  # ❗ КЛЮЧЕВОЕ: Закрывать соединение после каждого запроса
+                enable_cleanup_closed=True,  # Очищать закрытые соединения
+                ttl_dns_cache=300,  # DNS кэш на 5 минут
+            )
+            self.session = aiohttp.ClientSession(connector=connector)
+            self._session_created_at = now
+            logger.debug("♻️ Переинициализирована aiohttp сессия с force_close=True")
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Retry логика для таймаутов и ошибок подключения
         max_retries = 3

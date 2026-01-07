@@ -29,6 +29,46 @@ adaptive_exit_params:
     max_tightening: 0.3        # Максимальное ужесточение +0.3x
     tightening_factor: 0.1     # Коэффициент ужесточения
 
+# ✅ НОВОЕ (07.01.2026): Централизованные параметры выхода по режимам
+exit_params:
+  trending:
+    max_holding_minutes: 15.0
+    min_holding_minutes: 0.5
+    tp_atr_multiplier: 1.0
+    sl_atr_multiplier: 2.0
+    tp_min_percent: 1.5
+    sl_min_percent: 0.60
+    min_profit_for_extension: 0.4
+    extension_percent: 100.0
+  ranging:
+    max_holding_minutes: 25.0
+    min_holding_minutes: 0.5
+    tp_atr_multiplier: 1.0  # ✅ базовое значение, переопределяется по символам
+    sl_atr_multiplier: 1.5  # ✅ базовое значение, переопределяется по символам
+    tp_min_percent: 1.5
+    sl_min_percent: 0.60
+    min_profit_for_extension: 0.4
+    extension_percent: 100.0
+  choppy:
+    max_holding_minutes: 10.0
+    min_holding_minutes: 3.0
+    tp_atr_multiplier: 0.8
+    sl_atr_multiplier: 2.0
+    tp_min_percent: 1.0
+    sl_min_percent: 0.60
+    min_profit_for_extension: 0.2
+    extension_percent: 50.0
+  smart_close:
+    trending:
+      reversal_score_threshold: 2
+      trend_against_threshold: 0.7
+    ranging:
+      reversal_score_threshold: 4
+      trend_against_threshold: 0.5
+    choppy:
+      reversal_score_threshold: 3
+      trend_against_threshold: 0.4
+
 # API настройки
 api:
   okx:
@@ -52,8 +92,8 @@ scalping:
     - "BTC-USDT"
     - "ETH-USDT"
     - "SOL-USDT"  # ✅ НОВОЕ: Solana
-    - "DOGE-USDT"  # ✅ НОВОЕ: Dogecoin
-    - "XRP-USDT"  # ✅ НОВОЕ: XRP для частотного скальпинга
+    - "DOGE-USDT"  # ✅ НОВОЕ: Dogecoin (с адаптивным ATR period=5)
+    - "XRP-USDT"  # ✅ НОВОЕ: XRP (с адаптивным ATR period=7)
   
   # ✅ КРИТИЧЕСКОЕ: Интервал главного цикла (для скальпинга должно быть ≤ 2 сек)
   check_interval: 1.0  # ✅ ОПТИМИЗИРОВАНО: 1.0 сек для быстрого анализа позиций (было 5.0 по умолчанию)
@@ -91,10 +131,46 @@ scalping:
         reversal_score_threshold:
           ranging: 5  # ✅ SOL более волатильный - требуется еще больше подтверждений разворота (5 вместо 4)
     XRP-USDT:
+      # ✅ НОВОЕ (06.01.2026): Специальные параметры для низковолатильной пары
+      min_adx: 12.0  # ✅ Снижен порог - слабый тренд тоже допустим (волатильность низкая)
+      min_signal_strength: 0.55  # ✅ Снижен порог для большего количества сигналов
       sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Wider SL для XRP (Grok рекомендация)
+      tp_atr_multiplier: 4.0  # ✅ НОВОЕ (06.01.2026): Адаптивный TP для компенсации низкой волатильности
+      indicators:  # ✅ НОВОЕ (06.01.2026): Настройка индикаторов для микроволатильности
+        atr_period: 7  # ✅ Уменьшен период (14→7) для большей чувствительности
+        rsi_period: 10  # ✅ Быстрый RSI (14→10) для раннего обнаружения сигналов
+        rsi_overbought: 75  # ✅ Мягче порог (70→75) - XRP редко достигает экстремумов
+        rsi_oversold: 25  # ✅ Мягче порог (30→25)
+        ema_fast: 8    # ✅ НОВОЕ: Быстрый EMA (12→8) для чувствительности
+        ema_slow: 17   # ✅ НОВОЕ: Быстрый EMA (26→17) согласовано с MACD
+        macd_fast: 8   # ✅ Быстрый MACD (12→8)
+        macd_slow: 17  # ✅ Быстрый MACD (26→17)
+        bb_period: 15  # ✅ Короче период BB (20→15) для большей реактивности
+        bb_std_multiplier: 1.8  # ✅ Уже полосы (2.0→1.8) для низкой волатильности
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Per-symbol Smart Close параметры для XRP
         reversal_score_threshold:
           ranging: 5  # ✅ XRP часто показывает ложные развороты в ranging - требуется больше подтверждений (5 вместо 4)
+    DOGE-USDT:
+      # ✅ НОВОЕ (06.01.2026): Специальные параметры для ультра-низковолатильной пары
+      min_adx: 10.0  # ✅ Минимальный порог - DOGE имеет очень слабые тренды
+      min_signal_strength: 0.50  # ✅ Минимальный порог для максимальной чувствительности
+      sl_atr_multiplier: 4.0  # ✅ Широкий SL для компенсации шумов
+      tp_atr_multiplier: 5.0  # ✅ Увеличенный TP - компенсация микроволатильности
+      max_holding_minutes: 20.0  # ✅ Короче холдинг - быстрое закрытие на микродвижениях
+      indicators:  # ✅ НОВОЕ (06.01.2026): Максимальная чувствительность индикаторов
+        atr_period: 5  # ✅ КРИТИЧНО: Очень короткий период (14→5) для микроволатильности
+        rsi_period: 7  # ✅ Ультра-быстрый RSI (14→7)
+        rsi_overbought: 80  # ✅ Широкие границы (70→80) - DOGE редко перекупается
+        rsi_oversold: 20  # ✅ Широкие границы (30→20)
+        ema_fast: 6    # ✅ НОВОЕ: Ультра-быстрый EMA (12→6) согласовано с MACD
+        ema_slow: 13   # ✅ НОВОЕ: Ультра-быстрый EMA (26→13) согласовано с MACD
+        macd_fast: 6   # ✅ Очень быстрый MACD (12→6)
+        macd_slow: 13  # ✅ Очень быстрый MACD (26→13)
+        bb_period: 10  # ✅ Короткий период BB (20→10) для максимальной реактивности
+        bb_std_multiplier: 1.5  # ✅ Узкие полосы (2.0→1.5) для микроволатильности
+      smart_close:  # ✅ НОВОЕ (06.01.2026): Smart Close для DOGE
+        reversal_score_threshold:
+          ranging: 6  # ✅ DOGE экстремально чувствительна к ложным разворотам - максимум подтверждений
     BTC-USDT:
       min_signal_strength: 0.62  # ✅ Чуть looser для BTC
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Per-symbol Smart Close параметры для BTC
@@ -304,6 +380,10 @@ scalping:
       sl_atr_multiplier: 0.6  # ✅ АГРЕССИВНО: Увеличено с 0.5 до 0.6 (+20%) - больше места для откатов
       tp_percent: 6.55  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 6.0% до 6.55% для компенсации комиссий (0.2%) и slippage (0.15%) → net TP ≈ 6.2%
       sl_percent: 1.2  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.8% до 1.2% - баланс с новым TP
+      sl_atr_based: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Использовать ATR-based SL для защиты от шума
+      sl_atr_multiplier: 3.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): 3.0 ATR для trending (защита от откатов в тренде)
+      sl_min_percent: 0.8  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Минимальный SL 0.8%
+      sl_max_percent: 1.8  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Максимальный SL 1.8%
       max_holding_minutes: 40  # ✅ АГРЕССИВНО: Увеличено с 30 до 40 минут (+33%) - больше времени для прибыли
       extend_time_if_profitable: true  # ✅ НОВОЕ: Продлевать время если позиция в прибыли
       min_profit_for_extension: 0.4  # ✅ АГРЕССИВНО: Снижено с 0.5% до 0.4% - раньше продлеваем
@@ -316,7 +396,7 @@ scalping:
       ph_threshold_percent: 2.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (21.12.2025): 2.5% от маржи для trending
       ph_threshold: 0.12  # ✅ Fallback для обратной совместимости
       ph_time_limit: 600  # ✅ УВЕЛИЧЕНО: 10 минут (было 180 = 3 минуты)
-      min_holding_minutes: 0.8  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Минимальное время удержания перед SL (0.8 минуты = 48 сек) - меньше чем в ranging, т.к. в тренде нужна быстрая реакция
+      min_holding_minutes: 2.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 0.8 до 2.0 мин - защита от быстрых закрытий
       
       # Индикаторы для тренда
       indicators:
@@ -327,7 +407,7 @@ scalping:
         sma_slow: 21
         ema_fast: 8
         ema_slow: 21
-        atr_period: 14
+        atr_period: 14  # ✅ ОТКАТ (06.01.2026): Возврат с 7 на 14 для сохранения адаптивности BTC/ETH/SOL
         min_volatility_atr: 0.0004
         min_ma_difference_pct: 0.05  # ✅ ПРИОРИТЕТ 2 (28.12.2025): Снижено с 0.1% до 0.05% для большего количества сигналов
         macd_strength_divider: 120.0  # ✅ ПРИОРИТЕТ 1 (28.12.2025): Адаптивный делитель для MACD strength (Trending: более агрессивно)
@@ -340,10 +420,11 @@ scalping:
       # Модули для тренда
       modules:
         multi_timeframe:
-          block_opposite: false
-          score_bonus: 1
-          confirmation_timeframe: "15m"
-          fail_open_enabled: true
+          block_opposite: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Блокировать контр-трендовые SHORT в UP-trending
+          block_neutral: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Блокировать при неопределённом тренде
+          score_bonus: 2  # ✅ ИСПРАВЛЕНО: Увеличен бонус для подтверждённых трендовых сигналов
+          confirmation_timeframe: "5m"  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Изменено с 15m для быстрого реагирования
+          fail_open_enabled: false  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Отключить пропуск без подтверждения
           fail_open_blocks: 3
           fail_open_cooldown_seconds: 60
         correlation_filter:
@@ -380,9 +461,9 @@ scalping:
       tp_max_percent: 2.2  # ✅ ГРОК: Максимальный TP 2.2%
       sl_percent: 1.0  # ✅ ГРОК ФИКС: Увеличено с 0.8% до 1.0% (баланс для ranging noise)
       sl_atr_based: true  # ✅ ГРОК: Использовать ATR-based SL вместо фиксированного
-      sl_atr_multiplier: 2.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличено с 1.5 до 2.0 для предотвращения быстрых закрытий
+      sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 2.0 до 3.5 для защиты от шума в ranging
       sl_min_percent: 0.6  # ✅ ГРОК: Минимальный SL 0.6% (защита от шума)
-      sl_max_percent: 1.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличено с 1.2% до 1.5% для соответствия новому multiplier
+      sl_max_percent: 2.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 1.5% до 2.0% для соответствия новому multiplier
       max_holding_minutes: 25  # ✅ ГРОК: Уменьшено с 28 до 25 минут для более быстрой ротации
       max_holding_hard_stop: true  # ✅ ГРОК: Жесткий стоп по max_holding (не игнорировать убыточные)
       timeout_loss_percent: 1.5  # ✅ ГРОК: Закрывать по max_holding если убыток >= 1.5%
@@ -398,7 +479,7 @@ scalping:
       ph_min_absolute_usd: 0.10  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличено с 0.05 до 0.10 USD для защиты от микро-прибылей
       ph_threshold: 0.10  # ✅ Fallback для обратной совместимости
       ph_time_limit: 600  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Уменьшено с 1200 до 600 секунд (10 минут) для более быстрого PH
-      min_holding_minutes: 3.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Увеличено с 1.5 до 3.0 минут (180 сек) - защита от быстрых закрытий, позиции будут держаться дольше
+      min_holding_minutes: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 3.0 до 3.5 минут (210 сек) - защита от быстрых закрытий
       
       indicators:
         rsi_overbought: 85  # ✅ ИСПРАВЛЕНО: Увеличено с 70 до 85
@@ -408,7 +489,7 @@ scalping:
         sma_slow: 25
         ema_fast: 10
         ema_slow: 25
-        atr_period: 14
+        atr_period: 14  # ✅ ОТКАТ (06.01.2026): Возврат с 7 на 14 для сохранения адаптивности BTC/ETH/SOL
         min_volatility_atr: 0.0003
         min_ma_difference_pct: 0.015  # ✅ ПРИОРИТЕТ 2 (28.12.2025): Повышено с 0.002% до 0.015% для фильтрации шума
         macd_strength_divider: 180.0  # ✅ ПРИОРИТЕТ 1 (28.12.2025): Адаптивный делитель для MACD strength (Ranging: консервативно)
@@ -421,9 +502,10 @@ scalping:
       modules:
         multi_timeframe:
           block_opposite: true
+          block_neutral: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Блокировать при неопределённом тренде
           score_bonus: 1.5  # ✅ ИСПРАВЛЕНО: Снижено с 2 до 1.5 для ranging (менее агрессивно блокируем counter-trend сделки)
           confirmation_timeframe: "5m"
-          fail_open_enabled: true
+          fail_open_enabled: false  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Отключить fail-open для строгой фильтрации
           fail_open_blocks: 3
           fail_open_cooldown_seconds: 60
         correlation_filter:
@@ -453,13 +535,17 @@ scalping:
       tp_atr_multiplier: 1.1  # ✅ АГРЕССИВНО: Увеличено с 0.9 до 1.1 (+22%) - больше прибыль
       sl_atr_multiplier: 0.5  # ✅ АГРЕССИВНО: Увеличено с 0.4 до 0.5 (+25%) - больше места для откатов
       tp_percent: 5.05  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 4.5% до 5.05% для компенсации комиссий (0.2%) и slippage (0.15%) → net TP ≈ 4.7%
-      sl_percent: 1.2  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 1.0% до 1.2% - баланс с новым TP
+      sl_percent: 1.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 1.2% до 1.5% - баланс для choppy
+      sl_atr_based: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Использовать ATR-based SL для choppy
+      sl_atr_multiplier: 3.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): 3.0 ATR для choppy (защита от хаотичного движения)
+      sl_min_percent: 0.8  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Минимальный SL 0.8% для choppy
+      sl_max_percent: 2.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Максимальный SL 2.0% для choppy
       max_holding_minutes: 14  # ✅ АГРЕССИВНО: Увеличено с 10 до 14 минут (+40%) - больше времени для прибыли
       extend_time_if_profitable: true  # ✅ АГРЕССИВНО: Включено продление даже в хаосе
       min_profit_for_extension: 0.4  # ✅ АГРЕССИВНО: Снижено с 0.5% до 0.4% - раньше продлеваем
       extension_percent: 100  # ✅ АГРЕССИВНО: Увеличено с 50% до 100% - продлеваем больше
       cooldown_after_loss_minutes: 1.0  # ✅ АГРЕССИВНО: Уменьшено с 1.5 до 1.0 мин - быстрее возвращаемся
-      min_holding_minutes: 2.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Минимальное время удержания перед SL (2.5 минуты = 150 сек) - больше чем в ranging, т.к. в хаосе нужна защита от ложных сигналов
+      min_holding_minutes: 3.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 2.5 до 3.0 минут (180 сек) - защита от фольсивых сигналов в хаосе
       pivot_bonus_multiplier: 1.0
       volume_profile_bonus_multiplier: 0.9
       ph_enabled: true
@@ -806,8 +892,8 @@ scalping:
           arm:
             min_score_threshold: 2.0  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 1.7 до 2.0 (+18%) - фильтрация слабых сигналов
             position_size_multiplier: 1.0
-            tp_atr_multiplier: 0.45
-            sl_atr_multiplier: 0.30
+            tp_atr_multiplier: 0.62  # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 0.45 до 0.62 (+38%) - поймать больше прибыли на скачках
+            sl_atr_multiplier: 0.38  # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 0.30 до 0.38 (+27%) - защита от микроскачков
           position:
             base_position_usd: 30.0
             min_position_usd: 18.0
@@ -921,8 +1007,8 @@ scalping:
           arm:
             min_score_threshold: 1.7  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 1.6 до 1.7 (+6%) - качественнее сигналы
             position_size_multiplier: 1.0
-            tp_atr_multiplier: 0.42
-            sl_atr_multiplier: 0.28
+            tp_atr_multiplier: 0.65  # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 0.42 до 0.65 (+55%) - поймать больше прибыли на скачках
+            sl_atr_multiplier: 0.38  # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 0.28 до 0.38 (+36%) - защита от микроскачков
           position:
             base_position_usd: 24.0
             min_position_usd: 16.0
@@ -1057,8 +1143,8 @@ scalping:
           arm:
             min_score_threshold: 1.3  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 1.0 до 1.3 (+30%) - качественнее сигналы
             position_size_multiplier: 1.0
-            tp_atr_multiplier: 0.40
-            sl_atr_multiplier: 0.26
+            tp_atr_multiplier: 0.55  # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 0.40 до 0.55 (+38%) - поймать больше прибыли на скачках
+            sl_atr_multiplier: 0.35  # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 0.26 до 0.35 (+35%) - защита от микроскачков
           modules:
             adx_filter:
               adx_threshold: 13.0  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 10.0 до 13.0 (+30%) - более сильные тренды
@@ -1175,41 +1261,43 @@ scalping:
       bollinger_check: true
   order_executor:
     limit_order:
-      # ✅ ИСПРАВЛЕНО: Уменьшен offset для быстрого исполнения и экономии комиссий
-      limit_offset_percent: 0.05  # ✅ ИСПРАВЛЕНО: 0.05% для лучшего исполнения (было 0.01%)
-      max_wait_seconds: 30  # ✅ ОПТИМИЗАЦИЯ: Увеличено до 30 сек для лучшего исполнения (было 15 сек)
+      # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличен offset до 0.10% для гарантии исполнения
+      limit_offset_percent: 0.10  # ✅ ИСПРАВЛЕНО (07.01.2026): с 0.05% до 0.10% для гарантии исполнения maker
+      max_wait_seconds: 60  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 30 до 60 сек для больше времени на исполнение
       auto_cancel_enabled: true  # Автоматическая отмена после таймаута
       auto_replace_enabled: true  # Автоматическая замена ордера с новой ценой
-      replace_with_market: true  # Заменять на рыночный ордер после таймаута
-      post_only: false  # Гарантирует maker fee (0.02% вместо 0.05%), но может не исполниться сразу
-      adaptive_spread_offset: true  # ✅ НОВОЕ: Адаптивный offset на основе спреда (20% спреда, макс 0.05%)
+      replace_with_market: false  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Отключено - будем переставлять limit вместо market
+      post_only: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Глобально включено - гарантирует maker fee 0.02%
+      adaptive_spread_offset: true  # ✅ НОВОЕ: Адаптивный offset на основе спреда (20% спреда, макс 0.15%)
       
       # ✅ АДАПТИВНО: Параметры по режимам рынка
       by_regime:
         trending:
-          limit_offset_percent: 0.05  # ✅ ИСПРАВЛЕНО: 0.05% для лучшего исполнения (было 0.02%)
-          max_wait_seconds: 30  # ✅ ОПТИМИЗАЦИЯ: Увеличено до 30 сек для лучшего исполнения (было 10 сек)
+          limit_offset_percent: 0.12  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.05% до 0.12% для тренда
+          max_wait_seconds: 60  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 30 до 60 сек
           use_market_order: false  # Используем лимитные ордера в тренде
+          post_only: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Включено maker fee
         ranging:
-          limit_offset_percent: 0.05  # ✅ ИСПРАВЛЕНО: 0.05% для лучшего исполнения (было 0.03%)
-          max_wait_seconds: 30  # ✅ ОПТИМИЗАЦИЯ: Увеличено до 30 сек для лучшего исполнения (было 8 сек)
+          limit_offset_percent: 0.10  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.05% до 0.10% для ranging
+          max_wait_seconds: 60  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 30 до 60 сек
           post_only: true  # ✅ Maker fee 0.02% вместо taker 0.05%
         choppy:
-          limit_offset_percent: 0.05  # ✅ ИСПРАВЛЕНО: 0.05% для лучшего исполнения (было 0.02%)
-          max_wait_seconds: 30  # ✅ ОПТИМИЗАЦИЯ: Увеличено до 30 сек для лучшего исполнения (было 5 сек)
+          limit_offset_percent: 0.15  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.05% до 0.15% для choppy (больше волатильности)
+          max_wait_seconds: 60  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 30 до 60 сек
           use_market_order: false  # Используем лимитные ордера в хаосе
+          post_only: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Включено maker fee
       
       # ✅ НОВОЕ: Настройки для каждой пары (приоритет выше, чем by_regime)
       by_symbol:
         "BTC-USDT":
-          limit_offset_percent: 0.03  # ✅ Маленький offset для высокой ликвидности BTC
+          limit_offset_percent: 0.08  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.03% до 0.08% для гарантии исполнения
           by_regime:
             trending:
-              limit_offset_percent: 0.05  # ✅ В тренде можно чуть больше для гарантии
+              limit_offset_percent: 0.10  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.05% до 0.10%
             ranging:
-              limit_offset_percent: 0.08   # ✅ В боковике больше для гарантии исполнения
+              limit_offset_percent: 0.12  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.08% до 0.12%
             choppy:
-              limit_offset_percent: 0.06    # ✅ В хаосе средний offset
+              limit_offset_percent: 0.15  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.06% до 0.15%
         "ETH-USDT":
           limit_offset_percent: 0.04  # ✅ Немного больше для ETH
           by_regime:
@@ -1417,17 +1505,17 @@ risk:
 # ✅ ПРАВКА #2: Адаптивные параметры выхода по режимам
 exit_params:
   ranging:
-    max_holding_minutes: 15  # Для ranging
+    max_holding_minutes: 25.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильное значение для ranging режима
     sl_percent: 0.8  # ✅ ПРАВКА #11: Адаптивный SL для ranging
     tp_percent: 2.5  # ✅ ПРАВКА #11: Адаптивный TP для ranging
     spread_buffer: 0.15  # ✅ ПРАВКА #10: Увеличен для ranging
   trending:
-    max_holding_minutes: 45  # Для trending
+    max_holding_minutes: 15.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Было 45, исправлено на 15 мин для trending
     sl_percent: 2.0  # ✅ ПРАВКА #11: Адаптивный SL для trending
     tp_percent: 8.0  # ✅ ПРАВКА #11: Адаптивный TP для trending
     spread_buffer: 0.05
   choppy:
-    max_holding_minutes: 10  # Для choppy
+    max_holding_minutes: 10.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильное значение для choppy режима
     sl_percent: 1.5
     tp_percent: 3.0
     spread_buffer: 0.10

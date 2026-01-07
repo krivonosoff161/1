@@ -6,11 +6,11 @@
 Используем профилирование для выявления узких мест.
 """
 
-import sys
-import cProfile
-import pstats
-import io
 import asyncio
+import cProfile
+import io
+import pstats
+import sys
 from pathlib import Path
 
 # Добавляем корень проекта в путь
@@ -18,6 +18,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from loguru import logger
+
 from src.config import BotConfig
 
 
@@ -80,11 +81,10 @@ def profile_signal_generation():
     print("=" * 80)
 
     try:
-        from src.strategies.scalping.futures.signal_generator import (
-            FuturesSignalGenerator,
-        )
         from src.clients.futures_client import OKXFuturesClient
         from src.models import OHLCV
+        from src.strategies.scalping.futures.signal_generator import \
+            FuturesSignalGenerator
 
         config = BotConfig.load_from_file("config/config_futures.yaml")
         client = OKXFuturesClient(config.get_okx_config())
@@ -97,9 +97,7 @@ def profile_signal_generation():
         )
 
         print("✅ SignalGenerator инициализирован")
-        print(
-            "⚠️ Полный профиль требует запущенного бота с реальными данными"
-        )
+        print("⚠️ Полный профиль требует запущенного бота с реальными данными")
         print("   Используйте: python -m cProfile -s cumulative run.py --mode futures")
 
     except Exception as e:
@@ -113,8 +111,9 @@ def check_logging_level():
     print("=" * 80)
 
     try:
-        from loguru import logger
         import inspect
+
+        from loguru import logger
 
         # Проверяем текущий уровень
         for handler in logger._core.handlers:

@@ -9,7 +9,7 @@
 """
 
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
@@ -76,7 +76,7 @@ class TradingStatistics:
         self.trades.append(trade)
 
         # Очищаем старые сделки
-        cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=self.lookback_hours)
         self.trades = [t for t in self.trades if t["entry_time"] >= cutoff_time]
 
     def record_signal(
@@ -106,12 +106,12 @@ class TradingStatistics:
             "strength": strength,
             "signal_type": signal_type,
             "was_executed": was_executed,
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
         }
         self.signals.append(signal)
 
         # Очищаем старые сигналы
-        cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=self.lookback_hours)
         self.signals = [s for s in self.signals if s["timestamp"] >= cutoff_time]
 
     def record_reversal(
@@ -141,12 +141,12 @@ class TradingStatistics:
             "price_change": price_change,
             "max_price": max_price,
             "min_price": min_price,
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
         }
         self.reversals.append(reversal)
 
         # Очищаем старые развороты
-        cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=self.lookback_hours)
         self.reversals = [r for r in self.reversals if r["timestamp"] >= cutoff_time]
 
     def get_reversal_stats(
@@ -178,9 +178,7 @@ class TradingStatistics:
             ]
         if regime:
             filtered_reversals = [
-                r
-                for r in filtered_reversals
-                if r["regime"].lower() == regime.lower()
+                r for r in filtered_reversals if r["regime"].lower() == regime.lower()
             ]
 
         if not filtered_reversals:
@@ -194,12 +192,9 @@ class TradingStatistics:
         v_down_count = sum(
             1 for r in filtered_reversals if r["reversal_type"] == "v_down"
         )
-        v_up_count = sum(
-            1 for r in filtered_reversals if r["reversal_type"] == "v_up"
-        )
+        v_up_count = sum(1 for r in filtered_reversals if r["reversal_type"] == "v_up")
         avg_price_change = (
-            sum(r["price_change"] for r in filtered_reversals)
-            / len(filtered_reversals)
+            sum(r["price_change"] for r in filtered_reversals) / len(filtered_reversals)
             if filtered_reversals
             else 0.0
         )

@@ -187,9 +187,13 @@ class ParameterProvider:
                 exit_params["max_holding_minutes"] = _to_float(
                     exit_params.get("max_holding_minutes"),
                     "max_holding_minutes",
-                    25.0
-                    if regime and regime.lower() == "ranging"
-                    else 120.0,  # Default для ranging: 25.0, иначе 120.0
+                    {
+                        "ranging": 25.0,
+                        "trending": 15.0,  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильный default для trending
+                        "choppy": 10.0,  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильный default для choppy
+                    }.get(
+                        regime.lower() if regime else "ranging", 25.0
+                    ),  # Fallback на ranging если режим не определён
                 )
                 exit_params["sl_atr_multiplier"] = _to_float(
                     exit_params.get("sl_atr_multiplier"),
@@ -352,11 +356,15 @@ class ParameterProvider:
             )
 
             # Логирование итоговых адаптивных параметров
+            # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Добавлена защита от NoneType при форматировании
+            balance_str = f"${balance:.0f}" if balance is not None else "N/A"
+            pnl_str = f"{current_pnl:.1f}%" if current_pnl is not None else "N/A"
+            drawdown_str = f"{drawdown:.1f}%" if drawdown is not None else "N/A"
             logger.info(
                 f"🎯 [ADAPTIVE] {symbol} ({regime}): Финальные параметры → "
                 f"TP: {adaptive_params['tp_atr_multiplier']:.2f}, "
                 f"SL: {adaptive_params['sl_atr_multiplier']:.2f} | "
-                f"Контекст: баланс=${balance:.0f}, P&L={current_pnl:.1f}%, просадка={drawdown:.1f}%"
+                f"Контекст: баланс={balance_str}, P&L={pnl_str}, просадка={drawdown_str}"
             )
 
             return adaptive_params
@@ -1088,11 +1096,15 @@ class ParameterProvider:
             )
 
             # Логирование итоговых адаптивных параметров
+            # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Добавлена защита от NoneType при форматировании
+            balance_str = f"${balance:.0f}" if balance is not None else "N/A"
+            pnl_str = f"{current_pnl:.1f}%" if current_pnl is not None else "N/A"
+            drawdown_str = f"{drawdown:.1f}%" if drawdown is not None else "N/A"
             logger.info(
                 f"🎯 [ADAPTIVE] {symbol} ({regime}): Финальные параметры → "
                 f"TP: {adaptive_params['tp_atr_multiplier']:.2f}, "
                 f"SL: {adaptive_params['sl_atr_multiplier']:.2f} | "
-                f"Контекст: баланс=${balance:.0f}, P&L={current_pnl:.1f}%, просадка={drawdown:.1f}%"
+                f"Контекст: баланс={balance_str}, P&L={pnl_str}, просадка={drawdown_str}"
             )
 
             return adaptive_params

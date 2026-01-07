@@ -536,6 +536,13 @@ class TradingControlCenter:
             # Получение текущих позиций
             positions = await self.client.get_positions()
 
+            # 🛡️ Защита от некорректного формата (иногда API/клиент может вернуть строку/None)
+            if not isinstance(positions, list):
+                logger.warning(
+                    f"⚠️ TCC: Некорректный формат позиций от клиента: {type(positions).__name__}, ожидается list. Пропускаем обновление."
+                )
+                positions = []
+
             if not self.is_running:
                 return
 
@@ -547,6 +554,11 @@ class TradingControlCenter:
             # Удаляем позиции, которых больше нет на бирже
             exchange_symbols = set()
             for position in positions:
+                if not isinstance(position, dict):
+                    logger.warning(
+                        f"⚠️ TCC: Пропуск некорректной записи позиции: {position}"
+                    )
+                    continue
                 symbol = position.get("instId", "").replace("-SWAP", "")
                 size = float(position.get("pos", "0"))
                 if abs(size) >= 1e-8:
@@ -559,6 +571,11 @@ class TradingControlCenter:
 
             # Обновляем/регистрируем позиции с сохранением метаданных
             for position in positions:
+                if not isinstance(position, dict):
+                    logger.warning(
+                        f"⚠️ TCC: Пропуск некорректной записи позиции при обновлении: {position}"
+                    )
+                    continue
                 symbol = position.get("instId", "").replace("-SWAP", "")
                 size = float(position.get("pos", "0"))
                 if abs(size) >= 1e-8:

@@ -8,11 +8,11 @@
 4. Параметры фильтров
 """
 
-import re
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 # Индикаторы, которые должны быть dict
 COMPLEX_INDICATORS = {
@@ -28,7 +28,10 @@ SIMPLE_INDICATORS = {
     "sma_20": {"format": "scalar", "aliases": []},
     "ema_12": {"format": "scalar", "aliases": []},
     "ema_26": {"format": "scalar", "aliases": []},
-    "adx": {"format": "scalar", "aliases": ["adx_plus_di", "adx_minus_di", "adx_proxy"]},
+    "adx": {
+        "format": "scalar",
+        "aliases": ["adx_plus_di", "adx_minus_di", "adx_proxy"],
+    },
 }
 
 ALL_INDICATORS = list(COMPLEX_INDICATORS.keys()) + list(SIMPLE_INDICATORS.keys())
@@ -38,7 +41,11 @@ def find_files(root_dir: str) -> List[str]:
     """Найти все Python файлы"""
     files = []
     for root, dirs, filenames in os.walk(root_dir):
-        dirs[:] = [d for d in dirs if d not in ("__pycache__", ".git", "venv", ".venv", "tests")]
+        dirs[:] = [
+            d
+            for d in dirs
+            if d not in ("__pycache__", ".git", "venv", ".venv", "tests")
+        ]
         for filename in filenames:
             if filename.endswith(".py"):
                 files.append(os.path.join(root, filename))
@@ -55,7 +62,7 @@ def analyze_indicator_usage(file_path: str) -> Dict[str, Any]:
         result = {
             "file": file_path,
             "saves": [],  # Где сохраняются индикаторы
-            "reads": [],   # Где читаются индикаторы
+            "reads": [],  # Где читаются индикаторы
             "issues": [],  # Найденные проблемы
         }
 
@@ -63,30 +70,34 @@ def analyze_indicator_usage(file_path: str) -> Dict[str, Any]:
         for i, line in enumerate(lines, 1):
             # update_indicators
             if "update_indicators" in line:
-                context_lines = lines[max(0, i - 5):min(len(lines), i + 10)]
+                context_lines = lines[max(0, i - 5) : min(len(lines), i + 10)]
                 context = "\n".join(context_lines)
-                
+
                 # Извлекаем ключи из словаря
                 keys = extract_dict_keys(context)
-                
-                result["saves"].append({
-                    "line": i,
-                    "method": "update_indicators",
-                    "keys": keys,
-                    "code": context[:500],
-                })
+
+                result["saves"].append(
+                    {
+                        "line": i,
+                        "method": "update_indicators",
+                        "keys": keys,
+                        "code": context[:500],
+                    }
+                )
 
             # update_indicator
             if "update_indicator" in line:
                 indicator_name = extract_indicator_name_from_call(line)
                 if indicator_name:
-                    context = "\n".join(lines[max(0, i - 2):min(len(lines), i + 2)])
-                    result["saves"].append({
-                        "line": i,
-                        "method": "update_indicator",
-                        "keys": [indicator_name],
-                        "code": context[:300],
-                    })
+                    context = "\n".join(lines[max(0, i - 2) : min(len(lines), i + 2)])
+                    result["saves"].append(
+                        {
+                            "line": i,
+                            "method": "update_indicator",
+                            "keys": [indicator_name],
+                            "code": context[:300],
+                        }
+                    )
 
             # Чтение индикаторов
             for indicator in ALL_INDICATORS:
@@ -94,14 +105,16 @@ def analyze_indicator_usage(file_path: str) -> Dict[str, Any]:
                 pattern1 = rf'\.get\(["\']{indicator}["\']'
                 # indicators["rsi"]
                 pattern2 = rf'\[["\']{indicator}["\']'
-                
+
                 if re.search(pattern1, line) or re.search(pattern2, line):
-                    context = "\n".join(lines[max(0, i - 3):min(len(lines), i + 3)])
-                    result["reads"].append({
-                        "line": i,
-                        "indicator": indicator,
-                        "code": context[:300],
-                    })
+                    context = "\n".join(lines[max(0, i - 3) : min(len(lines), i + 3)])
+                    result["reads"].append(
+                        {
+                            "line": i,
+                            "indicator": indicator,
+                            "code": context[:300],
+                        }
+                    )
 
         return result
 
@@ -115,15 +128,19 @@ def extract_dict_keys(text: str) -> List[str]:
     # Паттерн: "key": value или 'key': value
     pattern = r'["\']([^"\']+)["\']\s*:'
     matches = re.findall(pattern, text)
-    
+
     for match in matches:
         # Проверяем, является ли это индикатором
         match_lower = match.lower()
         for ind in ALL_INDICATORS:
-            if ind in match_lower or match_lower in [alias for aliases in SIMPLE_INDICATORS.values() for alias in aliases.get("aliases", [])]:
+            if ind in match_lower or match_lower in [
+                alias
+                for aliases in SIMPLE_INDICATORS.values()
+                for alias in aliases.get("aliases", [])
+            ]:
                 keys.append(match)
                 break
-    
+
     return keys
 
 
@@ -178,30 +195,38 @@ def check_macd_consistency(results: List[Dict[str, Any]]) -> List[Dict[str, Any]
         # Проверяем сохранение
         for save in result.get("saves", []):
             keys = save.get("keys", [])
-            
+
             # Проблема: MACD сохраняется как отдельные значения
             if "macd" in keys and ("macd_signal" in keys or "macd_histogram" in keys):
-                issues.append({
-                    "file": file,
-                    "line": save["line"],
-                    "issue": "MACD сохраняется как отдельные значения вместо dict",
-                    "severity": "HIGH",
-                    "code": save.get("code", "")[:300],
-                })
+                issues.append(
+                    {
+                        "file": file,
+                        "line": save["line"],
+                        "issue": "MACD сохраняется как отдельные значения вместо dict",
+                        "severity": "HIGH",
+                        "code": save.get("code", "")[:300],
+                    }
+                )
 
         # Проверяем чтение
         for read in result.get("reads", []):
             if read.get("indicator") == "macd":
                 code = read.get("code", "")
                 # Если читается как scalar, но должен быть dict
-                if ".get('macd')" in code and "isinstance" not in code and ".get(" not in code:
-                    issues.append({
-                        "file": file,
-                        "line": read["line"],
-                        "issue": "MACD читается как scalar, но должен быть dict",
-                        "severity": "MEDIUM",
-                        "code": code[:300],
-                    })
+                if (
+                    ".get('macd')" in code
+                    and "isinstance" not in code
+                    and ".get(" not in code
+                ):
+                    issues.append(
+                        {
+                            "file": file,
+                            "line": read["line"],
+                            "issue": "MACD читается как scalar, но должен быть dict",
+                            "severity": "MEDIUM",
+                            "code": code[:300],
+                        }
+                    )
 
     return issues
 
@@ -225,23 +250,27 @@ def check_adx_consistency(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                 code = read.get("code", "")
                 # Проверяем, что ADX читается правильно
                 if "adx" in code.lower() and "get(" not in code:
-                    issues.append({
-                        "file": result["file"],
-                        "line": read["line"],
-                        "issue": "ADX читается напрямую без проверки наличия",
-                        "severity": "LOW",
-                        "code": code[:300],
-                    })
+                    issues.append(
+                        {
+                            "file": result["file"],
+                            "line": read["line"],
+                            "issue": "ADX читается напрямую без проверки наличия",
+                            "severity": "LOW",
+                            "code": code[:300],
+                        }
+                    )
 
     # Если ADX сохраняется с разными ключами
     if len(adx_keys_found) > 3:  # adx, adx_plus_di, adx_minus_di - это нормально
-        issues.append({
-            "file": "multiple",
-            "line": 0,
-            "issue": f"ADX сохраняется с множеством ключей: {sorted(adx_keys_found)}",
-            "severity": "MEDIUM",
-            "code": "",
-        })
+        issues.append(
+            {
+                "file": "multiple",
+                "line": 0,
+                "issue": f"ADX сохраняется с множеством ключей: {sorted(adx_keys_found)}",
+                "severity": "MEDIUM",
+                "code": "",
+            }
+        )
 
     return issues
 
@@ -270,13 +299,15 @@ def check_atr_consistency(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 
     # Если ATR сохраняется с разными ключами без fallback
     if len(atr_keys_found) > 1:
-        issues.append({
-            "file": "multiple",
-            "line": 0,
-            "issue": f"ATR сохраняется с разными ключами: {sorted(atr_keys_found)}. Убедитесь, что есть fallback при чтении.",
-            "severity": "LOW",
-            "code": "",
-        })
+        issues.append(
+            {
+                "file": "multiple",
+                "line": 0,
+                "issue": f"ATR сохраняется с разными ключами: {sorted(atr_keys_found)}. Убедитесь, что есть fallback при чтении.",
+                "severity": "LOW",
+                "code": "",
+            }
+        )
 
     return issues
 
@@ -294,13 +325,15 @@ def check_rsi_consistency(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                 code = read.get("code", "")
                 # RSI должен быть scalar
                 if "isinstance" in code and "dict" in code:
-                    issues.append({
-                        "file": result["file"],
-                        "line": read["line"],
-                        "issue": "RSI читается как dict, но должен быть scalar",
-                        "severity": "HIGH",
-                        "code": code[:300],
-                    })
+                    issues.append(
+                        {
+                            "file": result["file"],
+                            "line": read["line"],
+                            "issue": "RSI читается как dict, но должен быть scalar",
+                            "severity": "HIGH",
+                            "code": code[:300],
+                        }
+                    )
 
     return issues
 
@@ -315,19 +348,28 @@ def check_bb_consistency(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         for save in result.get("saves", []):
             keys = save.get("keys", [])
-            
+
             # Проверяем, что BB сохраняется как dict, а не отдельные значения
-            bb_keys = [k for k in keys if "bb_" in k.lower() or "bollinger" in k.lower()]
+            bb_keys = [
+                k for k in keys if "bb_" in k.lower() or "bollinger" in k.lower()
+            ]
             if bb_keys and len(bb_keys) > 1:
                 # Если сохраняются отдельные значения bb_upper, bb_lower, bb_middle
-                if any("upper" in k.lower() or "lower" in k.lower() or "middle" in k.lower() for k in bb_keys):
-                    issues.append({
-                        "file": result["file"],
-                        "line": save["line"],
-                        "issue": "Bollinger Bands сохраняются как отдельные значения вместо dict",
-                        "severity": "MEDIUM",
-                        "code": save.get("code", "")[:300],
-                    })
+                if any(
+                    "upper" in k.lower()
+                    or "lower" in k.lower()
+                    or "middle" in k.lower()
+                    for k in bb_keys
+                ):
+                    issues.append(
+                        {
+                            "file": result["file"],
+                            "line": save["line"],
+                            "issue": "Bollinger Bands сохраняются как отдельные значения вместо dict",
+                            "severity": "MEDIUM",
+                            "code": save.get("code", "")[:300],
+                        }
+                    )
 
     return issues
 
@@ -346,13 +388,15 @@ def check_ma_consistency(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 code = read.get("code", "")
                 # MA должны быть scalar
                 if "isinstance" in code and "dict" in code:
-                    issues.append({
-                        "file": result["file"],
-                        "line": read["line"],
-                        "issue": f"{indicator} читается как dict, но должен быть scalar",
-                        "severity": "MEDIUM",
-                        "code": code[:300],
-                    })
+                    issues.append(
+                        {
+                            "file": result["file"],
+                            "line": read["line"],
+                            "issue": f"{indicator} читается как dict, но должен быть scalar",
+                            "severity": "MEDIUM",
+                            "code": code[:300],
+                        }
+                    )
 
     return issues
 
@@ -392,15 +436,15 @@ def main():
             print(f"\n{'=' * 80}")
             print(f"ПРОБЛЕМЫ С {indicator.upper()}: {len(issues)}")
             print("=" * 80)
-            
+
             for issue in issues:
                 total_issues += 1
                 print(f"\nФайл: {os.path.basename(issue['file'])}")
                 print(f"Строка: {issue['line']}")
                 print(f"Проблема: {issue['issue']}")
                 print(f"Серьезность: {issue['severity']}")
-                if issue.get('code'):
-                    code = issue['code'].encode('ascii', 'ignore').decode('ascii')
+                if issue.get("code"):
+                    code = issue["code"].encode("ascii", "ignore").decode("ascii")
                     print(f"Код:\n{code[:200]}...")
         else:
             print(f"[OK] {indicator}: проблем не найдено")
@@ -410,7 +454,9 @@ def main():
     print("=" * 80)
 
     # Сохраняем отчет
-    report_file = "docs/analysis/reports/2026-01/ПОЛНАЯ_ПРОВЕРКА_ИНДИКАТОРОВ_2026-01-06.md"
+    report_file = (
+        "docs/analysis/reports/2026-01/ПОЛНАЯ_ПРОВЕРКА_ИНДИКАТОРОВ_2026-01-06.md"
+    )
     os.makedirs(os.path.dirname(report_file), exist_ok=True)
 
     with open(report_file, "w", encoding="utf-8") as f:
@@ -418,16 +464,18 @@ def main():
         f.write(f"**Дата:** 2026-01-06\n\n")
         f.write(f"**Всего проверено файлов:** {len(files)}\n")
         f.write(f"**Всего найдено проблем:** {total_issues}\n\n")
-        
+
         for indicator, issues in all_issues.items():
             f.write(f"## {indicator.upper()}\n\n")
             if issues:
                 f.write(f"**Найдено проблем:** {len(issues)}\n\n")
                 for issue in issues:
-                    f.write(f"### {os.path.basename(issue['file'])}:{issue['line']}\n\n")
+                    f.write(
+                        f"### {os.path.basename(issue['file'])}:{issue['line']}\n\n"
+                    )
                     f.write(f"**Проблема:** {issue['issue']}\n\n")
                     f.write(f"**Серьезность:** {issue['severity']}\n\n")
-                    if issue.get('code'):
+                    if issue.get("code"):
                         f.write(f"```python\n{issue['code'][:400]}\n```\n\n")
             else:
                 f.write("[OK] Проблем не найдено.\n\n")

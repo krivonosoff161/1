@@ -1679,8 +1679,12 @@ class SignalCoordinator:
                                         else:
                                             # ✅ ИСПРАВЛЕНО (06.01.2026): Получаем MACD из indicators_from_registry как dict
                                             # MACD всегда сохраняется как dict в DataRegistry
-                                            macd_dict = indicators_from_registry.get("macd")
-                                            if macd_dict and isinstance(macd_dict, dict):
+                                            macd_dict = indicators_from_registry.get(
+                                                "macd"
+                                            )
+                                            if macd_dict and isinstance(
+                                                macd_dict, dict
+                                            ):
                                                 macd_hist = macd_dict.get("histogram")
                                                 if macd_hist is None:
                                                     logger.warning(
@@ -1688,7 +1692,11 @@ class SignalCoordinator:
                                                     )
                                             else:
                                                 # Fallback: пытаемся получить отдельные значения (для backward compatibility со старыми данными)
-                                                macd_hist = indicators_from_registry.get("macd_histogram")
+                                                macd_hist = (
+                                                    indicators_from_registry.get(
+                                                        "macd_histogram"
+                                                    )
+                                                )
                                                 if macd_hist is None:
                                                     logger.warning(
                                                         f"⚠️ [MACD] {symbol}: MACD НЕ найден в indicators (ни как dict, ни как отдельные значения). "
@@ -2622,7 +2630,16 @@ class SignalCoordinator:
             logger.info(
                 f"   Сигнал: {signal.get('side', 'N/A').upper()} @ ${price:.2f}, strength={signal.get('strength', 0):.2f}"
             )
-            logger.info(f"   Размер позиции: {position_size:.6f} контрактов")
+            # position_size здесь уже в монетах; для логов показываем корректно в контрактах
+            try:
+                details = await self.client.get_instrument_details(symbol)
+                ct_val = float(details.get("ctVal", 0.01))
+                size_in_contracts = (
+                    position_size / ct_val if ct_val > 0 else position_size
+                )
+            except Exception:
+                size_in_contracts = position_size  # fallback
+            logger.info(f"   Размер позиции: {size_in_contracts:.6f} контрактов")
             logger.info(f"   Леверидж: {leverage_config}x")
 
             # Проверка ADL rank
@@ -3026,17 +3043,25 @@ class SignalCoordinator:
 
             # ✅ ИСПРАВЛЕНИЕ #30 (04.01.2026): Итоговое логирование размера позиции перед открытием
             try:
-                # Конвертируем размер из контрактов в монеты и USD для логирования
+                # Конвертируем размер для корректного логирования единиц
                 try:
                     details = await self.client.get_instrument_details(symbol)
                     ct_val = float(details.get("ctVal", 0.01))
-                    size_in_coins = position_size * ct_val
+                    # position_size уже в монетах (из RiskManager)
+                    size_in_coins = position_size
+                    size_in_contracts = (
+                        size_in_coins / ct_val if ct_val > 0 else size_in_coins
+                    )
                     notional_usd = size_in_coins * price
                     margin_usd = (
                         notional_usd / leverage_config if leverage_config > 0 else 0.0
                     )
                 except Exception:
-                    size_in_coins = position_size * 0.01  # Fallback
+                    # Fallback: не удалось получить ctVal, логируем только монеты
+                    size_in_coins = position_size
+                    size_in_contracts = (
+                        size_in_coins  # неизвестен ctVal, показываем одинаково
+                    )
                     notional_usd = size_in_coins * price
                     margin_usd = (
                         notional_usd / leverage_config if leverage_config > 0 else 0.0
@@ -3044,7 +3069,7 @@ class SignalCoordinator:
 
                 logger.info(
                     f"💰 ИТОГОВЫЙ РАЗМЕР ПОЗИЦИИ ПЕРЕД ОТКРЫТИЕМ: {symbol} {signal.get('side', 'N/A').upper()} | "
-                    f"Размер: {position_size:.6f} контрактов ({size_in_coins:.6f} монет) | "
+                    f"Размер: {size_in_contracts:.6f} контрактов ({size_in_coins:.6f} монет) | "
                     f"Notional: ${notional_usd:.2f} USD | "
                     f"Маржа: ${margin_usd:.2f} USD (леверидж: {leverage_config}x) | "
                     f"Цена входа: ${price:.2f} | "

@@ -669,6 +669,41 @@ class EntryManager:
                         f"⚠️ EntryManager: Ошибка записи открытия позиции в CSV: {e}"
                     )
 
+            # ✅ ИСПРАВЛЕНИЕ БАГА: Обновляем сигнал в CSV как исполненный
+            if self.performance_tracker:
+                try:
+                    signal_filters = signal.get("filters_passed", [])
+                    if isinstance(signal_filters, str):
+                        signal_filters = (
+                            signal_filters.split(",") if signal_filters else []
+                        )
+
+                    logger.info(
+                        f"[SIGNAL_EXECUTED] {symbol}: Recording executed signal in CSV"
+                    )
+                    logger.debug(f"  Entry price: {entry_price:.6f}")
+                    logger.debug(f"  Order ID: {order_result.get('order_id')}")
+                    logger.debug(f"  Regime: {final_regime}")
+                    logger.debug(f"  Filters passed: {signal_filters}")
+
+                    self.performance_tracker.record_signal(
+                        symbol=symbol,
+                        side=signal.get("side", ""),
+                        price=signal.get("price", 0.0),
+                        strength=signal.get("strength", 0.0),
+                        regime=final_regime or signal.get("regime"),
+                        filters_passed=signal_filters,
+                        executed=True,  # ✅ ИСПРАВЛЕНО: Теперь True для исполненных сигналов!
+                        order_id=order_result.get("order_id"),
+                    )
+                    logger.debug(
+                        f"✅ EntryManager: Сигнал обновлён в CSV как исполненный"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ EntryManager: Ошибка обновления сигнала в CSV: {e}"
+                    )
+
             # 5. Возвращаем результат, как от order_executor.execute_signal()
             return order_result
 

@@ -13,6 +13,7 @@ import copy
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np  # ✅ Для per-symbol ATR расчётов
 from loguru import logger
 
 from src.config import BotConfig, ScalpingConfig
@@ -1440,10 +1441,10 @@ class FuturesSignalGenerator:
                     # Это предотвращает генерацию сигналов до загрузки свечей
                     if self.data_registry:
                         candles_1m = await self.data_registry.get_candles(symbol, "1m")
-                        if not candles_1m or len(candles_1m) < 50:
+                        if not candles_1m or len(candles_1m) < 30:
                             logger.debug(
                                 f"⚠️ Недостаточно свечей для {symbol} "
-                                f"(нужно минимум 50, получено {len(candles_1m) if candles_1m else 0}), "
+                                f"(нужно минимум 30, получено {len(candles_1m) if candles_1m else 0}), "
                                 f"пропускаем генерацию сигналов"
                             )
                             return (
@@ -1851,8 +1852,8 @@ class FuturesSignalGenerator:
                     candles_1m = await self.data_registry.get_candles(symbol, "1m")
 
                     if (
-                        candles_1m and len(candles_1m) >= 20
-                    ):  # Минимум 20 свечей для индикаторов
+                        candles_1m and len(candles_1m) >= 30
+                    ):  # Минимум 30 свечей для индикаторов
                         logger.debug(
                             f"📊 Получено {len(candles_1m)} свечей 1m для {symbol} из DataRegistry"
                         )
@@ -1864,24 +1865,28 @@ class FuturesSignalGenerator:
                             ohlcv_data=candles_1m,
                         )
                     else:
-                        logger.debug(
-                            f"⚠️ DataRegistry содержит недостаточно свечей для {symbol} "
-                            f"({len(candles_1m) if candles_1m else 0} свечей), "
-                            f"используем fallback к API"
-                        )
+                        count = len(candles_1m) if candles_1m else 0
+                        if count >= 10:
+                            # Есть базовый минимум — не дергаем REST, подождем накопления
+                            logger.debug(
+                                f"⏳ Недостаточно свечей из DataRegistry для {symbol}: {count}/30 — ждём без REST"
+                            )
+                            return None
+                        else:
+                            logger.info(
+                                f"REST_FALLBACK {symbol} — в буфере {count}/10 свечей, загружаем историю через API"
+                            )
                 except Exception as e:
                     logger.debug(
-                        f"⚠️ Ошибка получения свечей из DataRegistry для {symbol}: {e}, "
-                        f"используем fallback к API"
+                        f"⚠️ Ошибка получения свечей из DataRegistry для {symbol}: {e}, переключаемся на REST API"
                     )
 
-            # Fallback: если DataRegistry не доступен или свечей недостаточно - запрашиваем через API
-            # Это используется только при старте бота для инициализации
+            # Fallback: если DataRegistry недоступен или свечей <10 — запрашиваем через REST API для первичной инициализации
             import time
 
             import aiohttp
 
-            # ✅ ИСПРАВЛЕНО (06.01.2026): Загружаем 500 свечей 1m для инициализации буфера (с лучшей прогревом ATR/BB)
+            # ✅ ИСПРАВЛЕНО (06.01.2026): Загружаем 500 свечей 1m для инициализации буфера (лучший прогрев ATR/BB)
             inst_id = f"{symbol}-SWAP"
             url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar=1m&limit=500"
 
@@ -1986,6 +1991,200 @@ class FuturesSignalGenerator:
 
             # Технические индикаторы
             indicator_results = self.indicator_manager.calculate_all(market_data)
+
+            # ✅ АДАПТИВНОСТЬ: Per-symbol индикаторы для пар с нестандартными параметрами
+            # Проверяем есть ли специфичные параметры индикаторов для символа
+            symbol_indicators_config = None
+            try:
+                if hasattr(self.scalping_config, "by_symbol"):
+                    by_symbol = getattr(self.scalping_config, "by_symbol", {})
+                    if isinstance(by_symbol, dict) and symbol in by_symbol:
+                        symbol_config = by_symbol[symbol]
+                        if hasattr(symbol_config, "indicators"):
+                            symbol_indicators_config = getattr(
+                                symbol_config, "indicators", {}
+                            )
+                            if not isinstance(symbol_indicators_config, dict):
+                                symbol_indicators_config = None
+                        elif (
+                            isinstance(symbol_config, dict)
+                            and "indicators" in symbol_config
+                        ):
+                            symbol_indicators_config = symbol_config["indicators"]
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ [INDICATORS] {symbol}: Ошибка чтения by_symbol.indicators: {e}"
+                )
+
+            # Если найдена специфичная конфигурация индикаторов - пересчитываем
+            if symbol_indicators_config:
+                try:
+                    import talib
+
+                    from src.indicators.base import IndicatorResult
+
+                    # Получаем массивы данных
+                    highs = np.array([c.high for c in candles], dtype=float)
+                    lows = np.array([c.low for c in candles], dtype=float)
+                    closes = np.array([c.close for c in candles], dtype=float)
+
+                    recalculated = []
+
+                    # 1. ATR с per-symbol периодом
+                    symbol_atr_period = symbol_indicators_config.get("atr_period")
+                    if symbol_atr_period is not None:
+                        atr_array = talib.ATR(
+                            highs, lows, closes, timeperiod=symbol_atr_period
+                        )
+                        atr_value = (
+                            float(atr_array[-1])
+                            if not np.isnan(atr_array[-1])
+                            else None
+                        )
+                        if atr_value and atr_value > 0:
+                            indicator_results["ATR"] = IndicatorResult(
+                                name="ATR",
+                                value=atr_value,
+                                metadata={"period": symbol_atr_period},
+                            )
+                            recalculated.append(f"ATR(period={symbol_atr_period})")
+
+                    # 2. RSI с per-symbol периодом
+                    symbol_rsi_period = symbol_indicators_config.get("rsi_period")
+                    if symbol_rsi_period is not None:
+                        rsi_array = talib.RSI(closes, timeperiod=symbol_rsi_period)
+                        rsi_value = (
+                            float(rsi_array[-1])
+                            if not np.isnan(rsi_array[-1])
+                            else None
+                        )
+                        if rsi_value is not None:
+                            indicator_results["RSI"] = IndicatorResult(
+                                name="RSI",
+                                value=rsi_value,
+                                metadata={
+                                    "period": symbol_rsi_period,
+                                    "overbought": symbol_indicators_config.get(
+                                        "rsi_overbought", 70
+                                    ),
+                                    "oversold": symbol_indicators_config.get(
+                                        "rsi_oversold", 30
+                                    ),
+                                },
+                            )
+                            recalculated.append(f"RSI(period={symbol_rsi_period})")
+
+                    # 3. EMA_12 и EMA_26 с per-symbol периодами
+                    symbol_ema_fast = symbol_indicators_config.get("ema_fast")
+                    symbol_ema_slow = symbol_indicators_config.get("ema_slow")
+                    if symbol_ema_fast is not None:
+                        ema_fast_array = talib.EMA(closes, timeperiod=symbol_ema_fast)
+                        ema_fast_value = (
+                            float(ema_fast_array[-1])
+                            if not np.isnan(ema_fast_array[-1])
+                            else None
+                        )
+                        if ema_fast_value is not None:
+                            indicator_results["EMA_12"] = IndicatorResult(
+                                name="EMA_12",
+                                value=ema_fast_value,
+                                metadata={"period": symbol_ema_fast},
+                            )
+                            recalculated.append(f"EMA_12(period={symbol_ema_fast})")
+
+                    if symbol_ema_slow is not None:
+                        ema_slow_array = talib.EMA(closes, timeperiod=symbol_ema_slow)
+                        ema_slow_value = (
+                            float(ema_slow_array[-1])
+                            if not np.isnan(ema_slow_array[-1])
+                            else None
+                        )
+                        if ema_slow_value is not None:
+                            indicator_results["EMA_26"] = IndicatorResult(
+                                name="EMA_26",
+                                value=ema_slow_value,
+                                metadata={"period": symbol_ema_slow},
+                            )
+                            recalculated.append(f"EMA_26(period={symbol_ema_slow})")
+
+                    # 4. MACD с per-symbol периодами
+                    symbol_macd_fast = symbol_indicators_config.get("macd_fast")
+                    symbol_macd_slow = symbol_indicators_config.get("macd_slow")
+                    if symbol_macd_fast is not None and symbol_macd_slow is not None:
+                        macd_signal_period = 9  # Стандартный signal period
+                        macd, signal, hist = talib.MACD(
+                            closes,
+                            fastperiod=symbol_macd_fast,
+                            slowperiod=symbol_macd_slow,
+                            signalperiod=macd_signal_period,
+                        )
+                        macd_value = float(macd[-1]) if not np.isnan(macd[-1]) else None
+                        signal_value = (
+                            float(signal[-1]) if not np.isnan(signal[-1]) else None
+                        )
+                        if macd_value is not None and signal_value is not None:
+                            indicator_results["MACD"] = IndicatorResult(
+                                name="MACD",
+                                value=macd_value,
+                                metadata={
+                                    "macd_line": macd_value,
+                                    "signal_line": signal_value,
+                                    "fast_period": symbol_macd_fast,
+                                    "slow_period": symbol_macd_slow,
+                                },
+                            )
+                            recalculated.append(
+                                f"MACD(fast={symbol_macd_fast}/slow={symbol_macd_slow})"
+                            )
+
+                    # 5. Bollinger Bands с per-symbol периодом
+                    symbol_bb_period = symbol_indicators_config.get("bb_period")
+                    symbol_bb_std = symbol_indicators_config.get("bb_std_multiplier")
+                    if symbol_bb_period is not None:
+                        std_mult = symbol_bb_std if symbol_bb_std is not None else 2.0
+                        upper, middle, lower = talib.BBANDS(
+                            closes,
+                            timeperiod=symbol_bb_period,
+                            nbdevup=std_mult,
+                            nbdevdn=std_mult,
+                        )
+                        upper_value = (
+                            float(upper[-1]) if not np.isnan(upper[-1]) else None
+                        )
+                        middle_value = (
+                            float(middle[-1]) if not np.isnan(middle[-1]) else None
+                        )
+                        lower_value = (
+                            float(lower[-1]) if not np.isnan(lower[-1]) else None
+                        )
+                        if all(
+                            v is not None
+                            for v in [upper_value, middle_value, lower_value]
+                        ):
+                            indicator_results["BollingerBands"] = IndicatorResult(
+                                name="BollingerBands",
+                                value=middle_value,
+                                metadata={
+                                    "upper_band": upper_value,
+                                    "lower_band": lower_value,
+                                    "period": symbol_bb_period,
+                                    "std_multiplier": std_mult,
+                                },
+                            )
+                            recalculated.append(
+                                f"BB(period={symbol_bb_period}, std={std_mult})"
+                            )
+
+                    # Логируем что было пересчитано
+                    if recalculated:
+                        logger.info(
+                            f"✅ [АДАПТИВНО] {symbol}: Пересчитаны индикаторы с per-symbol параметрами: {', '.join(recalculated)}"
+                        )
+
+                except Exception as e:
+                    logger.error(
+                        f"❌ [АДАПТИВНО] {symbol}: Ошибка пересчёта per-symbol индикаторов: {e}"
+                    )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем результат расчета индикаторов
             logger.debug(
@@ -2116,7 +2315,7 @@ class FuturesSignalGenerator:
                             indicators_for_registry["macd"] = {
                                 "macd": macd_data,
                                 "signal": 0,
-                                "histogram": 0
+                                "histogram": 0,
                             }
 
                     # Bollinger Bands (сложный индикатор - сохраняем как отдельные значения)
@@ -2290,6 +2489,11 @@ class FuturesSignalGenerator:
                         adx_plus_di = buy_result.plus_di
                         adx_minus_di = buy_result.minus_di
 
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем ADX в indicators для доступа в _generate_symbol_signals
+                        indicators["adx"] = adx_value
+                        indicators["adx_plus_di"] = adx_plus_di
+                        indicators["adx_minus_di"] = adx_minus_di
+
                         logger.debug(
                             f"✅ ADX для {symbol} рассчитан через adx_filter (fallback): ADX={adx_value:.2f}, +DI={adx_plus_di:.2f}, -DI={adx_minus_di:.2f}"
                         )
@@ -2354,11 +2558,16 @@ class FuturesSignalGenerator:
                 f"{bb_middle:.2f}" if bb_middle is not None else "НЕ РАССЧИТАН"
             )
             bb_lower_str = f"{bb_lower:.2f}" if bb_lower is not None else "НЕ РАССЧИТАН"
-            atr_val_str = (
-                f"{atr_val:.2f}"
-                if atr_val is not None and atr_val > 0
-                else "НЕ РАССЧИТАН"
-            )
+            # ✅ НОВОЕ: Адаптивное форматирование ATR для микро-значений
+            if atr_val is not None and atr_val > 0:
+                if atr_val < 0.01:
+                    atr_val_str = f"{atr_val:.8f}"  # 8 знаков для DOGE/XRP
+                elif atr_val < 0.1:
+                    atr_val_str = f"{atr_val:.4f}"  # 4 знака для SOL
+                else:
+                    atr_val_str = f"{atr_val:.2f}"  # 2 знака для BTC/ETH
+            else:
+                atr_val_str = "НЕ РАССЧИТАН"
 
             logger.info(
                 f"📊 [INDICATORS] {symbol}: Значения индикаторов при генерации сигналов | "
@@ -2620,6 +2829,33 @@ class FuturesSignalGenerator:
                         f"strength={final_strength:.3f})"
                     )
 
+                # ✅ НОВОЕ: Генерируем LONG сигнал на основе ADX bullish тренда (зеркально SHORT)
+                if adx_trend == "bullish" and adx_value >= adx_threshold:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "buy",
+                            "type": "adx_bullish",
+                            "strength": final_strength,
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "buy"
+                            ),
+                            "timestamp": datetime.now(),
+                            "indicator_value": adx_value,
+                            "confidence": 0.7,  # Высокая уверенность при сильном bullish тренде
+                            "has_conflict": False,
+                            "source": "adx_bullish",
+                        }
+                    )
+                    signal_stats["adx"]["generated"] = (
+                        signal_stats.get("adx", {}).get("generated", 0) + 1
+                    )
+                    logger.debug(
+                        f"📊 {symbol}: Сгенерирован LONG сигнал на основе ADX bullish тренда "
+                        f"(ADX={adx_value:.1f}, +DI={adx_plus_di:.1f}, -DI={adx_minus_di:.1f}, "
+                        f"strength={final_strength:.3f})"
+                    )
+
             # ✅ НОВОЕ (03.01.2026): Логирование значений индикаторов перед генерацией сигналов
             try:
                 rsi_value = indicators.get("rsi")
@@ -2694,11 +2930,16 @@ class FuturesSignalGenerator:
                 # ✅ ИСПРАВЛЕНИЕ (03.01.2026): Правильное форматирование значений (нельзя использовать тернарный оператор в f-string format specifier)
                 rsi_str = f"{rsi_value:.1f}" if rsi_value is not None else "N/A"
                 macd_str = f"{macd_hist:.3f}" if macd_hist is not None else "N/A"
-                atr_str = (
-                    f"{atr_value_for_log:.2f}"
-                    if atr_value_for_log is not None and atr_value_for_log > 0
-                    else "N/A"
-                )
+                # ✅ НОВОЕ: Адаптивное форматирование ATR для микро-значений
+                if atr_value_for_log is not None and atr_value_for_log > 0:
+                    if atr_value_for_log < 0.01:
+                        atr_str = f"{atr_value_for_log:.8f}"  # 8 знаков для DOGE/XRP
+                    elif atr_value_for_log < 0.1:
+                        atr_str = f"{atr_value_for_log:.4f}"  # 4 знака для SOL
+                    else:
+                        atr_str = f"{atr_value_for_log:.2f}"  # 2 знака для BTC/ETH
+                else:
+                    atr_str = "N/A"
 
                 logger.info(
                     f"📊 [INDICATORS] {symbol} ({regime_str}): Значения индикаторов | "
@@ -3634,9 +3875,10 @@ class FuturesSignalGenerator:
                 block_reason = ""
 
                 if is_downtrend:
-                    # Конфликт: RSI oversold (LONG) vs EMA bearish (DOWN) - ПОЛНАЯ БЛОКИРОВКА (ВСЕГДА)
-                    should_block = True
-                    block_reason = f"конфликт EMA (EMA_12={ema_fast:.2f} < EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
+                    # Конфликт EMA: ослабляем сигнал вместо полной блокировки
+                    strength *= 0.5
+                    confidence *= 0.8
+                    block_reason = f"ослаблен из-за EMA-конфликта (EMA_12={ema_fast:.2f} < EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
 
                 # ✅ ПРИОРИТЕТ 1 (28.12.2025): Режим-специфичная ADX блокировка
                 # Получаем режим для определения порога
@@ -4332,9 +4574,11 @@ class FuturesSignalGenerator:
                 block_reason_bb_oversold = ""
 
                 if is_downtrend:
-                    # Конфликт: BB oversold (LONG) vs EMA bearish (DOWN) - ПОЛНАЯ БЛОКИРОВКА
-                    should_block_bb_oversold = True
-                    block_reason_bb_oversold = f"конфликт EMA (EMA_12={ema_fast:.2f} < EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
+                    # Конфликт: ослабляем strength вместо блокировки
+                    base_strength *= conflict_multiplier
+                    logger.debug(
+                        f"⚡ BB OVERSOLD для {symbol}: конфликт EMA, ослабляем strength до {base_strength:.3f}"
+                    )
 
                 if adx_value >= 20.0 and adx_trend == "bearish":
                     should_block_bb_oversold = True
@@ -5262,7 +5506,7 @@ class FuturesSignalGenerator:
             return []
 
         config = self.impulse_config
-        regime_key = (current_regime or "ranging").lower()
+        regime_key = (current_regime or "trending").lower()
         symbol_profile = self.symbol_profiles.get(symbol, {})
         regime_profile = symbol_profile.get(regime_key, {})
         impulse_profile = self._to_dict(regime_profile.get("impulse", {}))
@@ -5359,7 +5603,9 @@ class FuturesSignalGenerator:
         # ✅ ИСПРАВЛЕНО (06.01.2026): Улучшенный фильтр объема (рекомендация Copilot)
         # Проверяем объем относительно SMA20 вместо среднего по lookback
         vol_cur = current_candle.volume
-        vol_sma20 = sum(c.volume for c in candles[-20:]) / 20 if len(candles) >= 20 else 0
+        vol_sma20 = (
+            sum(c.volume for c in candles[-20:]) / 20 if len(candles) >= 20 else 0
+        )
         if vol_sma20 > 0 and vol_cur < vol_sma20 * 1.1:
             # Блокируем низкообъемные сигналы (шум)
             logger.debug(
@@ -5382,7 +5628,7 @@ class FuturesSignalGenerator:
             adx_min_required = 30.0
         elif regime_key == "choppy":
             adx_min_required = 40.0
-        
+
         if adx_value is None or adx_value < adx_min_required:
             logger.debug(
                 f"🚫 Импульсный сигнал {symbol} заблокирован: ADX={adx_value:.1f} < {adx_min_required:.1f} "
@@ -5401,12 +5647,12 @@ class FuturesSignalGenerator:
             macd_line = macd_data.get("macd", 0)
             signal_line = macd_data.get("signal", 0)
             histogram = macd_data.get("histogram", 0)
-            
+
             if direction == "buy":
                 macd_crossover = macd_line > signal_line and histogram > 0
             else:  # sell
                 macd_crossover = macd_line < signal_line and histogram < 0
-            
+
             if macd_crossover:
                 score += 3
                 confirmation_details.append("MACD crossover")
@@ -5416,7 +5662,7 @@ class FuturesSignalGenerator:
         if rsi_value is not None:
             rsi_overbought = rsi_value > 70
             rsi_oversold = rsi_value < 30
-            
+
             if direction == "buy" and rsi_oversold:
                 score += 2
                 confirmation_details.append("RSI oversold")
@@ -5430,25 +5676,33 @@ class FuturesSignalGenerator:
             bb_upper = bb_data.get("upper", 0)
             bb_lower = bb_data.get("lower", 0)
             current_price = current_candle.close
-            
+
             if direction == "buy":
                 bb_breakout = current_price > bb_upper
             else:  # sell
                 bb_breakout = current_price < bb_lower
-            
+
             if bb_breakout:
                 score += 1
                 confirmation_details.append("BB breakout")
 
         # 4. EMA crossover (вес 1)
-        ema_fast = indicators.get("ema_fast") or indicators.get("ema_9") or indicators.get("EMA_FAST")
-        ema_slow = indicators.get("ema_slow") or indicators.get("ema_21") or indicators.get("EMA_SLOW")
+        ema_fast = (
+            indicators.get("ema_fast")
+            or indicators.get("ema_9")
+            or indicators.get("EMA_FAST")
+        )
+        ema_slow = (
+            indicators.get("ema_slow")
+            or indicators.get("ema_21")
+            or indicators.get("EMA_SLOW")
+        )
         if ema_fast is not None and ema_slow is not None:
             if direction == "buy":
                 ema_crossover = ema_fast > ema_slow and current_candle.close > ema_fast
             else:  # sell
                 ema_crossover = ema_fast < ema_slow and current_candle.close < ema_fast
-            
+
             if ema_crossover:
                 score += 1
                 confirmation_details.append("EMA crossover")
@@ -5578,6 +5832,17 @@ class FuturesSignalGenerator:
             current_positions: Текущие открытые позиции для CorrelationFilter
         """
         try:
+            # ✅ ЛОГИРОВАНИЕ: Входящие сигналы перед фильтрами
+            logger.info(
+                f"[FILTER_INPUT] {symbol}: {len(signals)} signals entering filters"
+            )
+            for idx, sig in enumerate(signals[:5]):  # Логируем первые 5
+                logger.debug(
+                    f"  RAW_SIGNAL #{idx+1}: {sig.get('side')} @ {sig.get('price'):.6f} (strength={sig.get('strength'):.2f})"
+                )
+            if len(signals) > 5:
+                logger.debug(f"  ... and {len(signals)-5} more signals")
+
             # ✅ РЕФАКТОРИНГ: Используем FilterManager если он настроен
             use_filter_manager = (
                 self.filter_manager
@@ -5587,9 +5852,19 @@ class FuturesSignalGenerator:
 
             if use_filter_manager:
                 # Используем новый FilterManager
-                return await self._apply_filters_via_manager(
+                filtered = await self._apply_filters_via_manager(
                     symbol, signals, market_data, current_positions
                 )
+                # ✅ ЛОГИРОВАНИЕ: Выходящие сигналы после фильтров
+                logger.info(
+                    f"[FILTER_OUTPUT] {symbol}: {len(filtered)} signals after filters ({len(signals)} before)"
+                )
+                logger.info(
+                    f"  Acceptance rate: {len(filtered)/len(signals)*100:.1f}%"
+                    if signals
+                    else ""
+                )
+                return filtered
 
             # Fallback на старую логику
             filtered_signals = []

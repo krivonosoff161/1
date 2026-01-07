@@ -44,4 +44,3 @@ for i, line in enumerate(lines):
 print(f"Found {len(sol_events)} SOL trade events\n")
 for i, (time_str, event) in enumerate(sol_events[-80:]):
     print(f"{i+1}. [{time_str}] {event}")
-

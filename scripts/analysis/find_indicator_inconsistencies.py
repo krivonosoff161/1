@@ -5,8 +5,8 @@
 и проверка единообразия форматов данных.
 """
 
-import re
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -34,7 +34,11 @@ def find_files(root_dir: str) -> list:
     """Найти все Python файлы"""
     files = []
     for root, dirs, filenames in os.walk(root_dir):
-        dirs[:] = [d for d in dirs if d not in ("__pycache__", ".git", "venv", ".venv", "tests")]
+        dirs[:] = [
+            d
+            for d in dirs
+            if d not in ("__pycache__", ".git", "venv", ".venv", "tests")
+        ]
         for filename in filenames:
             if filename.endswith(".py"):
                 files.append(os.path.join(root, filename))
@@ -98,7 +102,11 @@ def analyze_file(file_path: str) -> dict:
                 # indicators.get('macd_histogram')
                 pattern3 = rf'\.get\(["\']{indicator}_[^"\']+["\']'
 
-                if re.search(pattern1, line) or re.search(pattern2, line) or re.search(pattern3, line):
+                if (
+                    re.search(pattern1, line)
+                    or re.search(pattern2, line)
+                    or re.search(pattern3, line)
+                ):
                     context = "\n".join(lines[max(0, i - 2) : min(len(lines), i + 2)])
                     result["direct_access"].append(
                         {
@@ -248,7 +256,7 @@ def main():
             print(f"Строка: {issue['line']}")
             print(f"Проблема: {issue['issue']}")
             print(f"Серьезность: {issue['severity']}")
-            code = issue['code'].encode('ascii', 'ignore').decode('ascii')
+            code = issue["code"].encode("ascii", "ignore").decode("ascii")
             print(f"Код:\n{code}")
         print("\n")
     else:
@@ -284,8 +292,10 @@ def main():
 
     with open(report_file, "w", encoding="utf-8") as f:
         f.write("# АНАЛИЗ КОНСИСТЕНТНОСТИ ИНДИКАТОРОВ\n\n")
-        f.write(f"**Дата:** {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        
+        f.write(
+            f"**Дата:** {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        )
+
         f.write("## ПРОБЛЕМЫ С MACD\n\n")
         if macd_issues:
             for issue in macd_issues:

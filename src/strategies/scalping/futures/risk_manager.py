@@ -1288,7 +1288,7 @@ class FuturesRiskManager:
                     dynamic_margin_cap = self._calculate_dynamic_margin_cap(
                         balance=balance,
                         symbol=symbol,
-                        regime=symbol_regime or "ranging",
+                        regime=symbol_regime or "trending",
                         volatility=volatility_atr,
                         daily_pnl=daily_pnl,
                         open_positions_margin=used_margin,

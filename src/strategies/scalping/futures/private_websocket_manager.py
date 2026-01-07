@@ -47,11 +47,12 @@ class PrivateWebSocketManager:
         self.sandbox = sandbox
 
         # ✅ ИСПРАВЛЕНО: URL Private WebSocket зависит от окружения (sandbox/production)
+        # ✅ ВЫБОР ПОРТОВ: 443 вместо 8443 для лучшей региональной доступности
         if sandbox:
-            # Sandbox (demo) окружение
-            self.ws_url = "wss://wspap.okx.com:8443/ws/v5/private"
+            # Sandbox (demo) окружение - используем порт 443 для регионов с блокировкой 8443
+            self.ws_url = "wss://wspap.okx.com:443/ws/v5/private"
         else:
-            # Production окружение
+            # Production окружение - используем ws.okx.com:8443
             self.ws_url = "wss://ws.okx.com:8443/ws/v5/private"
 
         self.ws: Optional[aiohttp.ClientWebSocketResponse] = None

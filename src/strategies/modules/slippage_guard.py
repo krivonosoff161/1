@@ -92,21 +92,60 @@ class SlippageGuard:
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 break
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"⏱️ Таймаут при проверке активных ордеров, продолжаем мониторинг"
+                )
+                await asyncio.sleep(self.check_interval)
             except Exception as e:
-                logger.error(f"Ошибка в мониторинге проскальзывания: {e}")
+                # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Логируем SSL и другие ошибки но продолжаем работу
+                import traceback
+
+                error_str = str(e).lower()
+                if "ssl" in error_str or "application data" in error_str:
+                    logger.warning(
+                        f"⚠️ SSL ошибка в мониторинге проскальзывания (неопасно): {e}"
+                    )
+                else:
+                    logger.error(
+                        f"Ошибка в мониторинге проскальзывания: {e}\n{traceback.format_exc()}"
+                    )
                 await asyncio.sleep(self.check_interval)
 
     async def _check_active_orders(self, client):
         """Проверка активных ордеров"""
         try:
-            # Получаем активные ордера
-            orders = await client.get_active_orders()
+            # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Таймаут для get_active_orders чтобы не зависать
+            try:
+                orders = await asyncio.wait_for(
+                    client.get_active_orders(),
+                    timeout=5.0,  # 5 секунд таймаут для получения активных ордеров
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"⏱️ Таймаут при получении активных ордеров")
+                return
 
             for order in orders:
-                await self._analyze_order(order, client)
+                try:
+                    await self._analyze_order(order, client)
+                except Exception as e:
+                    # ✅ ИСПРАВЛЕНИЕ: Продолжаем проверку остальных ордеров даже если один вызовет ошибку
+                    order_id = order.get("ordId", "unknown")
+                    logger.debug(f"Ошибка анализа ордера {order_id}: {e}")
 
         except Exception as e:
-            logger.error(f"Ошибка проверки активных ордеров: {e}")
+            # ✅ ИСПРАВЛЕНИЕ (07.01.2026): SSL ошибки из aiohttp не должны убивать мониторинг
+            import traceback
+
+            error_str = str(e).lower()
+            if "ssl" in error_str or "application data" in error_str:
+                logger.debug(
+                    f"SSL ошибка при проверке активных ордеров (игнорируем): {e}"
+                )
+            else:
+                logger.error(
+                    f"Ошибка проверки активных ордеров: {e}\n{traceback.format_exc()}"
+                )
 
     async def _analyze_order(self, order: Dict[str, Any], client):
         """Анализ отдельного ордера"""
@@ -230,7 +269,7 @@ class SlippageGuard:
             Dict с bid, ask, last ценами или None при ошибке
         """
         try:
-            # ✅ ИСПРАВЛЕНО: Получаем реальные цены через OKX API
+            # ✅ ИСПРАВЛЕНО (07.01.2026): Используем сессию из клиента или используем context manager
             # Конвертируем symbol в instId (добавляем -SWAP для фьючерсов)
             inst_id = symbol.replace("-USDT", "-USDT-SWAP")
 
@@ -240,45 +279,53 @@ class SlippageGuard:
             base_url = "https://www.okx.com"
             ticker_url = f"{base_url}/api/v5/market/ticker?instId={inst_id}"
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get(ticker_url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("code") == "0" and data.get("data"):
-                            ticker = data["data"][0]
+            # ✅ ИСПРАВЛЕНИЕ: Используем context manager для гарантии закрытия сессии
+            timeout = aiohttp.ClientTimeout(total=5, connect=2)
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(ticker_url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if data.get("code") == "0" and data.get("data"):
+                                ticker = data["data"][0]
 
-                            bid_price = float(ticker.get("bidPx", "0") or "0")
-                            ask_price = float(ticker.get("askPx", "0") or "0")
-                            last_price = float(ticker.get("last", "0") or "0")
+                                bid_price = float(ticker.get("bidPx", "0") or "0")
+                                ask_price = float(ticker.get("askPx", "0") or "0")
+                                last_price = float(ticker.get("last", "0") or "0")
 
-                            if bid_price > 0 and ask_price > 0:
-                                logger.debug(
-                                    f"✅ SlippageGuard: Получены цены для {symbol}: "
-                                    f"bid={bid_price:.2f}, ask={ask_price:.2f}, last={last_price:.2f}"
-                                )
-                                return {
-                                    "bid": bid_price,
-                                    "ask": ask_price,
-                                    "last": last_price
-                                    if last_price > 0
-                                    else (bid_price + ask_price) / 2,
-                                }
+                                if bid_price > 0 and ask_price > 0:
+                                    logger.debug(
+                                        f"✅ SlippageGuard: Получены цены для {symbol}: "
+                                        f"bid={bid_price:.2f}, ask={ask_price:.2f}, last={last_price:.2f}"
+                                    )
+                                    return {
+                                        "bid": bid_price,
+                                        "ask": ask_price,
+                                        "last": last_price
+                                        if last_price > 0
+                                        else (bid_price + ask_price) / 2,
+                                    }
+                                else:
+                                    logger.warning(
+                                        f"⚠️ SlippageGuard: Некорректные цены для {symbol}: "
+                                        f"bid={bid_price}, ask={ask_price}"
+                                    )
+                                    return None
                             else:
                                 logger.warning(
-                                    f"⚠️ SlippageGuard: Некорректные цены для {symbol}: "
-                                    f"bid={bid_price}, ask={ask_price}"
+                                    f"⚠️ SlippageGuard: Ошибка API для {symbol}: {data.get('msg', 'Unknown')}"
                                 )
                                 return None
                         else:
                             logger.warning(
-                                f"⚠️ SlippageGuard: Ошибка API для {symbol}: {data.get('msg', 'Unknown')}"
+                                f"⚠️ SlippageGuard: HTTP {resp.status} для {symbol}"
                             )
                             return None
-                    else:
-                        logger.warning(
-                            f"⚠️ SlippageGuard: HTTP {resp.status} для {symbol}"
-                        )
-                        return None
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"⏱️ SlippageGuard: Таймаут при получении цен для {symbol}"
+                )
+                return None
 
         except Exception as e:
             logger.error(f"❌ SlippageGuard: Ошибка получения цен для {symbol}: {e}")

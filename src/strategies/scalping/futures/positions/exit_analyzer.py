@@ -441,14 +441,14 @@ class ExitAnalyzer:
                     symbol, position, metadata, market_data, current_price, regime
                 )
             else:
-                # Fallback на ranging
-                decision = await self._generate_exit_for_ranging(
+                # Fallback на более консервативный режим (trending)
+                decision = await self._generate_exit_for_trending(
                     symbol,
                     position,
                     metadata,
                     market_data,
                     current_price,
-                    regime or "ranging",
+                    regime or "trending",
                 )
 
             # ✅ INFO-логи для отслеживания решений
@@ -644,9 +644,20 @@ class ExitAnalyzer:
                     # Получаем leverage из metadata или position
                     leverage = 5  # Default
                     if metadata and hasattr(metadata, "leverage") and metadata.leverage:
-                        leverage = int(metadata.leverage)
+                        try:
+                            leverage = int(
+                                float(metadata.leverage)
+                            )  # ✅ ФИКС: Конвертируем в float сначала
+                        except (ValueError, TypeError):
+                            leverage = 5
                     elif position and isinstance(position, dict):
-                        leverage = position.get("leverage", 5) or 5
+                        try:
+                            leverage_val = position.get("leverage", 5) or 5
+                            leverage = int(
+                                float(leverage_val)
+                            )  # ✅ ФИКС: Конвертируем в float сначала
+                        except (ValueError, TypeError):
+                            leverage = 5
 
                     # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
                     # (т.к. комиссия считается от номинала, а PnL% от маржи)
@@ -727,9 +738,20 @@ class ExitAnalyzer:
                 # Получаем leverage из metadata или position
                 leverage = 5  # Default
                 if metadata and hasattr(metadata, "leverage") and metadata.leverage:
-                    leverage = int(metadata.leverage)
+                    try:
+                        leverage = int(
+                            float(metadata.leverage)
+                        )  # ✅ ФИКС: Конвертируем в float сначала
+                    except (ValueError, TypeError):
+                        leverage = 5
                 elif position and isinstance(position, dict):
-                    leverage = position.get("leverage", 5) or 5
+                    try:
+                        leverage_val = position.get("leverage", 5) or 5
+                        leverage = int(
+                            float(leverage_val)
+                        )  # ✅ ФИКС: Конвертируем в float сначала
+                    except (ValueError, TypeError):
+                        leverage = 5
 
                 # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
                 commission_pct = (trading_fee_rate * 2) * leverage * 100
@@ -772,14 +794,45 @@ class ExitAnalyzer:
             try:
                 # Получаем контекст для адаптации
                 balance = None
+                drawdown = None
                 if self.client:
                     try:
-                        balance = self.client.get_balance()
+                        balance = (
+                            await self.client.get_balance()
+                        )  # ✅ ФИКС (06.01.2026): Добавлен await
                     except Exception:
                         pass  # Если не удалось получить баланс, продолжаем без него
 
+                    try:
+                        # ✅ НОВОЕ (07.01.2026): Расчет drawdown для адаптивных параметров
+                        account_info = await self.client.get_account_info()
+                        if account_info:
+                            total_equity = (
+                                account_info.get("total_equity", balance)
+                                if balance
+                                else None
+                            )
+                            if total_equity and balance:
+                                # Предполагаем что peak_equity это 100% от начального баланса
+                                # Если система отслеживает начальный баланс, используем его
+                                drawdown = (
+                                    ((balance - total_equity) / total_equity * 100)
+                                    if total_equity > 0
+                                    else 0
+                                )
+                                if drawdown > 0:  # Положительный drawdown = loss
+                                    logger.debug(
+                                        f"📊 ExitAnalyzer: drawdown={drawdown:.1f}% для {symbol}"
+                                    )
+                    except Exception:
+                        pass  # Если не удалось рассчитать drawdown, продолжаем без него
+
                 exit_params = self.parameter_provider.get_exit_params(
-                    symbol, regime, balance=balance, current_pnl=current_pnl
+                    symbol,
+                    regime,
+                    balance=balance,
+                    current_pnl=current_pnl,
+                    drawdown=drawdown,
                 )
                 if exit_params:
                     if "tp_percent" in exit_params:
@@ -918,14 +971,14 @@ class ExitAnalyzer:
                     logger.error(
                         f"❌ [ATR] {symbol}: ATRProvider недоступен для расчета TP/SL - ПРОПУСКАЕМ расчет"
                     )
-                    return None, None
+                    return 2.4  # Возвращаем fallback значение
 
                 atr_1m = self.atr_provider.get_atr(symbol)  # БЕЗ FALLBACK
                 if atr_1m is None:
                     logger.error(
                         f"❌ [ATR] {symbol}: ATR не найден через ATRProvider для расчета TP/SL - ПРОПУСКАЕМ расчет"
                     )
-                    return None, None
+                    return 2.4  # Возвращаем fallback значение
 
                 # ✅ ИСПРАВЛЕНО: ATR найден через ATRProvider, продолжаем расчет TP/SL
                 # БЕЗ FALLBACK - если ATR не найден, уже вернули None выше
@@ -986,6 +1039,8 @@ class ExitAnalyzer:
                     f"⚠️ ExitAnalyzer: Ошибка расчета ATR-based TP для {symbol}: {e}, используем фиксированный"
                 )
 
+        # ✅ ИСПРАВЛЕНО (07.01.2026): Убедитесь что tp_percent всегда float перед возвратом
+        tp_percent = self._to_float(tp_percent, "tp_percent_final", 2.4)
         return tp_percent
 
     def _get_sl_percent(
@@ -1014,18 +1069,25 @@ class ExitAnalyzer:
 
         # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения параметров
         # ✅ НОВОЕ (05.01.2026): Передаем контекст для адаптивных параметров
+        # ⚠️ ФИКС (06.01.2026): balance не получаем здесь (метод не async), передаётся извне
         if self.parameter_provider:
             try:
                 # Получаем контекст для адаптации
                 balance = None
-                if self.client:
-                    try:
-                        balance = self.client.get_balance()
-                    except Exception:
-                        pass  # Если не удалось получить баланс, продолжаем без него
+                drawdown = None
+
+                # ✅ НОВОЕ (07.01.2026): Расчет drawdown для адаптивных параметров
+                # Проверяем есть ли доступ к position_pnl для расчета drawdown
+                if current_pnl is not None and current_pnl < 0:
+                    drawdown = abs(
+                        current_pnl
+                    )  # Используем текущий PnL как приблизительную просадку
+                    logger.debug(
+                        f"📊 ExitAnalyzer: drawdown={drawdown:.1f}% (from position PnL) для {symbol}"
+                    )
 
                 exit_params = self.parameter_provider.get_exit_params(
-                    symbol, regime, balance=balance
+                    symbol, regime, balance=balance, drawdown=drawdown
                 )
                 if exit_params:
                     if "sl_percent" in exit_params:
@@ -1307,9 +1369,20 @@ class ExitAnalyzer:
             # Получаем leverage
             leverage = 5  # Default
             if metadata and hasattr(metadata, "leverage") and metadata.leverage:
-                leverage = int(metadata.leverage)
+                try:
+                    leverage = int(
+                        float(metadata.leverage)
+                    )  # ✅ ФИКС: Конвертируем в float сначала
+                except (ValueError, TypeError):
+                    leverage = 5
             elif position and isinstance(position, dict):
-                leverage = position.get("leverage", 5) or 5
+                try:
+                    leverage_val = position.get("leverage", 5) or 5
+                    leverage = int(
+                        float(leverage_val)
+                    )  # ✅ ФИКС: Конвертируем в float сначала
+                except (ValueError, TypeError):
+                    leverage = 5
 
             # Получаем maker_fee_rate из конфига
             trading_fee_rate = 0.0002  # 0.02% по умолчанию
@@ -1768,9 +1841,12 @@ class ExitAnalyzer:
             if not adx_data:
                 return None
 
-            adx_value = adx_data.get("adx", 0)
-            plus_di = adx_data.get("plus_di", 0)
-            minus_di = adx_data.get("minus_di", 0)
+            # ✅ ИСПРАВЛЕНИЕ #1 (07.01.2026): Конвертируем все значения в float (защита от string из конфига)
+            # Было: adx_value = adx_data.get("adx", 0) может быть string "25" → ошибка при сравнении > 25
+            # Теперь: гарантируем что это float
+            adx_value = float(adx_data.get("adx", 0) or 0)
+            plus_di = float(adx_data.get("plus_di", 0) or 0)
+            minus_di = float(adx_data.get("minus_di", 0) or 0)
 
             # Рассчитываем силу тренда (0-1)
             # ADX > 25 = сильный тренд (нормализуем до 1.0)
@@ -2596,10 +2672,24 @@ class ExitAnalyzer:
             spread_buffer = self._get_spread_buffer(symbol, current_price)
             sl_threshold = -sl_percent - spread_buffer
 
+            # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ SL решения
+            adx_value = None
+            mtf_signal = None
+            try:
+                if self.fast_adx:
+                    adx_value = self.fast_adx.get_current_adx()
+                if self.mtf_filter:
+                    mtf_result = await self.mtf_filter.check_mtf_confirmation_async(
+                        symbol, position_side, current_price, market_data
+                    )
+                    mtf_signal = "confirm" if mtf_result else "block"
+            except Exception:
+                pass
+
             logger.debug(
-                f"🔍 ExitAnalyzer TRENDING: SL проверка {symbol} | "
-                f"Gross PnL={gross_pnl_percent:.2f}% (для SL) | Net PnL={pnl_percent:.2f}% (с комиссией) | "
-                f"SL={sl_percent:.2f}% | threshold={sl_threshold:.2f}%"
+                f"🔍 [SL_CHECK] {symbol}: gross_pnl={gross_pnl_percent:.2f}% vs threshold={sl_threshold:.2f}% | "
+                f"net_pnl={pnl_percent:.2f}%, sl={sl_percent:.2f}%, spread_buffer={spread_buffer:.2f}% | "
+                f"ADX={adx_value or 'N/A'}, MTF={mtf_signal or 'N/A'}, regime={regime}"
             )
 
             if gross_pnl_percent <= sl_threshold:
@@ -3387,6 +3477,13 @@ class ExitAnalyzer:
                         margin_used = metadata.margin_used
                     elif isinstance(metadata, dict):
                         margin_used = metadata.get("margin_used")
+
+                    # ✅ ФИКС: Конвертируем margin_used в float перед сравнением
+                    if margin_used:
+                        try:
+                            margin_used = float(margin_used)
+                        except (ValueError, TypeError):
+                            margin_used = None
 
                     if margin_used and margin_used > 0:
                         peak_profit_pct = (peak_profit_usd / margin_used) * 100
@@ -4241,8 +4338,9 @@ class ExitAnalyzer:
                 # Если min_profit_to_close не найден, используем минимальный порог 0.3% (чтобы покрыть комиссии)
                 # ✅ ИСПРАВЛЕНИЕ: min_profit_to_close в долях (0.003 = 0.3%), net_pnl_percent в процентах (1.5 = 1.5%)
                 # Конвертируем min_profit_to_close в проценты для сравнения
+                # ✅ FIX STRING/INT: Обязательно конвертируем в float перед умножением
                 min_profit_threshold_pct = (
-                    min_profit_to_close * 100
+                    float(min_profit_to_close) * 100
                     if min_profit_to_close is not None
                     else 0.3
                 )  # 0.3% в процентах
@@ -5054,8 +5152,9 @@ class ExitAnalyzer:
                 # Если min_profit_to_close не найден, используем минимальный порог 0.3% (чтобы покрыть комиссии)
                 # ✅ ИСПРАВЛЕНИЕ: min_profit_to_close в долях (0.003 = 0.3%), pnl_percent в процентах (1.5 = 1.5%)
                 # Конвертируем min_profit_to_close в проценты для сравнения
+                # ✅ FIX STRING/INT: Обязательно конвертируем в float перед умножением
                 min_profit_threshold_pct = (
-                    min_profit_to_close * 100
+                    float(min_profit_to_close) * 100
                     if min_profit_to_close is not None
                     else 0.3
                 )  # 0.3% в процентах

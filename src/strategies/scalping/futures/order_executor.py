@@ -328,6 +328,24 @@ class FuturesOrderExecutor:
         Использует настраиваемый offset из конфига для адаптации под разные режимы
         """
         try:
+            # ✅ Проверка актуальности локальной цены из DataRegistry (TTL 0.5s)
+            md_age_sec = None
+            if getattr(self, "data_registry", None):
+                try:
+                    md = await self.data_registry.get_market_data(symbol)
+                    if md and isinstance(md, dict):
+                        updated_at = md.get("updated_at")
+                        if isinstance(updated_at, datetime):
+                            md_age_sec = (datetime.now() - updated_at).total_seconds()
+                            if md_age_sec is not None and md_age_sec > 0.5:
+                                logger.warning(
+                                    f"⚠️ DataRegistry price for {symbol} устарела на {md_age_sec:.3f}s (>0.5s)"
+                                )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Не удалось проверить свежесть DataRegistry для {symbol}: {e}"
+                    )
+
             # ✅ НОВОЕ: Получаем конфигурацию лимитных ордеров
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем как dict и как атрибут
             order_executor_config = None
@@ -698,6 +716,29 @@ class FuturesOrderExecutor:
                                     )
                                     return limit_price
                 return 0.0
+
+            # ✅ Дополнительная защита: если и DataRegistry, и price_limits потенциально устарели — отклоняем ордер
+            try:
+                pl_ts = price_limits.get("timestamp", 0) if price_limits else 0
+                pl_age = (time.time() - pl_ts) if pl_ts else None
+                if (
+                    md_age_sec is not None
+                    and md_age_sec > 0.5
+                    and (pl_age is None or pl_age > 0.5)
+                ):
+                    logger.error(
+                        f"❌ Отклоняем размещение ордера по {symbol}: нет свежей цены (DataRegistry {md_age_sec:.3f}s, price_limits {pl_age if pl_age is not None else 'N/A'}s)"
+                    )
+                    raise ValueError("Stale price data: both local and remote are old")
+                else:
+                    # Инфо-лог о свежести цен при размещении ордера (раз в ~10 вызовов, чтобы не шуметь)
+                    if int(time.time() * 10) % 10 == 0:
+                        logger.info(
+                            f"PRICE_OK {symbol} md_age={md_age_sec if md_age_sec is not None else 'N/A'}s pl_age={pl_age if pl_age is not None else 'N/A'}s"
+                        )
+            except Exception:
+                # Если не удалось оценить свежесть price_limits — продолжаем (ниже еще будут проверки)
+                pass
 
             # ✅ ИСПРАВЛЕНО: Используем лучшие цены из стакана для более точного расчета
             best_bid = price_limits.get("best_bid", 0)

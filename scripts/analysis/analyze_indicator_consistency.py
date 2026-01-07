@@ -89,7 +89,11 @@ class IndicatorAnalyzer(ast.NodeVisitor):
         self.current_line = node.lineno
 
         if isinstance(node.value, ast.Name):
-            if node.value.id in ("indicators", "indicators_from_registry", "market_data"):
+            if node.value.id in (
+                "indicators",
+                "indicators_from_registry",
+                "market_data",
+            ):
                 if isinstance(node.slice, ast.Constant):
                     key = node.slice.value
                     if isinstance(key, str) and any(
@@ -361,7 +365,9 @@ def main():
 
     with open(report_file, "w", encoding="utf-8") as f:
         f.write("# 🔍 АНАЛИЗ КОНСИСТЕНТНОСТИ ИНДИКАТОРОВ\n\n")
-        f.write(f"**Дата:** {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write(
+            f"**Дата:** {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        )
         f.write("## ❌ ПРОБЛЕМЫ С MACD\n\n")
         for issue in consistency["macd_issues"]:
             f.write(f"### {issue['file']}:{issue['line']}\n\n")

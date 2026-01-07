@@ -49,11 +49,9 @@ class CandleBuffer:
             # Если превышен max_size, удаляем самую старую свечу
             if len(self._candles) > self.max_size:
                 removed_candle = self._candles.pop(0)
-                logger.debug(
-                    f"📊 CandleBuffer: Удалена старая свеча {removed_candle.symbol} "
-                    f"(timestamp={removed_candle.timestamp}), "
-                    f"теперь в буфере {len(self._candles)} свечей"
-                )
+                # DEBUG логирование отключено - слишком много вывода, убивает бота
+                # Включить только если нужна отладка конкретного буфера
+                # logger.debug(f"📊 CandleBuffer: Удалена старая свеча ...")
 
     async def update_last_candle(
         self,

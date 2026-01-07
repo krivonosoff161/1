@@ -8,6 +8,7 @@ WebSocket Coordinator для Futures торговли.
 - Fallback для получения цены через REST API
 """
 
+import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional
@@ -133,6 +134,20 @@ class WebSocketCoordinator:
         self._ticker_throttle: int = (
             5  # Обрабатывать каждый 5-й тикер (1/5 = 20% от исходной частоты)
         )
+        # ✅ Новый lock для атомарного обновления свечей/market_data/индикаторов
+        self._update_lock = asyncio.Lock()
+        # ✅ Конфигурация адаптивного дросселирования по волатильности
+        self._throttle_config = {
+            "low": 5,  # <0.1%/мин — обрабатывать 1/5
+            "medium": 2,  # 0.1-0.3%/мин — обрабатывать 1/2
+            "high": 1,  # >0.3%/мин — обрабатывать все
+        }
+        # Кэш последних N цен для оценки волатильности
+        self._volatility_cache: Dict[str, list] = {}
+        # Отслеживание последнего выбранного режима дросселирования для логирования изменений
+        self._last_throttle_state: Dict[str, str] = {}
+        # Последний момент вывода health-логов по символу
+        self._last_health_log_ts: Dict[str, float] = {}
         logger.info(
             f"✅ WebSocketCoordinator initialized (ticker throttle: 1/{self._ticker_throttle})"
         )
@@ -232,25 +247,75 @@ class WebSocketCoordinator:
                         if "last" in ticker:
                             price = float(ticker["last"])
                     # ✅ ИСПРАВЛЕНИЕ: Правильное форматирование цены в f-string
-                    price_str = f"{price:.2f}" if price is not None else "N/A"
-                    logger.debug(
-                        f"⚠️ Тикер пропущен (инициализация): {symbol} price={price_str}"
-                    )
+                    # DEBUG логирование отключено - слишком много вывода на инициализации
                     return
 
-            # ✅ ИСПРАВЛЕНИЕ CPU 100% (06.01.2026): Дросселирование обработки тикеров
-            # Обрабатывать каждый N-й тикер вместо каждого
-            # Это снижает CPU с 100% до 40-50% без потери live данных
+            # ✅ Адаптивное дросселирование: полная обработка при открытой позиции
             if symbol not in self._ticker_counter:
                 self._ticker_counter[symbol] = 0
 
             self._ticker_counter[symbol] += 1
-            if self._ticker_counter[symbol] % self._ticker_throttle != 0:
+
+            # Если по символу есть открытая позиция — не дросселируем
+            has_open_position = symbol in self.active_positions_ref
+
+            effective_throttle = self._ticker_throttle
+            if not has_open_position:
+                # Оценка волатильности по последним ценам
+                try:
+                    if (
+                        "data" in data
+                        and len(data["data"]) > 0
+                        and "last" in data["data"][0]
+                    ):
+                        price = float(data["data"][0]["last"])  # предварительно
+                        cache = self._volatility_cache.setdefault(symbol, [])
+                        cache.append((time.time(), price))
+                        # Храним последние ~60 секунд данных
+                        cutoff = time.time() - 60.0
+                        self._volatility_cache[symbol] = [
+                            p for p in cache if p[0] >= cutoff
+                        ]
+                        if len(self._volatility_cache[symbol]) >= 2:
+                            p0 = self._volatility_cache[symbol][0][1]
+                            p1 = self._volatility_cache[symbol][-1][1]
+                            if p0 > 0:
+                                change_pct = abs(p1 - p0) / p0 * 100.0
+                                if change_pct > 0.3:
+                                    effective_throttle = self._throttle_config["high"]
+                                elif change_pct > 0.1:
+                                    effective_throttle = self._throttle_config["medium"]
+                                else:
+                                    effective_throttle = self._throttle_config["low"]
+                except Exception:
+                    effective_throttle = self._ticker_throttle
+
+            # Логируем смену состояния throttle (один раз на изменение)
+            try:
+                state = (
+                    "bypass"
+                    if has_open_position
+                    else (
+                        "high"
+                        if effective_throttle == 1
+                        else ("medium" if effective_throttle == 2 else "low")
+                    )
+                )
+                if self._last_throttle_state.get(symbol) != state:
+                    self._last_throttle_state[symbol] = state
+                    logger.info(
+                        f"THROTTLE_STATE {symbol}: {state} (open_position={has_open_position}, eff={effective_throttle})"
+                    )
+            except Exception:
+                pass
+
+            if not has_open_position and (
+                self._ticker_counter[symbol] % effective_throttle != 0
+            ):
                 # Пропускаем обработку, но логируем редко
-                if self._ticker_counter[symbol] % (self._ticker_throttle * 10) == 0:
+                if self._ticker_counter[symbol] % (effective_throttle * 10) == 0:
                     logger.debug(
-                        f"⏭️ Тикер пропущен (дросселирование): {symbol} "
-                        f"(обработано 1/{self._ticker_throttle})"
+                        f"⏭️ Тикер пропущен (адаптивное дросселирование {symbol} 1/{effective_throttle})"
                     )
                 return
 
@@ -269,106 +334,160 @@ class WebSocketCoordinator:
                         return
                     self.last_prices[symbol] = price
 
-                    # ✅ НОВОЕ: Обновляем свечи в DataRegistry (инкрементально)
+                    # ✅ АТОМАРНО: Обновляем свечи, market_data и индикаторы под одним lock
                     if self.data_registry:
-                        try:
-                            await self._update_candle_from_ticker(symbol, price, ticker)
-                        except Exception as e:
-                            logger.warning(
-                                f"⚠️ Ошибка обновления свечей для {symbol}: {e}"
-                            )
-
-                    # ✅ НОВОЕ: Обновляем DataRegistry с рыночными данными
-                    if self.data_registry:
-                        try:
-                            # Извлекаем дополнительные данные из тикера
-                            volume_24h = float(ticker.get("vol24h", 0))
-                            volume_ccy_24h = float(ticker.get("volCcy24h", 0))
-                            high_24h = float(ticker.get("high24h", price))
-                            low_24h = float(ticker.get("low24h", price))
-                            open_24h = float(ticker.get("open24h", price))
-
-                            # Обновляем market data в DataRegistry
-                            await self.data_registry.update_market_data(
-                                symbol,
-                                {
-                                    "price": price,
-                                    "last_price": price,
-                                    "volume": volume_24h,
-                                    "volume_ccy": volume_ccy_24h,
-                                    "high_24h": high_24h,
-                                    "low_24h": low_24h,
-                                    "open_24h": open_24h,
-                                    "ticker": ticker,
-                                    "updated_at": datetime.now(),
-                                },
-                            )
-                            logger.debug(
-                                f"✅ DataRegistry: Обновлены market data для {symbol} (price=${price:.2f})"
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                f"⚠️ Ошибка обновления DataRegistry для {symbol}: {e}"
-                            )
-
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Обновляем FastADX per-symbol для расчета тренда
-                    try:
-                        if self._fast_adx_template:
-                            # Получаем или создаем FastADX экземпляр для этого символа
-                            if symbol not in self._fast_adx_by_symbol:
-                                # Создаем новый экземпляр FastADX для этого символа
-                                from src.strategies.scalping.futures.indicators.fast_adx import \
-                                    FastADX
-
-                                period = getattr(self._fast_adx_template, "period", 9)
-                                threshold = getattr(
-                                    self._fast_adx_template, "threshold", 20.0
+                        start_ts = time.perf_counter()
+                        async with self._update_lock:
+                            # 1) Обновление свечей
+                            try:
+                                await self._update_candle_from_ticker(
+                                    symbol, price, ticker
                                 )
-                                self._fast_adx_by_symbol[symbol] = FastADX(
-                                    period=period, threshold=threshold
+                            except Exception as e:
+                                logger.warning(
+                                    f"⚠️ Ошибка обновления свечей для {symbol}: {e}"
+                                )
+
+                            # 2) Обновление market data
+                            try:
+                                volume_24h = float(ticker.get("vol24h", 0))
+                                volume_ccy_24h = float(ticker.get("volCcy24h", 0))
+                                high_24h = float(ticker.get("high24h", price))
+                                low_24h = float(ticker.get("low24h", price))
+                                open_24h = float(ticker.get("open24h", price))
+
+                                await self.data_registry.update_market_data(
+                                    symbol,
+                                    {
+                                        "price": price,
+                                        "last_price": price,
+                                        "volume": volume_24h,
+                                        "volume_ccy": volume_ccy_24h,
+                                        "high_24h": high_24h,
+                                        "low_24h": low_24h,
+                                        "open_24h": open_24h,
+                                        "ticker": ticker,
+                                        "updated_at": datetime.now(),
+                                    },
                                 )
                                 logger.debug(
-                                    f"✅ Создан FastADX экземпляр для {symbol} (period={period}, threshold={threshold})"
+                                    f"✅ DataRegistry: Обновлены market data для {symbol} (price=${price:.2f})"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"⚠️ Ошибка обновления DataRegistry для {symbol}: {e}"
                                 )
 
-                            fast_adx_for_symbol = self._fast_adx_by_symbol[symbol]
+                            # 3) Обновление FastADX per-symbol
+                            try:
+                                if self._fast_adx_template:
+                                    if symbol not in self._fast_adx_by_symbol:
+                                        from src.strategies.scalping.futures.indicators.fast_adx import \
+                                            FastADX
 
-                            # Для тикера используем текущую цену как high/low/close
-                            high = price
-                            low = price
-                            close = price
+                                        period = getattr(
+                                            self._fast_adx_template, "period", 9
+                                        )
+                                        threshold = getattr(
+                                            self._fast_adx_template, "threshold", 20.0
+                                        )
+                                        self._fast_adx_by_symbol[symbol] = FastADX(
+                                            period=period, threshold=threshold
+                                        )
+                                        logger.debug(
+                                            f"✅ Создан FastADX экземпляр для {symbol} (period={period}, threshold={threshold})"
+                                        )
 
-                            # Обновляем FastADX для этого символа
-                            fast_adx_for_symbol.update(high=high, low=low, close=close)
-
-                            # ✅ НОВОЕ: Сохраняем ADX в DataRegistry после обновления
-                            if self.data_registry:
-                                try:
-                                    adx_value = fast_adx_for_symbol.get_adx_value()
-                                    # Также получаем +DI и -DI
-                                    plus_di = fast_adx_for_symbol.get_di_plus()
-                                    minus_di = fast_adx_for_symbol.get_di_minus()
-
-                                    indicators_to_save = {
-                                        "adx": adx_value,
-                                        "adx_plus_di": plus_di,
-                                        "adx_minus_di": minus_di,
-                                    }
-
-                                    await self.data_registry.update_indicators(
-                                        symbol, indicators_to_save
+                                    fast_adx_for_symbol = self._fast_adx_by_symbol[
+                                        symbol
+                                    ]
+                                    fast_adx_for_symbol.update(
+                                        high=price, low=price, close=price
                                     )
-                                    logger.debug(
-                                        f"✅ DataRegistry: Сохранен ADX для {symbol}: ADX={adx_value:.2f}, +DI={plus_di:.2f}, -DI={minus_di:.2f}"
-                                    )
-                                except Exception as e:
-                                    logger.debug(
-                                        f"⚠️ Ошибка сохранения ADX в DataRegistry для {symbol}: {e}"
-                                    )
-                    except Exception as e:
-                        logger.debug(
-                            f"⚠️ Не удалось обновить FastADX для {symbol}: {e}"
-                        )
+
+                                    if self.data_registry:
+                                        try:
+                                            adx_value = (
+                                                fast_adx_for_symbol.get_adx_value()
+                                            )
+                                            plus_di = fast_adx_for_symbol.get_di_plus()
+                                            minus_di = (
+                                                fast_adx_for_symbol.get_di_minus()
+                                            )
+
+                                            indicators_to_save = {
+                                                "adx": adx_value,
+                                                "adx_plus_di": plus_di,
+                                                "adx_minus_di": minus_di,
+                                            }
+                                            await self.data_registry.update_indicators(
+                                                symbol, indicators_to_save
+                                            )
+                                            logger.debug(
+                                                f"✅ DataRegistry: Сохранен ADX для {symbol}: ADX={adx_value:.2f}, +DI={plus_di:.2f}, -DI={minus_di:.2f}"
+                                            )
+                                        except Exception as e:
+                                            logger.debug(
+                                                f"⚠️ Ошибка сохранения ADX в DataRegistry для {symbol}: {e}"
+                                            )
+                            except Exception as e:
+                                logger.debug(
+                                    f"⚠️ Не удалось обновить FastADX для {symbol}: {e}"
+                                )
+                        dur_ms = int((time.perf_counter() - start_ts) * 1000)
+                        if dur_ms > 50:
+                            logger.warning(
+                                f"DATA_ATOMIC_UPDATE_SLOW {symbol} took {dur_ms}ms"
+                            )
+                        else:
+                            logger.debug(f"DATA_ATOMIC_UPDATE {symbol} took {dur_ms}ms")
+
+                        # Периодический health-лог (раз в 30 секунд на символ)
+                        now = time.time()
+                        last_ts = self._last_health_log_ts.get(symbol, 0)
+                        if now - last_ts >= 30:
+                            self._last_health_log_ts[symbol] = now
+                            try:
+                                md = await self.data_registry.get_market_data(symbol)
+                                md_age = None
+                                if md and md.get("updated_at"):
+                                    md_age = (
+                                        datetime.now() - md["updated_at"]
+                                    ).total_seconds()
+                                inds = await self.data_registry.get_indicators(
+                                    symbol, check_freshness=False
+                                )
+                                adx_age = None
+                                if inds and inds.get("updated_at"):
+                                    adx_age = (
+                                        datetime.now() - inds["updated_at"]
+                                    ).total_seconds()
+                                last_1m = await self.data_registry.get_last_candle(
+                                    symbol, "1m"
+                                )
+                                last_5m = await self.data_registry.get_last_candle(
+                                    symbol, "5m"
+                                )
+                                last1m_age = (
+                                    (datetime.now().timestamp() - last_1m.timestamp)
+                                    if last_1m
+                                    else None
+                                )
+                                last5m_age = (
+                                    (datetime.now().timestamp() - last_5m.timestamp)
+                                    if last_5m
+                                    else None
+                                )
+                                logger.info(
+                                    f"DATA_HEALTH {symbol} md_age={md_age if md_age is not None else 'N/A'}s "
+                                    f"adx_age={adx_age if adx_age is not None else 'N/A'}s "
+                                    f"candle1m_age={last1m_age if last1m_age is not None else 'N/A'}s "
+                                    f"candle5m_age={last5m_age if last5m_age is not None else 'N/A'}s"
+                                )
+                            except Exception as e:
+                                logger.debug(
+                                    f"⚠️ DATA_HEALTH log failed for {symbol}: {e}"
+                                )
 
                     # Логируем получение данных тикера
                     logger.info(f"💰 {symbol}: ${price:.2f}")

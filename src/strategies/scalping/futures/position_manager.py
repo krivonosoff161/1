@@ -892,172 +892,21 @@ class FuturesPositionManager:
                     f"⚠️ Leverage не найден на бирже для {symbol}, используем конфиг: {leverage}x"
                 )
 
-            # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для изолированной маржи получаем equity через get_margin_info!
-            # Это правильный баланс для данной позиции, а не общий баланс аккаунта
+            # ✅ ИСПРАВЛЕНО (07.01.2026): Для margin_ratio ВСЕГДА используем ОБЩИЙ баланс счёта!
+            # Раньше: использовали equity позиции → margin_ratio был ~0.10 (КРИТИЧНО)
+            # Теперь: используем общий USDT баланс → margin_ratio будет правильным (>1.80)
             try:
-                margin_info = await self.client.get_margin_info(symbol)
-                equity = margin_info.get("equity", 0)
-
-                # Если equity не найден в margin_info, пытаемся получить из самой позиции
-                if equity == 0:
-                    # Проверяем, есть ли 'eq' или другие поля в самой позиции
-                    if "eq" in position and position["eq"]:
-                        eq_value = position["eq"]
-                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
-                        if eq_value and str(eq_value).strip():
-                            try:
-                                equity = float(eq_value)
-                                logger.debug(
-                                    f"✅ equity получен из position['eq'] для {symbol}: {equity:.2f}"
-                                )
-                            except (ValueError, TypeError) as e:
-                                logger.debug(
-                                    f"⚠️ Ошибка конвертации eq для {symbol}: {e}, значение={eq_value}"
-                                )
-                                pass
-
-                    # Если все еще 0, используем общий баланс как fallback
-                    if equity == 0:
-                        # ✅ ИСПРАВЛЕНО: Пробуем получить equity из позиции напрямую через API
-                        try:
-                            # Получаем позицию напрямую через API для более точного equity
-                            positions_data = await self.client._make_request(
-                                "GET",
-                                "/api/v5/account/positions",
-                                params={"instType": "SWAP", "instId": f"{symbol}-SWAP"},
-                            )
-                            if positions_data and positions_data.get("data"):
-                                pos_data = positions_data["data"][0]
-
-                                # Пробуем получить equity из различных полей
-                                if "eq" in pos_data and pos_data.get("eq"):
-                                    eq_value = pos_data["eq"]
-                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
-                                    if eq_value and str(eq_value).strip():
-                                        try:
-                                            equity = float(eq_value)
-                                            logger.debug(
-                                                f"✅ equity получен из позиции API для {symbol}: {equity:.2f}"
-                                            )
-                                        except (ValueError, TypeError) as e:
-                                            logger.debug(
-                                                f"⚠️ Ошибка конвертации eq для {symbol}: {e}, значение={eq_value}"
-                                            )
-                                if (
-                                    equity == 0
-                                    and "margin" in pos_data
-                                    and "upl" in pos_data
-                                ):
-                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что значения не пустые строки
-                                    try:
-                                        margin_str = str(
-                                            pos_data.get("margin", "0")
-                                        ).strip()
-                                        upl_str = str(pos_data.get("upl", "0")).strip()
-                                        if margin_str and upl_str:
-                                            margin = float(margin_str)
-                                            upl = float(upl_str)
-                                            equity = margin + upl
-                                    except (ValueError, TypeError) as e:
-                                        logger.debug(
-                                            f"⚠️ Ошибка конвертации margin/upl для {symbol}: {e}"
-                                        )
-                                    if equity > 0:
-                                        logger.debug(
-                                            f"✅ equity рассчитан из позиции API для {symbol}: "
-                                            f"margin={margin:.2f} + upl={upl:.2f} = {equity:.2f}"
-                                        )
-                        except Exception as e:
-                            logger.debug(
-                                f"⚠️ Ошибка получения equity из позиции API для {symbol}: {e}"
-                            )
-
-                        # Fallback на общий баланс только если все остальное не сработало
-                        if equity == 0:
-                            equity = await self.client.get_balance()
-                            # ✅ ИСПРАВЛЕНО: Используем DEBUG вместо WARNING для нормальных случаев
-                            # equity может быть 0 для новых позиций или во время синхронизации
-                            logger.debug(
-                                f"⚠️ equity не найден через get_margin_info и API для {symbol}, "
-                                f"используем общий баланс: {equity:.2f}"
-                            )
+                # ВСЕГДА берём общий баланс счёта для расчёта margin_ratio
+                equity = await self.client.get_balance()
+                logger.debug(
+                    f"💰 Используем общий баланс для margin_ratio проверки {symbol}: ${equity:.2f}"
+                )
             except Exception as e:
-                # Fallback при ошибке - сначала пытаемся из позиции
-                equity = 0
-                try:
-                    if "eq" in position and position["eq"]:
-                        eq_value = position["eq"]
-                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
-                        if eq_value and str(eq_value).strip():
-                            equity = float(eq_value)
-                            logger.debug(
-                                f"✅ equity получен из position['eq'] (fallback) для {symbol}: {equity:.2f}"
-                            )
-                except (ValueError, TypeError) as e:
-                    logger.debug(
-                        f"⚠️ Ошибка конвертации eq (fallback) для {symbol}: {e}"
-                    )
-                    pass
-
-                if equity == 0:
-                    # ✅ ИСПРАВЛЕНО: Пробуем получить equity из позиции напрямую через API
-                    try:
-                        positions_data = await self.client._make_request(
-                            "GET",
-                            "/api/v5/account/positions",
-                            params={"instType": "SWAP", "instId": f"{symbol}-SWAP"},
-                        )
-                        if positions_data and positions_data.get("data"):
-                            pos_data = positions_data["data"][0]
-                            if "eq" in pos_data and pos_data.get("eq"):
-                                eq_value = pos_data["eq"]
-                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что это не пустая строка
-                                if eq_value and str(eq_value).strip():
-                                    try:
-                                        equity = float(eq_value)
-                                        logger.debug(
-                                            f"✅ equity получен из позиции API (fallback) для {symbol}: {equity:.2f}"
-                                        )
-                                    except (ValueError, TypeError) as e:
-                                        logger.debug(
-                                            f"⚠️ Ошибка конвертации eq (fallback) для {symbol}: {e}, значение={eq_value}"
-                                        )
-                            if (
-                                equity == 0
-                                and "margin" in pos_data
-                                and "upl" in pos_data
-                            ):
-                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что значения не пустые строки
-                                try:
-                                    margin_str = str(
-                                        pos_data.get("margin", "0")
-                                    ).strip()
-                                    upl_str = str(pos_data.get("upl", "0")).strip()
-                                    if margin_str and upl_str:
-                                        margin = float(margin_str)
-                                        upl = float(upl_str)
-                                        equity = margin + upl
-                                except (ValueError, TypeError) as e:
-                                    logger.debug(
-                                        f"⚠️ Ошибка конвертации margin/upl (fallback) для {symbol}: {e}"
-                                    )
-                                if equity > 0:
-                                    logger.debug(
-                                        f"✅ equity рассчитан из позиции API (fallback) для {symbol}: "
-                                        f"margin={margin:.2f} + upl={upl:.2f} = {equity:.2f}"
-                                    )
-                    except Exception as api_error:
-                        logger.debug(
-                            f"⚠️ Ошибка получения equity из позиции API (fallback) для {symbol}: {api_error}"
-                        )
-
-                    # Fallback на общий баланс только если все остальное не сработало
-                    if equity == 0:
-                        equity = await self.client.get_balance()
-                        logger.warning(
-                            f"⚠️ Ошибка получения equity для {symbol}: {e}, "
-                            f"используем общий баланс: {equity:.2f}"
-                        )
+                # Если не удалось получить баланс - используем безопасное значение
+                equity = 1000.0  # Fallback значение
+                logger.warning(
+                    f"⚠️ Не удалось получить общий баланс для {symbol}: {e}. Используем fallback {equity:.2f}"
+                )
 
             # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: size из API в контрактах!
             # Нужно получить ctVal для правильного расчета стоимости
@@ -1192,7 +1041,7 @@ class FuturesPositionManager:
                     )
 
             # Проверка безопасности через Margin Calculator
-            # ⚠️ Используем equity из позиции, а не общий баланс!
+            # ✅ ИСПРАВЛЕНО (07.01.2026): Используем ОБЩИЙ баланс, а не equity позиции! (см. строки 898-908)
             logger.debug(
                 f"🔍 Проверка безопасности {symbol}: "
                 f"position_value={position_value:.2f}, equity={equity:.2f}, "
@@ -1253,7 +1102,7 @@ class FuturesPositionManager:
 
             is_safe, details = self.margin_calculator.is_position_safe(
                 position_value,
-                equity,  # ✅ Используем equity из позиции!
+                equity,  # ✅ ИСПРАВЛЕНО (07.01.2026): Используем ОБЩИЙ баланс счёта! (см. строки 898-908)
                 current_price,
                 entry_price,
                 side,
@@ -2010,11 +1859,76 @@ class FuturesPositionManager:
                     f"threshold_adjusted=${ph_threshold_adjusted:.2f}"
                 )
 
+                # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Инициализируем ignore_min_holding ДО использования!
+                # Было: объявление на строке 1978, использование на строке 1872 → ошибка
+                # Теперь: объявляем сразу после расчета PnL
+                extreme_profit_threshold = ph_threshold_adjusted * 1.5
+                ignore_min_holding = False
+                if net_pnl_usd >= extreme_profit_threshold:
+                    ignore_min_holding = True
+                    logger.info(
+                        f"🚨 ЭКСТРЕМАЛЬНАЯ ПРИБЫЛЬ! {symbol}: ${net_pnl_usd:.4f} "
+                        f"(1.5x скорректированного порога: ${extreme_profit_threshold:.2f}) - игнорируем MIN_HOLDING и TIME_LIMIT"
+                    )
+
             except Exception as e:
                 logger.error(
                     f"❌ PH для {symbol}: Ошибка расчета PnL: {e}", exc_info=True
                 )
                 return False
+
+            # ✅ ИСПРАВЛЕНИЕ #0 (07.01.2026): ИНИЦИАЛИЗИРУЕМ min_holding_seconds ПЕРЕД ИСПОЛЬЗОВАНИЕМ!
+            # Было: использование на строке 1890 без инициализации → ошибка "name 'min_holding_seconds' is not defined"
+            # Теперь: инициализируем с дефолтным значением 30 секунд
+            min_holding_seconds = 30.0  # Default значение в секундах
+
+            # Получаем настоящее значение из конфига если доступно
+            if config_min_holding is not None:
+                min_holding_seconds = (
+                    float(config_min_holding) * 60.0
+                )  # Конвертируем минуты в секунды
+                logger.debug(
+                    f"[PROFIT_HARVEST] {symbol}: min_holding={min_holding_seconds:.0f}s (из конфига: {config_min_holding} мин)"
+                )
+            else:
+                logger.debug(
+                    f"[PROFIT_HARVEST] {symbol}: min_holding={min_holding_seconds:.0f}s (default)"
+                )
+
+            # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Решение о PH
+            should_close_ph = False
+            ph_reason = None
+
+            if ignore_min_holding:
+                should_close_ph = True
+                ph_reason = f"extreme_profit (${net_pnl_usd:.4f} >= ${extreme_profit_threshold:.2f})"
+                logger.info(
+                    f"🎯 [PH_DECISION] {symbol}: action=close, reason={ph_reason} | "
+                    f"PnL=${net_pnl_usd:.4f}, threshold=${ph_threshold_adjusted:.2f}, "
+                    f"time={time_since_open:.1f}s (игнорируем min_holding={min_holding_seconds:.0f}s)"
+                )
+            elif time_since_open < min_holding_seconds:
+                should_close_ph = False
+                ph_reason = f"min_holding (time={time_since_open:.1f}s < {min_holding_seconds:.0f}s)"
+                logger.debug(
+                    f"⏸️ [PH_DECISION] {symbol}: action=hold, reason={ph_reason} | "
+                    f"PnL=${net_pnl_usd:.4f}, threshold=${ph_threshold_adjusted:.2f}"
+                )
+                return False
+            elif net_pnl_usd >= ph_threshold_adjusted:
+                should_close_ph = True
+                ph_reason = f"profit_harvest (${net_pnl_usd:.4f} >= ${ph_threshold_adjusted:.2f})"
+                logger.info(
+                    f"🎯 [PH_DECISION] {symbol}: action=close, reason={ph_reason} | "
+                    f"time={time_since_open:.1f}s, min_holding={min_holding_seconds:.0f}s"
+                )
+            else:
+                should_close_ph = False
+                ph_reason = f"below_threshold (${net_pnl_usd:.4f} < ${ph_threshold_adjusted:.2f})"
+                logger.debug(
+                    f"⏸️ [PH_DECISION] {symbol}: action=hold, reason={ph_reason} | "
+                    f"time={time_since_open:.1f}s"
+                )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем MIN_HOLDING перед Profit Harvesting
             # Защита от шума должна работать - адаптивный min_holding по режиму
@@ -2025,7 +1939,29 @@ class FuturesPositionManager:
                 # ✅ Приоритет 1: ParameterProvider
                 if hasattr(self, "parameter_provider") and self.parameter_provider:
                     try:
-                        exit_params = self.parameter_provider.get_exit_params(symbol)
+                        # ✅ НОВОЕ (07.01.2026): Передаем контекст для адаптивных параметров
+                        balance = (
+                            position.get("balance")
+                            if isinstance(position, dict)
+                            else None
+                        )
+                        current_pnl = (
+                            position.get("pnl_percent")
+                            if isinstance(position, dict)
+                            else None
+                        )
+                        regime = (
+                            position.get("regime")
+                            if isinstance(position, dict)
+                            else None
+                        )
+
+                        exit_params = self.parameter_provider.get_exit_params(
+                            symbol,
+                            regime=regime,
+                            balance=balance,
+                            current_pnl=current_pnl,
+                        )
                         min_holding_minutes = exit_params.get(
                             "min_holding_minutes", None
                         )
@@ -2033,7 +1969,7 @@ class FuturesPositionManager:
                             min_holding_minutes = float(min_holding_minutes)
                             logger.debug(
                                 f"✅ [PH] {symbol}: min_holding_minutes={min_holding_minutes:.2f} мин "
-                                f"получен из ParameterProvider"
+                                f"получен из ParameterProvider (regime={regime}, pnl={current_pnl:.1f}%)"
                             )
                     except Exception as e:
                         logger.debug(
@@ -2084,22 +2020,6 @@ class FuturesPositionManager:
 
             min_holding_seconds = min_holding_minutes * 60.0
 
-            # ✅ УЛУЧШЕНИЕ: Используем скорректированный порог для экстремальной прибыли
-            # ✅ НОВОЕ: Игнорируем MIN_HOLDING для экстремально больших прибылей (> 1.5x скорректированного порога)
-            # Это позволяет закрывать позиции немедленно при сверхприбыли, не дожидаясь min_holding
-            # ✅ ОПТИМИЗАЦИЯ: Уменьшен порог с 2x до 1.5x для более агрессивного закрытия
-            extreme_profit_threshold = (
-                ph_threshold_adjusted * 1.5
-            )  # ✅ ИЗМЕНЕНО: используем скорректированный порог
-            ignore_min_holding = False
-            if net_pnl_usd >= extreme_profit_threshold:
-                ignore_min_holding = True
-                logger.info(
-                    f"🚨 ЭКСТРЕМАЛЬНАЯ ПРИБЫЛЬ! {symbol}: ${net_pnl_usd:.4f} "
-                    f"(1.5x скорректированного порога: ${extreme_profit_threshold:.2f}) - игнорируем MIN_HOLDING и TIME_LIMIT"
-                )
-
-            # ✅ УЛУЧШЕНИЕ: Используем скорректированный порог для проверки MIN_HOLDING
             # ✅ Проверяем MIN_HOLDING: если позиция открыта меньше min_holding, НЕ закрываем по PH
             # ИСКЛЮЧЕНИЕ: игнорируем для экстремально больших прибылей
             if not ignore_min_holding and time_since_open < min_holding_seconds:
@@ -2128,107 +2048,10 @@ class FuturesPositionManager:
             # ✅ ИСПРАВЛЕНО: Определяем порог экстремальной прибыли 2x (на основе скорректированного порога)
             extreme_profit_2x = ph_threshold_adjusted * 2.0
 
-            if ignore_min_holding:
-                # ✅ ИСПРАВЛЕНО: Для экстремальных прибылей >= 2x полностью игнорируем ph_time_limit
-                if net_pnl_usd >= extreme_profit_2x:
-                    # Экстремальная прибыль >= 2x: игнорируем ph_time_limit
-                    if net_pnl_usd >= ph_threshold_adjusted:
-                        should_close = True
-                        close_reason = (
-                            "EXTREME PROFIT 2x+ (ignoring time_limit and min_holding)"
-                        )
-                        logger.debug(
-                            f"✅ PH для {symbol}: Условие экстремальной прибыли 2x+ выполнено "
-                            f"(profit=${net_pnl_usd:.4f} >= 2x adjusted_threshold=${extreme_profit_2x:.2f})"
-                        )
-                    else:
-                        logger.debug(
-                            f"❌ PH для {symbol}: Экстремальная прибыль 2x+, но недостаточно для закрытия "
-                            f"(profit=${net_pnl_usd:.4f} < adjusted_threshold=${ph_threshold_adjusted:.2f})"
-                        )
-                elif net_pnl_usd >= ph_threshold_adjusted:
-                    # Экстремальная прибыль >= 1.5x но < 2x: игнорируем min_holding, но проверяем ph_time_limit
-                    if time_since_open < ph_time_limit:
-                        should_close = True
-                        close_reason = "EXTREME PROFIT 1.5x+ (ignoring min_holding, within time_limit)"
-                        logger.debug(
-                            f"✅ PH для {symbol}: Условие экстремальной прибыли 1.5x+ выполнено "
-                            f"(profit=${net_pnl_usd:.4f} >= adjusted_threshold=${ph_threshold_adjusted:.2f}, "
-                            f"time={time_since_open:.1f}с < {ph_time_limit}с)"
-                        )
-                    else:
-                        logger.debug(
-                            f"❌ PH для {symbol}: Экстремальная прибыль 1.5x+, но превышен time_limit "
-                            f"({time_since_open:.1f}с >= {ph_time_limit}с)"
-                        )
-                else:
-                    logger.debug(
-                        f"❌ PH для {symbol}: Экстремальная прибыль, но недостаточно для закрытия "
-                        f"(profit=${net_pnl_usd:.4f} < adjusted_threshold=${ph_threshold_adjusted:.2f})"
-                    )
-            else:
-                # ✅ УЛУЧШЕНИЕ #2: Проверка процентного порога PH (для маленьких позиций)
-                if (
-                    pnl_percent >= ph_percent_threshold
-                    and time_since_open <= ph_percent_time_limit
-                ):
-                    should_close = True
-                    close_reason = f"PH процентный порог ({pnl_percent:.2f}% >= {ph_percent_threshold:.2f}% за {time_since_open:.1f}с)"
-                    logger.debug(
-                        f"✅ PH для {symbol}: Процентный порог достигнут | "
-                        f"PnL%={pnl_percent:.2f}% >= {ph_percent_threshold:.2f}%, "
-                        f"время={time_since_open:.1f}с <= {ph_percent_time_limit}с"
-                    )
-                # Обычная прибыль: проверяем ph_time_limit (используем скорректированный порог)
-                elif (
-                    net_pnl_usd >= ph_threshold_adjusted
-                    and time_since_open < ph_time_limit
-                ):
-                    should_close = True
-                    close_reason = "NORMAL PROFIT (within time_limit)"
-                    logger.debug(
-                        f"✅ PH для {symbol}: Условие обычной прибыли выполнено "
-                        f"(profit=${net_pnl_usd:.4f} >= adjusted_threshold=${ph_threshold_adjusted:.2f}, "
-                        f"time={time_since_open:.1f}с < {ph_time_limit}с)"
-                    )
-                else:
-                    if net_pnl_usd < ph_threshold_adjusted:
-                        logger.debug(
-                            f"❌ PH для {symbol}: Прибыль недостаточна "
-                            f"(${net_pnl_usd:.4f} < adjusted_threshold=${ph_threshold_adjusted:.2f})"
-                        )
-                    if time_since_open >= ph_time_limit:
-                        logger.debug(
-                            f"❌ PH для {symbol}: Превышен time_limit "
-                            f"({time_since_open:.1f}с >= {ph_time_limit}с)"
-                        )
-
-            if should_close:
-                logger.info(
-                    f"💰💰💰 PROFIT HARVESTING TRIGGERED! {symbol} {side.upper()}\n"
-                    f"   Quick profit: ${net_pnl_usd:.4f} (threshold: ${ph_threshold:.2f}, adjusted: ${ph_threshold_adjusted:.2f})\n"
-                    f"   Commission: ${commission:.4f} (включена в adjusted threshold)\n"
-                    f"   Time: {time_since_open:.1f}s (limit: {ph_time_limit}s, min_holding: {min_holding_seconds:.1f}s)\n"
-                    f"   Entry: ${entry_price:.4f} → Exit: ${current_price:.4f}\n"
-                    f"   Regime: {market_regime or 'N/A'}\n"
-                    f"   Reason: {close_reason}"
-                )
+            if should_close_ph:
                 return True
-
-            # ✅ УЛУЧШЕНИЕ: Логируем прогресс к PH с учетом скорректированного порога
-            if time_since_open < ph_time_limit and net_pnl_usd > 0:
-                progress = (
-                    (net_pnl_usd / ph_threshold_adjusted) * 100
-                    if ph_threshold_adjusted > 0
-                    else 0
-                )
-                if progress >= 50:  # Логируем только если >50% прогресса
-                    logger.debug(
-                        f"📊 PH прогресс {symbol}: ${net_pnl_usd:.4f} / ${ph_threshold_adjusted:.2f} "
-                        f"({progress:.0f}%), время: {time_since_open:.1f}s / {ph_time_limit}s"
-                    )
-
-            return False
+            else:
+                return False
 
         except Exception as e:
             logger.error(f"❌ Ошибка проверки Profit Harvesting для {symbol}: {e}")
@@ -2328,8 +2151,14 @@ class FuturesPositionManager:
                             and self.parameter_provider
                         ):
                             try:
+                                # ✅ НОВОЕ (07.01.2026): Передаем контекст для адаптивных параметров
+                                regime = (
+                                    position.get("regime")
+                                    if isinstance(position, dict)
+                                    else None
+                                )
                                 exit_params = self.parameter_provider.get_exit_params(
-                                    symbol
+                                    symbol, regime=regime
                                 )
                                 min_holding_minutes = exit_params.get(
                                     "min_holding_minutes", None
@@ -4140,6 +3969,127 @@ class FuturesPositionManager:
                             )
                 return None
 
+            # ✅ EXIT GUARD: Защита от преждевременного закрытия по min_holding
+            try:
+                non_blocking_reasons = {
+                    "sl",
+                    "sl_reached",
+                    "trailing_sl",
+                    "liquidation",
+                    "risk_emergency",
+                    "margin_call",
+                    "tp",
+                    "take_profit",
+                    "max_holding",
+                    "max_time",
+                }
+                if str(reason).lower() not in non_blocking_reasons:
+                    minutes_in_position = 0.0
+                    entry_time_val = None
+                    # Пытаемся получить entry_time из orchestrator.active_positions
+                    if (
+                        hasattr(self, "orchestrator")
+                        and self.orchestrator
+                        and hasattr(self.orchestrator, "active_positions")
+                    ):
+                        stored = self.orchestrator.active_positions.get(symbol)
+                        if isinstance(stored, dict):
+                            entry_time_val = stored.get("entry_time")
+                    if (
+                        entry_time_val is None
+                        and symbol in self.active_positions
+                        and isinstance(self.active_positions.get(symbol), dict)
+                    ):
+                        entry_time_val = self.active_positions[symbol].get("entry_time")
+                    if entry_time_val:
+                        if isinstance(entry_time_val, datetime):
+                            minutes_in_position = (
+                                datetime.now(timezone.utc) - entry_time_val
+                            ).total_seconds() / 60.0
+                        else:
+                            try:
+                                minutes_in_position = (
+                                    time.time() - float(entry_time_val)
+                                ) / 60.0
+                            except Exception:
+                                minutes_in_position = 0.0
+
+                    # Определяем режим для получения min_holding
+                    regime_val = None
+                    # из позиции/active_positions
+                    regime_val = (
+                        position.get("regime") if isinstance(position, dict) else None
+                    ) or (
+                        self.active_positions.get(symbol, {}).get("regime")
+                        if symbol in self.active_positions
+                        else None
+                    )
+                    if (
+                        not regime_val
+                        and hasattr(self, "orchestrator")
+                        and self.orchestrator
+                        and hasattr(self.orchestrator, "signal_generator")
+                    ):
+                        sg = self.orchestrator.signal_generator
+                        try:
+                            if (
+                                hasattr(sg, "regime_managers")
+                                and symbol in sg.regime_managers
+                            ):
+                                regime_obj = sg.regime_managers[
+                                    symbol
+                                ].get_current_regime()
+                                regime_val = (
+                                    regime_obj.value.lower()
+                                    if hasattr(regime_obj, "value")
+                                    else str(regime_obj).lower()
+                                )
+                        except Exception:
+                            pass
+
+                    min_holding_minutes = 0.5
+                    try:
+                        tsl_config = getattr(self.scalping_config, "trailing_sl", {})
+                        if not isinstance(tsl_config, dict):
+                            tsl_config = getattr(tsl_config, "__dict__", {})
+                        by_regime = tsl_config.get("by_regime", {})
+                        if (
+                            regime_val
+                            and isinstance(by_regime, dict)
+                            and regime_val.lower() in by_regime
+                        ):
+                            r_tsl = by_regime[regime_val.lower()]
+                            if isinstance(r_tsl, dict):
+                                min_holding_minutes = float(
+                                    r_tsl.get(
+                                        "min_holding_minutes", min_holding_minutes
+                                    )
+                                )
+                            elif hasattr(r_tsl, "min_holding_minutes"):
+                                min_holding_minutes = float(
+                                    getattr(
+                                        r_tsl,
+                                        "min_holding_minutes",
+                                        min_holding_minutes,
+                                    )
+                                )
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ [EXIT_GUARD] Ошибка чтения min_holding для {symbol}: {e}"
+                        )
+
+                    if minutes_in_position < min_holding_minutes:
+                        logger.info(
+                            f"🛡️ [EXIT_GUARD] {symbol}: блокируем закрытие (reason={reason}) "
+                            f"{minutes_in_position:.2f} мин < {min_holding_minutes:.2f} мин "
+                            f"(regime={regime_val or 'n/a'})"
+                        )
+                        return None
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ [EXIT_GUARD] Ошибка в логике защиты для {symbol}: {e}"
+                )
+
             # ✅ НОВОЕ (КИМИ): Проверка PnL < комиссия перед закрытием
             # Рассчитываем PnL и комиссию для проверки
             try:
@@ -4556,7 +4506,39 @@ class FuturesPositionManager:
 
             # ✅ НОВОЕ: Логируем размер позиции ДО закрытия
             size_before_close = abs(size)
+
+            # ✅ НОВОЕ: PH_DECISION логирование с маркером
+            regime_for_log = position.get("regime", "UNKNOWN")
+            if (
+                not regime_for_log
+                and hasattr(self, "orchestrator")
+                and self.orchestrator
+                and hasattr(self.orchestrator, "signal_generator")
+            ):
+                try:
+                    sg = self.orchestrator.signal_generator
+                    if hasattr(sg, "regime_managers") and symbol in sg.regime_managers:
+                        regime_obj = sg.regime_managers[symbol].get_current_regime()
+                        regime_for_log = (
+                            regime_obj.value.upper()
+                            if hasattr(regime_obj, "value")
+                            else str(regime_obj).upper()
+                        )
+                except Exception:
+                    regime_for_log = "UNKNOWN"
+
+            # Рассчитываем PnL в процентах от notional
+            gross_pnl_pct = (
+                (gross_pnl / notional_entry * 100) if notional_entry > 0 else 0.0
+            )
+            net_pnl_pct = (
+                (net_pnl / notional_entry * 100) if notional_entry > 0 else 0.0
+            )
+
             logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(
+                f"🎯 [PH_DECISION] {symbol}: action=close | reason={reason} | gross={gross_pnl_pct:+.2f}% | net={net_pnl_pct:+.2f}% | time={duration_min:.1f}min | regime={regime_for_log}"
+            )
             logger.info(f"💰 ПОЗИЦИЯ ЗАКРЫТА: {symbol} {side.upper()}")
             logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             logger.info(
@@ -5286,7 +5268,7 @@ class FuturesPositionManager:
                 net_pnl = current_pnl - commission
 
                 # Получаем режим для адаптивного порога отката
-                regime = metadata.regime or "ranging"
+                regime = metadata.regime or "trending"
 
                 # ✅ ИСПРАВЛЕНО: Читаем порог отката из конфига вместо захардкоженных значений
                 base_drawdown = 0.20  # Default 20%
@@ -6560,7 +6542,8 @@ class FuturesPositionManager:
             except Exception as e:
                 logger.error(f"❌ Ошибка ручного закрытия позиции: {e}", exc_info=True)
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Возвращаем result если он был создан, иначе ошибку
-                if result is not None:
+                # ✅ FIX NoneType: Проверяем что result существует и является dict перед возвратом
+                if result is not None and isinstance(result, dict):
                     return result
                 return {"success": False, "error": str(e)}
 

@@ -661,15 +661,15 @@ class FuturesScalpingOrchestrator:
 
         # WebSocket Manager
         # ✅ ИСПРАВЛЕНИЕ: Используем правильный WebSocket URL в зависимости от sandbox режима
-        # OKX Sandbox WebSocket: wss://wspap.okx.com:8443/ws/v5/public (демо)
-        # OKX Production WebSocket: wss://ws.okx.com:8443/ws/v5/public
-        # Используем уже полученный okx_config из строки 69
+        # Public WebSocket: используем ws.okx.com (работает в обоих режимах)
+        # Private WebSocket: используем wspap.okx.com (в private_websocket_manager.py)
+        # OKX Public WebSocket: wss://ws.okx.com:8443/ws/v5/public (работает везде)
         if okx_config.sandbox:
-            ws_url = "wss://wspap.okx.com:8443/ws/v5/public"  # Sandbox WebSocket
-            logger.info("📡 Используется SANDBOX WebSocket для тестирования")
+            ws_url = "wss://ws.okx.com:8443/ws/v5/public"  # Sandbox Public WebSocket
+            logger.info("📡 Используется SANDBOX Public WebSocket (ws.okx.com:8443)")
         else:
-            ws_url = "wss://ws.okx.com:8443/ws/v5/public"  # Production WebSocket
-            logger.info("📡 Используется PRODUCTION WebSocket")
+            ws_url = "wss://ws.okx.com:8443/ws/v5/public"  # Production Public WebSocket (одинаков для обоих)
+            logger.info("📡 Используется PRODUCTION Public WebSocket (ws.okx.com:8443)")
 
         self.ws_manager = FuturesWebSocketManager(ws_url=ws_url)
 
@@ -1033,26 +1033,46 @@ class FuturesScalpingOrchestrator:
         # ✅ ИСПРАВЛЕНО (06.01.2026): Логируем статистику режимов перед остановкой
         if hasattr(self, "signal_generator") and self.signal_generator:
             # Общий regime_manager
-            if hasattr(self.signal_generator, "regime_manager") and self.signal_generator.regime_manager:
+            if (
+                hasattr(self.signal_generator, "regime_manager")
+                and self.signal_generator.regime_manager
+            ):
                 try:
                     # Обновляем время в текущем режиме перед логированием
-                    time_in_current = datetime.utcnow() - self.signal_generator.regime_manager.regime_start_time
-                    self.signal_generator.regime_manager.time_in_regime[self.signal_generator.regime_manager.current_regime] += time_in_current
+                    time_in_current = (
+                        datetime.utcnow()
+                        - self.signal_generator.regime_manager.regime_start_time
+                    )
+                    self.signal_generator.regime_manager.time_in_regime[
+                        self.signal_generator.regime_manager.current_regime
+                    ] += time_in_current
                     self.signal_generator.regime_manager.log_statistics()
                 except Exception as e:
                     logger.warning(f"⚠️ Ошибка логирования статистики режимов: {e}")
-            
+
             # Per-symbol regime_managers
-            if hasattr(self.signal_generator, "regime_managers") and self.signal_generator.regime_managers:
-                for symbol, regime_manager in self.signal_generator.regime_managers.items():
+            if (
+                hasattr(self.signal_generator, "regime_managers")
+                and self.signal_generator.regime_managers
+            ):
+                for (
+                    symbol,
+                    regime_manager,
+                ) in self.signal_generator.regime_managers.items():
                     try:
                         # Обновляем время в текущем режиме перед логированием
-                        time_in_current = datetime.utcnow() - regime_manager.regime_start_time
-                        regime_manager.time_in_regime[regime_manager.current_regime] += time_in_current
+                        time_in_current = (
+                            datetime.utcnow() - regime_manager.regime_start_time
+                        )
+                        regime_manager.time_in_regime[
+                            regime_manager.current_regime
+                        ] += time_in_current
                         logger.info(f"\n📊 Статистика режимов для {symbol}:")
                         regime_manager.log_statistics()
                     except Exception as e:
-                        logger.warning(f"⚠️ Ошибка логирования статистики режимов для {symbol}: {e}")
+                        logger.warning(
+                            f"⚠️ Ошибка логирования статистики режимов для {symbol}: {e}"
+                        )
 
         # ✅ РЕФАКТОРИНГ: Остановка TradingControlCenter
         if hasattr(self, "trading_control_center") and self.trading_control_center:
@@ -1385,9 +1405,9 @@ class FuturesScalpingOrchestrator:
             timeframes_config = [
                 {
                     "timeframe": "1m",
-                    "limit": 500,  # ✅ Загружаем 500 свечей для прогрева ATR/BB (~8 часов данных вместо 3.3)
-                    "max_size": 200,  # ⚡ Но в буфере храним 200 (быстрый расчет индикаторов, не 26 сек!)
-                    "description": "основные индикаторы (ATR/BB прогрев, но 200 в буфере для скорости)",
+                    "limit": 500,  # ✅ Загружаем 500 свечей через пагинацию (обход лимита OKX 300)
+                    "max_size": 500,  # ✅ ИСПРАВЛЕНО: Храним все 500 для корректного ATR на малых парах (DOGE/XRP)
+                    "description": "основные индикаторы (ATR/BB с полными 500 свечами для прогрева)",
                 },
                 {
                     "timeframe": "5m",
@@ -1412,6 +1432,8 @@ class FuturesScalpingOrchestrator:
             total_initialized = 0
             for symbol in symbols:
                 symbol_initialized = 0
+                logger.info(f"📥 Загрузка свечей для символа {symbol}...")
+
                 for tf_config in timeframes_config:
                     timeframe = tf_config["timeframe"]
                     limit = tf_config["limit"]
@@ -1419,91 +1441,135 @@ class FuturesScalpingOrchestrator:
                     description = tf_config["description"]
 
                     try:
-                        # Получаем свечи через API
+                        # Получаем свечи через API (с пагинацией если limit > 300)
                         inst_id = f"{symbol}-SWAP"
-                        url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar={timeframe}&limit={limit}"
+                        all_candles = []
 
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(url) as resp:
-                                if resp.status == 200:
-                                    data = await resp.json()
-                                    if data.get("code") == "0" and data.get("data"):
-                                        candles = data["data"]
+                        async with aiohttp.ClientSession(
+                            timeout=aiohttp.ClientTimeout(total=30)
+                        ) as session:
+                            # Если нужно больше 300 свечей - делаем несколько запросов
+                            remaining = limit
+                            after_ts = None
 
-                                        # Конвертируем свечи из формата OKX в OHLCV
-                                        ohlcv_data = []
-                                        for candle in candles:
-                                            if len(candle) >= 6:
-                                                ohlcv_item = OHLCV(
-                                                    timestamp=int(candle[0])
-                                                    // 1000,  # OKX в миллисекундах
-                                                    symbol=symbol,
-                                                    open=float(candle[1]),
-                                                    high=float(candle[2]),
-                                                    low=float(candle[3]),
-                                                    close=float(candle[4]),
-                                                    volume=float(candle[5]),
-                                                    timeframe=timeframe,
-                                                )
-                                                ohlcv_data.append(ohlcv_item)
+                            while remaining > 0:
+                                batch_limit = min(
+                                    remaining, 300
+                                )  # OKX API макс 300 за запрос
+                                url = f"https://www.okx.com/api/v5/market/candles?instId={inst_id}&bar={timeframe}&limit={batch_limit}"
+                                if after_ts:
+                                    url += f"&after={after_ts}"
 
-                                        if ohlcv_data:
-                                            # Сортируем по timestamp (старые -> новые)
-                                            ohlcv_data.sort(key=lambda x: x.timestamp)
+                                try:
+                                    async with session.get(url) as resp:
+                                        if resp.status == 200:
+                                            data = await resp.json()
+                                            if data.get("code") == "0" and data.get(
+                                                "data"
+                                            ):
+                                                batch = data["data"]
+                                                if not batch:
+                                                    break  # Нет больше данных
 
-                                            # Инициализируем буфер в DataRegistry
-                                            await self.data_registry.initialize_candles(
-                                                symbol=symbol,
-                                                timeframe=timeframe,
-                                                candles=ohlcv_data,
-                                                max_size=max_size,
-                                            )
+                                                all_candles.extend(batch)
+                                                remaining -= len(batch)
 
-                                            symbol_initialized += 1
-                                            total_initialized += 1
-                                            logger.info(
-                                                f"✅ Инициализирован буфер свечей {timeframe} для {symbol} "
-                                                f"({len(ohlcv_data)} свечей, {description})"
-                                            )
+                                                # after_ts = самая старая свеча из batch (для следующей страницы)
+                                                after_ts = batch[-1][
+                                                    0
+                                                ]  # timestamp последней (самой старой) свечи
 
-                                            # ✅ НОВОЕ: Логируем в StructuredLogger
-                                            if self.structured_logger:
-                                                try:
-                                                    self.structured_logger.log_candle_init(
-                                                        symbol=symbol,
-                                                        timeframe=timeframe,
-                                                        candles_count=len(ohlcv_data),
-                                                        status="success",
-                                                    )
-                                                except Exception as e:
-                                                    logger.debug(
-                                                        f"⚠️ Ошибка логирования инициализации свечей в StructuredLogger: {e}"
-                                                    )
-                                    else:
-                                        error_msg = data.get(
-                                            "msg", "Неизвестная ошибка"
-                                        )
-                                        logger.warning(
-                                            f"⚠️ Не удалось получить свечи {timeframe} для {symbol}: {error_msg}"
-                                        )
-                                        # ✅ НОВОЕ: Логируем ошибку в StructuredLogger
-                                        if self.structured_logger:
-                                            try:
-                                                self.structured_logger.log_candle_init(
-                                                    symbol=symbol,
-                                                    timeframe=timeframe,
-                                                    candles_count=0,
-                                                    status="error",
-                                                    error=error_msg,
-                                                )
-                                            except Exception as e:
-                                                logger.debug(
-                                                    f"⚠️ Ошибка логирования ошибки инициализации свечей: {e}"
-                                                )
-                                else:
+                                                if len(batch) < batch_limit:
+                                                    break  # Получили меньше чем запрашивали - больше нет данных
+
+                                                # ⏳ Добавляем задержку между запросами чтобы не overload API
+                                                await asyncio.sleep(0.5)
+                                            else:
+                                                break
+                                        else:
+                                            break
+                                except asyncio.TimeoutError:
                                     logger.warning(
-                                        f"⚠️ HTTP ошибка при получении свечей {timeframe} для {symbol}: {resp.status}"
+                                        f"⏱️ Timeout при загрузке {symbol} {timeframe}, используем имеющиеся данные"
                                     )
+                                    break
+                                except Exception as e:
+                                    logger.warning(
+                                        f"⚠️ Ошибка при загрузке {symbol} {timeframe}: {e}"
+                                    )
+                                    break
+
+                            candles = all_candles
+
+                        if candles:
+                            # Конвертируем свечи из формата OKX в OHLCV
+                            ohlcv_data = []
+                            for candle in candles:
+                                if len(candle) >= 6:
+                                    ohlcv_item = OHLCV(
+                                        timestamp=int(candle[0])
+                                        // 1000,  # OKX в миллисекундах
+                                        symbol=symbol,
+                                        open=float(candle[1]),
+                                        high=float(candle[2]),
+                                        low=float(candle[3]),
+                                        close=float(candle[4]),
+                                        volume=float(candle[5]),
+                                        timeframe=timeframe,
+                                    )
+                                    ohlcv_data.append(ohlcv_item)
+
+                            if ohlcv_data:
+                                # Сортируем по timestamp (старые -> новые)
+                                ohlcv_data.sort(key=lambda x: x.timestamp)
+
+                                # Инициализируем буфер в DataRegistry
+                                await self.data_registry.initialize_candles(
+                                    symbol=symbol,
+                                    timeframe=timeframe,
+                                    candles=ohlcv_data,
+                                    max_size=max_size,
+                                )
+
+                                symbol_initialized += 1
+                                total_initialized += 1
+                                logger.info(
+                                    f"✅ Инициализирован буфер свечей {timeframe} для {symbol} "
+                                    f"({len(ohlcv_data)} свечей, {description})"
+                                )
+
+                                # ✅ НОВОЕ: Логируем в StructuredLogger
+                                if self.structured_logger:
+                                    try:
+                                        self.structured_logger.log_candle_init(
+                                            symbol=symbol,
+                                            timeframe=timeframe,
+                                            candles_count=len(ohlcv_data),
+                                            status="success",
+                                        )
+                                    except Exception as e:
+                                        logger.debug(
+                                            f"⚠️ Ошибка логирования инициализации свечей в StructuredLogger: {e}"
+                                        )
+                        else:
+                            logger.warning(
+                                f"⚠️ Не удалось получить свечи {timeframe} для {symbol}: OKX API вернул пустой ответ или ошибку"
+                            )
+                            # ✅ НОВОЕ: Логируем ошибку в StructuredLogger
+                            if self.structured_logger:
+                                try:
+                                    self.structured_logger.log_candle_init(
+                                        symbol=symbol,
+                                        timeframe=timeframe,
+                                        candles_count=0,
+                                        status="error",
+                                        error="Empty response from API",
+                                    )
+                                except Exception as e:
+                                    logger.debug(
+                                        f"⚠️ Ошибка логирования ошибки инициализации свечей: {e}"
+                                    )
+
                     except Exception as e:
                         logger.warning(
                             f"⚠️ Ошибка инициализации буфера свечей {timeframe} для {symbol}: {e}"
@@ -5262,15 +5328,18 @@ class FuturesScalpingOrchestrator:
                 missing_candles.append(symbol)
 
         if missing_candles:
-            raise ValueError(
-                f"❌ КРИТИЧЕСКАЯ ОШИБКА: Свечи не загружены для символов: {', '.join(missing_candles)}"
+            # ⚠️ ИЗМЕНЕНО: Вместо критической ошибки, просто логируем WARNING
+            # Бот сможет работать с имеющимися свечами, остальные загрузятся через WebSocket
+            logger.warning(
+                f"⚠️ Свечи не загружены для символов (будут загружены через WebSocket): {', '.join(missing_candles)}"
             )
 
         if insufficient_candles:
-            raise ValueError(
-                f"❌ КРИТИЧЕСКАЯ ОШИБКА: Недостаточно свечей для символов: "
+            # ⚠️ ИЗМЕНЕНО: Вместо критической ошибки, просто логируем WARNING
+            logger.warning(
+                f"⚠️ Недостаточно свечей для символов (они будут загружены через WebSocket): "
                 f"{', '.join([f'{s} ({c} свечей)' for s, c in insufficient_candles])}. "
-                f"Требуется минимум 50 свечей для каждого символа."
+                f"Требуется минимум 50 свечей, начинаем с имеющихся..."
             )
 
         logger.info(f"✅ Все свечи загружены для {len(symbols)} символов")
