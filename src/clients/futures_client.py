@@ -196,9 +196,8 @@ class OKXFuturesClient:
                 ttl_dns_cache=300,  # DNS кэш на 5 минут
                 # ✅ VPN параметры:
                 keepalive_timeout=60,  # Keep-alive на 60 сек (для VPN stability)
-                ssl=False if False else True,  # Используем SSL (True)
+                ssl=True,  # Используем SSL
                 family=0,  # 0=auto, 2=IPv4, 10=IPv6 - для VPN берем auto
-                resolve=True,  # Резолвить DNS
             )
             self.session = aiohttp.ClientSession(connector=connector)
             self._session_created_at = now
