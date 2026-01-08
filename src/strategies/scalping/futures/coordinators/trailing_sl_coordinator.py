@@ -745,6 +745,39 @@ class TrailingSLCoordinator:
                     f"⚠️ TrailingSLCoordinator: Ошибка получения margin/upl для {symbol}: {e}"
                 )
 
+            # ✅ FIX (09.01.2026): Если margin не найден, рассчитываем его из size * entry_price / leverage
+            if margin_used is None or margin_used <= 0:
+                try:
+                    pos_size = float(position.get("pos", "0") or 0)
+                    leverage = float(position.get("lever") or getattr(self.scalping_config, "leverage", 5) or 5)
+                    # Получаем ctVal для расчета стоимости позиции
+                    ct_val = float(position.get("ctVal", "1") or 1)
+                    position_value = abs(pos_size) * ct_val * entry_price
+                    margin_used = position_value / leverage if leverage > 0 else position_value
+                    logger.debug(
+                        f"📊 TSL margin расчитан для {symbol}: size={pos_size}, entry=${entry_price:.2f}, "
+                        f"lever={leverage}, margin=${margin_used:.2f}"
+                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка расчета margin для {symbol}: {e}")
+
+            # ✅ FIX (09.01.2026): Если unrealized_pnl не найден, рассчитываем его
+            if unrealized_pnl is None and entry_price > 0:
+                try:
+                    pos_size = float(position.get("pos", "0") or 0)
+                    pos_side = position.get("posSide") or position.get("position_side", "long")
+                    ct_val = float(position.get("ctVal", "1") or 1)
+                    position_value = abs(pos_size) * ct_val
+                    if pos_side.lower() == "long":
+                        unrealized_pnl = position_value * (current_price - entry_price)
+                    else:  # short
+                        unrealized_pnl = position_value * (entry_price - current_price)
+                    logger.debug(
+                        f"📊 TSL unrealized_pnl расчитан для {symbol}: ${unrealized_pnl:.2f}"
+                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка расчета unrealized_pnl для {symbol}: {e}")
+
             # ✅ ГРОК РЕКОМЕНДАЦИЯ: Проверка min_profit_to_activate перед обновлением trailing stop
             try:
                 # Получаем параметры trailing_sl из конфига

@@ -578,7 +578,7 @@ class TradingControlCenter:
                         f"⚠️ TCC: Пропуск некорректной записи позиции при обновлении: {type(position).__name__} = {position}"
                     )
                     continue
-
+                
                 # ✅ ДОПОЛНИТЕЛЬНАЯ защита: Проверяем что position является dict ПЕРЕД каждым .get()
                 try:
                     symbol = position.get("instId", "").replace("-SWAP", "")
@@ -782,10 +782,8 @@ class TradingControlCenter:
 
             # Проверка здоровья маржи
             try:
-                margin_status = await self.liquidation_guard.get_margin_status(
-                    self.client
-                )
-
+                margin_status = await self.liquidation_guard.get_margin_status(self.client)
+                
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Валидация payload перед использованием
                 # Защита от краша на 'str' object has no attribute 'get'
                 if not isinstance(margin_status, dict):
@@ -795,7 +793,7 @@ class TradingControlCenter:
                     )
                     # Не обновляем состояние при битых данных
                     return
-
+                
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Строгая валидация margin_status
                 # Проверяем что margin_status это dict ПЕРЕД каждым .get()
                 if not isinstance(margin_status, dict):
@@ -805,14 +803,25 @@ class TradingControlCenter:
                     )
                     # Не обновляем состояние при битых данных
                     return
-
+                
                 # Валидация вложенной структуры
                 health_status = margin_status.get("health_status")
                 if health_status and not isinstance(health_status, dict):
                     logger.error(
-                        f"❌ TCC: health_status некорректного типа: {type(health_status).__name__}"
+                        f"❌ TCC: health_status некорректного типа: {type(health_status).__name__}. "
+                        f"Получено: {health_status}. Это может указывать на проблемы с API/VPN."
                     )
-                    return
+                    # ✅ ИСПРАВЛЕНО: Останавливаем бота вместо игнорирования
+                    raise RuntimeError(
+                        f"TCC: health_status имеет неправильный тип {type(health_status).__name__}. "
+                        f"Возможна критическая ошибка API/VPN. Торговля должна быть остановлена."
+                    )
+            except ConnectionError as e:
+                # ✅ ИСПРАВЛЕНО: Circuit Breaker открыт - торговля ОСТАНОВЛЕНА
+                logger.critical(
+                    f"🔴 TCC: Circuit Breaker ОТКРЫТ - сетевые проблемы: {e}. Торговля приостановлена!"
+                )
+                return
             except RuntimeError as e:
                 # LiquidationGuard теперь выбрасывает RuntimeError при hard-fail
                 logger.critical(f"🔴 TCC: LiquidationGuard hard-fail: {e}")
@@ -824,6 +833,12 @@ class TradingControlCenter:
                 if "str' object has no attribute 'get'" in error_msg:
                     logger.error(
                         f"❌ TCC: Получена строка ошибки вместо dict от LiquidationGuard: {error_msg}"
+                    )
+                elif "ssl" in error_msg.lower() or "application_data_after_close_notify" in error_msg.lower():
+                    # ✅ ИСПРАВЛЕНО: SSL ошибки логируем как критические
+                    logger.critical(
+                        f"🔴 TCC: SSL/Network ошибка при получении margin_status: {e}. "
+                        f"Возможна проблема с VPN/соединением."
                     )
                 else:
                     logger.error(f"❌ TCC: Ошибка при получении margin_status: {e}")

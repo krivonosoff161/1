@@ -406,26 +406,38 @@ class LiquidationGuard:
             try:
                 equity = await client.get_balance()
             except Exception as e:
+                error_str = str(e).lower()
+                # ✅ ИСПРАВЛЕНО: Пробрасываем SSL ошибки чтобы circuit breaker в client сработал
+                if "ssl" in error_str or "application_data_after_close_notify" in error_str:
+                    logger.error(f"❌ SSL/Network ошибка получения баланса: {e}")
+                    raise  # Пробрасываем дальше чтобы circuit breaker сработал
+                
                 logger.error(f"❌ Ошибка получения баланса: {e}")
-                # Возвращаем пустой статус при ошибке получения баланса
+                # ✅ ИСПРАВЛЕНО: health_status теперь правильный dict, а не string
                 return {
                     "equity": 0.0,
                     "total_margin_used": 0.0,
                     "positions": [],
-                    "health_status": "error",
+                    "health_status": {"status": "error", "reason": "balance_fetch_failed"},
                     "error": str(e),
                 }
 
             try:
                 positions = await client.get_positions()
             except Exception as e:
+                error_str = str(e).lower()
+                # ✅ ИСПРАВЛЕНО: Пробрасываем SSL ошибки чтобы circuit breaker в client сработал
+                if "ssl" in error_str or "application_data_after_close_notify" in error_str:
+                    logger.error(f"❌ SSL/Network ошибка получения позиций: {e}")
+                    raise  # Пробрасываем дальше чтобы circuit breaker сработал
+                
                 logger.error(f"❌ Ошибка получения позиций: {e}")
-                # Возвращаем статус только с балансом
+                # ✅ ИСПРАВЛЕНО: health_status теперь правильный dict, а не string
                 return {
                     "equity": equity,
                     "total_margin_used": 0.0,
                     "positions": [],
-                    "health_status": "error",
+                    "health_status": {"status": "error", "reason": "positions_fetch_failed"},
                     "error": f"Failed to get positions: {e}",
                 }
 
@@ -440,7 +452,7 @@ class LiquidationGuard:
                         f"⚠️ LiquidationGuard: Пропуск некорректной позиции (type={type(position).__name__}): {position}"
                     )
                     continue
-
+                
                 try:
                     size = float(position.get("pos", "0"))
                 except (ValueError, TypeError):
@@ -448,7 +460,7 @@ class LiquidationGuard:
                         f"⚠️ LiquidationGuard: Ошибка парсинга размера позиции: {position.get('pos')}"
                     )
                     continue
-
+                
                 if size == 0:
                     continue
 

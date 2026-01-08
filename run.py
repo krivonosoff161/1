@@ -14,6 +14,10 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+# ✅ КРИТИЧЕСКИ ВАЖНО: Загружаем переменные окружения ПЕРЕД импортом модулей
+from dotenv import load_dotenv
+load_dotenv()  # Загружаем .env файл
+
 from loguru import logger
 
 
