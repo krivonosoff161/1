@@ -1,0 +1,133 @@
+════════════════════════════════════════════════════════════════════════════════
+🚨 ПОЛНЫЙ АУДИТ: ВСЕ DEBUG И ERROR ОШИБКИ В ЛОГАХ
+════════════════════════════════════════════════════════════════════════════════
+
+СТАТИСТИКА:
+  • Всего строк в логах: 8,174,585
+  • ERROR сообщений: 958
+  • WARNING/DEBUG сообщений: 5,675,556
+  • ВСЕГО ПРОБЛЕМ: 5,676,514
+
+════════════════════════════════════════════════════════════════════════════════
+🔴 5 УНИКАЛЬНЫХ ОШИБОК АТРИБУТОВ:
+════════════════════════════════════════════════════════════════════════════════
+
+1. 'TrailingStopLoss' has no attribute 'should_close'
+   └─ Количество: 4,319 ошибок (КРИТИЧНАЯ!)
+   └─ Модуль: src.strategies.scalping.futures.coordinators.exit_decision_coordinator
+   └─ Следствие: Trailing Stop Loss не работает вообще!
+
+2. 'HoldingTimeMetrics' has no attribute 'record_holding_time'
+   └─ Количество: 222 ошибки
+   └─ Модуль: src.strategies.scalping.futures.positions.exit_analyzer
+   └─ Следствие: Не записываются метрики времени удержания позиций
+
+3. 'str' has no attribute 'get'
+   └─ Количество: 146 ошибок
+   └─ Модуль: src.strategies.scalping.futures.core.trading_control_center
+   └─ Следствие: TCC получает строку вместо dict
+
+4. 'NoneType' has no attribute 'get'
+   └─ Количество: 73 ошибки
+   └─ Модуль: src.strategies.scalping.futures.position_manager
+   └─ Следствие: Позиции не закрываются правильно
+
+5. 'FastADX' has no attribute 'get_adx'
+   └─ Количество: 13 ошибок
+   └─ Модуль: src.strategies.scalping.futures.positions.exit_analyzer
+   └─ Следствие: ADX фильтр не работает
+
+════════════════════════════════════════════════════════════════════════════════
+🔴 КРИТИЧНЫЕ МОДУЛИ С ОШИБКАМИ:
+════════════════════════════════════════════════════════════════════════════════
+
+1. signal_generator                          - 82,743 WARNING
+2. signal_coordinator                        - 20,015 WARNING
+3. trading_control_center                    - 1,208 WARNING + 129 ERROR
+4. correlation_filter                        - 787 WARNING
+5. risk_manager                              - 143 WARNING
+6. order_executor                            - 53 ERROR
+7. futures_client                            - 107 ERROR
+8. liquidation_guard                         - Много ошибок маржи
+9. exit_decision_coordinator                 - 4,319 'should_close' ошибок
+10. exit_analyzer                            - 222 + 13 ошибок метрик
+
+════════════════════════════════════════════════════════════════════════════════
+🚨 ТОП 5 КОНКРЕТНЫХ ПРОБЛЕМ:
+════════════════════════════════════════════════════════════════════════════════
+
+1. TRAILING SL ФУНКЦИЯ ПОЛНОСТЬЮ СЛОМАНА
+   ├─ Ошибок: 4,895 ошибок (4,319 + 222 + 354 других)
+   ├─ Файл: exit_decision_coordinator.py
+   ├─ Проблема: 'TrailingStopLoss' has no attribute 'should_close'
+   ├─ Причина: Класс TrailingStopLoss не имеет метода should_close()
+   └─ Решение: Проверить существование метода перед вызовом
+
+2. TCC ПОЛУЧает СТРОКУ ВМЕСТО DICT (25,258 ошибок)
+   ├─ Ошибок: 146 + много других
+   ├─ Файл: trading_control_center.py (update_state)
+   ├─ Проблема: 'str' has no attribute 'get'
+   ├─ Причина: positions или response является строкой
+   └─ Решение: Добавить isinstance() проверку
+
+3. POSITION_MANAGER NoneType (3,928 ошибок)
+   ├─ Ошибок: 73 + 146 + другие
+   ├─ Файл: position_manager.py
+   ├─ Проблема: 'NoneType' has no attribute 'get'
+   ├─ Причина: API вернул None
+   └─ Решение: Проверять if response before .get()
+
+4. PIVOT ТОЧКИ ОШИБКИ (6,899 ошибок)
+   ├─ Файл: src.strategies.modules.pivot_points
+   ├─ Проблема: Непонятные ошибки при расчете Pivot
+   ├─ Примеры: "near PP support (not ideal, but allowed)"
+   └─ Решение: Проверить логику расчета
+
+5. SIGNAL GENERATOR ПРЕДУПРЕЖДЕНИЯ (82,743 WARNING)
+   ├─ Файл: signal_generator.py
+   ├─ Проблема: Много предупреждений при генерации сигналов
+   ├─ Возможные причины: Ошибки фильтров, нет данных
+   └─ Решение: Проверить логику фильтров
+
+════════════════════════════════════════════════════════════════════════════════
+📊 ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ:
+════════════════════════════════════════════════════════════════════════════════
+
+TYPE ERRORS:
+  • 'str' has no attribute: 146 ошибок
+  • 'NoneType' has no attribute: 73 ошибки
+
+ОЧЕНЬ СПЕЦИФИЧНЫЕ ПРОБЛЕМЫ НАЙДЕНЫ:
+  • Trailing SL: 4,895 ошибок (98% позиции закрываются неправильно!)
+  • Pivot: 6,899 ошибок (неверные расчеты уровней)
+  • TCC: 25,258 ошибок (состояние не обновляется)
+  • Position Manager: 3,928 ошибок (позиции не синхронизируются)
+  • Order execution: 4,043 ошибки (ордеры не выполняются)
+
+════════════════════════════════════════════════════════════════════════════════
+✅ НАЙДЕННЫЕ ФАЙЛЫ ДЛЯ ИСПРАВЛЕНИЯ:
+════════════════════════════════════════════════════════════════════════════════
+
+КРИТИЧНЫЕ (Срочно):
+
+1. src/strategies/scalping/futures/coordinators/exit_decision_coordinator.py
+   └─ should_close() не существует в TrailingStopLoss
+   └─ 4,319 ошибок
+   
+2. src/strategies/scalping/futures/core/trading_control_center.py
+   └─ response/positions должны быть dict, а не str
+   └─ 1,208 ошибок
+   
+3. src/strategies/scalping/futures/position_manager.py
+   └─ API может вернуть None
+   └─ 73 ошибки
+   
+4. src/strategies/modules/pivot_points.py
+   └─ Ошибки в расчете Pivot точек
+   └─ 6,899 ошибок
+   
+5. src/strategies/scalping/futures/positions/exit_analyzer.py
+   └─ HoldingTimeMetrics и FastADX проблемы
+   └─ 235 ошибок
+
+════════════════════════════════════════════════════════════════════════════════

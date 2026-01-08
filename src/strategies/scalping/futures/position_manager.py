@@ -6194,6 +6194,13 @@ class FuturesPositionManager:
                         )
                         return None
 
+                    # ✅ ИСПРАВЛЕНО (08.01.2026): Защита от 'str' object has no attribute 'get'
+                    if not isinstance(result, dict):
+                        logger.error(
+                            f"❌ Ошибка закрытия позиции {symbol}: result должен быть dict, получен {type(result).__name__}: {result}"
+                        )
+                        return None
+
                     if result.get("code") == "0":
                         # ✅ ЗАДАЧА #8: Детальное логирование уже сделано выше перед закрытием
                         logger.info(f"✅ Позиция {symbol} успешно закрыта через API")

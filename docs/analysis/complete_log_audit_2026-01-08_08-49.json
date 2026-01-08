@@ -1,0 +1,4780 @@
+{
+  "limit_orders": {
+    "total_limit_orders": 147,
+    "details": [
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91196.0127,
+        "order_price": 91300.0,
+        "entry_price": 92630.4,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.11402614754887568,
+        "timestamp": "2026-01-07T18:41:07.188267"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "buy",
+        "signal_price": 135.66553,
+        "order_price": 135.641,
+        "entry_price": 135.641,
+        "size": 1.44,
+        "distance_from_signal_pct": 0.018081232572488098,
+        "timestamp": "2026-01-07T18:41:46.423116"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3159.12597,
+        "order_price": 3158.06,
+        "entry_price": 3158.06,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.03374256076278297,
+        "timestamp": "2026-01-07T18:42:19.001180"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3160.44729,
+        "order_price": 3153.84,
+        "entry_price": 3153.84,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.2090618635186895,
+        "timestamp": "2026-01-07T18:49:28.077146"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3161.158,
+        "order_price": 3147.87,
+        "entry_price": 3147.87,
+        "size": 0.057,
+        "distance_from_signal_pct": 0.4203522886233466,
+        "timestamp": "2026-01-07T18:54:33.564845"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1836142,
+        "order_price": 2.18499,
+        "entry_price": 2.1873,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.06300563533612884,
+        "timestamp": "2026-01-07T19:10:34.467060"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3140.97588,
+        "order_price": 3137.09,
+        "entry_price": 3183.64,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.12371569055155608,
+        "timestamp": "2026-01-07T19:13:35.116847"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 90682.6266,
+        "order_price": 90834.7,
+        "entry_price": 92062.5,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.16769849496176134,
+        "timestamp": "2026-01-07T19:20:03.178285"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3131.3655,
+        "order_price": 3132.36,
+        "entry_price": 3177.5,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.031759307560878594,
+        "timestamp": "2026-01-07T19:24:47.282975"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3133.68318,
+        "order_price": 3132.44,
+        "entry_price": 3178.42119403,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.03967152799409474,
+        "timestamp": "2026-01-07T19:28:13.699076"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14584401,
+        "order_price": 0.146679,
+        "entry_price": 0.1479,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.5725226562270248,
+        "timestamp": "2026-01-07T19:33:12.180315"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14579406,
+        "order_price": 0.146869,
+        "entry_price": 0.1477,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.73730027135536,
+        "timestamp": "2026-01-07T19:34:27.378292"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3131.57529,
+        "order_price": 3142.47,
+        "entry_price": 3181.07,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.34789870883160456,
+        "timestamp": "2026-01-07T19:36:03.165892"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1712266,
+        "order_price": 2.19049,
+        "entry_price": 2.19049,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.8872127856208221,
+        "timestamp": "2026-01-07T19:36:46.514763"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1711267,
+        "order_price": 2.19339,
+        "entry_price": 2.19339,
+        "size": 97.0,
+        "distance_from_signal_pct": 1.0254261070991433,
+        "timestamp": "2026-01-07T19:39:54.497229"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 90718.7904,
+        "order_price": 91092.9,
+        "entry_price": 92463.2,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.41238380532904034,
+        "timestamp": "2026-01-07T19:46:42.922179"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3148.18504,
+        "order_price": 3145.2,
+        "entry_price": 3145.2,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.09481780651622773,
+        "timestamp": "2026-01-07T20:00:06.248955"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3141.855,
+        "order_price": 3149.05,
+        "entry_price": 3198.64,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.22900483949769046,
+        "timestamp": "2026-01-07T20:02:51.455566"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91091.9169,
+        "order_price": 91152.0,
+        "entry_price": 92410.3,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.06595876126524183,
+        "timestamp": "2026-01-07T20:08:04.413233"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1957936,
+        "order_price": 2.19261,
+        "entry_price": 2.1924,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.1449863047237155,
+        "timestamp": "2026-01-07T20:12:18.498684"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1963942,
+        "order_price": 2.18511,
+        "entry_price": 2.18511,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.5137602348430881,
+        "timestamp": "2026-01-07T20:15:06.847849"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1979958,
+        "order_price": 2.18531,
+        "entry_price": 2.18531,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.5771530591641849,
+        "timestamp": "2026-01-07T20:18:14.707901"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "buy",
+        "signal_price": 91317.3261,
+        "order_price": 90986.0,
+        "entry_price": 90986.0,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.3628293930082625,
+        "timestamp": "2026-01-07T20:18:35.133859"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "buy",
+        "signal_price": 135.94581,
+        "order_price": 135.481,
+        "entry_price": 135.47769231,
+        "size": 1.43,
+        "distance_from_signal_pct": 0.34190829419457647,
+        "timestamp": "2026-01-07T20:19:56.954921"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "buy",
+        "signal_price": 91337.0458,
+        "order_price": 90947.7,
+        "entry_price": 90947.7,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.4262736949611414,
+        "timestamp": "2026-01-07T20:21:57.726899"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1987966,
+        "order_price": 2.17951,
+        "entry_price": 2.17951,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.8771434338219388,
+        "timestamp": "2026-01-07T20:22:39.267901"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "buy",
+        "signal_price": 136.04591,
+        "order_price": 134.921,
+        "entry_price": 134.921,
+        "size": 1.43,
+        "distance_from_signal_pct": 0.8268605796381531,
+        "timestamp": "2026-01-07T20:25:05.843736"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "buy",
+        "signal_price": 91351.3601,
+        "order_price": 90840.9,
+        "entry_price": 90840.9,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.5587876299173034,
+        "timestamp": "2026-01-07T20:25:46.597200"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1995974,
+        "order_price": 2.17811,
+        "entry_price": 2.17811,
+        "size": 113.0,
+        "distance_from_signal_pct": 0.9768787688146852,
+        "timestamp": "2026-01-07T20:26:49.154902"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 90843.066,
+        "order_price": 91093.4,
+        "entry_price": 92418.15925926,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.2755675375377445,
+        "timestamp": "2026-01-07T20:40:21.434938"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 135.35451,
+        "order_price": 135.71900007,
+        "entry_price": 136.16,
+        "size": 1.44,
+        "distance_from_signal_pct": 0.26928550071954604,
+        "timestamp": "2026-01-07T20:42:13.667026"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14599386,
+        "order_price": 0.146049,
+        "entry_price": 0.1479,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.0377687116430849,
+        "timestamp": "2026-01-07T20:46:23.546894"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1805173,
+        "order_price": 2.17529,
+        "entry_price": 2.18082604,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.23972751786927102,
+        "timestamp": "2026-01-07T20:47:03.189587"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14600385,
+        "order_price": 0.145979,
+        "entry_price": 0.148,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.01702009912751817,
+        "timestamp": "2026-01-07T20:48:18.101213"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1804174,
+        "order_price": 2.17849,
+        "entry_price": 2.18280312,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.08839591905660006,
+        "timestamp": "2026-01-07T20:50:43.793205"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 135.60426,
+        "order_price": 135.65900007,
+        "entry_price": 136.01,
+        "size": 1.43,
+        "distance_from_signal_pct": 0.04036751500283237,
+        "timestamp": "2026-01-07T20:54:45.378421"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14619366,
+        "order_price": 0.146159,
+        "entry_price": 0.1478,
+        "size": 1860.0,
+        "distance_from_signal_pct": 0.02370827845748709,
+        "timestamp": "2026-01-07T20:57:22.443359"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1789189,
+        "order_price": 2.17419,
+        "entry_price": 2.1763,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.21702964713373996,
+        "timestamp": "2026-01-07T21:10:21.545074"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.172825,
+        "order_price": 2.17979,
+        "entry_price": 2.1798,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.3205504354929693,
+        "timestamp": "2026-01-07T21:20:19.448710"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 135.90396,
+        "order_price": 136.12900007,
+        "entry_price": 136.26,
+        "size": 1.43,
+        "distance_from_signal_pct": 0.1655875737542727,
+        "timestamp": "2026-01-07T21:27:35.818938"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91028.7801,
+        "order_price": 91145.2,
+        "entry_price": 92413.9,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.12789350782477804,
+        "timestamp": "2026-01-07T21:27:56.423911"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3138.48837,
+        "order_price": 3143.71,
+        "entry_price": 3193.4,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.1663740433105382,
+        "timestamp": "2026-01-07T21:28:15.991637"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1754224,
+        "order_price": 2.18289,
+        "entry_price": 2.18289,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.34327126538735736,
+        "timestamp": "2026-01-07T21:28:50.531490"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3138.48837,
+        "order_price": 3143.6,
+        "entry_price": 3188.48,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.1628691713138283,
+        "timestamp": "2026-01-07T21:29:11.098055"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "buy",
+        "signal_price": 0.14678664,
+        "order_price": 0.146711,
+        "entry_price": 0.146711,
+        "size": 1430.0,
+        "distance_from_signal_pct": 0.05153057526215461,
+        "timestamp": "2026-01-07T21:29:24.055867"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91028.7801,
+        "order_price": 91156.0,
+        "entry_price": 92463.2,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.13975788740686024,
+        "timestamp": "2026-01-07T21:29:50.781443"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91070.3385,
+        "order_price": 91058.8,
+        "entry_price": 92353.4,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.012669877141167222,
+        "timestamp": "2026-01-07T21:37:40.804932"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3149.6465,
+        "order_price": 3144.46,
+        "entry_price": 3144.46,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.1646692732025577,
+        "timestamp": "2026-01-07T21:38:42.480339"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91070.4384,
+        "order_price": 91059.3,
+        "entry_price": 92360.0,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.012230532976105867,
+        "timestamp": "2026-01-07T21:39:03.956666"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3142.31454,
+        "order_price": 3146.67,
+        "entry_price": 3185.0,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.13860674813286583,
+        "timestamp": "2026-01-07T21:40:45.900551"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3147.7446,
+        "order_price": 3147.75,
+        "entry_price": 3147.75,
+        "size": 0.058,
+        "distance_from_signal_pct": 0.00017155140223284733,
+        "timestamp": "2026-01-07T21:46:00.451384"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14653332,
+        "order_price": 0.146229,
+        "entry_price": 0.1476,
+        "size": 1430.0,
+        "distance_from_signal_pct": 0.20767972772335794,
+        "timestamp": "2026-01-07T22:00:16.847237"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3146.26059,
+        "order_price": 3143.38,
+        "entry_price": 3189.5,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.09155598900979008,
+        "timestamp": "2026-01-07T22:01:51.117942"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3145.71114,
+        "order_price": 3145.11,
+        "entry_price": 3182.67,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.0191098283741259,
+        "timestamp": "2026-01-07T22:03:33.689083"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 90999.2097,
+        "order_price": 90885.3,
+        "entry_price": 92196.6,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.12517658161596515,
+        "timestamp": "2026-01-07T22:04:44.416188"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 135.88398,
+        "order_price": 135.81900007,
+        "entry_price": 137.32,
+        "size": 1.43,
+        "distance_from_signal_pct": 0.04782015510586392,
+        "timestamp": "2026-01-07T22:16:27.470350"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91020.5883,
+        "order_price": 90973.0,
+        "entry_price": 92274.5,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.05228300639318442,
+        "timestamp": "2026-01-07T22:20:09.580708"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3146.84001,
+        "order_price": 3149.61,
+        "entry_price": 3185.0,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.08802449413372733,
+        "timestamp": "2026-01-07T22:20:49.481952"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91020.5883,
+        "order_price": 91030.6,
+        "entry_price": 92252.3,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.010999379576634473,
+        "timestamp": "2026-01-07T22:21:52.698366"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91013.895,
+        "order_price": 91030.6,
+        "entry_price": 92352.9,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.018354340290569638,
+        "timestamp": "2026-01-07T22:23:15.814936"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1761217,
+        "order_price": 2.17719,
+        "entry_price": 2.17897396,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.04909192348939042,
+        "timestamp": "2026-01-07T22:27:45.985143"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3145.86099,
+        "order_price": 3151.45,
+        "entry_price": 3195.2,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.17766233211721438,
+        "timestamp": "2026-01-07T22:41:12.597623"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91011.9969,
+        "order_price": 91033.3,
+        "entry_price": 92355.40740741,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.023406914171338916,
+        "timestamp": "2026-01-07T22:41:32.056535"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3145.91094,
+        "order_price": 3151.03,
+        "entry_price": 3192.64,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.16272107181775433,
+        "timestamp": "2026-01-07T22:43:16.359838"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 135.91395,
+        "order_price": 136.32900007,
+        "entry_price": 137.66,
+        "size": 1.43,
+        "distance_from_signal_pct": 0.30537709337415814,
+        "timestamp": "2026-01-07T22:44:38.003354"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3144.56229,
+        "order_price": 3144.32,
+        "entry_price": 3185.19,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.00770504692402466,
+        "timestamp": "2026-01-07T23:09:03.006733"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1615363,
+        "order_price": 2.15969,
+        "entry_price": 2.1645,
+        "size": 65.0,
+        "distance_from_signal_pct": 0.08541609965097359,
+        "timestamp": "2026-01-07T23:10:01.195040"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 90970.3386,
+        "order_price": 91096.5,
+        "entry_price": 92411.2,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.13868410510675755,
+        "timestamp": "2026-01-07T23:12:42.871746"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91004.2047,
+        "order_price": 91304.1,
+        "entry_price": 92630.4,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.32954004816439403,
+        "timestamp": "2026-01-07T23:21:52.107700"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1506472,
+        "order_price": 2.17609,
+        "entry_price": 2.17609,
+        "size": 65.0,
+        "distance_from_signal_pct": 1.1830299269912792,
+        "timestamp": "2026-01-07T23:23:55.830068"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14544441,
+        "order_price": 0.146669,
+        "entry_price": 0.14785,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.8419642941244683,
+        "timestamp": "2026-01-07T23:26:27.232991"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1502476,
+        "order_price": 2.17449,
+        "entry_price": 2.1807,
+        "size": 98.0,
+        "distance_from_signal_pct": 1.1274236511181264,
+        "timestamp": "2026-01-07T23:29:30.143816"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 135.72414,
+        "order_price": 136.74900007,
+        "entry_price": 138.41,
+        "size": 1.43,
+        "distance_from_signal_pct": 0.7551052229912736,
+        "timestamp": "2026-01-07T23:31:37.327295"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1493485,
+        "order_price": 2.17719,
+        "entry_price": 2.17719,
+        "size": 98.0,
+        "distance_from_signal_pct": 1.2953460083369486,
+        "timestamp": "2026-01-07T23:32:13.065962"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 90960.2487,
+        "order_price": 91220.0,
+        "entry_price": 92600.0,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.28556573196792895,
+        "timestamp": "2026-01-07T23:39:11.478188"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1728707,
+        "order_price": 2.16351,
+        "entry_price": 2.16351,
+        "size": 65.0,
+        "distance_from_signal_pct": 0.4307987585271309,
+        "timestamp": "2026-01-07T23:46:32.621832"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3160.37646,
+        "order_price": 3162.94,
+        "entry_price": 3205.0,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.08111502007580776,
+        "timestamp": "2026-01-07T23:48:56.905286"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1719698,
+        "order_price": 2.16621,
+        "entry_price": 2.16621,
+        "size": 65.0,
+        "distance_from_signal_pct": 0.26518784929697786,
+        "timestamp": "2026-01-07T23:51:01.141888"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "buy",
+        "signal_price": 0.14635621,
+        "order_price": 0.146151,
+        "entry_price": 0.146151,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.14021270433279429,
+        "timestamp": "2026-01-07T23:51:19.452705"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1718697,
+        "order_price": 2.16451,
+        "entry_price": 2.16451,
+        "size": 65.0,
+        "distance_from_signal_pct": 0.3388647118194917,
+        "timestamp": "2026-01-07T23:52:03.318233"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3167.164,
+        "order_price": 3166.01,
+        "entry_price": 3166.01,
+        "size": 0.079,
+        "distance_from_signal_pct": 0.03643638283334858,
+        "timestamp": "2026-01-07T23:54:07.138860"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91090.7181,
+        "order_price": 91288.0,
+        "entry_price": 92639.4037037,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.2165773902269871,
+        "timestamp": "2026-01-07T23:54:46.766113"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3166.54338,
+        "order_price": 3168.48,
+        "entry_price": 3168.48,
+        "size": 0.079,
+        "distance_from_signal_pct": 0.06115880212574091,
+        "timestamp": "2026-01-07T23:59:03.359443"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3166.37321,
+        "order_price": 3163.0,
+        "entry_price": 3163.0,
+        "size": 0.057,
+        "distance_from_signal_pct": 0.10653229345634209,
+        "timestamp": "2026-01-08T00:11:22.252254"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1627351,
+        "order_price": 2.16419,
+        "entry_price": 2.16470206,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.06727129919887775,
+        "timestamp": "2026-01-08T00:11:55.020723"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91143.6651,
+        "order_price": 91202.3,
+        "entry_price": 92589.8,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.0643323920929361,
+        "timestamp": "2026-01-08T00:12:17.487198"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91208.3004,
+        "order_price": 91093.5,
+        "entry_price": 92431.4,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.1258661761007804,
+        "timestamp": "2026-01-08T00:31:59.538041"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 136.19367,
+        "order_price": 136.14900007,
+        "entry_price": 137.73,
+        "size": 1.43,
+        "distance_from_signal_pct": 0.03279882978408449,
+        "timestamp": "2026-01-08T00:32:40.352570"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3170.34718,
+        "order_price": 3159.73,
+        "entry_price": 3159.73,
+        "size": 0.057,
+        "distance_from_signal_pct": 0.33489013654334815,
+        "timestamp": "2026-01-08T00:34:15.519139"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3171.4683,
+        "order_price": 3161.51,
+        "entry_price": 3161.51,
+        "size": 0.057,
+        "distance_from_signal_pct": 0.31399651700758857,
+        "timestamp": "2026-01-08T00:38:42.406296"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1542436,
+        "order_price": 2.17079,
+        "entry_price": 2.17079,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.7680839808460002,
+        "timestamp": "2026-01-08T00:53:56.685015"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1571407,
+        "order_price": 2.17159,
+        "entry_price": 2.17159,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.6698357691735329,
+        "timestamp": "2026-01-08T00:55:40.663883"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3169.43739,
+        "order_price": 3171.78,
+        "entry_price": 3213.42818182,
+        "size": 0.066,
+        "distance_from_signal_pct": 0.07391248703607141,
+        "timestamp": "2026-01-08T01:06:26.540533"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "buy",
+        "signal_price": 0.14720706,
+        "order_price": 0.146871,
+        "entry_price": 0.146871,
+        "size": 1430.0,
+        "distance_from_signal_pct": 0.22829068116705759,
+        "timestamp": "2026-01-08T01:07:06.576797"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3175.86269,
+        "order_price": 3168.75,
+        "entry_price": 3168.75,
+        "size": 0.066,
+        "distance_from_signal_pct": 0.22396087911470533,
+        "timestamp": "2026-01-08T01:10:34.551626"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "buy",
+        "signal_price": 0.14735721,
+        "order_price": 0.146891,
+        "entry_price": 0.146891,
+        "size": 1430.0,
+        "distance_from_signal_pct": 0.3163808543877797,
+        "timestamp": "2026-01-08T01:11:15.637179"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "buy",
+        "signal_price": 136.85672,
+        "order_price": 136.811,
+        "entry_price": 136.811,
+        "size": 1.42,
+        "distance_from_signal_pct": 0.03340720134165765,
+        "timestamp": "2026-01-08T01:16:02.032740"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14644341,
+        "order_price": 0.146899,
+        "entry_price": 0.1477,
+        "size": 1230.0,
+        "distance_from_signal_pct": 0.31110310801968194,
+        "timestamp": "2026-01-08T01:22:38.941421"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.1464534,
+        "order_price": 0.146999,
+        "entry_price": 0.1478,
+        "size": 1430.0,
+        "distance_from_signal_pct": 0.3725417095130461,
+        "timestamp": "2026-01-08T01:24:02.739696"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91222.1865,
+        "order_price": 91326.0,
+        "entry_price": 92539.92962963,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.11380290692769553,
+        "timestamp": "2026-01-08T01:44:57.568474"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91264.5441,
+        "order_price": 91391.0,
+        "entry_price": 92707.8,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.138559723545478,
+        "timestamp": "2026-01-08T01:57:34.050124"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91272.7359,
+        "order_price": 91349.1,
+        "entry_price": 92544.2,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.08366583870529748,
+        "timestamp": "2026-01-08T02:13:55.929812"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91272.636,
+        "order_price": 91328.0,
+        "entry_price": 92641.42962963,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.0606578295821339,
+        "timestamp": "2026-01-08T02:16:01.025900"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3176.07075,
+        "order_price": 3174.67,
+        "entry_price": 3218.0,
+        "size": 0.066,
+        "distance_from_signal_pct": 0.04410323668009565,
+        "timestamp": "2026-01-08T02:20:34.335021"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1914893,
+        "order_price": 2.18581,
+        "entry_price": 2.18263646,
+        "size": 96.0,
+        "distance_from_signal_pct": 0.25915253156837975,
+        "timestamp": "2026-01-08T02:22:15.813210"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3174.66216,
+        "order_price": 3160.3,
+        "entry_price": 3213.64015152,
+        "size": 0.066,
+        "distance_from_signal_pct": 0.4523996342338259,
+        "timestamp": "2026-01-08T02:24:20.088875"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "buy",
+        "signal_price": 137.98785,
+        "order_price": 136.971,
+        "entry_price": 136.971,
+        "size": 1.41,
+        "distance_from_signal_pct": 0.7369127064448102,
+        "timestamp": "2026-01-08T02:36:20.915345"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "buy",
+        "signal_price": 137.98785,
+        "order_price": 136.921,
+        "entry_price": 136.921,
+        "size": 1.41,
+        "distance_from_signal_pct": 0.7731477807647676,
+        "timestamp": "2026-01-08T02:38:09.915170"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1717261,
+        "order_price": 2.16609,
+        "entry_price": 2.1661,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.25952167725017494,
+        "timestamp": "2026-01-08T02:57:40.019717"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14612373,
+        "order_price": 0.145669,
+        "entry_price": 0.14765,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.31119517685458364,
+        "timestamp": "2026-01-08T03:01:41.161115"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3156.9399,
+        "order_price": 3160.35,
+        "entry_price": 3198.21,
+        "size": 0.079,
+        "distance_from_signal_pct": 0.10801916121368219,
+        "timestamp": "2026-01-08T03:02:39.206494"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1692286,
+        "order_price": 2.16879,
+        "entry_price": 2.16879,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.02021916915533221,
+        "timestamp": "2026-01-08T03:03:11.736320"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14604381,
+        "order_price": 0.146239,
+        "entry_price": 0.1476,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.13365167616485202,
+        "timestamp": "2026-01-08T03:04:52.374502"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3163.1337,
+        "order_price": 3161.99,
+        "entry_price": 3207.29,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.03615718172140751,
+        "timestamp": "2026-01-08T03:15:31.502545"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91068.2406,
+        "order_price": 91054.4,
+        "entry_price": 92360.0,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.015198053579186478,
+        "timestamp": "2026-01-08T03:16:55.214012"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 137.43243,
+        "order_price": 137.66900007,
+        "entry_price": 138.95,
+        "size": 1.42,
+        "distance_from_signal_pct": 0.1721355505392716,
+        "timestamp": "2026-01-08T03:17:35.624575"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 137.34252,
+        "order_price": 137.51900007,
+        "entry_price": 139.36,
+        "size": 1.42,
+        "distance_from_signal_pct": 0.128496309809953,
+        "timestamp": "2026-01-08T03:19:20.087428"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91054.9539,
+        "order_price": 90990.0,
+        "entry_price": 92386.7,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.07133483376569275,
+        "timestamp": "2026-01-08T03:19:42.251869"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14617368,
+        "order_price": 0.146049,
+        "entry_price": 0.14755,
+        "size": 1230.0,
+        "distance_from_signal_pct": 0.085295793332964,
+        "timestamp": "2026-01-08T03:22:51.145944"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 137.44242,
+        "order_price": 137.31900007,
+        "entry_price": 138.96,
+        "size": 1.41,
+        "distance_from_signal_pct": 0.08979755304076528,
+        "timestamp": "2026-01-08T03:25:46.336783"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.1455543,
+        "order_price": 0.145859,
+        "entry_price": 0.1472,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.20933768359986002,
+        "timestamp": "2026-01-08T03:40:06.834515"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1604374,
+        "order_price": 2.14879,
+        "entry_price": 2.1582,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.5391223092138747,
+        "timestamp": "2026-01-08T03:47:46.283166"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14563422,
+        "order_price": 0.144899,
+        "entry_price": 0.1466,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.5048401399066844,
+        "timestamp": "2026-01-08T03:48:06.869902"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3150.31653,
+        "order_price": 3133.9,
+        "entry_price": 3184.31,
+        "size": 0.079,
+        "distance_from_signal_pct": 0.5211073186985425,
+        "timestamp": "2026-01-08T03:48:35.196678"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3150.18666,
+        "order_price": 3137.37,
+        "entry_price": 3179.81582278,
+        "size": 0.079,
+        "distance_from_signal_pct": 0.4068539862333097,
+        "timestamp": "2026-01-08T03:49:37.211731"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 137.09277,
+        "order_price": 136.62900007,
+        "entry_price": 138.2,
+        "size": 1.42,
+        "distance_from_signal_pct": 0.33828912348916157,
+        "timestamp": "2026-01-08T03:56:49.947116"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14559426,
+        "order_price": 0.145159,
+        "entry_price": 0.1474,
+        "size": 1240.0,
+        "distance_from_signal_pct": 0.2989540933825227,
+        "timestamp": "2026-01-08T03:58:17.350664"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3150.846,
+        "order_price": 3142.56,
+        "entry_price": 3184.31,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.2629769909414823,
+        "timestamp": "2026-01-08T04:07:24.570951"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14571414,
+        "order_price": 0.145229,
+        "entry_price": 0.1474,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.33293954862581976,
+        "timestamp": "2026-01-08T04:08:13.110796"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3142.31454,
+        "order_price": 3153.45,
+        "entry_price": 3193.02,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.3543712718205469,
+        "timestamp": "2026-01-08T04:25:44.220449"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1521457,
+        "order_price": 2.16549,
+        "entry_price": 2.16549,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.6200463100616271,
+        "timestamp": "2026-01-08T04:26:16.903862"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "sell",
+        "signal_price": 3142.30455,
+        "order_price": 3154.84,
+        "entry_price": 3202.72,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.39892536832562303,
+        "timestamp": "2026-01-08T04:27:34.834165"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 136.77309,
+        "order_price": 137.57900007,
+        "entry_price": 138.90253521,
+        "size": 1.42,
+        "distance_from_signal_pct": 0.5892314562755072,
+        "timestamp": "2026-01-08T04:28:12.066008"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 136.79307,
+        "order_price": 137.76900007,
+        "entry_price": 139.36,
+        "size": 1.42,
+        "distance_from_signal_pct": 0.7134353151077054,
+        "timestamp": "2026-01-08T04:29:55.193663"
+      },
+      {
+        "symbol": "SOL-USDT",
+        "side": "sell",
+        "signal_price": 136.93293,
+        "order_price": 137.98900007,
+        "entry_price": 140.00176056,
+        "size": 1.42,
+        "distance_from_signal_pct": 0.7712316314271549,
+        "timestamp": "2026-01-08T04:34:57.786100"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "sell",
+        "signal_price": 0.14548437,
+        "order_price": 0.146829,
+        "entry_price": 0.1481,
+        "size": 1440.0,
+        "distance_from_signal_pct": 0.9242436146233342,
+        "timestamp": "2026-01-08T04:35:24.401882"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 90834.8742,
+        "order_price": 91032.6,
+        "entry_price": 92346.1,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.21767608723126317,
+        "timestamp": "2026-01-08T04:37:49.977268"
+      },
+      {
+        "symbol": "ETH-USDT",
+        "side": "buy",
+        "signal_price": 3156.53338,
+        "order_price": 3151.68,
+        "entry_price": 3151.68,
+        "size": 0.067,
+        "distance_from_signal_pct": 0.15375665059496427,
+        "timestamp": "2026-01-08T04:49:47.992820"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "buy",
+        "signal_price": 2.1683662,
+        "order_price": 2.16101,
+        "entry_price": 2.161,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.33925081473783414,
+        "timestamp": "2026-01-08T04:54:54.208456"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "buy",
+        "signal_price": 0.14678664,
+        "order_price": 0.146961,
+        "entry_price": 0.146961,
+        "size": 1430.0,
+        "distance_from_signal_pct": 0.11878465233621553,
+        "timestamp": "2026-01-08T04:56:58.357661"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "buy",
+        "signal_price": 0.14700686,
+        "order_price": 0.147161,
+        "entry_price": 0.147161,
+        "size": 1850.0,
+        "distance_from_signal_pct": 0.10485224975215243,
+        "timestamp": "2026-01-08T05:04:35.433774"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "buy",
+        "signal_price": 0.14742728,
+        "order_price": 0.146881,
+        "entry_price": 0.146881,
+        "size": 1850.0,
+        "distance_from_signal_pct": 0.37054200552298217,
+        "timestamp": "2026-01-08T05:13:54.591597"
+      },
+      {
+        "symbol": "BTC-USDT",
+        "side": "sell",
+        "signal_price": 91006.1028,
+        "order_price": 91046.9,
+        "entry_price": 92347.8,
+        "size": 0.0027,
+        "distance_from_signal_pct": 0.0448290815063898,
+        "timestamp": "2026-01-08T05:15:04.889964"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1601377,
+        "order_price": 2.16099,
+        "entry_price": 2.1614,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.03945581802493554,
+        "timestamp": "2026-01-08T05:15:59.257751"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "buy",
+        "signal_price": 0.14723709,
+        "order_price": 0.146701,
+        "entry_price": 0.146701,
+        "size": 1430.0,
+        "distance_from_signal_pct": 0.3640998338122474,
+        "timestamp": "2026-01-08T05:18:11.560344"
+      },
+      {
+        "symbol": "DOGE-USDT",
+        "side": "buy",
+        "signal_price": 0.14718704,
+        "order_price": 0.146821,
+        "entry_price": 0.146821,
+        "size": 1430.0,
+        "distance_from_signal_pct": 0.2486903738263805,
+        "timestamp": "2026-01-08T05:21:18.607161"
+      },
+      {
+        "symbol": "XRP-USDT",
+        "side": "sell",
+        "signal_price": 2.1610368,
+        "order_price": 2.15279,
+        "entry_price": 2.1541,
+        "size": 97.0,
+        "distance_from_signal_pct": 0.38161312199774755,
+        "timestamp": "2026-01-08T05:30:01.704784"
+      }
+    ],
+    "symbols": {
+      "BTC-USDT": [
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91196.0127,
+          "order_price": 91300.0,
+          "entry_price": 92630.4,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.11402614754887568,
+          "timestamp": "2026-01-07T18:41:07.188267"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 90682.6266,
+          "order_price": 90834.7,
+          "entry_price": 92062.5,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.16769849496176134,
+          "timestamp": "2026-01-07T19:20:03.178285"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 90718.7904,
+          "order_price": 91092.9,
+          "entry_price": 92463.2,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.41238380532904034,
+          "timestamp": "2026-01-07T19:46:42.922179"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91091.9169,
+          "order_price": 91152.0,
+          "entry_price": 92410.3,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.06595876126524183,
+          "timestamp": "2026-01-07T20:08:04.413233"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "buy",
+          "signal_price": 91317.3261,
+          "order_price": 90986.0,
+          "entry_price": 90986.0,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.3628293930082625,
+          "timestamp": "2026-01-07T20:18:35.133859"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "buy",
+          "signal_price": 91337.0458,
+          "order_price": 90947.7,
+          "entry_price": 90947.7,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.4262736949611414,
+          "timestamp": "2026-01-07T20:21:57.726899"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "buy",
+          "signal_price": 91351.3601,
+          "order_price": 90840.9,
+          "entry_price": 90840.9,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.5587876299173034,
+          "timestamp": "2026-01-07T20:25:46.597200"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 90843.066,
+          "order_price": 91093.4,
+          "entry_price": 92418.15925926,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.2755675375377445,
+          "timestamp": "2026-01-07T20:40:21.434938"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91028.7801,
+          "order_price": 91145.2,
+          "entry_price": 92413.9,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.12789350782477804,
+          "timestamp": "2026-01-07T21:27:56.423911"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91028.7801,
+          "order_price": 91156.0,
+          "entry_price": 92463.2,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.13975788740686024,
+          "timestamp": "2026-01-07T21:29:50.781443"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91070.3385,
+          "order_price": 91058.8,
+          "entry_price": 92353.4,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.012669877141167222,
+          "timestamp": "2026-01-07T21:37:40.804932"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91070.4384,
+          "order_price": 91059.3,
+          "entry_price": 92360.0,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.012230532976105867,
+          "timestamp": "2026-01-07T21:39:03.956666"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 90999.2097,
+          "order_price": 90885.3,
+          "entry_price": 92196.6,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.12517658161596515,
+          "timestamp": "2026-01-07T22:04:44.416188"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91020.5883,
+          "order_price": 90973.0,
+          "entry_price": 92274.5,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.05228300639318442,
+          "timestamp": "2026-01-07T22:20:09.580708"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91020.5883,
+          "order_price": 91030.6,
+          "entry_price": 92252.3,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.010999379576634473,
+          "timestamp": "2026-01-07T22:21:52.698366"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91013.895,
+          "order_price": 91030.6,
+          "entry_price": 92352.9,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.018354340290569638,
+          "timestamp": "2026-01-07T22:23:15.814936"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91011.9969,
+          "order_price": 91033.3,
+          "entry_price": 92355.40740741,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.023406914171338916,
+          "timestamp": "2026-01-07T22:41:32.056535"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 90970.3386,
+          "order_price": 91096.5,
+          "entry_price": 92411.2,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.13868410510675755,
+          "timestamp": "2026-01-07T23:12:42.871746"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91004.2047,
+          "order_price": 91304.1,
+          "entry_price": 92630.4,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.32954004816439403,
+          "timestamp": "2026-01-07T23:21:52.107700"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 90960.2487,
+          "order_price": 91220.0,
+          "entry_price": 92600.0,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.28556573196792895,
+          "timestamp": "2026-01-07T23:39:11.478188"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91090.7181,
+          "order_price": 91288.0,
+          "entry_price": 92639.4037037,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.2165773902269871,
+          "timestamp": "2026-01-07T23:54:46.766113"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91143.6651,
+          "order_price": 91202.3,
+          "entry_price": 92589.8,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.0643323920929361,
+          "timestamp": "2026-01-08T00:12:17.487198"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91208.3004,
+          "order_price": 91093.5,
+          "entry_price": 92431.4,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.1258661761007804,
+          "timestamp": "2026-01-08T00:31:59.538041"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91222.1865,
+          "order_price": 91326.0,
+          "entry_price": 92539.92962963,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.11380290692769553,
+          "timestamp": "2026-01-08T01:44:57.568474"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91264.5441,
+          "order_price": 91391.0,
+          "entry_price": 92707.8,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.138559723545478,
+          "timestamp": "2026-01-08T01:57:34.050124"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91272.7359,
+          "order_price": 91349.1,
+          "entry_price": 92544.2,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.08366583870529748,
+          "timestamp": "2026-01-08T02:13:55.929812"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91272.636,
+          "order_price": 91328.0,
+          "entry_price": 92641.42962963,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.0606578295821339,
+          "timestamp": "2026-01-08T02:16:01.025900"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91068.2406,
+          "order_price": 91054.4,
+          "entry_price": 92360.0,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.015198053579186478,
+          "timestamp": "2026-01-08T03:16:55.214012"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91054.9539,
+          "order_price": 90990.0,
+          "entry_price": 92386.7,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.07133483376569275,
+          "timestamp": "2026-01-08T03:19:42.251869"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 90834.8742,
+          "order_price": 91032.6,
+          "entry_price": 92346.1,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.21767608723126317,
+          "timestamp": "2026-01-08T04:37:49.977268"
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "sell",
+          "signal_price": 91006.1028,
+          "order_price": 91046.9,
+          "entry_price": 92347.8,
+          "size": 0.0027,
+          "distance_from_signal_pct": 0.0448290815063898,
+          "timestamp": "2026-01-08T05:15:04.889964"
+        }
+      ],
+      "SOL-USDT": [
+        {
+          "symbol": "SOL-USDT",
+          "side": "buy",
+          "signal_price": 135.66553,
+          "order_price": 135.641,
+          "entry_price": 135.641,
+          "size": 1.44,
+          "distance_from_signal_pct": 0.018081232572488098,
+          "timestamp": "2026-01-07T18:41:46.423116"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "buy",
+          "signal_price": 135.94581,
+          "order_price": 135.481,
+          "entry_price": 135.47769231,
+          "size": 1.43,
+          "distance_from_signal_pct": 0.34190829419457647,
+          "timestamp": "2026-01-07T20:19:56.954921"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "buy",
+          "signal_price": 136.04591,
+          "order_price": 134.921,
+          "entry_price": 134.921,
+          "size": 1.43,
+          "distance_from_signal_pct": 0.8268605796381531,
+          "timestamp": "2026-01-07T20:25:05.843736"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 135.35451,
+          "order_price": 135.71900007,
+          "entry_price": 136.16,
+          "size": 1.44,
+          "distance_from_signal_pct": 0.26928550071954604,
+          "timestamp": "2026-01-07T20:42:13.667026"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 135.60426,
+          "order_price": 135.65900007,
+          "entry_price": 136.01,
+          "size": 1.43,
+          "distance_from_signal_pct": 0.04036751500283237,
+          "timestamp": "2026-01-07T20:54:45.378421"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 135.90396,
+          "order_price": 136.12900007,
+          "entry_price": 136.26,
+          "size": 1.43,
+          "distance_from_signal_pct": 0.1655875737542727,
+          "timestamp": "2026-01-07T21:27:35.818938"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 135.88398,
+          "order_price": 135.81900007,
+          "entry_price": 137.32,
+          "size": 1.43,
+          "distance_from_signal_pct": 0.04782015510586392,
+          "timestamp": "2026-01-07T22:16:27.470350"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 135.91395,
+          "order_price": 136.32900007,
+          "entry_price": 137.66,
+          "size": 1.43,
+          "distance_from_signal_pct": 0.30537709337415814,
+          "timestamp": "2026-01-07T22:44:38.003354"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 135.72414,
+          "order_price": 136.74900007,
+          "entry_price": 138.41,
+          "size": 1.43,
+          "distance_from_signal_pct": 0.7551052229912736,
+          "timestamp": "2026-01-07T23:31:37.327295"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 136.19367,
+          "order_price": 136.14900007,
+          "entry_price": 137.73,
+          "size": 1.43,
+          "distance_from_signal_pct": 0.03279882978408449,
+          "timestamp": "2026-01-08T00:32:40.352570"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "buy",
+          "signal_price": 136.85672,
+          "order_price": 136.811,
+          "entry_price": 136.811,
+          "size": 1.42,
+          "distance_from_signal_pct": 0.03340720134165765,
+          "timestamp": "2026-01-08T01:16:02.032740"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "buy",
+          "signal_price": 137.98785,
+          "order_price": 136.971,
+          "entry_price": 136.971,
+          "size": 1.41,
+          "distance_from_signal_pct": 0.7369127064448102,
+          "timestamp": "2026-01-08T02:36:20.915345"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "buy",
+          "signal_price": 137.98785,
+          "order_price": 136.921,
+          "entry_price": 136.921,
+          "size": 1.41,
+          "distance_from_signal_pct": 0.7731477807647676,
+          "timestamp": "2026-01-08T02:38:09.915170"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 137.43243,
+          "order_price": 137.66900007,
+          "entry_price": 138.95,
+          "size": 1.42,
+          "distance_from_signal_pct": 0.1721355505392716,
+          "timestamp": "2026-01-08T03:17:35.624575"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 137.34252,
+          "order_price": 137.51900007,
+          "entry_price": 139.36,
+          "size": 1.42,
+          "distance_from_signal_pct": 0.128496309809953,
+          "timestamp": "2026-01-08T03:19:20.087428"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 137.44242,
+          "order_price": 137.31900007,
+          "entry_price": 138.96,
+          "size": 1.41,
+          "distance_from_signal_pct": 0.08979755304076528,
+          "timestamp": "2026-01-08T03:25:46.336783"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 137.09277,
+          "order_price": 136.62900007,
+          "entry_price": 138.2,
+          "size": 1.42,
+          "distance_from_signal_pct": 0.33828912348916157,
+          "timestamp": "2026-01-08T03:56:49.947116"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 136.77309,
+          "order_price": 137.57900007,
+          "entry_price": 138.90253521,
+          "size": 1.42,
+          "distance_from_signal_pct": 0.5892314562755072,
+          "timestamp": "2026-01-08T04:28:12.066008"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 136.79307,
+          "order_price": 137.76900007,
+          "entry_price": 139.36,
+          "size": 1.42,
+          "distance_from_signal_pct": 0.7134353151077054,
+          "timestamp": "2026-01-08T04:29:55.193663"
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "sell",
+          "signal_price": 136.93293,
+          "order_price": 137.98900007,
+          "entry_price": 140.00176056,
+          "size": 1.42,
+          "distance_from_signal_pct": 0.7712316314271549,
+          "timestamp": "2026-01-08T04:34:57.786100"
+        }
+      ],
+      "ETH-USDT": [
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3159.12597,
+          "order_price": 3158.06,
+          "entry_price": 3158.06,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.03374256076278297,
+          "timestamp": "2026-01-07T18:42:19.001180"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3160.44729,
+          "order_price": 3153.84,
+          "entry_price": 3153.84,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.2090618635186895,
+          "timestamp": "2026-01-07T18:49:28.077146"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3161.158,
+          "order_price": 3147.87,
+          "entry_price": 3147.87,
+          "size": 0.057,
+          "distance_from_signal_pct": 0.4203522886233466,
+          "timestamp": "2026-01-07T18:54:33.564845"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3140.97588,
+          "order_price": 3137.09,
+          "entry_price": 3183.64,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.12371569055155608,
+          "timestamp": "2026-01-07T19:13:35.116847"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3131.3655,
+          "order_price": 3132.36,
+          "entry_price": 3177.5,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.031759307560878594,
+          "timestamp": "2026-01-07T19:24:47.282975"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3133.68318,
+          "order_price": 3132.44,
+          "entry_price": 3178.42119403,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.03967152799409474,
+          "timestamp": "2026-01-07T19:28:13.699076"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3131.57529,
+          "order_price": 3142.47,
+          "entry_price": 3181.07,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.34789870883160456,
+          "timestamp": "2026-01-07T19:36:03.165892"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3148.18504,
+          "order_price": 3145.2,
+          "entry_price": 3145.2,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.09481780651622773,
+          "timestamp": "2026-01-07T20:00:06.248955"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3141.855,
+          "order_price": 3149.05,
+          "entry_price": 3198.64,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.22900483949769046,
+          "timestamp": "2026-01-07T20:02:51.455566"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3138.48837,
+          "order_price": 3143.71,
+          "entry_price": 3193.4,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.1663740433105382,
+          "timestamp": "2026-01-07T21:28:15.991637"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3138.48837,
+          "order_price": 3143.6,
+          "entry_price": 3188.48,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.1628691713138283,
+          "timestamp": "2026-01-07T21:29:11.098055"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3149.6465,
+          "order_price": 3144.46,
+          "entry_price": 3144.46,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.1646692732025577,
+          "timestamp": "2026-01-07T21:38:42.480339"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3142.31454,
+          "order_price": 3146.67,
+          "entry_price": 3185.0,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.13860674813286583,
+          "timestamp": "2026-01-07T21:40:45.900551"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3147.7446,
+          "order_price": 3147.75,
+          "entry_price": 3147.75,
+          "size": 0.058,
+          "distance_from_signal_pct": 0.00017155140223284733,
+          "timestamp": "2026-01-07T21:46:00.451384"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3146.26059,
+          "order_price": 3143.38,
+          "entry_price": 3189.5,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.09155598900979008,
+          "timestamp": "2026-01-07T22:01:51.117942"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3145.71114,
+          "order_price": 3145.11,
+          "entry_price": 3182.67,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.0191098283741259,
+          "timestamp": "2026-01-07T22:03:33.689083"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3146.84001,
+          "order_price": 3149.61,
+          "entry_price": 3185.0,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.08802449413372733,
+          "timestamp": "2026-01-07T22:20:49.481952"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3145.86099,
+          "order_price": 3151.45,
+          "entry_price": 3195.2,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.17766233211721438,
+          "timestamp": "2026-01-07T22:41:12.597623"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3145.91094,
+          "order_price": 3151.03,
+          "entry_price": 3192.64,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.16272107181775433,
+          "timestamp": "2026-01-07T22:43:16.359838"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3144.56229,
+          "order_price": 3144.32,
+          "entry_price": 3185.19,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.00770504692402466,
+          "timestamp": "2026-01-07T23:09:03.006733"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3160.37646,
+          "order_price": 3162.94,
+          "entry_price": 3205.0,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.08111502007580776,
+          "timestamp": "2026-01-07T23:48:56.905286"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3167.164,
+          "order_price": 3166.01,
+          "entry_price": 3166.01,
+          "size": 0.079,
+          "distance_from_signal_pct": 0.03643638283334858,
+          "timestamp": "2026-01-07T23:54:07.138860"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3166.54338,
+          "order_price": 3168.48,
+          "entry_price": 3168.48,
+          "size": 0.079,
+          "distance_from_signal_pct": 0.06115880212574091,
+          "timestamp": "2026-01-07T23:59:03.359443"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3166.37321,
+          "order_price": 3163.0,
+          "entry_price": 3163.0,
+          "size": 0.057,
+          "distance_from_signal_pct": 0.10653229345634209,
+          "timestamp": "2026-01-08T00:11:22.252254"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3170.34718,
+          "order_price": 3159.73,
+          "entry_price": 3159.73,
+          "size": 0.057,
+          "distance_from_signal_pct": 0.33489013654334815,
+          "timestamp": "2026-01-08T00:34:15.519139"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3171.4683,
+          "order_price": 3161.51,
+          "entry_price": 3161.51,
+          "size": 0.057,
+          "distance_from_signal_pct": 0.31399651700758857,
+          "timestamp": "2026-01-08T00:38:42.406296"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3169.43739,
+          "order_price": 3171.78,
+          "entry_price": 3213.42818182,
+          "size": 0.066,
+          "distance_from_signal_pct": 0.07391248703607141,
+          "timestamp": "2026-01-08T01:06:26.540533"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3175.86269,
+          "order_price": 3168.75,
+          "entry_price": 3168.75,
+          "size": 0.066,
+          "distance_from_signal_pct": 0.22396087911470533,
+          "timestamp": "2026-01-08T01:10:34.551626"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3176.07075,
+          "order_price": 3174.67,
+          "entry_price": 3218.0,
+          "size": 0.066,
+          "distance_from_signal_pct": 0.04410323668009565,
+          "timestamp": "2026-01-08T02:20:34.335021"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3174.66216,
+          "order_price": 3160.3,
+          "entry_price": 3213.64015152,
+          "size": 0.066,
+          "distance_from_signal_pct": 0.4523996342338259,
+          "timestamp": "2026-01-08T02:24:20.088875"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3156.9399,
+          "order_price": 3160.35,
+          "entry_price": 3198.21,
+          "size": 0.079,
+          "distance_from_signal_pct": 0.10801916121368219,
+          "timestamp": "2026-01-08T03:02:39.206494"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3163.1337,
+          "order_price": 3161.99,
+          "entry_price": 3207.29,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.03615718172140751,
+          "timestamp": "2026-01-08T03:15:31.502545"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3150.31653,
+          "order_price": 3133.9,
+          "entry_price": 3184.31,
+          "size": 0.079,
+          "distance_from_signal_pct": 0.5211073186985425,
+          "timestamp": "2026-01-08T03:48:35.196678"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3150.18666,
+          "order_price": 3137.37,
+          "entry_price": 3179.81582278,
+          "size": 0.079,
+          "distance_from_signal_pct": 0.4068539862333097,
+          "timestamp": "2026-01-08T03:49:37.211731"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3150.846,
+          "order_price": 3142.56,
+          "entry_price": 3184.31,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.2629769909414823,
+          "timestamp": "2026-01-08T04:07:24.570951"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3142.31454,
+          "order_price": 3153.45,
+          "entry_price": 3193.02,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.3543712718205469,
+          "timestamp": "2026-01-08T04:25:44.220449"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "sell",
+          "signal_price": 3142.30455,
+          "order_price": 3154.84,
+          "entry_price": 3202.72,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.39892536832562303,
+          "timestamp": "2026-01-08T04:27:34.834165"
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "buy",
+          "signal_price": 3156.53338,
+          "order_price": 3151.68,
+          "entry_price": 3151.68,
+          "size": 0.067,
+          "distance_from_signal_pct": 0.15375665059496427,
+          "timestamp": "2026-01-08T04:49:47.992820"
+        }
+      ],
+      "XRP-USDT": [
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1836142,
+          "order_price": 2.18499,
+          "entry_price": 2.1873,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.06300563533612884,
+          "timestamp": "2026-01-07T19:10:34.467060"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1712266,
+          "order_price": 2.19049,
+          "entry_price": 2.19049,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.8872127856208221,
+          "timestamp": "2026-01-07T19:36:46.514763"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1711267,
+          "order_price": 2.19339,
+          "entry_price": 2.19339,
+          "size": 97.0,
+          "distance_from_signal_pct": 1.0254261070991433,
+          "timestamp": "2026-01-07T19:39:54.497229"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1957936,
+          "order_price": 2.19261,
+          "entry_price": 2.1924,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.1449863047237155,
+          "timestamp": "2026-01-07T20:12:18.498684"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1963942,
+          "order_price": 2.18511,
+          "entry_price": 2.18511,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.5137602348430881,
+          "timestamp": "2026-01-07T20:15:06.847849"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1979958,
+          "order_price": 2.18531,
+          "entry_price": 2.18531,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.5771530591641849,
+          "timestamp": "2026-01-07T20:18:14.707901"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1987966,
+          "order_price": 2.17951,
+          "entry_price": 2.17951,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.8771434338219388,
+          "timestamp": "2026-01-07T20:22:39.267901"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1995974,
+          "order_price": 2.17811,
+          "entry_price": 2.17811,
+          "size": 113.0,
+          "distance_from_signal_pct": 0.9768787688146852,
+          "timestamp": "2026-01-07T20:26:49.154902"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1805173,
+          "order_price": 2.17529,
+          "entry_price": 2.18082604,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.23972751786927102,
+          "timestamp": "2026-01-07T20:47:03.189587"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1804174,
+          "order_price": 2.17849,
+          "entry_price": 2.18280312,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.08839591905660006,
+          "timestamp": "2026-01-07T20:50:43.793205"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1789189,
+          "order_price": 2.17419,
+          "entry_price": 2.1763,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.21702964713373996,
+          "timestamp": "2026-01-07T21:10:21.545074"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.172825,
+          "order_price": 2.17979,
+          "entry_price": 2.1798,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.3205504354929693,
+          "timestamp": "2026-01-07T21:20:19.448710"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1754224,
+          "order_price": 2.18289,
+          "entry_price": 2.18289,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.34327126538735736,
+          "timestamp": "2026-01-07T21:28:50.531490"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1761217,
+          "order_price": 2.17719,
+          "entry_price": 2.17897396,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.04909192348939042,
+          "timestamp": "2026-01-07T22:27:45.985143"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1615363,
+          "order_price": 2.15969,
+          "entry_price": 2.1645,
+          "size": 65.0,
+          "distance_from_signal_pct": 0.08541609965097359,
+          "timestamp": "2026-01-07T23:10:01.195040"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1506472,
+          "order_price": 2.17609,
+          "entry_price": 2.17609,
+          "size": 65.0,
+          "distance_from_signal_pct": 1.1830299269912792,
+          "timestamp": "2026-01-07T23:23:55.830068"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1502476,
+          "order_price": 2.17449,
+          "entry_price": 2.1807,
+          "size": 98.0,
+          "distance_from_signal_pct": 1.1274236511181264,
+          "timestamp": "2026-01-07T23:29:30.143816"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1493485,
+          "order_price": 2.17719,
+          "entry_price": 2.17719,
+          "size": 98.0,
+          "distance_from_signal_pct": 1.2953460083369486,
+          "timestamp": "2026-01-07T23:32:13.065962"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1728707,
+          "order_price": 2.16351,
+          "entry_price": 2.16351,
+          "size": 65.0,
+          "distance_from_signal_pct": 0.4307987585271309,
+          "timestamp": "2026-01-07T23:46:32.621832"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1719698,
+          "order_price": 2.16621,
+          "entry_price": 2.16621,
+          "size": 65.0,
+          "distance_from_signal_pct": 0.26518784929697786,
+          "timestamp": "2026-01-07T23:51:01.141888"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1718697,
+          "order_price": 2.16451,
+          "entry_price": 2.16451,
+          "size": 65.0,
+          "distance_from_signal_pct": 0.3388647118194917,
+          "timestamp": "2026-01-07T23:52:03.318233"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1627351,
+          "order_price": 2.16419,
+          "entry_price": 2.16470206,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.06727129919887775,
+          "timestamp": "2026-01-08T00:11:55.020723"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1542436,
+          "order_price": 2.17079,
+          "entry_price": 2.17079,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.7680839808460002,
+          "timestamp": "2026-01-08T00:53:56.685015"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1571407,
+          "order_price": 2.17159,
+          "entry_price": 2.17159,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.6698357691735329,
+          "timestamp": "2026-01-08T00:55:40.663883"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1914893,
+          "order_price": 2.18581,
+          "entry_price": 2.18263646,
+          "size": 96.0,
+          "distance_from_signal_pct": 0.25915253156837975,
+          "timestamp": "2026-01-08T02:22:15.813210"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1717261,
+          "order_price": 2.16609,
+          "entry_price": 2.1661,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.25952167725017494,
+          "timestamp": "2026-01-08T02:57:40.019717"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1692286,
+          "order_price": 2.16879,
+          "entry_price": 2.16879,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.02021916915533221,
+          "timestamp": "2026-01-08T03:03:11.736320"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1604374,
+          "order_price": 2.14879,
+          "entry_price": 2.1582,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.5391223092138747,
+          "timestamp": "2026-01-08T03:47:46.283166"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1521457,
+          "order_price": 2.16549,
+          "entry_price": 2.16549,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.6200463100616271,
+          "timestamp": "2026-01-08T04:26:16.903862"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "buy",
+          "signal_price": 2.1683662,
+          "order_price": 2.16101,
+          "entry_price": 2.161,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.33925081473783414,
+          "timestamp": "2026-01-08T04:54:54.208456"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1601377,
+          "order_price": 2.16099,
+          "entry_price": 2.1614,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.03945581802493554,
+          "timestamp": "2026-01-08T05:15:59.257751"
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "sell",
+          "signal_price": 2.1610368,
+          "order_price": 2.15279,
+          "entry_price": 2.1541,
+          "size": 97.0,
+          "distance_from_signal_pct": 0.38161312199774755,
+          "timestamp": "2026-01-08T05:30:01.704784"
+        }
+      ],
+      "DOGE-USDT": [
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14584401,
+          "order_price": 0.146679,
+          "entry_price": 0.1479,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.5725226562270248,
+          "timestamp": "2026-01-07T19:33:12.180315"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14579406,
+          "order_price": 0.146869,
+          "entry_price": 0.1477,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.73730027135536,
+          "timestamp": "2026-01-07T19:34:27.378292"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14599386,
+          "order_price": 0.146049,
+          "entry_price": 0.1479,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.0377687116430849,
+          "timestamp": "2026-01-07T20:46:23.546894"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14600385,
+          "order_price": 0.145979,
+          "entry_price": 0.148,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.01702009912751817,
+          "timestamp": "2026-01-07T20:48:18.101213"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14619366,
+          "order_price": 0.146159,
+          "entry_price": 0.1478,
+          "size": 1860.0,
+          "distance_from_signal_pct": 0.02370827845748709,
+          "timestamp": "2026-01-07T20:57:22.443359"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "buy",
+          "signal_price": 0.14678664,
+          "order_price": 0.146711,
+          "entry_price": 0.146711,
+          "size": 1430.0,
+          "distance_from_signal_pct": 0.05153057526215461,
+          "timestamp": "2026-01-07T21:29:24.055867"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14653332,
+          "order_price": 0.146229,
+          "entry_price": 0.1476,
+          "size": 1430.0,
+          "distance_from_signal_pct": 0.20767972772335794,
+          "timestamp": "2026-01-07T22:00:16.847237"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14544441,
+          "order_price": 0.146669,
+          "entry_price": 0.14785,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.8419642941244683,
+          "timestamp": "2026-01-07T23:26:27.232991"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "buy",
+          "signal_price": 0.14635621,
+          "order_price": 0.146151,
+          "entry_price": 0.146151,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.14021270433279429,
+          "timestamp": "2026-01-07T23:51:19.452705"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "buy",
+          "signal_price": 0.14720706,
+          "order_price": 0.146871,
+          "entry_price": 0.146871,
+          "size": 1430.0,
+          "distance_from_signal_pct": 0.22829068116705759,
+          "timestamp": "2026-01-08T01:07:06.576797"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "buy",
+          "signal_price": 0.14735721,
+          "order_price": 0.146891,
+          "entry_price": 0.146891,
+          "size": 1430.0,
+          "distance_from_signal_pct": 0.3163808543877797,
+          "timestamp": "2026-01-08T01:11:15.637179"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14644341,
+          "order_price": 0.146899,
+          "entry_price": 0.1477,
+          "size": 1230.0,
+          "distance_from_signal_pct": 0.31110310801968194,
+          "timestamp": "2026-01-08T01:22:38.941421"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.1464534,
+          "order_price": 0.146999,
+          "entry_price": 0.1478,
+          "size": 1430.0,
+          "distance_from_signal_pct": 0.3725417095130461,
+          "timestamp": "2026-01-08T01:24:02.739696"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14612373,
+          "order_price": 0.145669,
+          "entry_price": 0.14765,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.31119517685458364,
+          "timestamp": "2026-01-08T03:01:41.161115"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14604381,
+          "order_price": 0.146239,
+          "entry_price": 0.1476,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.13365167616485202,
+          "timestamp": "2026-01-08T03:04:52.374502"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14617368,
+          "order_price": 0.146049,
+          "entry_price": 0.14755,
+          "size": 1230.0,
+          "distance_from_signal_pct": 0.085295793332964,
+          "timestamp": "2026-01-08T03:22:51.145944"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.1455543,
+          "order_price": 0.145859,
+          "entry_price": 0.1472,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.20933768359986002,
+          "timestamp": "2026-01-08T03:40:06.834515"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14563422,
+          "order_price": 0.144899,
+          "entry_price": 0.1466,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.5048401399066844,
+          "timestamp": "2026-01-08T03:48:06.869902"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14559426,
+          "order_price": 0.145159,
+          "entry_price": 0.1474,
+          "size": 1240.0,
+          "distance_from_signal_pct": 0.2989540933825227,
+          "timestamp": "2026-01-08T03:58:17.350664"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14571414,
+          "order_price": 0.145229,
+          "entry_price": 0.1474,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.33293954862581976,
+          "timestamp": "2026-01-08T04:08:13.110796"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "sell",
+          "signal_price": 0.14548437,
+          "order_price": 0.146829,
+          "entry_price": 0.1481,
+          "size": 1440.0,
+          "distance_from_signal_pct": 0.9242436146233342,
+          "timestamp": "2026-01-08T04:35:24.401882"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "buy",
+          "signal_price": 0.14678664,
+          "order_price": 0.146961,
+          "entry_price": 0.146961,
+          "size": 1430.0,
+          "distance_from_signal_pct": 0.11878465233621553,
+          "timestamp": "2026-01-08T04:56:58.357661"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "buy",
+          "signal_price": 0.14700686,
+          "order_price": 0.147161,
+          "entry_price": 0.147161,
+          "size": 1850.0,
+          "distance_from_signal_pct": 0.10485224975215243,
+          "timestamp": "2026-01-08T05:04:35.433774"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "buy",
+          "signal_price": 0.14742728,
+          "order_price": 0.146881,
+          "entry_price": 0.146881,
+          "size": 1850.0,
+          "distance_from_signal_pct": 0.37054200552298217,
+          "timestamp": "2026-01-08T05:13:54.591597"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "buy",
+          "signal_price": 0.14723709,
+          "order_price": 0.146701,
+          "entry_price": 0.146701,
+          "size": 1430.0,
+          "distance_from_signal_pct": 0.3640998338122474,
+          "timestamp": "2026-01-08T05:18:11.560344"
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "buy",
+          "signal_price": 0.14718704,
+          "order_price": 0.146821,
+          "entry_price": 0.146821,
+          "size": 1430.0,
+          "distance_from_signal_pct": 0.2486903738263805,
+          "timestamp": "2026-01-08T05:21:18.607161"
+        }
+      ]
+    },
+    "spread_analysis": {},
+    "errors": [],
+    "limit_order_errors": 56
+  },
+  "parameter_transmission": {
+    "config_errors": [
+      "2026-01-07 22:38:46.862 | ERROR    | src.strategies.scalping.futures.risk_manager:calculate_position_size:838 | ❌ ОШИБКА КОНФИГУРАЦИИ: max_position_us",
+      "2026-01-07 22:38:46.865 | ERROR    | src.strategies.scalping.futures.risk_manager:calculate_position_size:1709 | Ошибка расчета размера позиции: max_p"
+    ],
+    "regime_inconsistencies": [],
+    "filter_effectiveness": {
+      "ADX": {
+        "passed": 1446,
+        "total": 1446,
+        "effectiveness_pct": 100.0
+      },
+      "Correlation": {
+        "passed": 1446,
+        "total": 1446,
+        "effectiveness_pct": 100.0
+      },
+      "FundingRate": {
+        "passed": 1446,
+        "total": 1446,
+        "effectiveness_pct": 100.0
+      },
+      "Liquidity": {
+        "passed": 1446,
+        "total": 1446,
+        "effectiveness_pct": 100.0
+      },
+      "MTF": {
+        "passed": 1446,
+        "total": 1446,
+        "effectiveness_pct": 100.0
+      },
+      "OrderFlow": {
+        "passed": 1446,
+        "total": 1446,
+        "effectiveness_pct": 100.0
+      },
+      "PivotPoints": {
+        "passed": 1446,
+        "total": 1446,
+        "effectiveness_pct": 100.0
+      },
+      "VolumeProfile": {
+        "passed": 1446,
+        "total": 1446,
+        "effectiveness_pct": 100.0
+      }
+    }
+  },
+  "trading_logic": {
+    "total_signals": 1446,
+    "signals_executed": 147,
+    "execution_ratio": 10.16597510373444,
+    "by_regime": {
+      "choppy": {
+        "signals": 38,
+        "orders": 0
+      },
+      "ranging": {
+        "signals": 1290,
+        "orders": 147
+      },
+      "trending": {
+        "signals": 118,
+        "orders": 0
+      }
+    },
+    "by_symbol": {},
+    "confidence_analysis": {
+      "avg": 0.95629889349931,
+      "min": 0.6516,
+      "max": 1.0
+    }
+  },
+  "entry_exit": {
+    "entry_analysis": {
+      "total_entries": 147,
+      "by_symbol": {
+        "BTC-USDT": 31,
+        "SOL-USDT": 20,
+        "ETH-USDT": 38,
+        "XRP-USDT": 32,
+        "DOGE-USDT": 26
+      },
+      "entry_price_gaps": []
+    },
+    "exit_analysis": {
+      "total_exits": 103,
+      "exit_reasons": {
+        "tp_reached": 14,
+        "sl_reached": 85,
+        "profit_harvest": 3,
+        "max_holding_hard_stop_profit": 1
+      },
+      "exit_details": [
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92630.4,
+          "exit": 92198.7,
+          "pnl": 0.9161,
+          "reason": "tp_reached",
+          "duration": 1208.201301
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3183.64,
+          "exit": 3185.83,
+          "pnl": -0.3601,
+          "reason": "sl_reached",
+          "duration": 243.956418
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92062.5,
+          "exit": 92161.1,
+          "pnl": -0.5149,
+          "reason": "sl_reached",
+          "duration": 268.629587
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1873,
+          "exit": 2.1834,
+          "pnl": 0.1646,
+          "reason": "tp_reached",
+          "duration": 853.215772
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3177.5,
+          "exit": 3183.45,
+          "pnl": -0.6117,
+          "reason": "sl_reached",
+          "duration": 127.190335
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3178.4212,
+          "exit": 3182.73,
+          "pnl": -0.5018,
+          "reason": "sl_reached",
+          "duration": 142.50169
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1479,
+          "exit": 0.148,
+          "pnl": -0.4147,
+          "reason": "sl_reached",
+          "duration": 38.128983
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1477,
+          "exit": 0.1478,
+          "pnl": -0.3568,
+          "reason": "sl_reached",
+          "duration": 96.703179
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3181.07,
+          "exit": 3190.32,
+          "pnl": -0.8332,
+          "reason": "sl_reached",
+          "duration": 110.953291
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92463.2,
+          "exit": 92488.3,
+          "pnl": -0.3175,
+          "reason": "sl_reached",
+          "duration": 1843.559832
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92410.3,
+          "exit": 92515.1,
+          "pnl": -0.5326,
+          "reason": "sl_reached",
+          "duration": 34.642091
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "long",
+          "entry": 2.1924,
+          "exit": 2.1907,
+          "pnl": -0.3736,
+          "reason": "sl_reached",
+          "duration": 115.464044
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "long",
+          "entry": 135.4777,
+          "exit": 135.37,
+          "pnl": -0.3477,
+          "reason": "sl_reached",
+          "duration": 110.941796
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 136.16,
+          "exit": 135.76,
+          "pnl": 0.3802,
+          "reason": "tp_reached",
+          "duration": 1426.757122
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1808,
+          "exit": 2.1821,
+          "pnl": -0.3317,
+          "reason": "sl_reached",
+          "duration": 2116.383051
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1479,
+          "exit": 0.1479,
+          "pnl": -0.2706,
+          "reason": "sl_reached",
+          "duration": 80.408759
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3198.64,
+          "exit": 3180.91,
+          "pnl": 0.9742,
+          "reason": "tp_reached",
+          "duration": 3011.073203
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 136.01,
+          "exit": 136.11,
+          "pnl": -0.3376,
+          "reason": "sl_reached",
+          "duration": 792.776207
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.148,
+          "exit": 0.1475,
+          "pnl": 0.5649,
+          "reason": "tp_reached",
+          "duration": 445.915433
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1478,
+          "exit": 0.148,
+          "pnl": -0.6099,
+          "reason": "sl_reached",
+          "duration": 34.311845
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92418.1593,
+          "exit": 92499.2,
+          "pnl": -0.4684,
+          "reason": "sl_reached",
+          "duration": 1273.071694
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1828,
+          "exit": 2.1756,
+          "pnl": 0.4823,
+          "reason": "tp_reached",
+          "duration": 968.668615
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1763,
+          "exit": 2.1782,
+          "pnl": -0.3914,
+          "reason": "sl_reached",
+          "duration": 359.453429
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1798,
+          "exit": 2.1812,
+          "pnl": -0.3473,
+          "reason": "sl_reached",
+          "duration": 402.152116
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3193.4,
+          "exit": 3194.5,
+          "pnl": -0.2877,
+          "reason": "tp_reached",
+          "duration": 10.343575
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92413.9,
+          "exit": 92510.0,
+          "pnl": -0.5091,
+          "reason": "sl_reached",
+          "duration": 88.248874
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 136.26,
+          "exit": 136.32,
+          "pnl": -0.2807,
+          "reason": "sl_reached",
+          "duration": 2102.978508
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3188.48,
+          "exit": 3188.18,
+          "pnl": -0.1935,
+          "reason": "sl_reached",
+          "duration": 109.591607
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92463.2,
+          "exit": 92508.2,
+          "pnl": -0.3712,
+          "reason": "sl_reached",
+          "duration": 43.7332
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92353.4,
+          "exit": 92426.3,
+          "pnl": -0.4463,
+          "reason": "sl_reached",
+          "duration": 48.526701
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3185.0,
+          "exit": 3190.77,
+          "pnl": -0.6002,
+          "reason": "sl_reached",
+          "duration": 63.325602
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92360.0,
+          "exit": 92485.7,
+          "pnl": -0.5889,
+          "reason": "sl_reached",
+          "duration": 217.480166
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1476,
+          "exit": 0.1479,
+          "pnl": -0.5687,
+          "reason": "sl_reached",
+          "duration": 3808.205843
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3189.5,
+          "exit": 3189.69,
+          "pnl": -0.2264,
+          "reason": "sl_reached",
+          "duration": 34.873702
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3182.67,
+          "exit": 3188.69,
+          "pnl": -0.6168,
+          "reason": "sl_reached",
+          "duration": 35.257642
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92196.6,
+          "exit": 92269.7,
+          "pnl": -0.4464,
+          "reason": "sl_reached",
+          "duration": 94.271976
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 137.32,
+          "exit": 137.61,
+          "pnl": -0.6113,
+          "reason": "sl_reached",
+          "duration": 65.784676
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92274.5,
+          "exit": 92367.9,
+          "pnl": -0.5014,
+          "reason": "sl_reached",
+          "duration": 79.397525
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3185.0,
+          "exit": 3192.08,
+          "pnl": -0.688,
+          "reason": "sl_reached",
+          "duration": 50.954538
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92252.3,
+          "exit": 92364.6,
+          "pnl": -0.5524,
+          "reason": "sl_reached",
+          "duration": 47.26844
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92352.9,
+          "exit": 92422.2,
+          "pnl": -0.4366,
+          "reason": "sl_reached",
+          "duration": 68.41765
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.179,
+          "exit": 2.1806,
+          "pnl": -0.3654,
+          "reason": "sl_reached",
+          "duration": 235.969194
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3195.2,
+          "exit": 3197.0,
+          "pnl": -0.3347,
+          "reason": "sl_reached",
+          "duration": 67.2048
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3192.64,
+          "exit": 3197.63,
+          "pnl": -0.5484,
+          "reason": "sl_reached",
+          "duration": 73.777231
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 137.66,
+          "exit": 137.92,
+          "pnl": -0.5688,
+          "reason": "sl_reached",
+          "duration": 34.748238
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92355.4074,
+          "exit": 92447.8,
+          "pnl": -0.4989,
+          "reason": "sl_reached",
+          "duration": 319.852419
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3185.19,
+          "exit": 3189.78,
+          "pnl": -0.5211,
+          "reason": "sl_reached",
+          "duration": 33.255932
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1645,
+          "exit": 2.1664,
+          "pnl": -0.2643,
+          "reason": "sl_reached",
+          "duration": 417.031473
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92411.2,
+          "exit": 92594.4,
+          "pnl": -0.7444,
+          "reason": "sl_reached",
+          "duration": 287.511301
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92630.4,
+          "exit": 92719.4,
+          "pnl": -0.4905,
+          "reason": "sl_reached",
+          "duration": 88.978073
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1761,
+          "exit": 2.1813,
+          "pnl": -0.4796,
+          "reason": "sl_reached",
+          "duration": 117.481139
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1479,
+          "exit": 0.1479,
+          "pnl": -0.3426,
+          "reason": "sl_reached",
+          "duration": 42.537242
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1807,
+          "exit": 2.1721,
+          "pnl": 0.6295,
+          "reason": "tp_reached",
+          "duration": 26.599308
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 138.41,
+          "exit": 138.32,
+          "pnl": -0.0692,
+          "reason": "sl_reached",
+          "duration": 32.853471
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3205.0,
+          "exit": 3208.21,
+          "pnl": -0.4299,
+          "reason": "sl_reached",
+          "duration": 2427.612112
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92600.0,
+          "exit": 92709.5,
+          "pnl": -0.5458,
+          "reason": "sl_reached",
+          "duration": 852.173077
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92639.4037,
+          "exit": 92712.7,
+          "pnl": -0.4481,
+          "reason": "sl_reached",
+          "duration": 36.481879
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92589.8,
+          "exit": 92662.4,
+          "pnl": -0.4461,
+          "reason": "sl_reached",
+          "duration": 247.899884
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1647,
+          "exit": 2.1522,
+          "pnl": 1.0033,
+          "reason": "profit_harvest",
+          "duration": 722.100669
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92431.4,
+          "exit": 92481.5,
+          "pnl": -0.3849,
+          "reason": "sl_reached",
+          "duration": 1247.805406
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 137.73,
+          "exit": 137.98,
+          "pnl": -0.5546,
+          "reason": "sl_reached",
+          "duration": 3709.99784
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3213.4282,
+          "exit": 3216.81,
+          "pnl": -0.4354,
+          "reason": "sl_reached",
+          "duration": 4680.860432
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "long",
+          "entry": 0.1479,
+          "exit": 0.1476,
+          "pnl": -0.626,
+          "reason": "sl_reached",
+          "duration": 40.91404
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1477,
+          "exit": 0.1478,
+          "pnl": -0.3047,
+          "reason": "sl_reached",
+          "duration": 47.628856
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92539.9296,
+          "exit": 92585.1,
+          "pnl": -0.3719,
+          "reason": "sl_reached",
+          "duration": 34.618694
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1478,
+          "exit": 0.1474,
+          "pnl": 0.2894,
+          "reason": "tp_reached",
+          "duration": 1297.763103
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92707.8,
+          "exit": 92781.8,
+          "pnl": -0.4502,
+          "reason": "sl_reached",
+          "duration": 276.533002
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92544.2,
+          "exit": 92688.9,
+          "pnl": -0.6408,
+          "reason": "sl_reached",
+          "duration": 32.797506
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92641.4296,
+          "exit": 92704.2,
+          "pnl": -0.4197,
+          "reason": "sl_reached",
+          "duration": 35.925713
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3218.0,
+          "exit": 3220.58,
+          "pnl": -0.3828,
+          "reason": "sl_reached",
+          "duration": 143.456151
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3213.6402,
+          "exit": 3213.74,
+          "pnl": -0.2187,
+          "reason": "tp_reached",
+          "duration": 6.622735
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "long",
+          "entry": 2.1826,
+          "exit": 2.1815,
+          "pnl": -0.3186,
+          "reason": "sl_reached",
+          "duration": 295.207749
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1661,
+          "exit": 2.1687,
+          "pnl": -0.4624,
+          "reason": "sl_reached",
+          "duration": 103.809182
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1477,
+          "exit": 0.1477,
+          "pnl": -0.3135,
+          "reason": "sl_reached",
+          "duration": 54.373197
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3198.21,
+          "exit": 3200.83,
+          "pnl": -0.4597,
+          "reason": "sl_reached",
+          "duration": 77.635197
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1476,
+          "exit": 0.1477,
+          "pnl": -0.3998,
+          "reason": "sl_reached",
+          "duration": 32.700793
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1688,
+          "exit": 2.1716,
+          "pnl": -0.4821,
+          "reason": "sl_reached",
+          "duration": 167.287347
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 138.95,
+          "exit": 139.24,
+          "pnl": -0.6093,
+          "reason": "sl_reached",
+          "duration": 32.924616
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92360.0,
+          "exit": 92459.4,
+          "pnl": -0.5179,
+          "reason": "sl_reached",
+          "duration": 103.510042
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 139.36,
+          "exit": 139.22,
+          "pnl": 0.001,
+          "reason": "sl_reached",
+          "duration": 221.766262
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1475,
+          "exit": 0.1479,
+          "pnl": -0.5753,
+          "reason": "sl_reached",
+          "duration": 1111.118181
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 138.96,
+          "exit": 138.76,
+          "pnl": 0.0862,
+          "reason": "sl_reached",
+          "duration": 424.25167
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3207.29,
+          "exit": 3175.76,
+          "pnl": 1.8987,
+          "reason": "tp_reached",
+          "duration": 1384.592953
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1472,
+          "exit": 0.1475,
+          "pnl": -0.6586,
+          "reason": "sl_reached",
+          "duration": 155.877436
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1466,
+          "exit": 0.1469,
+          "pnl": -0.7154,
+          "reason": "sl_reached",
+          "duration": 31.916676
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3184.31,
+          "exit": 3177.99,
+          "pnl": 0.248,
+          "reason": "tp_reached",
+          "duration": 36.734233
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3179.8158,
+          "exit": 3180.29,
+          "pnl": -0.2887,
+          "reason": "sl_reached",
+          "duration": 73.380094
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 138.2,
+          "exit": 138.56,
+          "pnl": -0.7077,
+          "reason": "sl_reached",
+          "duration": 1911.063205
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1474,
+          "exit": 0.1454,
+          "pnl": 2.3605,
+          "reason": "profit_harvest",
+          "duration": 261.513224
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92386.7,
+          "exit": 92138.6,
+          "pnl": 0.4208,
+          "reason": "tp_reached",
+          "duration": 2716.009645
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3184.31,
+          "exit": 3190.73,
+          "pnl": -0.6437,
+          "reason": "sl_reached",
+          "duration": 1180.140306
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1474,
+          "exit": 0.1469,
+          "pnl": 0.4505,
+          "reason": "tp_reached",
+          "duration": 67.385807
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1582,
+          "exit": 2.1574,
+          "pnl": -0.1317,
+          "reason": "max_holding_hard_stop_profit",
+          "duration": 1681.549915
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3193.02,
+          "exit": 3200.04,
+          "pnl": -0.6845,
+          "reason": "sl_reached",
+          "duration": 97.168311
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 138.9025,
+          "exit": 139.35,
+          "pnl": -0.833,
+          "reason": "sl_reached",
+          "duration": 1919.240605
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 139.36,
+          "exit": 139.77,
+          "pnl": -0.7804,
+          "reason": "sl_reached",
+          "duration": 34.441636
+        },
+        {
+          "symbol": "ETH-USDT",
+          "side": "short",
+          "entry": 3202.72,
+          "exit": 3206.81,
+          "pnl": -0.4887,
+          "reason": "sl_reached",
+          "duration": 680.148419
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92346.1,
+          "exit": 92348.8,
+          "pnl": -0.2566,
+          "reason": "sl_reached",
+          "duration": 222.670316
+        },
+        {
+          "symbol": "SOL-USDT",
+          "side": "short",
+          "entry": 140.0018,
+          "exit": 137.96,
+          "pnl": 2.7019,
+          "reason": "profit_harvest",
+          "duration": 465.191238
+        },
+        {
+          "symbol": "DOGE-USDT",
+          "side": "short",
+          "entry": 0.1481,
+          "exit": 0.1482,
+          "pnl": -0.3573,
+          "reason": "sl_reached",
+          "duration": 1170.578197
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "long",
+          "entry": 2.161,
+          "exit": 2.1589,
+          "pnl": -0.4132,
+          "reason": "sl_reached",
+          "duration": 669.834481
+        },
+        {
+          "symbol": "BTC-USDT",
+          "side": "short",
+          "entry": 92347.8,
+          "exit": 92438.5,
+          "pnl": -0.4944,
+          "reason": "sl_reached",
+          "duration": 51.320523
+        },
+        {
+          "symbol": "XRP-USDT",
+          "side": "short",
+          "entry": 2.1614,
+          "exit": 2.1646,
+          "pnl": -0.5202,
+          "reason": "sl_reached",
+          "duration": 223.346019
+        }
+      ]
+    },
+    "pnl_analysis": {
+      "profitable": 17,
+      "losing": 86,
+      "breakeven": 0
+    }
+  },
+  "errors_anomalies": {
+    "total_errors": 830,
+    "error_types": {
+      "api": 56,
+      "position_close": 20,
+      "connection": 205
+    },
+    "critical_issues": [
+      "2026-01-07 22:17:47.904 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-07 22:30:43.983 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-07 22:35:02.543 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-07 22:39:37.259 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-07 22:50:54.694 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-07 23:08:47.912 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-07 23:22:37.340 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-07 23:33:20.684 | ERROR    | src.strategies.scalping.futures.position_manager:_close_positio",
+      "2026-01-08 01:00:57.562 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 01:21:37.482 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 01:31:49.497 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 02:17:27.548 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 02:50:12.276 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 02:55:30.296 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 03:24:01.864 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 04:23:33.724 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 05:16:43.917 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 06:23:20.239 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 06:26:32.539 | ERROR    | src.strategies.scalping.futures.position_manager:close_position",
+      "2026-01-08 07:26:16.710 | ERROR    | src.strategies.scalping.futures.position_manager:close_position"
+    ],
+    "connection_problems": 205,
+    "position_close_errors": 20,
+    "api_errors": 56
+  },
+  "risk_calculations": {
+    "position_sizing": {
+      "BTC-USDT": [
+        {
+          "size": 0.0027,
+          "entry_price": 92630.4,
+          "usd_value": 250.10208
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92062.5,
+          "usd_value": 248.56875000000002
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92463.2,
+          "usd_value": 249.65064
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92410.3,
+          "usd_value": 249.50781000000003
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 90986.0,
+          "usd_value": 245.6622
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 90947.7,
+          "usd_value": 245.55879000000002
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 90840.9,
+          "usd_value": 245.27043
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92418.15925926,
+          "usd_value": 249.52903000000202
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92413.9,
+          "usd_value": 249.51753
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92463.2,
+          "usd_value": 249.65064
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92353.4,
+          "usd_value": 249.35417999999999
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92360.0,
+          "usd_value": 249.372
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92196.6,
+          "usd_value": 248.93082000000004
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92274.5,
+          "usd_value": 249.14115
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92252.3,
+          "usd_value": 249.08121000000003
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92352.9,
+          "usd_value": 249.35283
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92355.40740741,
+          "usd_value": 249.35960000000702
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92411.2,
+          "usd_value": 249.51024
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92630.4,
+          "usd_value": 250.10208
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92600.0,
+          "usd_value": 250.02
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92639.4037037,
+          "usd_value": 250.12638999999
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92589.8,
+          "usd_value": 249.99246000000002
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92431.4,
+          "usd_value": 249.56477999999998
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92539.92962963,
+          "usd_value": 249.85781000000102
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92707.8,
+          "usd_value": 250.31106000000003
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92544.2,
+          "usd_value": 249.86934
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92641.42962963,
+          "usd_value": 250.131860000001
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92360.0,
+          "usd_value": 249.372
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92386.7,
+          "usd_value": 249.44409000000002
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92346.1,
+          "usd_value": 249.33447000000004
+        },
+        {
+          "size": 0.0027,
+          "entry_price": 92347.8,
+          "usd_value": 249.33906000000002
+        }
+      ],
+      "SOL-USDT": [
+        {
+          "size": 1.44,
+          "entry_price": 135.641,
+          "usd_value": 195.32304
+        },
+        {
+          "size": 1.43,
+          "entry_price": 135.47769231,
+          "usd_value": 193.7331000033
+        },
+        {
+          "size": 1.43,
+          "entry_price": 134.921,
+          "usd_value": 192.93703
+        },
+        {
+          "size": 1.44,
+          "entry_price": 136.16,
+          "usd_value": 196.07039999999998
+        },
+        {
+          "size": 1.43,
+          "entry_price": 136.01,
+          "usd_value": 194.49429999999998
+        },
+        {
+          "size": 1.43,
+          "entry_price": 136.26,
+          "usd_value": 194.85179999999997
+        },
+        {
+          "size": 1.43,
+          "entry_price": 137.32,
+          "usd_value": 196.36759999999998
+        },
+        {
+          "size": 1.43,
+          "entry_price": 137.66,
+          "usd_value": 196.85379999999998
+        },
+        {
+          "size": 1.43,
+          "entry_price": 138.41,
+          "usd_value": 197.9263
+        },
+        {
+          "size": 1.43,
+          "entry_price": 137.73,
+          "usd_value": 196.95389999999998
+        },
+        {
+          "size": 1.42,
+          "entry_price": 136.811,
+          "usd_value": 194.27162
+        },
+        {
+          "size": 1.41,
+          "entry_price": 136.971,
+          "usd_value": 193.12911
+        },
+        {
+          "size": 1.41,
+          "entry_price": 136.921,
+          "usd_value": 193.05861
+        },
+        {
+          "size": 1.42,
+          "entry_price": 138.95,
+          "usd_value": 197.30899999999997
+        },
+        {
+          "size": 1.42,
+          "entry_price": 139.36,
+          "usd_value": 197.8912
+        },
+        {
+          "size": 1.41,
+          "entry_price": 138.96,
+          "usd_value": 195.9336
+        },
+        {
+          "size": 1.42,
+          "entry_price": 138.2,
+          "usd_value": 196.24399999999997
+        },
+        {
+          "size": 1.42,
+          "entry_price": 138.90253521,
+          "usd_value": 197.24159999819997
+        },
+        {
+          "size": 1.42,
+          "entry_price": 139.36,
+          "usd_value": 197.8912
+        },
+        {
+          "size": 1.42,
+          "entry_price": 140.00176056,
+          "usd_value": 198.8024999952
+        }
+      ],
+      "ETH-USDT": [
+        {
+          "size": 0.067,
+          "entry_price": 3158.06,
+          "usd_value": 211.59002
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3153.84,
+          "usd_value": 211.30728000000002
+        },
+        {
+          "size": 0.057,
+          "entry_price": 3147.87,
+          "usd_value": 179.42859
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3183.64,
+          "usd_value": 213.30388
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3177.5,
+          "usd_value": 212.8925
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3178.42119403,
+          "usd_value": 212.95422000001003
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3181.07,
+          "usd_value": 213.13169000000002
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3145.2,
+          "usd_value": 210.7284
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3198.64,
+          "usd_value": 214.30888000000002
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3193.4,
+          "usd_value": 213.95780000000002
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3188.48,
+          "usd_value": 213.62816
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3144.46,
+          "usd_value": 210.67882
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3185.0,
+          "usd_value": 213.395
+        },
+        {
+          "size": 0.058,
+          "entry_price": 3147.75,
+          "usd_value": 182.5695
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3189.5,
+          "usd_value": 213.69650000000001
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3182.67,
+          "usd_value": 213.23889000000003
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3185.0,
+          "usd_value": 213.395
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3195.2,
+          "usd_value": 214.0784
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3192.64,
+          "usd_value": 213.90688
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3185.19,
+          "usd_value": 213.40773000000002
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3205.0,
+          "usd_value": 214.735
+        },
+        {
+          "size": 0.079,
+          "entry_price": 3166.01,
+          "usd_value": 250.11479000000003
+        },
+        {
+          "size": 0.079,
+          "entry_price": 3168.48,
+          "usd_value": 250.30992
+        },
+        {
+          "size": 0.057,
+          "entry_price": 3163.0,
+          "usd_value": 180.291
+        },
+        {
+          "size": 0.057,
+          "entry_price": 3159.73,
+          "usd_value": 180.10461
+        },
+        {
+          "size": 0.057,
+          "entry_price": 3161.51,
+          "usd_value": 180.20607
+        },
+        {
+          "size": 0.066,
+          "entry_price": 3213.42818182,
+          "usd_value": 212.08626000012003
+        },
+        {
+          "size": 0.066,
+          "entry_price": 3168.75,
+          "usd_value": 209.13750000000002
+        },
+        {
+          "size": 0.066,
+          "entry_price": 3218.0,
+          "usd_value": 212.388
+        },
+        {
+          "size": 0.066,
+          "entry_price": 3213.64015152,
+          "usd_value": 212.10025000032002
+        },
+        {
+          "size": 0.079,
+          "entry_price": 3198.21,
+          "usd_value": 252.65859
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3207.29,
+          "usd_value": 214.88843
+        },
+        {
+          "size": 0.079,
+          "entry_price": 3184.31,
+          "usd_value": 251.56049
+        },
+        {
+          "size": 0.079,
+          "entry_price": 3179.81582278,
+          "usd_value": 251.20544999962
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3184.31,
+          "usd_value": 213.34877
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3193.02,
+          "usd_value": 213.93234
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3202.72,
+          "usd_value": 214.58224
+        },
+        {
+          "size": 0.067,
+          "entry_price": 3151.68,
+          "usd_value": 211.16256
+        }
+      ],
+      "XRP-USDT": [
+        {
+          "size": 96.0,
+          "entry_price": 2.1873,
+          "usd_value": 209.9808
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.19049,
+          "usd_value": 212.47753
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.19339,
+          "usd_value": 212.75883
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.1924,
+          "usd_value": 210.4704
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.18511,
+          "usd_value": 209.77056
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.18531,
+          "usd_value": 209.78976
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.17951,
+          "usd_value": 209.23296
+        },
+        {
+          "size": 113.0,
+          "entry_price": 2.17811,
+          "usd_value": 246.12643000000003
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.18082604,
+          "usd_value": 209.35929984
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.18280312,
+          "usd_value": 209.54909952
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.1763,
+          "usd_value": 208.9248
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.1798,
+          "usd_value": 211.44060000000002
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.18289,
+          "usd_value": 209.55743999999999
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.17897396,
+          "usd_value": 209.18150015999998
+        },
+        {
+          "size": 65.0,
+          "entry_price": 2.1645,
+          "usd_value": 140.6925
+        },
+        {
+          "size": 65.0,
+          "entry_price": 2.17609,
+          "usd_value": 141.44584999999998
+        },
+        {
+          "size": 98.0,
+          "entry_price": 2.1807,
+          "usd_value": 213.7086
+        },
+        {
+          "size": 98.0,
+          "entry_price": 2.17719,
+          "usd_value": 213.36462
+        },
+        {
+          "size": 65.0,
+          "entry_price": 2.16351,
+          "usd_value": 140.62815
+        },
+        {
+          "size": 65.0,
+          "entry_price": 2.16621,
+          "usd_value": 140.80365
+        },
+        {
+          "size": 65.0,
+          "entry_price": 2.16451,
+          "usd_value": 140.69315
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.16470206,
+          "usd_value": 209.97609982000003
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.17079,
+          "usd_value": 210.56663000000003
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.17159,
+          "usd_value": 210.64423000000002
+        },
+        {
+          "size": 96.0,
+          "entry_price": 2.18263646,
+          "usd_value": 209.53310016
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.1661,
+          "usd_value": 210.1117
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.16879,
+          "usd_value": 210.37263
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.1582,
+          "usd_value": 209.34539999999998
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.16549,
+          "usd_value": 210.05253000000002
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.161,
+          "usd_value": 209.617
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.1614,
+          "usd_value": 209.6558
+        },
+        {
+          "size": 97.0,
+          "entry_price": 2.1541,
+          "usd_value": 208.94770000000003
+        }
+      ],
+      "DOGE-USDT": [
+        {
+          "size": 1440.0,
+          "entry_price": 0.1479,
+          "usd_value": 212.976
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.1477,
+          "usd_value": 212.688
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.1479,
+          "usd_value": 212.976
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.148,
+          "usd_value": 213.11999999999998
+        },
+        {
+          "size": 1860.0,
+          "entry_price": 0.1478,
+          "usd_value": 274.90799999999996
+        },
+        {
+          "size": 1430.0,
+          "entry_price": 0.146711,
+          "usd_value": 209.79673000000003
+        },
+        {
+          "size": 1430.0,
+          "entry_price": 0.1476,
+          "usd_value": 211.068
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.14785,
+          "usd_value": 212.90400000000002
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.146151,
+          "usd_value": 210.45744
+        },
+        {
+          "size": 1430.0,
+          "entry_price": 0.146871,
+          "usd_value": 210.02553
+        },
+        {
+          "size": 1430.0,
+          "entry_price": 0.146891,
+          "usd_value": 210.05413
+        },
+        {
+          "size": 1230.0,
+          "entry_price": 0.1477,
+          "usd_value": 181.671
+        },
+        {
+          "size": 1430.0,
+          "entry_price": 0.1478,
+          "usd_value": 211.35399999999998
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.14765,
+          "usd_value": 212.616
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.1476,
+          "usd_value": 212.544
+        },
+        {
+          "size": 1230.0,
+          "entry_price": 0.14755,
+          "usd_value": 181.48649999999998
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.1472,
+          "usd_value": 211.968
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.1466,
+          "usd_value": 211.104
+        },
+        {
+          "size": 1240.0,
+          "entry_price": 0.1474,
+          "usd_value": 182.776
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.1474,
+          "usd_value": 212.256
+        },
+        {
+          "size": 1440.0,
+          "entry_price": 0.1481,
+          "usd_value": 213.264
+        },
+        {
+          "size": 1430.0,
+          "entry_price": 0.146961,
+          "usd_value": 210.15423
+        },
+        {
+          "size": 1850.0,
+          "entry_price": 0.147161,
+          "usd_value": 272.24784999999997
+        },
+        {
+          "size": 1850.0,
+          "entry_price": 0.146881,
+          "usd_value": 271.72985
+        },
+        {
+          "size": 1430.0,
+          "entry_price": 0.146701,
+          "usd_value": 209.78243
+        },
+        {
+          "size": 1430.0,
+          "entry_price": 0.146821,
+          "usd_value": 209.95403000000002
+        }
+      ]
+    },
+    "risk_metrics": {
+      "total_pnl": -26.275199999999987,
+      "avg_loss_per_losing_trade": -0.4633406976744187,
+      "trades_analyzed": 103
+    },
+    "leverage_analysis": {}
+  }
+}

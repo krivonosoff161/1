@@ -148,6 +148,29 @@ class FastADX:
         """Получение текущего значения ADX."""
         return self._calculate_adx()
 
+    def get_adx(self, symbol: Optional[str] = None) -> Optional[Dict[str, float]]:
+        """
+        ✅ НОВОЕ (08.01.2026): Получить ADX данные в формате словаря
+
+        Args:
+            symbol: Торговый символ (игнорируется, для совместимости с интерфейсом)
+
+        Returns:
+            {'adx': float, 'plus_di': float, 'minus_di': float} или None
+        """
+        if len(self.adx_history) == 0:
+            return None
+
+        di_plus = self.di_plus_history[-1] if len(self.di_plus_history) > 0 else 0.0
+        di_minus = self.di_minus_history[-1] if len(self.di_minus_history) > 0 else 0.0
+        adx_value = self._calculate_adx()
+
+        return {
+            "adx": adx_value,
+            "plus_di": di_plus,
+            "minus_di": di_minus,
+        }
+
     def get_current_di_plus(self) -> float:
         """Получение текущего значения +DI."""
         if len(self.di_plus_history) == 0:

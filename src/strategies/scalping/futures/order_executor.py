@@ -1426,6 +1426,43 @@ class FuturesOrderExecutor:
                     f"POST_ONLY disabled {symbol} (быстрое исполнение, taker fee 0.05%)"
                 )
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Получение bid-ask спреда перед размещением
+            # Проблема: 38% ордеров отказываются с ошибкой 51006 (price out of range ±2%)
+            # Решение: Получаем текущий bid-ask и размещаем цену ВНУТРИ спреда, а не на краях
+            try:
+                # Получаем текущий спред (bid-ask)
+                market_data = await self.client.get_market_data(symbol)
+                if market_data:
+                    current_bid = float(market_data.get("bid_price", 0))
+                    current_ask = float(market_data.get("ask_price", 0))
+
+                    if current_bid > 0 and current_ask > 0:
+                        # Параметры для размещения цены
+                        spread_pct = ((current_ask - current_bid) / current_bid) * 100.0
+
+                        if side.lower() == "buy":
+                            # Для BUY: размещаем ниже текущего ask, но выше mid + 0.1% буфера
+                            mid_price = (current_bid + current_ask) / 2
+                            buffer_price = mid_price * 1.001  # +0.1% буфер от середины
+                            price = min(price, buffer_price)  # Не выше буфера
+                            logger.debug(
+                                f"🔍 BUY ордер {symbol}: spread={spread_pct:.3f}%, bid={current_bid:.2f}, ask={current_ask:.2f}, "
+                                f"mid={mid_price:.2f}, buffer={buffer_price:.2f}, final_price={price:.2f}"
+                            )
+                        else:  # SELL
+                            # Для SELL: размещаем выше текущего bid, но ниже mid - 0.1% буфера
+                            mid_price = (current_bid + current_ask) / 2
+                            buffer_price = mid_price * 0.999  # -0.1% буфер от середины
+                            price = max(price, buffer_price)  # Не ниже буфера
+                            logger.debug(
+                                f"🔍 SELL ордер {symbol}: spread={spread_pct:.3f}%, bid={current_bid:.2f}, ask={current_ask:.2f}, "
+                                f"mid={mid_price:.2f}, buffer={buffer_price:.2f}, final_price={price:.2f}"
+                            )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Не удалось получить bid-ask спред для {symbol}: {e}, продолжаем без оптимизации"
+                )
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем ценовые лимиты перед размещением ордера
             # ✅ ИСПРАВЛЕНИЕ: Используем уже полученные price_limits из проверки свежести цены
             if not price_limits:

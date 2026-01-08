@@ -144,6 +144,36 @@ class HoldingTimeMetrics:
             self.holding_times_by_exit[exit_reason].append(holding_seconds)
             self.holding_times_by_symbol[symbol].append(holding_seconds)
 
+    def record_holding_time(
+        self,
+        symbol: str,
+        reason: str,
+        holding_time_seconds: float,
+        pnl: Optional[float] = None,
+        position_id: Optional[str] = None,
+    ) -> None:
+        """
+        ✅ НОВОЕ (08.01.2026): Alias для record_position_closed
+        Записать время удержания позиции.
+
+        Args:
+            symbol: Торговый символ
+            reason: Причина закрытия (exit reason)
+            holding_time_seconds: Время удержания в секундах
+            pnl: P&L в процентах (опционально)
+            position_id: ID позиции (опционально)
+        """
+        # Вычисляем time opened_at на основе holding_time_seconds
+        opened_at = datetime.now() - timedelta(seconds=holding_time_seconds)
+
+        # Используем существующий метод record_position_closed
+        self.record_position_closed(
+            symbol=symbol,
+            exit_reason=reason,
+            position_id=position_id,
+            opened_at=opened_at,
+        )
+
     def get_average_holding_time(
         self,
         symbol: Optional[str] = None,
@@ -373,4 +403,3 @@ class HoldingTimeMetrics:
         self.holding_times_by_exit.clear()
         self.holding_times_by_symbol.clear()
         logger.info("✅ HoldingTimeMetrics: Все метрики сброшены")
-

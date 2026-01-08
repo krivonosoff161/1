@@ -126,6 +126,8 @@ scalping:
     SOL-USDT:
       min_adx: 20.0  # ✅ Looser для trending
       min_signal_strength: 0.58  # ✅ Looser для SOL
+      min_position_usd: 40.0  # ✅ ИСПРАВЛЕНО (08.01.2026): Снижено с 50.0
+      max_position_usd: 60.0  # ✅ ИСПРАВЛЕНО (08.01.2026): Увеличено с 48.0 (было min > max!)
       sl_atr_multiplier: 3.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Wider SL для SOL (Grok рекомендация)
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Per-symbol Smart Close параметры для SOL
         reversal_score_threshold:

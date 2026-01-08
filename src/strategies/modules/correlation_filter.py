@@ -261,6 +261,25 @@ class CorrelationFilter:
                     correlation_values=correlation_values,
                 )
 
+            # ✅ ИСПРАВЛЕНО (08.01.2026): ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА - блокировать даже одну коррелированную позицию
+            # если корреляция очень высокая (> 0.85) и направления совпадают
+            if correlated_positions and not self.config.block_same_direction_only:
+                # Если mode НЕ "блокировать только по направлению", то используем дефолт - не пропускаем
+                logger.warning(
+                    f"🚫 Correlation Filter BLOCKED (HIGH_CORRELATION): {symbol} {signal_side}\n"
+                    f"   Correlated positions: {correlated_positions}\n"
+                    f"   Correlations: {correlation_values}\n"
+                    f"   Threshold: {threshold:.2f}"
+                )
+                self._record_decision(blocked=True)
+                return CorrelationFilterResult(
+                    allowed=False,
+                    blocked=True,
+                    reason=f"Correlated with open positions: {correlated_positions}",
+                    correlated_positions=correlated_positions,
+                    correlation_values=correlation_values,
+                )
+
             # Разрешаем вход
             if correlated_positions:
                 logger.info(

@@ -238,13 +238,15 @@ class ExitDecisionCoordinator:
                 return None
 
             # Проверяем, сработал ли trailing stop
-            should_close = trailing_stop.should_close(current_price)
+            # ✅ ИСПРАВЛЕНО (08.01.2026): Метод должен быть should_close_position, а не should_close
+            should_close, reason = trailing_stop.should_close_position(current_price)
             if should_close:
                 return {
                     "action": "close",
                     "reason": "trailing_stop",
+                    "detail_reason": reason,  # ✅ НОВОЕ: Сохраняем детальную причину
                     "current_price": current_price,
-                    "trailing_stop_price": trailing_stop.current_stop_price,
+                    "trailing_stop_price": trailing_stop.get_stop_loss(),
                 }
 
             return None
