@@ -4803,7 +4803,14 @@ class FuturesSignalGenerator:
             bb_middle = indicators.get("bb_middle", 0)
             rsi = indicators.get("rsi", 0)
             adx = indicators.get("adx", 0)
-            current_price = market_data.current_price
+            
+            # ✅ ИСПРАВЛЕНО: Получаем цену из свечей или через метод
+            if market_data and market_data.ohlcv_data:
+                candle_close_price = market_data.ohlcv_data[-1].close
+                current_price = await self._get_current_market_price(symbol, candle_close_price)
+            else:
+                logger.warning(f"⚠️ Range-bounce: market_data или свечи отсутствуют для {symbol}")
+                return signals
 
             if not all([bb_upper, bb_lower, bb_middle, current_price]):
                 return signals
