@@ -2716,6 +2716,16 @@ class FuturesSignalGenerator:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Range-bounce сигналы для ranging режима (FIX 8)
             # Генерируем сигналы отскока от BB границ в ranging режиме
+            # Получаем режим из DataRegistry для range-bounce сигналов
+            current_regime = None
+            try:
+                if self.data_registry:
+                    regime_data = await self.data_registry.get_regime(symbol)
+                    if regime_data:
+                        current_regime = regime_data.get("regime")
+            except Exception:
+                pass
+            
             if current_regime and current_regime.lower() == "ranging":
                 range_bounce_signals = await self._generate_range_bounce_signals(
                     symbol, indicators, market_data
