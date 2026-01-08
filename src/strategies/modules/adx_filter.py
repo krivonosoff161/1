@@ -370,12 +370,18 @@ class ADXFilter:
         """
         +DM (Plus Directional Movement).
 
-        +DM = high - prev_high (если > 0 и > |low - prev_low|, иначе 0)
+        +DM = high - prev_high (если > 0 и > prev_low - low, иначе 0)
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 8.1.2026: Сравниваем up_move vs down_move
         """
         up_move = highs[1:] - highs[:-1]
-
+        down_move = highs[0:-1] - highs[1:]  # prev_high - current_high (для сравнения)
+        
+        # Начинаем с нулей
         plus_dm = np.zeros(len(highs))
-        plus_dm[1:] = np.where(up_move > 0, up_move, 0)
+        
+        # ✅ ИСПРАВЛЕНО: up_move > 0 И up_move > down_move
+        # (оригинальная формула требует сравнения движений)
+        plus_dm[1:] = np.where((up_move > 0) & (up_move > down_move), up_move, 0)
 
         return plus_dm
 
@@ -384,11 +390,17 @@ class ADXFilter:
         -DM (Minus Directional Movement).
 
         -DM = prev_low - low (если > 0 и > high - prev_high, иначе 0)
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 8.1.2026: Сравниваем down_move vs up_move
         """
         down_move = lows[:-1] - lows[1:]
-
+        up_move = lows[1:] - lows[:-1]  # current_low - prev_low (для сравнения)
+        
+        # Начинаем с нулей
         minus_dm = np.zeros(len(lows))
-        minus_dm[1:] = np.where(down_move > 0, down_move, 0)
+        
+        # ✅ ИСПРАВЛЕНО: down_move > 0 И down_move > up_move
+        # (оригинальная формула требует сравнения движений)
+        minus_dm[1:] = np.where((down_move > 0) & (down_move > up_move), down_move, 0)
 
         return minus_dm
 

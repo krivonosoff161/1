@@ -45,6 +45,7 @@ class OrderCoordinator:
         self.scalping_config = scalping_config
         self.signal_generator = signal_generator
         self.last_orders_cache = last_orders_cache_ref  # Ссылка на кэш
+        self._last_amend_ts: Dict[str, float] = {}
 
         logger.info("✅ OrderCoordinator initialized")
 
@@ -137,6 +138,7 @@ class OrderCoordinator:
                                     price_drift_pct = 0.0
                                     should_cancel_early = False
                                     price_close_to_execution = False
+                                    did_amend = False
                                     try:
                                         # Получаем текущую цену
                                         price_limits = (
@@ -281,6 +283,61 @@ class OrderCoordinator:
                                             f"для {symbol} (order_price={order.get('px', 'N/A')}, "
                                             f"current_price={price_limits.get('current_price', 'N/A') if price_limits else 'N/A'})"
                                         )
+
+                                    # 🔄 Авто-репрайс: если отклонение >= 0.2% и таймаут не превышен
+                                    try:
+                                        if not price_close_to_execution and price_drift_pct >= 0.2 and wait_time <= max_wait:
+                                            now_ts = time.time()
+                                            last_ts = self._last_amend_ts.get(order_id, 0)
+                                            if now_ts - last_ts >= 2.0:
+                                                current_price = price_limits.get("current_price", 0) if price_limits else 0
+                                                best_bid = price_limits.get("best_bid", 0) if price_limits else 0
+                                                best_ask = price_limits.get("best_ask", 0) if price_limits else 0
+                                                max_buy_price = price_limits.get("max_buy_price", 0) if price_limits else 0
+                                                min_sell_price = price_limits.get("min_sell_price", 0) if price_limits else 0
+
+                                                new_price = None
+                                                if is_post_only:
+                                                    # Репрайс для maker: BUY к bid, SELL к ask с минимальным смещением
+                                                    if side == "buy":
+                                                        base = best_bid if best_bid else current_price
+                                                        new_price = base * 0.9999 if base > 0 else float(order.get("px", "0") or 0)
+                                                        if max_buy_price:
+                                                            new_price = min(new_price, max_buy_price * 0.999)
+                                                    else:
+                                                        base = best_ask if best_ask else current_price
+                                                        new_price = base * 1.0001 if base > 0 else float(order.get("px", "0") or 0)
+                                                        if min_sell_price:
+                                                            new_price = max(new_price, min_sell_price * 1.001)
+                                                else:
+                                                    # Репрайс для быстрого исполнения: расчет оптимальной лимитной цены
+                                                    try:
+                                                        calc_price = await self.order_executor._calculate_limit_price(
+                                                            symbol=symbol,
+                                                            side=side,
+                                                            signal_price=None,
+                                                            base_price=current_price,
+                                                            regime=current_regime,
+                                                        )
+                                                        new_price = calc_price
+                                                    except Exception as e:
+                                                        logger.debug(f"⚠️ Ошибка расчета новой цены для репрайса {symbol}: {e}")
+                                                        new_price = None
+
+                                                if new_price and new_price > 0:
+                                                    amend_res = await self.order_executor.amend_order_price(symbol, order_id, float(new_price))
+                                                    if amend_res.get("success"):
+                                                        did_amend = True
+                                                        self._last_amend_ts[order_id] = now_ts
+                                                        logger.info(
+                                                            f"✅ Авто-репрайс {symbol} {side}: {order.get('px', 'N/A')} → {float(new_price):.6f} (дрейф {price_drift_pct:.2f}%)"
+                                                        )
+                                                    else:
+                                                        logger.warning(
+                                                            f"⚠️ Авто-репрайс не выполнен для {order_id}: {amend_res.get('error')}"
+                                                        )
+                                    except Exception as e:
+                                        logger.debug(f"⚠️ Ошибка авто-репрайса для {symbol}: {e}")
 
                                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: post_only ордер может не исполниться даже при достижении цены
                                     # (is_post_only уже определен выше)
@@ -506,8 +563,8 @@ class OrderCoordinator:
                                         )
                                         continue  # Пропускаем отмену этого ордера
 
-                                    # Отменяем ордер если нужно (быстрая отмена)
-                                    if should_cancel_early:
+                                    # Отменяем ордер если нужно (быстрая отмена), пропускаем если уже сделали репрайс
+                                    if should_cancel_early and not did_amend:
                                         # Отменяем ордер
                                         if auto_cancel:
                                             cancel_result = (

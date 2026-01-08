@@ -571,13 +571,23 @@ class TradingControlCenter:
 
             # Обновляем/регистрируем позиции с сохранением метаданных
             for position in positions:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 8.1.2026: Строгая защита от некорректных данных
+                # SSL ошибки могут привести к получению string или None вместо dict
                 if not isinstance(position, dict):
                     logger.warning(
-                        f"⚠️ TCC: Пропуск некорректной записи позиции при обновлении: {position}"
+                        f"⚠️ TCC: Пропуск некорректной записи позиции при обновлении: {type(position).__name__} = {position}"
                     )
                     continue
-                symbol = position.get("instId", "").replace("-SWAP", "")
-                size = float(position.get("pos", "0"))
+                
+                # ✅ ДОПОЛНИТЕЛЬНАЯ защита: Проверяем что position является dict ПЕРЕД каждым .get()
+                try:
+                    symbol = position.get("instId", "").replace("-SWAP", "")
+                    size = float(position.get("pos", "0"))
+                except (AttributeError, TypeError, ValueError) as e:
+                    logger.error(
+                        f"❌ TCC: Ошибка парсинга position данных (type={type(position).__name__}, value={position}): {e}"
+                    )
+                    continue
                 if abs(size) >= 1e-8:
                     # ✅ КРИТИЧЕСКОЕ: Сохраняем существующие метаданные
                     existing_metadata = all_metadata.get(symbol)

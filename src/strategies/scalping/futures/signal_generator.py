@@ -1824,10 +1824,14 @@ class FuturesSignalGenerator:
             # Корректируем цену в зависимости от направления
             if side.lower() == "buy":
                 # Для LONG: увеличиваем цену входа (покупаем дороже из-за slippage)
+                # Лимит выше текущей цены → ордер сработает быстрее
                 adjusted_price = price * (1 + slippage_pct / 100)
             else:  # sell
-                # Для SHORT: уменьшаем цену входа (продаем дешевле из-за slippage)
-                adjusted_price = price * (1 - slippage_pct / 100)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 8.1.2026: Для SHORT тоже УВЕЛИЧИВАЕМ цену!
+                # Лимит должен быть ВЫШЕ текущей цены (продаем дороже)
+                # ❌ БЫЛО (неправильно): price * (1 - slippage) → лимит ниже цены, ордер не сработает
+                # ✅ СТАЛО (правильно): price * (1 + slippage) → лимит выше цены, быстрое исполнение
+                adjusted_price = price * (1 + slippage_pct / 100)
 
             logger.debug(
                 f"💰 {symbol}: Цена сигнала скорректирована на slippage {slippage_pct:.3f}% "
@@ -2493,6 +2497,26 @@ class FuturesSignalGenerator:
                         indicators["adx"] = adx_value
                         indicators["adx_plus_di"] = adx_plus_di
                         indicators["adx_minus_di"] = adx_minus_di
+
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 8.1.2026: Сохраняем ADX в DataRegistry
+                        # (была ошибка - ADX считался но не сохранялся в registry)
+                        if self.data_registry:
+                            try:
+                                await self.data_registry.update_indicators(
+                                    symbol,
+                                    {
+                                        "adx": adx_value,
+                                        "adx_plus_di": adx_plus_di,
+                                        "adx_minus_di": adx_minus_di,
+                                    }
+                                )
+                                logger.debug(
+                                    f"✅ ADX сохранен в DataRegistry для {symbol}: ADX={adx_value:.2f}, +DI={adx_plus_di:.2f}, -DI={adx_minus_di:.2f}"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"⚠️ Ошибка сохранения ADX в DataRegistry для {symbol}: {e}"
+                                )
 
                         logger.debug(
                             f"✅ ADX для {symbol} рассчитан через adx_filter (fallback): ADX={adx_value:.2f}, +DI={adx_plus_di:.2f}, -DI={adx_minus_di:.2f}"

@@ -2467,6 +2467,36 @@ class FuturesOrderExecutor:
             logger.error(f"Ошибка получения статуса ордера: {e}")
             return {"error": str(e)}
 
+    async def amend_order_price(self, symbol: str, order_id: str, new_price: float) -> Dict[str, Any]:
+        """Изменение цены лимитного ордера через batch amend (1 ордер)."""
+        try:
+            if new_price <= 0:
+                return {"success": False, "error": "invalid new_price"}
+
+            inst_id = f"{symbol}-SWAP"
+            amend_item = {
+                "instId": inst_id,
+                "ordId": str(order_id),
+                "newPx": str(new_price),
+            }
+
+            logger.info(
+                f"🔄 Amend price: {symbol} ordId={order_id} → {new_price:.6f}"
+            )
+
+            result = await self.client.batch_amend_orders([amend_item])
+
+            if result and str(result.get("code")) == "0":
+                logger.info(f"✅ Цена ордера {order_id} изменена на {new_price:.6f}")
+                return {"success": True, "order_id": order_id, "new_price": new_price}
+
+            msg = result.get("msg") if isinstance(result, dict) else "Unknown error"
+            logger.warning(f"⚠️ Не удалось изменить цену ордера {order_id}: {msg}")
+            return {"success": False, "error": msg}
+        except Exception as e:
+            logger.error(f"Ошибка amend_order_price: {e}")
+            return {"success": False, "error": str(e)}
+
     def _update_execution_stats(self, result: Dict[str, Any]):
         """Обновление статистики исполнения"""
         try:

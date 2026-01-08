@@ -427,7 +427,22 @@ class LiquidationGuard:
             position_details = []
 
             for position in positions:
-                size = float(position.get("pos", "0"))
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 8.1.2026: Защита от некорректного формата position
+                # SSL ошибки могут вернуть строку вместо dict
+                if not isinstance(position, dict):
+                    logger.warning(
+                        f"⚠️ LiquidationGuard: Пропуск некорректной позиции (type={type(position).__name__}): {position}"
+                    )
+                    continue
+                
+                try:
+                    size = float(position.get("pos", "0"))
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"⚠️ LiquidationGuard: Ошибка парсинга размера позиции: {position.get('pos')}"
+                    )
+                    continue
+                
                 if size == 0:
                     continue
 

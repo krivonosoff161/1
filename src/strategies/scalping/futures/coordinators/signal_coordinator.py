@@ -1793,6 +1793,44 @@ class SignalCoordinator:
                                         else "статусы фильтров недоступны (кэш пуст или устарел)"
                                     )
 
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 8.1.2026: РЕАЛЬНЫЕ причины вместо "возможные"
+                                    # Анализируем ФАКТИЧЕСКИЕ условия вместо пустых предположений
+                                    actual_reasons = []
+                                    
+                                    # Проверяем RSI
+                                    if rsi is not None:
+                                        if rsi < 30:
+                                            actual_reasons.append(f"RSI={rsi:.1f} < 30 (перепродано, нет SHORT)")
+                                        elif rsi > 70:
+                                            actual_reasons.append(f"RSI={rsi:.1f} > 70 (перекупленность, нет LONG)")
+                                        # Если 30-70 - RSI в норме, сигнал возможен
+                                    else:
+                                        actual_reasons.append("RSI не рассчитан")
+                                    
+                                    # Проверяем MACD
+                                    if macd_hist is not None:
+                                        if abs(macd_hist) < 0.001:  # Очень близко к нулю = нет четкого crossover
+                                            actual_reasons.append(f"MACD histogram={macd_hist:.6f} ≈ 0 (нет четкого crossover)")
+                                    else:
+                                        actual_reasons.append("MACD не рассчитан")
+                                    
+                                    # Проверяем ADX
+                                    if adx_value is not None and adx_value > 0:
+                                        if adx_value < 20:
+                                            actual_reasons.append(f"ADX={adx_value:.1f} < 20 (слабый тренд)")
+                                    else:
+                                        actual_reasons.append("ADX не рассчитан")
+                                    
+                                    # Проверяем фильтры
+                                    if "BLOCKED" in filter_status_str:
+                                        actual_reasons.append(f"Фильтры заблокировали: {filter_status_str}")
+                                    
+                                    # Если нет специфичных причин - используем общее
+                                    if not actual_reasons:
+                                        actual_reasons = ["Индикаторы не дали сигнала (условия не выполнены)"]
+                                    
+                                    actual_reasons_str = " | ".join(actual_reasons)
+
                                     # Форматируем значения БЕЗ fallback
                                     adx_value_str = (
                                         f"{adx_value:.1f}"
@@ -1823,9 +1861,7 @@ class SignalCoordinator:
                                         f"Индикаторы: ADX={adx_value_str} ({adx_trend_str}), RSI={rsi_str}, "
                                         f"MACD_hist={macd_hist_str}, ATR={atr_value_log_str} | "
                                         f"Фильтры: {filter_status_str} | "
-                                        f"Возможные причины: индикаторы не дали сигналов (значения вне порогов: RSI не в 30-70, MACD нет crossover), "
-                                        f"фильтры заблокировали сигналы (если были сгенерированы), режим рынка ({adx_trend_str}) не подходит, "
-                                        f"нет подходящих условий | "
+                                        f"Реальные причины: {actual_reasons_str} | "
                                         f"Источник: SignalGenerator.generate_signals() -> _generate_base_signals()"
                                     )
                                 else:
