@@ -245,6 +245,35 @@ class CorrelationFilter:
 
             # Проверяем лимит коррелированных позиций
             if len(correlated_positions) >= self.config.max_correlated_positions:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем противоположные направления (хедж)
+                # Если есть позиции в противоположном направлении → разрешаем (хеджирование)
+                opposite_positions = []
+                for pos_symbol in correlated_positions:
+                    pos = current_positions[pos_symbol]
+                    if isinstance(pos, dict):
+                        pos_size = float(pos.get("pos", "0"))
+                        pos_direction = "LONG" if pos_size > 0 else "SHORT"
+                    else:
+                        pos_direction = (
+                            "LONG" if pos.side == PositionSide.LONG else "SHORT"
+                        )
+
+                    if signal_side != pos_direction:
+                        opposite_positions.append(pos_symbol)
+
+                if len(opposite_positions) > 0:
+                    logger.info(
+                        f"✅ Correlation Filter ALLOWED: {symbol} {signal_side} — хедж для "
+                        f"{len(opposite_positions)} противоположных позиций: {opposite_positions}"
+                    )
+                    return CorrelationFilterResult(
+                        allowed=True,
+                        blocked=False,
+                        reason=f"Хеджирование: {len(opposite_positions)} противоположных позиций",
+                        correlated_positions=opposite_positions,
+                        correlation_values=correlation_values,
+                    )
+
                 logger.warning(
                     f"🚫 Correlation Filter BLOCKED: {symbol} {signal_side}\n"
                     f"   Correlated positions: {correlated_positions}\n"

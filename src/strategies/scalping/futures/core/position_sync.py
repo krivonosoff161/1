@@ -139,6 +139,29 @@ class PositionSync:
                     f"Размер={abs(pos_size):.6f}, сторона={'long' if pos_size > 0 else 'short'}. "
                     f"Регистрируем..."
                 )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Логирование drift в файл для аудита
+                try:
+                    import os
+
+                    drift_log_path = os.path.join("logs", "futures", "drift_log.txt")
+                    os.makedirs(os.path.dirname(drift_log_path), exist_ok=True)
+
+                    with open(drift_log_path, "a", encoding="utf-8") as f:
+                        from datetime import datetime, timezone
+
+                        timestamp = datetime.now(timezone.utc).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                        f.write(
+                            f"{timestamp} | DRIFT_ADD | {symbol} | "
+                            f"size={abs(pos_size):.6f} | side={'LONG' if pos_size > 0 else 'SHORT'} | "
+                            f"entry=${float(pos.get('avgPx', 0)):.2f} | "
+                            f"margin=${float(pos.get('margin', 0)):.2f}\n"
+                        )
+                except Exception as e_log:
+                    logger.debug(f"⚠️ Не удалось записать DRIFT в лог файл: {e_log}")
+
                 # ✅ ИСПРАВЛЕНИЕ: Для DRIFT_ADD позиций регистрируем, а не обновляем
                 if self.position_registry:
                     try:

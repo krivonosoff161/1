@@ -578,7 +578,7 @@ class TradingControlCenter:
                         f"⚠️ TCC: Пропуск некорректной записи позиции при обновлении: {type(position).__name__} = {position}"
                     )
                     continue
-                
+
                 # ✅ ДОПОЛНИТЕЛЬНАЯ защита: Проверяем что position является dict ПЕРЕД каждым .get()
                 try:
                     symbol = position.get("instId", "").replace("-SWAP", "")
@@ -781,7 +781,53 @@ class TradingControlCenter:
                 return
 
             # Проверка здоровья маржи
-            margin_status = await self.liquidation_guard.get_margin_status(self.client)
+            try:
+                margin_status = await self.liquidation_guard.get_margin_status(
+                    self.client
+                )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Валидация payload перед использованием
+                # Защита от краша на 'str' object has no attribute 'get'
+                if not isinstance(margin_status, dict):
+                    logger.error(
+                        f"❌ TCC: margin_status некорректного типа: {type(margin_status).__name__}. "
+                        f"Ожидался dict, получено: {margin_status}"
+                    )
+                    # Не обновляем состояние при битых данных
+                    return
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Строгая валидация margin_status
+                # Проверяем что margin_status это dict ПЕРЕД каждым .get()
+                if not isinstance(margin_status, dict):
+                    logger.error(
+                        f"❌ TCC: margin_status некорректного типа: {type(margin_status).__name__}. "
+                        f"Ожидался dict, получено: {margin_status}"
+                    )
+                    # Не обновляем состояние при битых данных
+                    return
+
+                # Валидация вложенной структуры
+                health_status = margin_status.get("health_status")
+                if health_status and not isinstance(health_status, dict):
+                    logger.error(
+                        f"❌ TCC: health_status некорректного типа: {type(health_status).__name__}"
+                    )
+                    return
+            except RuntimeError as e:
+                # LiquidationGuard теперь выбрасывает RuntimeError при hard-fail
+                logger.critical(f"🔴 TCC: LiquidationGuard hard-fail: {e}")
+                # Останавливаем обновление состояния
+                return
+            except Exception as e:
+                # Обработка других ошибок без краша
+                error_msg = str(e)
+                if "str' object has no attribute 'get'" in error_msg:
+                    logger.error(
+                        f"❌ TCC: Получена строка ошибки вместо dict от LiquidationGuard: {error_msg}"
+                    )
+                else:
+                    logger.error(f"❌ TCC: Ошибка при получении margin_status: {e}")
+                return
 
             if not self.is_running:
                 return

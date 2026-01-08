@@ -83,6 +83,17 @@ class OKXFuturesClient:
         self._session_created_at: Optional[float] = None
         self._session_max_age: float = 60.0  # Пересоздавать сессию каждые 60 секунд
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Circuit Breaker для защиты от массовых сбоев API
+        self.consecutive_failures = 0  # Счётчик последовательных сбоев
+        self.circuit_open = False  # Флаг открытого circuit breaker
+        self.circuit_open_until: Optional[
+            float
+        ] = None  # Время закрытия circuit breaker
+        self.circuit_failure_threshold = (
+            5  # Порог для открытия circuit (5 подряд ошибок)
+        )
+        self.circuit_cooldown_seconds = 120  # Пауза при открытом circuit (2 минуты)
+
     async def close(self):
         """Корректное закрытие клиента и сессии"""
         try:
@@ -106,6 +117,22 @@ class OKXFuturesClient:
         data: Optional[Dict] = None,
     ) -> Dict[str, Any]:
         """Unified request with OKX signing (same as your spot client)"""
+
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверка Circuit Breaker перед запросом
+        if self.circuit_open:
+            if self.circuit_open_until and time.time() < self.circuit_open_until:
+                elapsed = self.circuit_open_until - time.time()
+                raise ConnectionError(
+                    f"🔴 Circuit Breaker OPEN: API недоступен, ожидание восстановления ({elapsed:.0f}s)"
+                )
+            else:
+                # Пробуем закрыть circuit
+                logger.info(
+                    "🔄 Circuit Breaker: Попытка восстановления соединения с API"
+                )
+                self.circuit_open = False
+                self.circuit_open_until = None
+
         url = self.base_url + endpoint
         # OKX requires timestamp in ISO 8601 format with milliseconds
         timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
@@ -160,16 +187,24 @@ class OKXFuturesClient:
                 await asyncio.sleep(0.1)  # Даем время на корректное закрытие
 
             # Создаем новый connector с force_close=True для предотвращения проблем с keep-alive
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): VPN оптимизация
             connector = aiohttp.TCPConnector(
                 limit=10,  # Лимит соединений
                 limit_per_host=10,  # Лимит на хост
                 force_close=True,  # ❗ КЛЮЧЕВОЕ: Закрывать соединение после каждого запроса
                 enable_cleanup_closed=True,  # Очищать закрытые соединения
                 ttl_dns_cache=300,  # DNS кэш на 5 минут
+                # ✅ VPN параметры:
+                keepalive_timeout=60,  # Keep-alive на 60 сек (для VPN stability)
+                ssl=False if False else True,  # Используем SSL (True)
+                family=0,  # 0=auto, 2=IPv4, 10=IPv6 - для VPN берем auto
+                resolve=True,  # Резолвить DNS
             )
             self.session = aiohttp.ClientSession(connector=connector)
             self._session_created_at = now
-            logger.debug("♻️ Переинициализирована aiohttp сессия с force_close=True")
+            logger.debug(
+                "♻️ Переинициализирована aiohttp сессия с force_close=True (VPN optimized)"
+            )
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Retry логика для таймаутов и ошибок подключения
         max_retries = 3
@@ -177,8 +212,16 @@ class OKXFuturesClient:
 
         for attempt in range(max_retries):
             try:
-                # Увеличиваем таймаут для запросов (30 секунд)
-                timeout = aiohttp.ClientTimeout(total=30, connect=10)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Увеличены timeouts для VPN
+                # VPN может медленнее делать handshake, поэтому увеличиваем:
+                # - total: 30→60 сек (весь запрос может занять до 60 сек на VPN)
+                # - connect: 10→30 сек (handshake может быть медленным)
+                # - sock_read: 30 сек (для долгих запросов)
+                timeout = aiohttp.ClientTimeout(
+                    total=60,  # ✅ VPN fix: было 30, теперь 60
+                    connect=30,  # ✅ VPN fix: было 10, теперь 30
+                    sock_read=30,  # ✅ NEW: читай с сокета до 30 сек
+                )
                 async with self.session.request(
                     method,
                     url,
@@ -287,9 +330,16 @@ class OKXFuturesClient:
                         except Exception as e:
                             logger.debug(f"Не удалось залогировать комиссию: {e}")
 
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Сброс счётчика при успешном запросе
+                    self.consecutive_failures = 0
+                    if self.circuit_open:
+                        logger.info("✅ Circuit Breaker CLOSED: API восстановлен")
+                        self.circuit_open = False
+                        self.circuit_open_until = None
+
                     return resp_data
 
-            except asyncio.TimeoutError:
+            except (asyncio.TimeoutError, aiohttp.ServerTimeoutError) as e:
                 if attempt < max_retries - 1:
                     wait_time = retry_delay * (
                         2**attempt
@@ -358,6 +408,58 @@ class OKXFuturesClient:
                     # Другие OSError - пробрасываем дальше
                     raise
             except aiohttp.ClientError as e:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Специальная обработка SSL ошибок
+                error_str = str(e).lower()
+                is_ssl_error = (
+                    "ssl" in error_str
+                    or "application_data_after_close_notify" in error_str
+                    or "network name" in error_str
+                    or "cannot connect to host" in error_str
+                )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Retry для SSL ошибок
+                if is_ssl_error and attempt < max_retries - 1:
+                    wait_time = retry_delay * (2**attempt)
+                    logger.warning(
+                        f"🔒 SSL/Network ошибка при запросе к OKX (попытка {attempt + 1}/{max_retries}): "
+                        f"{method} {url}, ошибка: {e}, повтор через {wait_time:.1f}с"
+                    )
+                    # Пересоздаем сессию при SSL ошибке
+                    if self.session and not self.session.closed:
+                        await self.session.close()
+                        await asyncio.sleep(0.1)
+                    self.session = None
+                    await asyncio.sleep(wait_time)
+                    # Обновляем timestamp и подпись для новой попытки
+                    timestamp = (
+                        datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                    )
+                    sign_str = timestamp + method.upper() + request_path + body
+                    signature = base64.b64encode(
+                        hmac.new(
+                            self.secret_key.encode(), sign_str.encode(), hashlib.sha256
+                        ).digest()
+                    ).decode()
+                    headers["OK-ACCESS-TIMESTAMP"] = timestamp
+                    headers["OK-ACCESS-SIGN"] = signature
+                    continue
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Circuit Breaker при network errors
+                self.consecutive_failures += 1
+
+                if self.consecutive_failures >= self.circuit_failure_threshold:
+                    self.circuit_open = True
+                    self.circuit_open_until = (
+                        time.time() + self.circuit_cooldown_seconds
+                    )
+                    logger.critical(
+                        f"🔴 Circuit Breaker OPEN: {self.consecutive_failures} подряд ошибок подключения. "
+                        f"Пауза {self.circuit_cooldown_seconds}s. Торговля ПРИОСТАНОВЛЕНА!"
+                    )
+                    raise ConnectionError(
+                        f"Circuit Breaker открыт из-за {self.consecutive_failures} последовательных сбоев"
+                    )
+
                 # Ошибки подключения aiohttp (Cannot connect to host и т.д.)
                 if attempt < max_retries - 1:
                     wait_time = retry_delay * (2**attempt)
@@ -388,6 +490,27 @@ class OKXFuturesClient:
                 logger.debug(f"Запрос к OKX отменен: {method} {url}")
                 raise  # Пробрасываем дальше
             except Exception as e:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Специальная обработка "Connector is closed" для VPN
+                error_str = str(e).lower()
+                if (
+                    "connector is closed" in error_str
+                    or "session is closed" in error_str
+                ):
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2**attempt)
+                        logger.warning(
+                            f"🔌 Connector/Session закрыт при VPN (попытка {attempt + 1}/{max_retries}): "
+                            f"{method} {url}, переподключаемся через {wait_time:.1f}с"
+                        )
+                        self.session = None  # Принудительно сбросить session
+                        if self.session and not self.session.closed:
+                            try:
+                                await self.session.close()
+                            except:
+                                pass
+                        await asyncio.sleep(wait_time)
+                        continue
+
                 # Для других ошибок не делаем retry (ошибки API, авторизации и т.д.)
                 logger.error(f"Ошибка при запросе к OKX ({method} {url}): {e}")
                 raise

@@ -2508,7 +2508,7 @@ class FuturesSignalGenerator:
                                         "adx": adx_value,
                                         "adx_plus_di": adx_plus_di,
                                         "adx_minus_di": adx_minus_di,
-                                    }
+                                    },
                                 )
                                 logger.debug(
                                     f"✅ ADX сохранен в DataRegistry для {symbol}: ADX={adx_value:.2f}, +DI={adx_plus_di:.2f}, -DI={adx_minus_di:.2f}"
@@ -2713,6 +2713,21 @@ class FuturesSignalGenerator:
             )
             signal_stats["ma"]["generated"] = len(ma_signals)
             signals.extend(ma_signals)
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Range-bounce сигналы для ranging режима (FIX 8)
+            # Генерируем сигналы отскока от BB границ в ranging режиме
+            if current_regime and current_regime.lower() == "ranging":
+                range_bounce_signals = await self._generate_range_bounce_signals(
+                    symbol, indicators, market_data
+                )
+                signal_stats["range_bounce"] = {
+                    "generated": len(range_bounce_signals),
+                    "filtered": 0,
+                }
+                signals.extend(range_bounce_signals)
+                logger.debug(
+                    f"🎯 Range-bounce сигналы для {symbol}: {len(range_bounce_signals)}"
+                )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Генерация SHORT сигналов по требованиям Grok
             # Условия для SHORT: RSI>75 + MACD down (MACD < signal_line) + ADX bearish >25
@@ -4756,6 +4771,100 @@ class FuturesSignalGenerator:
 
         return signals
 
+    async def _generate_range_bounce_signals(
+        self,
+        symbol: str,
+        indicators: Dict,
+        market_data: MarketData,
+    ) -> List[Dict[str, Any]]:
+        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Генерация Range-bounce сигналов для ranging режима (FIX 8)
+
+        Логика:
+        - LONG при касании BB lower + RSI 20-35 (oversold, но не экстремально)
+        - SHORT при касании BB upper + RSI 65-80 (overbought, но не экстремально)
+        - Блокировка при сильном ADX тренде (>25) чтобы избежать ловли трендового ножа
+        """
+        signals = []
+
+        try:
+            # Получаем индикаторы
+            bb_upper = indicators.get("bb_upper", 0)
+            bb_lower = indicators.get("bb_lower", 0)
+            bb_middle = indicators.get("bb_middle", 0)
+            rsi = indicators.get("rsi", 0)
+            adx = indicators.get("adx", 0)
+            current_price = market_data.current_price
+
+            if not all([bb_upper, bb_lower, bb_middle, current_price]):
+                return signals
+
+            # Блокируем при сильном тренде (ADX > 25)
+            if adx > 25.0:
+                logger.debug(
+                    f"⛔ Range-bounce BLOCKED для {symbol}: ADX={adx:.1f} > 25 (сильный тренд)"
+                )
+                return signals
+
+            # Порог касания BB (1.5% от границы)
+            touch_threshold = 0.015
+
+            # Проверка LONG условий (касание lower + RSI 20-35)
+            distance_to_lower = (
+                abs(current_price - bb_lower) / bb_lower if bb_lower > 0 else 1.0
+            )
+            if distance_to_lower < touch_threshold and 20 <= rsi <= 35:
+                strength = 80.0 + (35 - rsi) * 0.5  # Stronger when RSI closer to 20
+                logger.info(
+                    f"🎯 Range-bounce LONG сигнал для {symbol}: "
+                    f"цена={current_price:.2f} касается BB lower={bb_lower:.2f} (dist={distance_to_lower*100:.2f}%), "
+                    f"RSI={rsi:.1f}, ADX={adx:.1f}"
+                )
+                signals.append(
+                    {
+                        "symbol": symbol,
+                        "side": "buy",
+                        "type": "range_bounce_long",
+                        "strength": strength,
+                        "price": self._adjust_price_for_slippage(
+                            symbol, current_price, "buy"
+                        ),
+                        "timestamp": datetime.now(),
+                        "indicator_value": distance_to_lower,
+                        "confidence": 0.70,  # Средняя уверенность для range-bounce
+                    }
+                )
+
+            # Проверка SHORT условий (касание upper + RSI 65-80)
+            distance_to_upper = (
+                abs(current_price - bb_upper) / bb_upper if bb_upper > 0 else 1.0
+            )
+            if distance_to_upper < touch_threshold and 65 <= rsi <= 80:
+                strength = 80.0 + (rsi - 65) * 0.5  # Stronger when RSI closer to 80
+                logger.info(
+                    f"🎯 Range-bounce SHORT сигнал для {symbol}: "
+                    f"цена={current_price:.2f} касается BB upper={bb_upper:.2f} (dist={distance_to_upper*100:.2f}%), "
+                    f"RSI={rsi:.1f}, ADX={adx:.1f}"
+                )
+                signals.append(
+                    {
+                        "symbol": symbol,
+                        "side": "sell",
+                        "type": "range_bounce_short",
+                        "strength": strength,
+                        "price": self._adjust_price_for_slippage(
+                            symbol, current_price, "sell"
+                        ),
+                        "timestamp": datetime.now(),
+                        "indicator_value": distance_to_upper,
+                        "confidence": 0.70,  # Средняя уверенность для range-bounce
+                    }
+                )
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка генерации Range-bounce сигналов для {symbol}: {e}")
+
+        return signals
+
     async def _generate_ma_signals(
         self,
         symbol: str,
@@ -5368,6 +5477,17 @@ class FuturesSignalGenerator:
                 }
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): adx_threshold_ma уже определена в начале метода (строка 3781)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Блокируем сигналы при идентичных EMA (|EMA12-EMA26|/EMA26 < 0.01%)
+            ema_identity_threshold = 0.0001  # 0.01% - порог идентичности EMA
+            ema_identity_pct = abs(ma_fast - ma_slow) / ma_slow if ma_slow > 0 else 0
+            if ema_identity_pct < ema_identity_threshold:
+                logger.warning(
+                    f"🚫 MA сигналы ПОЛНОСТЬЮ ЗАБЛОКИРОВАНЫ для {symbol}: "
+                    f"EMA12 ({ma_fast:.8f}) ≈ EMA26 ({ma_slow:.8f}), разница {ema_identity_pct:.6f}% < {ema_identity_threshold:.6f}% (идентичные EMA). "
+                    f"DOGE 08.01.2026 fix: предотвращаем некорректные сигналы при идентичных EMA."
+                )
+                return signals  # Не генерируем сигналы вообще при идентичных EMA
+
             # Пересечение быстрой и медленной MA
             if ma_fast > ma_slow and current_price > ma_fast and ma_slow > 0:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (31.12.2025): Блокируем BULLISH в bearish рынке

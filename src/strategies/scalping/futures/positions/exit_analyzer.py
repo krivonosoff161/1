@@ -6,6 +6,7 @@ ExitAnalyzer - Централизованное управление закры�
 """
 
 import asyncio
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -120,6 +121,12 @@ class ExitAnalyzer:
         # ✅ FIX: Используем существующие locks для предотвращения race condition
         self._signal_locks_ref = signal_locks_ref or {}
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period для SL при недоступном MTF
+        self._sl_grace_periods: Dict[
+            str, float
+        ] = {}  # {symbol: timestamp последней попытки SL}
+        self._sl_grace_duration = 30.0  # 30 секунд grace period
+
         # Получаем доступ к модулям через orchestrator
         self.fast_adx = None
         self.order_flow = None
@@ -137,6 +144,14 @@ class ExitAnalyzer:
                 # MTF фильтр может быть в signal_generator
                 if hasattr(signal_generator, "mtf_filter"):
                     self.mtf_filter = signal_generator.mtf_filter
+                    if self.mtf_filter:
+                        logger.debug(
+                            "✅ ExitAnalyzer: MTF фильтр получен из signal_generator.mtf_filter"
+                        )
+                    else:
+                        logger.warning(
+                            "⚠️ ExitAnalyzer: signal_generator.mtf_filter = None"
+                        )
                 elif (
                     hasattr(signal_generator, "filter_manager")
                     and signal_generator.filter_manager
@@ -144,6 +159,22 @@ class ExitAnalyzer:
                     self.mtf_filter = getattr(
                         signal_generator.filter_manager, "mtf_filter", None
                     )
+                    if self.mtf_filter:
+                        logger.debug(
+                            "✅ ExitAnalyzer: MTF фильтр получен из filter_manager.mtf_filter"
+                        )
+                    else:
+                        logger.warning(
+                            "⚠️ ExitAnalyzer: filter_manager.mtf_filter = None"
+                        )
+                else:
+                    logger.warning(
+                        "⚠️ ExitAnalyzer: signal_generator не имеет mtf_filter или filter_manager"
+                    )
+            else:
+                logger.warning(
+                    "⚠️ ExitAnalyzer: signal_generator не передан, MTF фильтр недоступен"
+                )
 
             # Получаем scalping_config из orchestrator
             if hasattr(orchestrator, "scalping_config"):
@@ -1963,10 +1994,19 @@ class ExitAnalyzer:
                 logger.warning(
                     f"⚠️ [REVERSAL_CHECK] {symbol} {position_side.upper()}: Ошибка проверки MTF разворота: {e}"
                 )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period при ошибке MTF
+                # MTF недоступен из-за ошибки, откладываем SL
+                if not order_flow_reversal:
+                    return self._apply_sl_grace_period(symbol, "MTF ошибка")
         elif not self.mtf_filter:
-            logger.info(
-                f"⚠️ [REVERSAL_CHECK] {symbol} {position_side.upper()}: MTF фильтр недоступен"
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period при отсутствии MTF
+            logger.warning(
+                f"⚠️ [REVERSAL_CHECK] {symbol} {position_side.upper()}: MTF фильтр недоступен — "
+                f"применяем grace period для SL"
             )
+            # Если Order Flow тоже не показал разворот → откладываем SL
+            if not order_flow_reversal:
+                return self._apply_sl_grace_period(symbol, "MTF недоступен")
 
         # ✅ ИТОГОВОЕ ЛОГИРОВАНИЕ
         logger.info(
@@ -1975,6 +2015,53 @@ class ExitAnalyzer:
         )
 
         return reversal_detected
+
+    def _apply_sl_grace_period(self, symbol: str, reason: str) -> bool:
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Применение grace period для SL.
+
+        При недоступности MTF фильтра откладываем срабатывание SL на 30 секунд,
+        чтобы избежать преждевременного закрытия позиций, которые могут развернуться.
+
+        Args:
+            symbol: Торговый символ
+            reason: Причина применения grace period
+
+        Returns:
+            True если нужно считать это разворотом (блокировать SL), False если grace period истёк
+        """
+        now = time.time()
+        grace_key = f"{symbol}_sl_grace"
+        last_attempt = self._sl_grace_periods.get(grace_key)
+
+        if not last_attempt:
+            # Первая попытка SL — запоминаем время и откладываем
+            self._sl_grace_periods[grace_key] = now
+            logger.info(
+                f"⏳ [GRACE_PERIOD] {symbol}: Начало grace period ({self._sl_grace_duration}s) — {reason}. "
+                f"SL отложен."
+            )
+            return True  # Блокируем SL (считаем как разворот)
+
+        elapsed = now - last_attempt
+
+        if elapsed < self._sl_grace_duration:
+            # Grace period ещё не истёк
+            remaining = self._sl_grace_duration - elapsed
+            logger.info(
+                f"⏳ [GRACE_PERIOD] {symbol}: Grace period активен ({remaining:.1f}s осталось) — {reason}. "
+                f"SL отложен."
+            )
+            return True  # Продолжаем блокировать SL
+        else:
+            # Grace period истёк — разрешаем SL
+            logger.warning(
+                f"⚠️ [GRACE_PERIOD] {symbol}: Grace period истёк ({elapsed:.1f}s > {self._sl_grace_duration}s) — {reason}. "
+                f"SL РАЗРЕШЁН."
+            )
+            # Сбрасываем grace period
+            del self._sl_grace_periods[grace_key]
+            return False  # Не блокируем SL
 
     async def _get_entry_price_and_side(
         self, symbol: str, position: Any, metadata: Any
