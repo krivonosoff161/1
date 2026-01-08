@@ -6180,6 +6180,54 @@ class FuturesPositionManager:
                     # Определение стороны закрытия
                     close_side = "sell" if side.lower() == "long" else "buy"
 
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверка slippage перед закрытием
+                    # Защита от проскальзывания при закрытии позиций
+                    if hasattr(self, "slippage_guard") and self.slippage_guard:
+                        try:
+                            # Получаем текущую цену для проверки slippage
+                            current_prices = await self.slippage_guard._get_current_prices(
+                                self.client, symbol
+                            )
+                            if current_prices:
+                                bid_price = current_prices.get("bid", 0)
+                                ask_price = current_prices.get("ask", 0)
+                                mid_price = (bid_price + ask_price) / 2 if (bid_price > 0 and ask_price > 0) else 0
+                                
+                                if mid_price > 0:
+                                    spread = abs(ask_price - bid_price)
+                                    spread_percent = (spread / mid_price) * 100
+                                    
+                                    # Для SHORT позиции закрываем через BUY (ask), для LONG через SELL (bid)
+                                    expected_close_price = ask_price if close_side == "buy" else bid_price
+                                    
+                                    # Проверяем спред - если слишком большой, откладываем закрытие
+                                    if spread_percent > self.slippage_guard.max_spread_percent:
+                                        logger.warning(
+                                            f"⚠️ [SLIPPAGE_PROTECTION] {symbol}: Закрытие ОТЛОЖЕНО - спред слишком большой "
+                                            f"({spread_percent:.3f}% > {self.slippage_guard.max_spread_percent:.3f}%). "
+                                            f"Позиция останется открытой до следующего цикла."
+                                        )
+                                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Возвращаем специальный статус вместо None
+                                        # Это позволяет вызывающей функции понять что закрытие отложено, а не завершено
+                                        return {
+                                            "status": "deferred_high_spread",
+                                            "symbol": symbol,
+                                            "spread_percent": spread_percent,
+                                            "max_spread_percent": self.slippage_guard.max_spread_percent,
+                                            "message": f"Закрытие отложено из-за большого спреда ({spread_percent:.3f}%)"
+                                        }
+                                    
+                                    logger.debug(
+                                        f"✅ [SLIPPAGE_PROTECTION] {symbol}: Спред приемлемый "
+                                        f"({spread_percent:.3f}% <= {self.slippage_guard.max_spread_percent:.3f}%), "
+                                        f"ожидаемая цена закрытия: {expected_close_price:.8f}"
+                                    )
+                        except Exception as e:
+                            logger.warning(
+                                f"⚠️ [SLIPPAGE_PROTECTION] {symbol}: Ошибка проверки slippage: {e}, "
+                                f"продолжаем закрытие без проверки"
+                            )
+
                     # ✅ Размещаем рыночный ордер на закрытие
                     # ⚠️ size из API уже в контрактах, поэтому size_in_contracts=True
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для закрытия позиции используем reduceOnly=True

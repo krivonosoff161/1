@@ -1108,14 +1108,18 @@ class ExitAnalyzer:
                 drawdown = None
 
                 # ✅ НОВОЕ (07.01.2026): Расчет drawdown для адаптивных параметров
+                # ✅ ИСПРАВЛЕНО (08.01.2026): Проверяем что current_pnl определена перед использованием
                 # Проверяем есть ли доступ к position_pnl для расчета drawdown
-                if current_pnl is not None and current_pnl < 0:
+                if current_pnl is not None and isinstance(current_pnl, (int, float)) and current_pnl < 0:
                     drawdown = abs(
                         current_pnl
                     )  # Используем текущий PnL как приблизительную просадку
                     logger.debug(
                         f"📊 ExitAnalyzer: drawdown={drawdown:.1f}% (from position PnL) для {symbol}"
                     )
+                else:
+                    # ✅ ИСПРАВЛЕНО: Если current_pnl не определена или не отрицательна, drawdown = None
+                    drawdown = None
 
                 exit_params = self.parameter_provider.get_exit_params(
                     symbol, regime, balance=balance, drawdown=drawdown
@@ -1996,8 +2000,10 @@ class ExitAnalyzer:
                 )
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period при ошибке MTF
                 # MTF недоступен из-за ошибки, откладываем SL
+                # ⚠️ ВАЖНО: Grace period НЕ считается разворотом - он только блокирует SL
                 if not order_flow_reversal:
-                    return self._apply_sl_grace_period(symbol, "MTF ошибка")
+                    self._apply_sl_grace_period(symbol, "MTF ошибка")
+                    # НЕ возвращаем True - grace period не является разворотом!
         elif not self.mtf_filter:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period при отсутствии MTF
             logger.warning(
@@ -2005,8 +2011,11 @@ class ExitAnalyzer:
                 f"применяем grace period для SL"
             )
             # Если Order Flow тоже не показал разворот → откладываем SL
+            # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period НЕ является разворотом!
+            # Grace period только блокирует SL, но НЕ должен приводить к закрытию позиции с прибылью
             if not order_flow_reversal:
-                return self._apply_sl_grace_period(symbol, "MTF недоступен")
+                self._apply_sl_grace_period(symbol, "MTF недоступен")
+                # НЕ возвращаем True - grace period не является разворотом!
 
         # ✅ ИТОГОВОЕ ЛОГИРОВАНИЕ
         logger.info(
@@ -2014,21 +2023,25 @@ class ExitAnalyzer:
             f"reversal_detected={reversal_detected}, order_flow={order_flow_reversal}, mtf={mtf_reversal}"
         )
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Возвращаем ТОЛЬКО реальный разворот (order_flow или mtf)
+        # Grace period НЕ считается разворотом для закрытия позиции с прибылью!
         return reversal_detected
 
-    def _apply_sl_grace_period(self, symbol: str, reason: str) -> bool:
+    def _apply_sl_grace_period(self, symbol: str, reason: str) -> None:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Применение grace period для SL.
 
         При недоступности MTF фильтра откладываем срабатывание SL на 30 секунд,
         чтобы избежать преждевременного закрытия позиций, которые могут развернуться.
 
+        ⚠️ ВАЖНО: Grace period НЕ является разворотом! Он только блокирует SL.
+
         Args:
             symbol: Торговый символ
             reason: Причина применения grace period
 
         Returns:
-            True если нужно считать это разворотом (блокировать SL), False если grace period истёк
+            None (grace period не возвращает значение - это не разворот!)
         """
         now = time.time()
         grace_key = f"{symbol}_sl_grace"
@@ -2041,7 +2054,7 @@ class ExitAnalyzer:
                 f"⏳ [GRACE_PERIOD] {symbol}: Начало grace period ({self._sl_grace_duration}s) — {reason}. "
                 f"SL отложен."
             )
-            return True  # Блокируем SL (считаем как разворот)
+            return  # Grace period активен, но это НЕ разворот!
 
         elapsed = now - last_attempt
 
@@ -2052,7 +2065,7 @@ class ExitAnalyzer:
                 f"⏳ [GRACE_PERIOD] {symbol}: Grace period активен ({remaining:.1f}s осталось) — {reason}. "
                 f"SL отложен."
             )
-            return True  # Продолжаем блокировать SL
+            return  # Grace period активен, но это НЕ разворот!
         else:
             # Grace period истёк — разрешаем SL
             logger.warning(
@@ -2061,7 +2074,26 @@ class ExitAnalyzer:
             )
             # Сбрасываем grace period
             del self._sl_grace_periods[grace_key]
-            return False  # Не блокируем SL
+            return  # Grace period истёк
+
+    def _is_grace_period_active(self, symbol: str) -> bool:
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверка активного grace period.
+
+        Args:
+            symbol: Торговый символ
+
+        Returns:
+            True если grace period активен, False если нет
+        """
+        grace_key = f"{symbol}_sl_grace"
+        last_attempt = self._sl_grace_periods.get(grace_key)
+        
+        if not last_attempt:
+            return False
+        
+        elapsed = time.time() - last_attempt
+        return elapsed < self._sl_grace_duration
 
     async def _get_entry_price_and_side(
         self, symbol: str, position: Any, metadata: Any
@@ -2459,7 +2491,13 @@ class ExitAnalyzer:
                             reversal_detected = await self._check_reversal_signals(
                                 symbol, position_side
                             )
-                            if reversal_detected:
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+                            is_grace_period = self._is_grace_period_active(symbol)
+                            if is_grace_period:
+                                logger.debug(
+                                    f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
+                                )
+                            elif reversal_detected:
                                 logger.info(
                                     f"🔄 ExitAnalyzer TRENDING: Обнаружен разворот для {symbol} {position_side.upper()}, "
                                     f"но убыток критический ({pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
@@ -2820,7 +2858,13 @@ class ExitAnalyzer:
                 reversal_detected = await self._check_reversal_signals(
                     symbol, position_side
                 )
-                if reversal_detected:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+                is_grace_period = self._is_grace_period_active(symbol)
+                if is_grace_period:
+                    logger.debug(
+                        f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
+                    )
+                elif reversal_detected:
                     logger.info(
                         f"🔄 ExitAnalyzer TRENDING: Обнаружен разворот для {symbol} {position_side.upper()}, "
                         f"но SL достигнут (Gross PnL={gross_pnl_percent:.2f}% <= {sl_threshold:.2f}%). "
@@ -2994,9 +3038,18 @@ class ExitAnalyzer:
             reversal_detected = await self._check_reversal_signals(
                 symbol, position_side
             )
-            if reversal_detected:
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+            is_grace_period = self._is_grace_period_active(symbol)
+            
+            if is_grace_period:
+                logger.debug(
+                    f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот, "
+                    f"не закрываем позицию по развороту"
+                )
+            elif reversal_detected:
                 logger.info(
-                    f"🔄 ExitAnalyzer TRENDING: Разворот обнаружен для {symbol}, закрываем позицию "
+                    f"🔄 ExitAnalyzer TRENDING: РЕАЛЬНЫЙ разворот обнаружен для {symbol}, закрываем позицию "
                     f"(profit={pnl_percent:.2f}%)"
                 )
                 return {
@@ -3169,11 +3222,17 @@ class ExitAnalyzer:
                     reversal_detected = await self._check_reversal_signals(
                         symbol, position_side
                     )
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+                    is_grace_period = self._is_grace_period_active(symbol)
                     logger.info(
                         f"🔍 ExitAnalyzer TRENDING: Результат проверки разворота для {symbol} {position_side.upper()}: "
-                        f"reversal_detected={reversal_detected}"
+                        f"reversal_detected={reversal_detected}, is_grace_period={is_grace_period}"
                     )
-                    if reversal_detected:
+                    if is_grace_period:
+                        logger.debug(
+                            f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
+                        )
+                    elif reversal_detected:
                         # Есть признаки разворота - закрываем по времени
                         logger.info(
                             f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
@@ -3390,11 +3449,17 @@ class ExitAnalyzer:
                             reversal_detected = await self._check_reversal_signals(
                                 symbol, position_side
                             )
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+                            is_grace_period = self._is_grace_period_active(symbol)
                             logger.info(
                                 f"🔍 ExitAnalyzer RANGING: Результат проверки разворота для {symbol} {position_side.upper()}: "
-                                f"reversal_detected={reversal_detected}"
+                                f"reversal_detected={reversal_detected}, is_grace_period={is_grace_period}"
                             )
-                            if reversal_detected:
+                            if is_grace_period:
+                                logger.debug(
+                                    f"🔍 ExitAnalyzer RANGING: Grace period активен для {symbol} - это НЕ разворот"
+                                )
+                            elif reversal_detected:
                                 logger.info(
                                     f"🔄 ExitAnalyzer RANGING: Обнаружен разворот для {symbol} {position_side.upper()}, "
                                     f"но убыток критический ({net_pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
@@ -3699,11 +3764,17 @@ class ExitAnalyzer:
                 reversal_detected = await self._check_reversal_signals(
                     symbol, position_side
                 )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+                is_grace_period = self._is_grace_period_active(symbol)
                 logger.info(
                     f"🔍 ExitAnalyzer TRENDING: Результат проверки разворота для {symbol} {position_side.upper()}: "
-                    f"reversal_detected={reversal_detected}"
+                    f"reversal_detected={reversal_detected}, is_grace_period={is_grace_period}"
                 )
-                if reversal_detected:
+                if is_grace_period:
+                    logger.debug(
+                        f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
+                    )
+                elif reversal_detected:
                     logger.info(
                         f"🔄 ExitAnalyzer RANGING: Обнаружен разворот для {symbol} {position_side.upper()}, "
                         f"но SL достигнут (Gross PnL={gross_pnl_percent:.2f}% <= {sl_threshold:.2f}%). "
@@ -4080,14 +4151,25 @@ class ExitAnalyzer:
 
             # 6. Проверка разворота (Order Flow, MTF) - в ranging режиме более строго
             # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки прибыли (реальная прибыль после комиссий)
+            # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period НЕ считается разворотом!
             reversal_detected = await self._check_reversal_signals(
                 symbol, position_side
             )
-            if (
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+            # Grace period НЕ должен приводить к закрытию позиции с прибылью!
+            is_grace_period = self._is_grace_period_active(symbol)
+            
+            if is_grace_period:
+                logger.debug(
+                    f"🔍 ExitAnalyzer RANGING: Grace period активен для {symbol} - это НЕ разворот, "
+                    f"не закрываем позицию по развороту"
+                )
+            elif (
                 reversal_detected and net_pnl_percent > 0.3
-            ):  # Закрываем только если есть реальная прибыль после комиссий
+            ):  # Закрываем только если есть реальная прибыль после комиссий И РЕАЛЬНЫЙ разворот (НЕ grace period!)
                 logger.info(
-                    f"🔄 ExitAnalyzer RANGING: Разворот обнаружен для {symbol}, закрываем позицию "
+                    f"🔄 ExitAnalyzer RANGING: РЕАЛЬНЫЙ разворот обнаружен для {symbol}, закрываем позицию "
                     f"(Net PnL={net_pnl_percent:.2f}%, Gross PnL={gross_pnl_percent:.2f}%)"
                 )
                 return {
@@ -4098,6 +4180,12 @@ class ExitAnalyzer:
                     "reversal_signal": "order_flow_or_mtf",
                     "regime": regime,
                 }
+            elif reversal_detected:
+                # Разворот обнаружен, но прибыль недостаточна - не закрываем
+                logger.debug(
+                    f"🔍 ExitAnalyzer RANGING: Разворот обнаружен для {symbol}, но Net PnL={net_pnl_percent:.2f}% <= 0.3% - "
+                    f"не закрываем (требуется минимум 0.3% прибыли для закрытия по развороту)"
+                )
 
             # 7. ✅ НОВОЕ: Проверка Max Holding - учитываем время в позиции как фактор анализа
             logger.debug(
@@ -4462,10 +4550,16 @@ class ExitAnalyzer:
                 reversal_detected = await self._check_reversal_signals(
                     symbol, position_side
                 )
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+                is_grace_period = self._is_grace_period_active(symbol)
                 logger.info(
                     f"🔍 ExitAnalyzer RANGING: Результат проверки разворота для {symbol} {position_side.upper()}: "
-                    f"reversal_detected={reversal_detected}"
+                    f"reversal_detected={reversal_detected}, is_grace_period={is_grace_period}"
                 )
+                if is_grace_period:
+                    logger.debug(
+                        f"🔍 ExitAnalyzer RANGING: Grace period активен для {symbol} - это НЕ разворот"
+                    )
                 trend_data = await self._analyze_trend_strength(symbol)
                 trend_strength = (
                     trend_data.get("trend_strength", 0) if trend_data else 0
@@ -4475,8 +4569,13 @@ class ExitAnalyzer:
                     f"trend_strength={trend_strength:.2f}"
                 )
 
-                if reversal_detected:
-                    # Есть признаки разворота - закрываем по времени
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+                if is_grace_period:
+                    logger.debug(
+                        f"🔍 ExitAnalyzer RANGING: Grace period активен для {symbol} - это НЕ разворот, не закрываем по времени"
+                    )
+                elif reversal_detected:
+                    # Есть признаки РЕАЛЬНОГО разворота - закрываем по времени
                     logger.info(
                         f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
                         f"Net прибыль={net_pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}%, "
@@ -4745,7 +4844,13 @@ class ExitAnalyzer:
                             reversal_detected = await self._check_reversal_signals(
                                 symbol, position_side
                             )
-                            if reversal_detected:
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+                            is_grace_period = self._is_grace_period_active(symbol)
+                            if is_grace_period:
+                                logger.debug(
+                                    f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
+                                )
+                            elif reversal_detected:
                                 logger.info(
                                     f"🔄 ExitAnalyzer CHOPPY: Обнаружен разворот для {symbol} {position_side.upper()}, "
                                     f"но убыток критический ({pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
@@ -5189,9 +5294,18 @@ class ExitAnalyzer:
             reversal_detected = await self._check_reversal_signals(
                 symbol, position_side
             )
-            if reversal_detected:
+            
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
+            is_grace_period = self._is_grace_period_active(symbol)
+            
+            if is_grace_period:
+                logger.debug(
+                    f"🔍 ExitAnalyzer CHOPPY: Grace period активен для {symbol} - это НЕ разворот, "
+                    f"не закрываем позицию по развороту"
+                )
+            elif reversal_detected:
                 logger.info(
-                    f"🔄 ExitAnalyzer CHOPPY: Разворот обнаружен для {symbol}, закрываем позицию "
+                    f"🔄 ExitAnalyzer CHOPPY: РЕАЛЬНЫЙ разворот обнаружен для {symbol}, закрываем позицию "
                     f"(profit={pnl_percent:.2f}%)"
                 )
                 return {

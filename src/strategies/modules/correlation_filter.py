@@ -257,10 +257,10 @@ class CorrelationFilter:
                         pos_direction = (
                             "LONG" if pos.side == PositionSide.LONG else "SHORT"
                         )
-
+                    
                     if signal_side != pos_direction:
                         opposite_positions.append(pos_symbol)
-
+                
                 if len(opposite_positions) > 0:
                     logger.info(
                         f"✅ Correlation Filter ALLOWED: {symbol} {signal_side} — хедж для "
@@ -273,7 +273,7 @@ class CorrelationFilter:
                         correlated_positions=opposite_positions,
                         correlation_values=correlation_values,
                     )
-
+                
                 logger.warning(
                     f"🚫 Correlation Filter BLOCKED: {symbol} {signal_side}\n"
                     f"   Correlated positions: {correlated_positions}\n"

@@ -4597,13 +4597,22 @@ class FuturesScalpingOrchestrator:
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем сделку в CSV через performance_tracker
                 # ✅ ИСПРАВЛЕНО (27.12.2025): Проверяем что trade_result это TradeResult объект, а не dict
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Обработка отложенного закрытия из-за большого спреда
+                if isinstance(trade_result, dict) and trade_result.get("status") == "deferred_high_spread":
+                    # Закрытие отложено из-за большого спреда - позиция остается открытой
+                    logger.info(
+                        f"⏳ Закрытие {symbol} отложено: {trade_result.get('message', 'большой спред')}. "
+                        f"Позиция останется открытой до следующего цикла."
+                    )
+                    return  # Не записываем в CSV, позиция не закрыта
+                
                 if trade_result and hasattr(self, "performance_tracker"):
                     try:
                         # ✅ КРИТИЧЕСКОЕ: record_trade ожидает TradeResult объект, а не dict
                         if isinstance(trade_result, dict):
-                            # Если это dict (ошибка), не записываем в CSV
+                            # Если это dict (ошибка или другой статус), не записываем в CSV
                             logger.warning(
-                                f"⚠️ trade_result для {symbol} это dict, не записываем в CSV: {trade_result.get('error', 'unknown error')}"
+                                f"⚠️ trade_result для {symbol} это dict, не записываем в CSV: {trade_result.get('error', trade_result.get('status', 'unknown status'))}"
                             )
                         else:
                             # Это TradeResult объект, можно записывать
