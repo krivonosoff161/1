@@ -188,14 +188,13 @@ class OKXFuturesClient:
 
             # Создаем новый connector с force_close=True для предотвращения проблем с keep-alive
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): VPN оптимизация
+            # ⚠️ keepalive_timeout несовместим с force_close=True (force_close закрывает соединение после каждого запроса)
             connector = aiohttp.TCPConnector(
                 limit=10,  # Лимит соединений
                 limit_per_host=10,  # Лимит на хост
                 force_close=True,  # ❗ КЛЮЧЕВОЕ: Закрывать соединение после каждого запроса
                 enable_cleanup_closed=True,  # Очищать закрытые соединения
                 ttl_dns_cache=300,  # DNS кэш на 5 минут
-                # ✅ VPN параметры:
-                keepalive_timeout=60,  # Keep-alive на 60 сек (для VPN stability)
                 ssl=True,  # Используем SSL
                 family=0,  # 0=auto, 2=IPv4, 10=IPv6 - для VPN берем auto
             )
