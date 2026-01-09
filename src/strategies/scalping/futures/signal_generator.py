@@ -1684,12 +1684,12 @@ class FuturesSignalGenerator:
                 symbol, market_data, regime
             )
 
-                # ✅ ИСПРАВЛЕНО (10.01.2026): Убрано misleading логирование ADX=0 до инициализации ADX
-                # Реальное логирование причин происходит внутри _generate_base_signals после получения ADX
-                if not base_signals or len(base_signals) == 0:
-                    logger.debug(
-                        f"📊 {symbol}: Базовые сигналы не сгенерированы (см. детали в _generate_base_signals)"
-                    )
+            # ✅ ИСПРАВЛЕНО (10.01.2026): Убрано misleading логирование ADX=0 до инициализации ADX
+            # Реальное логирование причин происходит внутри _generate_base_signals после получения ADX
+            if not base_signals or len(base_signals) == 0:
+                logger.debug(
+                    f"📊 {symbol}: Базовые сигналы не сгенерированы (см. детали в _generate_base_signals)"
+                )
 
             # Применение фильтров (передаем позиции для CorrelationFilter)
             filtered_signals = await self._apply_filters(
@@ -2529,9 +2529,9 @@ class FuturesSignalGenerator:
                 else indicators.get("adx", indicators.get("adx_proxy", 0))
             )
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): Заменён жёсткий блок на мягкий fallback
-                # Если ADX=0 после всех попыток → генерируем сигналы в degraded режиме (ranging, без ADX-проверок)
-                if adx_value <= 0 or adx_for_log <= 0:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): Заменён жёсткий блок на мягкий fallback
+            # Если ADX=0 после всех попыток → генерируем сигналы в degraded режиме (ranging, без ADX-проверок)
+            if adx_value <= 0 or adx_for_log <= 0:
                     logger.warning(
                         f"⚠️ [ADX] {symbol}: ADX не получен из DataRegistry/fallback "
                         f"(adx_value={adx_value}, adx_for_log={adx_for_log}, adx_from_registry={adx_from_registry}). "
