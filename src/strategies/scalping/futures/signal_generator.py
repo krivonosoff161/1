@@ -1684,59 +1684,11 @@ class FuturesSignalGenerator:
                 symbol, market_data, regime
             )
 
-            # ✅ НОВОЕ (26.12.2025): Логирование причин отсутствия сигналов
-            if not base_signals or len(base_signals) == 0:
-                # Получаем индикаторы для анализа
-                try:
-                    indicators = (
-                        market_data.indicators
-                        if hasattr(market_data, "indicators")
-                        else {}
-                    )
-                    adx_value = indicators.get("adx", indicators.get("adx_proxy", 0))
-                    min_adx = getattr(self.scalping_config, "min_adx", 20.0)
-
-                    # Получаем MA значения
-                    ma_fast = indicators.get("ema_12", 0)
-                    ma_slow = indicators.get("ema_26", 0)
-                    ma_difference_pct = (
-                        abs(ma_fast - ma_slow) / ma_slow * 100 if ma_slow > 0 else 0
-                    )
-
-                    # Получаем min_ma_difference_pct из конфига
-                    min_ma_difference_pct = 0.1  # Fallback
-                    try:
-                        adaptive_regime = getattr(
-                            self.scalping_config, "adaptive_regime", {}
-                        )
-                        if isinstance(adaptive_regime, dict):
-                            regime_config = adaptive_regime.get("ranging", {})
-                            if isinstance(regime_config, dict):
-                                indicators_config = regime_config.get("indicators", {})
-                                if isinstance(indicators_config, dict):
-                                    min_ma_difference_pct = indicators_config.get(
-                                        "min_ma_difference_pct", 0.1
-                                    )
-                    except Exception:
-                        pass
-
-                    reasons = []
-                    if adx_value < min_adx:
-                        reasons.append(f"ADX={adx_value:.1f} < min_adx={min_adx:.1f}")
-                    if ma_difference_pct < min_ma_difference_pct:
-                        reasons.append(
-                            f"MA разница={ma_difference_pct:.3f}% < min={min_ma_difference_pct}%"
-                        )
-                    if not reasons:
-                        reasons.append("индикаторы не дают сигнала")
-
-                    logger.info(
-                        f"📊 {symbol}: Сигналы не сгенерированы. Причины: {', '.join(reasons)}. "
-                        f"ADX={adx_value:.1f}, MA разница={ma_difference_pct:.3f}%"
-                    )
-                except Exception as e:
+                # ✅ ИСПРАВЛЕНО (10.01.2026): Убрано misleading логирование ADX=0 до инициализации ADX
+                # Реальное логирование причин происходит внутри _generate_base_signals после получения ADX
+                if not base_signals or len(base_signals) == 0:
                     logger.debug(
-                        f"⚠️ Не удалось проанализировать причины отсутствия сигналов для {symbol}: {e}"
+                        f"📊 {symbol}: Базовые сигналы не сгенерированы (см. детали в _generate_base_signals)"
                     )
 
             # Применение фильтров (передаем позиции для CorrelationFilter)
@@ -2577,15 +2529,21 @@ class FuturesSignalGenerator:
                 else indicators.get("adx", indicators.get("adx_proxy", 0))
             )
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверяем ADX после получения из DataRegistry/fallback - БЛОКИРУЕМ если ADX=0.0
-            if adx_value <= 0 or adx_for_log <= 0:
-                logger.error(
-                    f"❌ [ADX] {symbol}: ADX не рассчитан или равен 0 после получения из DataRegistry/fallback "
-                    f"(adx_value={adx_value}, adx_for_log={adx_for_log}, adx_from_registry={adx_from_registry}) - "
-                    f"ПРОПУСКАЕМ генерацию сигналов. Бот НЕ ДОЛЖЕН работать без валидного ADX! "
-                    f"Количество свечей: {len(candles)}, indicator_results keys: {list(indicator_results.keys())}"
-                )
-                return []
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): Заменён жёсткий блок на мягкий fallback
+                # Если ADX=0 после всех попыток → генерируем сигналы в degraded режиме (ranging, без ADX-проверок)
+                if adx_value <= 0 or adx_for_log <= 0:
+                    logger.warning(
+                        f"⚠️ [ADX] {symbol}: ADX не получен из DataRegistry/fallback "
+                        f"(adx_value={adx_value}, adx_for_log={adx_for_log}, adx_from_registry={adx_from_registry}). "
+                        f"Продолжаем генерацию в degraded режиме: adx_trend=ranging, adx_value=0. "
+                        f"Свечей: {len(candles)}, indicators: {list(indicator_results.keys())}"
+                    )
+                    # Degraded mode: принудительно устанавливаем ranging и ADX=0
+                    adx_trend = "ranging"
+                    adx_value = 0.0
+                    adx_plus_di = 0.0
+                    adx_minus_di = 0.0
+                    # НЕ блокируем генерацию - продолжаем работу
 
             # ✅ ИСПРАВЛЕНО: Определяем направление тренда ДО логирования (после fallback)
             if adx_value > 0:
