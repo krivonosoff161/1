@@ -9,6 +9,7 @@ Trailing SL Coordinator для Futures торговли.
 - Интеграция с DebugLogger
 """
 
+import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional
@@ -49,6 +50,7 @@ class TrailingSLCoordinator:
         position_manager=None,
         order_flow=None,  # ✅ ЭТАП 1.1: OrderFlowIndicator для анализа разворота
         exit_analyzer=None,  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
+        position_registry=None,  # ✅ НОВОЕ (09.01.2026): PositionRegistry для доступа к DataRegistry
     ):
         """
         Инициализация TrailingSLCoordinator.
@@ -88,6 +90,7 @@ class TrailingSLCoordinator:
         self.exit_analyzer = (
             exit_analyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия (fallback)
         )
+        self.position_registry = position_registry  # ✅ НОВОЕ (09.01.2026): PositionRegistry для доступа к DataRegistry
         self.exit_decision_coordinator = None  # ✅ НОВОЕ (26.12.2025): ExitDecisionCoordinator для координации закрытия
 
         # ✅ ЭТАП 1.1: История delta для анализа разворота Order Flow
@@ -294,9 +297,16 @@ class TrailingSLCoordinator:
             # Fallback на config_manager
             params = self.config_manager.get_trailing_sl_params(regime=regime)
 
-        # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Логируем режим и параметры для диагностики
+        # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Логирование параметра enabled из конфига
+        tsl_config = getattr(self.scalping_config, "trailing_sl", {})
+        tsl_enabled = getattr(tsl_config, "enabled", False)
+        if isinstance(tsl_config, dict):
+            tsl_enabled = tsl_config.get("enabled", False)
+
         logger.info(
-            f"🔍 TSL INIT для {symbol}: regime={regime}, "
+            f"🔍 TSL CONFIG CHECK для {symbol}: "
+            f"enabled={tsl_enabled} (из конфига trailing_sl.enabled), "
+            f"regime={regime}, "
             f"loss_cut={params.get('loss_cut_percent')}, "
             f"min_holding={params.get('min_holding_minutes')} мин, "
             f"timeout={params.get('timeout_minutes')} мин"
@@ -749,11 +759,17 @@ class TrailingSLCoordinator:
             if margin_used is None or margin_used <= 0:
                 try:
                     pos_size = float(position.get("pos", "0") or 0)
-                    leverage = float(position.get("lever") or getattr(self.scalping_config, "leverage", 5) or 5)
+                    leverage = float(
+                        position.get("lever")
+                        or getattr(self.scalping_config, "leverage", 5)
+                        or 5
+                    )
                     # Получаем ctVal для расчета стоимости позиции
                     ct_val = float(position.get("ctVal", "1") or 1)
                     position_value = abs(pos_size) * ct_val * entry_price
-                    margin_used = position_value / leverage if leverage > 0 else position_value
+                    margin_used = (
+                        position_value / leverage if leverage > 0 else position_value
+                    )
                     logger.debug(
                         f"📊 TSL margin расчитан для {symbol}: size={pos_size}, entry=${entry_price:.2f}, "
                         f"lever={leverage}, margin=${margin_used:.2f}"
@@ -765,7 +781,9 @@ class TrailingSLCoordinator:
             if unrealized_pnl is None and entry_price > 0:
                 try:
                     pos_size = float(position.get("pos", "0") or 0)
-                    pos_side = position.get("posSide") or position.get("position_side", "long")
+                    pos_side = position.get("posSide") or position.get(
+                        "position_side", "long"
+                    )
                     ct_val = float(position.get("ctVal", "1") or 1)
                     position_value = abs(pos_size) * ct_val
                     if pos_side.lower() == "long":
@@ -861,12 +879,16 @@ class TrailingSLCoordinator:
 
             # ✅ ДИНАМИЧЕСКИЙ TSL: Применяем distance_multiplier к stop_loss если режим не normal
             if tsl_mode != "normal" and stop_loss and entry_price > 0:
+                # Получаем pos_side для корректировки stop_loss
+                pos_side = position.get("posSide") or position.get(
+                    "position_side", "long"
+                )
                 # Рассчитываем текущую distance
                 current_distance = abs(stop_loss - entry_price) / entry_price
                 # Применяем multiplier
                 new_distance = current_distance * distance_multiplier
                 # Корректируем stop_loss
-                if position_side.lower() == "long":
+                if pos_side.lower() == "long":
                     stop_loss = entry_price * (1 - new_distance)
                 else:  # short
                     stop_loss = entry_price * (1 + new_distance)
@@ -1057,9 +1079,34 @@ class TrailingSLCoordinator:
                         except Exception:
                             pass
 
+                    # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Добавлен price=0 guardrail с retry
                     current_price = await self.get_current_price_callback(symbol)
-                    if current_price is None:
-                        current_price = 0.0
+                    if current_price is None or current_price == 0:
+                        logger.warning(
+                            f"⚠️ {symbol}: Получена некорректная цена (price={current_price}), "
+                            f"пытаемся повторно через 1 сек..."
+                        )
+                        await asyncio.sleep(1)
+                        current_price = await self.get_current_price_callback(symbol)
+
+                        if current_price is None or current_price == 0:
+                            # Если снова price=0, используем entry_price как fallback
+                            if (
+                                position
+                                and hasattr(position, "entry_price")
+                                and position.entry_price > 0
+                            ):
+                                logger.error(
+                                    f"❌ {symbol}: Получена некорректная цена после повторной попытки "
+                                    f"(price={current_price}), используем entry_price={position.entry_price} как fallback"
+                                )
+                                current_price = position.entry_price
+                            else:
+                                logger.error(
+                                    f"❌ {symbol}: Критическая ошибка - не удалось получить валидную цену "
+                                    f"(price={current_price}, entry_price недоступен), пропускаем проверку TSL"
+                                )
+                                current_price = 0.0
 
                     # Получаем режим
                     regime = "ranging"
@@ -1621,7 +1668,24 @@ class TrailingSLCoordinator:
                         continue
                     self._last_tsl_check_time[symbol] = current_time
 
+                    # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Добавлен price=0 guardrail с retry
                     current_price = await self._get_current_price(symbol)
+                    if current_price is None or current_price == 0:
+                        logger.warning(
+                            f"⚠️ {symbol}: Получена некорректная цена при проверке TSL (price={current_price}), "
+                            f"пытаемся повторно через 1 сек..."
+                        )
+                        await asyncio.sleep(1)
+                        current_price = await self._get_current_price(symbol)
+
+                        if current_price is None or current_price == 0:
+                            # Если снова price=0, пропускаем проверку
+                            logger.error(
+                                f"❌ {symbol}: Не удалось получить валидную цену после повторной попытки "
+                                f"(price={current_price}), пропускаем проверку TSL"
+                            )
+                            continue
+
                     if current_price and current_price > 0:
                         await self.update_trailing_stop_loss(symbol, current_price)
                     else:
@@ -1637,23 +1701,91 @@ class TrailingSLCoordinator:
 
     async def _get_current_price(self, symbol: str) -> Optional[float]:
         """
-        Получение текущей цены через внешний колбэк или REST fallback.
+        ✅ ИСПРАВЛЕНИЕ (09.01.2026): Получение текущей цены с приоритетом на WebSocket real-time.
+
+        Иерархия источников (приоритет):
+        1. WebSocket real-time из DataRegistry (current_tick) - <100ms
+        2. Последняя свеча из DataRegistry (ohlcv_data) - fallback если WebSocket недоступен
+        3. REST API callback (медленно, но надежно) - fallback если DataRegistry недоступна
+        4. REST API client fallback - emergency
+
+        Returns:
+            float: Текущая цена или None
         """
+        # ✅ ПРИОРИТЕТ 1: WebSocket real-time из DataRegistry
+        try:
+            if (
+                hasattr(self, "position_registry")
+                and self.position_registry
+                and hasattr(self.position_registry, "data_registry")
+            ):
+                market_data = (
+                    await self.position_registry.data_registry.get_market_data(symbol)
+                )
+                if (
+                    market_data
+                    and hasattr(market_data, "current_tick")
+                    and market_data.current_tick
+                ):
+                    if (
+                        hasattr(market_data.current_tick, "price")
+                        and market_data.current_tick.price > 0
+                    ):
+                        logger.debug(
+                            f"✅ TSL: WebSocket real-time price for {symbol}: {market_data.current_tick.price:.8f}"
+                        )
+                        return market_data.current_tick.price
+        except Exception as e:
+            logger.debug(f"⚠️ TSL: Failed to get DataRegistry market_data: {e}")
+
+        # ✅ ПРИОРИТЕТ 2: Fallback на последнюю свечу из DataRegistry
+        try:
+            if (
+                hasattr(self, "position_registry")
+                and self.position_registry
+                and hasattr(self.position_registry, "data_registry")
+            ):
+                market_data = (
+                    await self.position_registry.data_registry.get_market_data(symbol)
+                )
+                if (
+                    market_data
+                    and hasattr(market_data, "ohlcv_data")
+                    and market_data.ohlcv_data
+                ):
+                    last_candle_price = market_data.ohlcv_data[-1].close
+                    logger.debug(
+                        f"⚠️ TSL: Using last candle (DataRegistry) for {symbol}: {last_candle_price:.8f}"
+                    )
+                    return last_candle_price
+        except Exception as e:
+            logger.debug(f"⚠️ TSL: Failed to get last candle from DataRegistry: {e}")
+
+        # ✅ ПРИОРИТЕТ 3: REST API callback (медленнее чем WebSocket, но все еще OK)
         if self.get_current_price_callback:
             try:
                 price = await self.get_current_price_callback(symbol)
-                if price:
+                if price and price > 0:
+                    logger.debug(
+                        f"⚠️ TSL: Using REST API callback for {symbol}: {price:.8f}"
+                    )
                     return price
             except TypeError:
                 # На случай если передана синхронная функция
-                price = self.get_current_price_callback(symbol)
-                if price:
-                    return price
+                try:
+                    price = self.get_current_price_callback(symbol)
+                    if price and price > 0:
+                        logger.debug(
+                            f"⚠️ TSL: Using sync REST API callback for {symbol}: {price:.8f}"
+                        )
+                        return price
+                except Exception as e:
+                    logger.debug(f"⚠️ TSL: Sync callback failed for {symbol}: {e}")
             except Exception as e:
-                logger.debug(
-                    f"⚠️ Колбэк получения цены вернул ошибку для {symbol}: {e}, используем fallback"
-                )
+                logger.debug(f"⚠️ TSL: Async callback failed for {symbol}: {e}")
 
+        # ✅ ПРИОРИТЕТ 4: REST API client fallback (emergency)
+        logger.warning(f"🔴 TSL: Falling back to REST API client for {symbol}")
         return await self._fetch_price_via_client(symbol)
 
     async def _fetch_price_via_client(self, symbol: str) -> Optional[float]:

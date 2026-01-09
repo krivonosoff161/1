@@ -516,6 +516,7 @@ class FuturesScalpingOrchestrator:
             position_manager=self.position_manager,
             order_flow=self.order_flow,  # ✅ ЭТАП 1.1: Передаем OrderFlowIndicator для анализа разворота
             exit_analyzer=self.exit_analyzer,  # ✅ НОВОЕ: Передаем ExitAnalyzer для анализа закрытия (fallback)
+            position_registry=self.position_registry,  # ✅ НОВОЕ (09.01.2026): Передаем PositionRegistry для доступа к DataRegistry
         )
         # Для совместимости с существующими модулями (PositionManager)
         self.trailing_sl_by_symbol = self.trailing_sl_coordinator.trailing_sl_by_symbol
@@ -4598,14 +4599,17 @@ class FuturesScalpingOrchestrator:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Записываем сделку в CSV через performance_tracker
                 # ✅ ИСПРАВЛЕНО (27.12.2025): Проверяем что trade_result это TradeResult объект, а не dict
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Обработка отложенного закрытия из-за большого спреда
-                if isinstance(trade_result, dict) and trade_result.get("status") == "deferred_high_spread":
+                if (
+                    isinstance(trade_result, dict)
+                    and trade_result.get("status") == "deferred_high_spread"
+                ):
                     # Закрытие отложено из-за большого спреда - позиция остается открытой
                     logger.info(
                         f"⏳ Закрытие {symbol} отложено: {trade_result.get('message', 'большой спред')}. "
                         f"Позиция останется открытой до следующего цикла."
                     )
                     return  # Не записываем в CSV, позиция не закрыта
-                
+
                 if trade_result and hasattr(self, "performance_tracker"):
                     try:
                         # ✅ КРИТИЧЕСКОЕ: record_trade ожидает TradeResult объект, а не dict

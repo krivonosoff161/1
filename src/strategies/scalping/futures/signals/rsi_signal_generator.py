@@ -87,6 +87,28 @@ class RSISignalGenerator:
             rsi_oversold = regime_params.get("rsi_oversold", 30)
             rsi_overbought = regime_params.get("rsi_overbought", 70)
 
+            # ✅ НОВОЕ (09.01.2026): Адаптивные RSI пороги по направлению тренда
+            # В uptrend: LONG при RSI < 50 (не ждать глубокой перепроданности 30)
+            # В downtrend: SHORT при RSI > 50 (не ждать сильной перекупленности 70)
+            ema_fast = indicators.get("ema_12", 0)
+            ema_slow = indicators.get("ema_26", 0)
+
+            # Определяем направление тренда по EMA
+            is_uptrend = ema_fast > ema_slow
+            is_downtrend = ema_fast < ema_slow
+
+            # Адаптируем пороги
+            if is_uptrend:
+                rsi_oversold_adaptive = 50  # В uptrend ловим LONG раньше
+                rsi_overbought_adaptive = rsi_overbought  # Стандартный порог для SHORT
+            elif is_downtrend:
+                rsi_oversold_adaptive = rsi_oversold  # Стандартный порог для LONG
+                rsi_overbought_adaptive = 50  # В downtrend ловим SHORT раньше
+            else:
+                # Нейтральный тренд - стандартные пороги
+                rsi_oversold_adaptive = rsi_oversold
+                rsi_overbought_adaptive = rsi_overbought
+
             # Получаем текущий режим для логирования
             regime_manager = self.regime_managers.get(symbol) or self.regime_manager
             current_regime = (
@@ -156,9 +178,9 @@ class RSISignalGenerator:
                             }
 
             # Перепроданность (покупка) - используем адаптивный порог
-            if rsi < rsi_oversold:
+            if rsi < rsi_oversold_adaptive:
                 # Проверяем тренд через EMA - если конфликт, снижаем confidence
-                is_downtrend = ema_fast < ema_slow and current_price < ema_fast
+                is_downtrend_check = ema_fast < ema_slow and current_price < ema_fast
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем текущий режим для проверки блокировки
                 current_regime_check = "ranging"  # Fallback
@@ -175,7 +197,7 @@ class RSISignalGenerator:
                     logger.debug(f"⚠️ Не удалось получить режим для блокировки: {e}")
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: В trending режиме - полная блокировка противотрендовых сигналов
-                should_block = current_regime_check == "trending" and is_downtrend
+                should_block = current_regime_check == "trending" and is_downtrend_check
                 if should_block:
                     logger.debug(
                         f"🚫 RSI OVERSOLD сигнал ПОЛНОСТЬЮ ЗАБЛОКИРОВАН для {symbol}: "
@@ -183,11 +205,13 @@ class RSISignalGenerator:
                     )
                 else:
                     # Нормализованная сила: от 0 до 1
-                    strength = min(1.0, (rsi_oversold - rsi) / rsi_oversold)
+                    strength = min(
+                        1.0, (rsi_oversold_adaptive - rsi) / rsi_oversold_adaptive
+                    )
 
                     # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим
                     has_conflict = False
-                    if is_downtrend:
+                    if is_downtrend_check:
                         # Конфликт: RSI oversold (LONG) vs EMA bearish (DOWN)
                         # Получаем strength_multiplier для конфликта из конфига
                         conflict_multiplier = 0.5  # Fallback
@@ -386,4 +410,3 @@ class RSISignalGenerator:
             )
 
         return signals
-

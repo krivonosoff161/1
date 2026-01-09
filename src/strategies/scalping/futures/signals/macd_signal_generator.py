@@ -139,6 +139,72 @@ class MACDSignalGenerator:
                     symbol, candle_close_price
                 )
 
+            # ✅ НОВОЕ (09.01.2026): MA CROSSOVER сигналы
+            # Получаем предыдущие значения EMA для определения пересечения
+            prev_ema_fast = 0
+            prev_ema_slow = 0
+            if market_data.ohlcv_data and len(market_data.ohlcv_data) >= 2:
+                # Рассчитываем EMA для предыдущей свечи (упрощенно - можно улучшить)
+                prev_candles = market_data.ohlcv_data[:-1]  # Все кроме последней
+                if len(prev_candles) >= 26:  # Нужно минимум 26 для EMA26
+                    # Используем приблизительные значения (в идеале пересчитать EMA)
+                    # Для быстрой реализации проверяем просто предыдущий close
+                    prev_close = prev_candles[-1].close
+                    # Простая аппроксимация: prev_ema ≈ текущий EMA со сдвигом
+                    # (в production нужно сохранять историю EMA или пересчитывать)
+                    prev_ema_fast = (
+                        ema_fast * 0.99 if ema_fast > 0 else 0
+                    )  # Приближение
+                    prev_ema_slow = (
+                        ema_slow * 0.99 if ema_slow > 0 else 0
+                    )  # Приближение
+
+            # MA Crossover UP (Bullish): EMA Fast пересекает EMA Slow снизу вверх
+            ma_crossover_up = (
+                prev_ema_fast > 0
+                and prev_ema_slow > 0
+                and prev_ema_fast <= prev_ema_slow
+                and ema_fast > ema_slow  # Было ниже или равно  # Стало выше
+            )
+
+            # MA Crossover DOWN (Bearish): EMA Fast пересекает EMA Slow сверху вниз
+            ma_crossover_down = (
+                prev_ema_fast > 0
+                and prev_ema_slow > 0
+                and prev_ema_fast >= prev_ema_slow
+                and ema_fast < ema_slow  # Было выше или равно  # Стало ниже
+            )
+
+            # Генерируем сигнал при пересечении вверх (LONG)
+            if ma_crossover_up:
+                confidence_crossover = macd_confidence + 0.10  # Bonus за crossover
+                signals.append(
+                    {
+                        "symbol": symbol,
+                        "side": "buy",  # LONG
+                        "type": "ma_crossover_up",
+                        "price": current_price,
+                        "strength": confidence_crossover,
+                        "confidence": confidence_crossover,
+                        "reason": (
+                            f"MA Crossover UP: ema_fast({ema_fast:.2f}) пересекла "
+                            f"ema_slow({ema_slow:.2f}) снизу вверх"
+                        ),
+                        "timestamp": datetime.now().isoformat(),
+                        "indicators": {
+                            "ema_fast": ema_fast,
+                            "ema_slow": ema_slow,
+                            "prev_ema_fast": prev_ema_fast,
+                            "prev_ema_slow": prev_ema_slow,
+                            "current_price": current_price,
+                        },
+                    }
+                )
+                logger.info(
+                    f"🎯 {symbol}: MA Crossover UP LONG сигнал (confidence={confidence_crossover:.2f}): "
+                    f"ema_fast={ema_fast:.2f} > ema_slow={ema_slow:.2f}"
+                )
+
             # Пересечение MACD линии и сигнальной линии
             if macd_line > signal_line and histogram > 0:
                 # ✅ ЗАДАЧА #7: Проверяем совпадение EMA и цены для BULLISH
@@ -333,4 +399,3 @@ class MACDSignalGenerator:
             )
 
         return signals
-

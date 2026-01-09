@@ -191,10 +191,42 @@ class FuturesOrderExecutor:
             # Получаем текущую цену для проверки дельты
             current_price_for_check = 0.0
             signal_price = signal.get("price", 0.0) if signal else 0.0
+
+            # ✅ КРИТИЧНО (09.01.2026): Используем DataRegistry WebSocket вместо REST API!
             try:
-                price_limits = await self.client.get_price_limits(symbol)
-                if price_limits:
-                    current_price_for_check = price_limits.get("current_price", 0)
+                if hasattr(self, "data_registry") and self.data_registry:
+                    market_data = await self.data_registry.get_market_data(symbol)
+                    if (
+                        market_data
+                        and hasattr(market_data, "current_tick")
+                        and market_data.current_tick
+                    ):
+                        if (
+                            hasattr(market_data.current_tick, "price")
+                            and market_data.current_tick.price > 0
+                        ):
+                            current_price_for_check = market_data.current_tick.price
+                            logger.debug(
+                                f"✅ OrderExecutor: WebSocket price for delta check: {current_price_for_check:.2f}"
+                            )
+                    # Fallback на свечу если WebSocket недоступен
+                    elif (
+                        market_data
+                        and hasattr(market_data, "ohlcv_data")
+                        and market_data.ohlcv_data
+                    ):
+                        current_price_for_check = market_data.ohlcv_data[-1].close
+                        logger.debug(
+                            f"⚠️ OrderExecutor: Using candle for delta check: {current_price_for_check:.2f}"
+                        )
+                # Fallback на REST API только если DataRegistry полностью недоступен
+                if current_price_for_check <= 0:
+                    price_limits = await self.client.get_price_limits(symbol)
+                    if price_limits:
+                        current_price_for_check = price_limits.get("current_price", 0)
+                        logger.warning(
+                            f"🔴 OrderExecutor: Fallback to REST API for delta check: {current_price_for_check:.2f}"
+                        )
             except Exception as e:
                 logger.debug(
                     f"⚠️ Не удалось получить текущую цену для проверки дельты: {e}"
@@ -333,10 +365,28 @@ class FuturesOrderExecutor:
             if getattr(self, "data_registry", None):
                 try:
                     md = await self.data_registry.get_market_data(symbol)
-                    if md and isinstance(md, dict):
-                        updated_at = md.get("updated_at")
-                        if isinstance(updated_at, datetime):
-                            md_age_sec = (datetime.now() - updated_at).total_seconds()
+                    if md:
+                        # Предпочитаем timestamp из current_tick, если он есть
+                        md_ts = None
+                        current_tick = None
+                        if isinstance(md, dict):
+                            current_tick = md.get("current_tick")
+                            updated_at = md.get("updated_at")
+                            if md_ts is None and hasattr(current_tick, "timestamp"):
+                                md_ts = current_tick.timestamp
+                            if md_ts is None and isinstance(updated_at, datetime):
+                                md_ts = updated_at.timestamp()
+                        else:
+                            # Объект с атрибутами
+                            current_tick = getattr(md, "current_tick", None)
+                            updated_at = getattr(md, "updated_at", None)
+                            if md_ts is None and hasattr(current_tick, "timestamp"):
+                                md_ts = current_tick.timestamp
+                            if md_ts is None and isinstance(updated_at, datetime):
+                                md_ts = updated_at.timestamp()
+
+                        if md_ts:
+                            md_age_sec = time.time() - md_ts
                             if md_age_sec is not None and md_age_sec > 0.5:
                                 logger.warning(
                                     f"⚠️ DataRegistry price for {symbol} устарела на {md_age_sec:.3f}s (>0.5s)"
@@ -663,30 +713,87 @@ class FuturesOrderExecutor:
                 )
                 offset_percent = 0.05  # Безопасный fallback
 
-            # Получаем лимиты цены биржи (включая лучшие цены из стакана)
-            price_limits = await self.client.get_price_limits(symbol)
+            # ✅ КРИТИЧНО (09.01.2026): Получаем цены из DataRegistry WebSocket вместо REST API!
+            price_limits = None
+            price_limits_source = "unknown"
+            best_bid = 0
+            best_ask = 0
+            current_price = 0
+            ws_price = None
+            ws_bid = None
+            ws_ask = None
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверка свежести цены (не старше 0.5 секунды для скальпинга)
-            if price_limits:
-                price_timestamp = price_limits.get("timestamp", 0)
-                if price_timestamp > 0:
-                    price_age = time.time() - price_timestamp
+            # Tier 1: WebSocket real-time from DataRegistry
+            try:
+                if hasattr(self, "data_registry") and self.data_registry:
+                    market_data = await self.data_registry.get_market_data(symbol)
                     if (
-                        price_age > 0.5
-                    ):  # Цена старше 0.5 секунды - обновляем для скальпинга
-                        logger.warning(
-                            f"⚠️ Цена для {symbol} устарела ({price_age:.2f} сек), "
-                            f"обновляем данные перед размещением ордера..."
+                        market_data
+                        and hasattr(market_data, "current_tick")
+                        and market_data.current_tick
+                    ):
+                        if (
+                            hasattr(market_data.current_tick, "price")
+                            and market_data.current_tick.price > 0
+                        ):
+                            current_price = market_data.current_tick.price
+                            best_bid = getattr(
+                                market_data.current_tick, "bid", current_price
+                            )
+                            best_ask = getattr(
+                                market_data.current_tick, "ask", current_price
+                            )
+                            tick_ts = (
+                                getattr(market_data.current_tick, "timestamp", None)
+                                or time.time()
+                            )
+                            ws_price, ws_bid, ws_ask = current_price, best_bid, best_ask
+                            price_limits_source = "ws"
+                            logger.debug(
+                                f"✅ OrderExecutor: WebSocket price for limit calc: {current_price:.2f} (bid={best_bid:.2f}, ask={best_ask:.2f})"
+                            )
+                            # Создаем price_limits структуру для совместимости
+                            price_limits = {
+                                "current_price": current_price,
+                                "best_bid": best_bid,
+                                "best_ask": best_ask,
+                                "timestamp": tick_ts,
+                            }
+                    # Tier 2: Fallback на свечу если WebSocket недоступен
+                    elif (
+                        market_data
+                        and hasattr(market_data, "ohlcv_data")
+                        and market_data.ohlcv_data
+                    ):
+                        current_price = market_data.ohlcv_data[-1].close
+                        best_bid = current_price
+                        best_ask = current_price
+                        price_limits_source = "candle"
+                        logger.debug(
+                            f"⚠️ OrderExecutor: Using candle for limit calc: {current_price:.2f}"
                         )
-                        # Обновляем цену
-                        price_limits = await self.client.get_price_limits(symbol)
-                        # Обновляем переменные после обновления
-                        if price_limits:
-                            best_bid = price_limits.get("best_bid", 0)
-                            best_ask = price_limits.get("best_ask", 0)
-                            current_price = price_limits.get("current_price", 0)
-                            max_buy_price = price_limits.get("max_buy_price", 0)
-                            min_sell_price = price_limits.get("min_sell_price", 0)
+                        price_limits = {
+                            "current_price": current_price,
+                            "best_bid": best_bid,
+                            "best_ask": best_ask,
+                            "timestamp": time.time(),
+                        }
+            except Exception as e:
+                logger.debug(f"⚠️ OrderExecutor: Failed to get DataRegistry price: {e}")
+
+            # Tier 3: Fallback на REST API только если DataRegistry полностью недоступен
+            if not price_limits or current_price <= 0:
+                logger.warning(
+                    f"🔴 OrderExecutor: Falling back to REST API for {symbol}"
+                )
+                price_limits = await self.client.get_price_limits(symbol)
+                if price_limits:
+                    best_bid = price_limits.get("best_bid", 0)
+                    best_ask = price_limits.get("best_ask", 0)
+                    current_price = price_limits.get("current_price", 0)
+                    price_limits_source = "rest"
+                    max_buy_price = price_limits.get("max_buy_price", 0)
+                    min_sell_price = price_limits.get("min_sell_price", 0)
 
             if not price_limits:
                 logger.warning(
@@ -721,23 +828,38 @@ class FuturesOrderExecutor:
             try:
                 pl_ts = price_limits.get("timestamp", 0) if price_limits else 0
                 pl_age = (time.time() - pl_ts) if pl_ts else None
-                if (
-                    md_age_sec is not None
-                    and md_age_sec > 0.5
-                    and (pl_age is None or pl_age > 0.5)
-                ):
+                if md_age_sec is not None and md_age_sec > 0.5:
                     logger.error(
-                        f"❌ Отклоняем размещение ордера по {symbol}: нет свежей цены (DataRegistry {md_age_sec:.3f}s, price_limits {pl_age if pl_age is not None else 'N/A'}s)"
+                        f"❌ Отклоняем размещение ордера по {symbol}: нет свежей WS-цены (DataRegistry {md_age_sec:.3f}s)"
                     )
-                    raise ValueError("Stale price data: both local and remote are old")
-                else:
-                    # Инфо-лог о свежести цен при размещении ордера (раз в ~10 вызовов, чтобы не шуметь)
-                    if int(time.time() * 10) % 10 == 0:
-                        logger.info(
-                            f"PRICE_OK {symbol} md_age={md_age_sec if md_age_sec is not None else 'N/A'}s pl_age={pl_age if pl_age is not None else 'N/A'}s"
-                        )
+                    raise ValueError("Stale price data: websocket is old")
+
+                # Дополнительный контроль: если price_limits тоже старые (>0.5s)
+                if pl_age is not None and pl_age > 0.5:
+                    logger.error(
+                        f"❌ Отклоняем размещение ордера по {symbol}: нет свежей price_limits ({pl_age:.3f}s)"
+                    )
+                    raise ValueError("Stale price data: price_limits are old")
+
+                # Инфо-лог о свежести цен при размещении ордера (раз в ~10 вызовов, чтобы не шуметь)
+                if int(time.time() * 10) % 10 == 0:
+                    logger.info(
+                        f"PRICE_OK {symbol} md_age={md_age_sec if md_age_sec is not None else 'N/A'}s pl_age={pl_age if pl_age is not None else 'N/A'}s"
+                    )
             except Exception:
                 # Если не удалось оценить свежесть price_limits — продолжаем (ниже еще будут проверки)
+                pass
+
+            # Логируем расхождение между WS и REST, если использовали REST и есть ws_price
+            try:
+                if price_limits_source == "rest" and ws_price and current_price > 0:
+                    diff_pct = abs(current_price - ws_price) / ws_price
+                    if diff_pct > 0.0005:  # >0.05%
+                        logger.warning(
+                            f"⚠️ REST price differs from WS for {symbol}: ws={ws_price:.4f}/{ws_bid if ws_bid is not None else 0:.4f}/{ws_ask if ws_ask is not None else 0:.4f}, "
+                            f"rest={current_price:.4f}/{best_bid:.4f}/{best_ask:.4f}, diff={diff_pct*100:.3f}%"
+                        )
+            except Exception:
                 pass
 
             # ✅ ИСПРАВЛЕНО: Используем лучшие цены из стакана для более точного расчета
@@ -2467,7 +2589,9 @@ class FuturesOrderExecutor:
             logger.error(f"Ошибка получения статуса ордера: {e}")
             return {"error": str(e)}
 
-    async def amend_order_price(self, symbol: str, order_id: str, new_price: float) -> Dict[str, Any]:
+    async def amend_order_price(
+        self, symbol: str, order_id: str, new_price: float
+    ) -> Dict[str, Any]:
         """Изменение цены лимитного ордера через batch amend (1 ордер)."""
         try:
             if new_price <= 0:
@@ -2480,9 +2604,7 @@ class FuturesOrderExecutor:
                 "newPx": str(new_price),
             }
 
-            logger.info(
-                f"🔄 Amend price: {symbol} ordId={order_id} → {new_price:.6f}"
-            )
+            logger.info(f"🔄 Amend price: {symbol} ordId={order_id} → {new_price:.6f}")
 
             result = await self.client.batch_amend_orders([amend_item])
 

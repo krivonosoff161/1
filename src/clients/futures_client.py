@@ -11,6 +11,9 @@ from typing import Any, Dict, Optional
 import aiohttp
 from loguru import logger
 
+# ✅ НОВОЕ (09.01.2026): Автоопределение VPN и адаптация соединения
+from src.connection_quality_monitor import ConnectionQualityMonitor
+
 
 def round_to_step(value: float, step: float) -> float:
     """
@@ -81,7 +84,15 @@ class OKXFuturesClient:
         )
         # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Управление сессией для предотвращения keep-alive проблем
         self._session_created_at: Optional[float] = None
-        self._session_max_age: float = 60.0  # Пересоздавать сессию каждые 60 секунд
+        self._session_max_age: float = (
+            60.0  # Пересоздавать сессию каждые 60 секунд (будет перезаписан из monitor)
+        )
+
+        # ✅ НОВОЕ (09.01.2026): ConnectionQualityMonitor для автоопределения VPN
+        self.connection_monitor = ConnectionQualityMonitor(
+            check_interval=60.0, test_url="https://www.okx.com/api/v5/public/time"
+        )
+        self._monitor_started = False
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Circuit Breaker для защиты от массовых сбоев API
         self.consecutive_failures = 0  # Счётчик последовательных сбоев
@@ -186,24 +197,31 @@ class OKXFuturesClient:
                 await self.session.close()
                 await asyncio.sleep(0.1)  # Даем время на корректное закрытие
 
-            # Создаем новый connector с force_close=True для предотвращения проблем с keep-alive
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): VPN оптимизация
-            # ⚠️ keepalive_timeout НЕ используется - несовместим с force_close=True!
-            # force_close=True закрывает соединение после каждого запроса, поэтому keepalive_timeout бессмыслен
-            connector = aiohttp.TCPConnector(
-                limit=10,  # Лимит соединений
-                limit_per_host=10,  # Лимит на хост
-                force_close=True,  # ❗ КЛЮЧЕВОЕ: Закрывать соединение после каждого запроса
-                enable_cleanup_closed=True,  # Очищать закрытые соединения
-                ttl_dns_cache=300,  # DNS кэш на 5 минут
-                ssl=True,  # Используем SSL
-                # ✅ ИСПРАВЛЕНО: family=0 убран - параметр не существует в aiohttp.TCPConnector
-            )
+            # ✅ НОВОЕ (09.01.2026): Запуск ConnectionQualityMonitor при первом запросе
+            if not self._monitor_started:
+                await self.connection_monitor.start()
+                self._monitor_started = True
+                logger.info("🌐 ConnectionQualityMonitor запущен")
+
+            # ✅ НОВОЕ: Динамические параметры соединения из ConnectionQualityMonitor
+            connector_params = self.connection_monitor.get_connector_params()
+            self._session_max_age = self.connection_monitor.get_session_max_age()
+
+            connector = aiohttp.TCPConnector(**connector_params)
             self.session = aiohttp.ClientSession(connector=connector)
             self._session_created_at = now
-            logger.debug(
-                "♻️ Переинициализирована aiohttp сессия с force_close=True (VPN optimized)"
-            )
+
+            profile = self.connection_monitor.get_current_profile()
+            if profile:
+                logger.info(
+                    f"♻️ Переинициализирована aiohttp сессия с профилем '{profile.profile_name}': "
+                    f"force_close={profile.force_close}, timeout={profile.total_timeout}s, "
+                    f"session_max_age={profile.session_max_age}s"
+                )
+            else:
+                logger.debug(
+                    "♻️ Переинициализирована aiohttp сессия (профиль не определен)"
+                )
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Retry логика для таймаутов и ошибок подключения
         max_retries = 3
@@ -211,16 +229,8 @@ class OKXFuturesClient:
 
         for attempt in range(max_retries):
             try:
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Увеличены timeouts для VPN
-                # VPN может медленнее делать handshake, поэтому увеличиваем:
-                # - total: 30→60 сек (весь запрос может занять до 60 сек на VPN)
-                # - connect: 10→30 сек (handshake может быть медленным)
-                # - sock_read: 30 сек (для долгих запросов)
-                timeout = aiohttp.ClientTimeout(
-                    total=60,  # ✅ VPN fix: было 30, теперь 60
-                    connect=30,  # ✅ VPN fix: было 10, теперь 30
-                    sock_read=30,  # ✅ NEW: читай с сокета до 30 сек
-                )
+                # ✅ НОВОЕ (09.01.2026): Динамический timeout из ConnectionQualityMonitor
+                timeout = self.connection_monitor.get_timeout_params()
                 async with self.session.request(
                     method,
                     url,
@@ -415,6 +425,12 @@ class OKXFuturesClient:
                     or "network name" in error_str
                     or "cannot connect to host" in error_str
                 )
+
+                # ✅ НОВОЕ (09.01.2026): Записываем SSL ошибку в ConnectionQualityMonitor
+                if is_ssl_error:
+                    self.connection_monitor.record_error(is_ssl_error=True)
+                else:
+                    self.connection_monitor.record_error(is_ssl_error=False)
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Retry для SSL ошибок
                 if is_ssl_error and attempt < max_retries - 1:

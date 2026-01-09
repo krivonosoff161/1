@@ -130,7 +130,9 @@ class ExitAnalyzer:
         # Получаем доступ к модулям через orchestrator
         self.fast_adx = None
         self.order_flow = None
-        self.mtf_filter = None
+        self._mtf_filter = (
+            None  # ✅ FIX: Приватное поле, используем getter _get_mtf_filter()
+        )
         self.scalping_config = None
         self.funding_monitor = None
         self.client = None
@@ -140,41 +142,11 @@ class ExitAnalyzer:
             self.order_flow = getattr(orchestrator, "order_flow", None)
             self.funding_monitor = getattr(orchestrator, "funding_monitor", None)
             self.client = getattr(orchestrator, "client", None)
-            if signal_generator:
-                # MTF фильтр может быть в signal_generator
-                if hasattr(signal_generator, "mtf_filter"):
-                    self.mtf_filter = signal_generator.mtf_filter
-                    if self.mtf_filter:
-                        logger.debug(
-                            "✅ ExitAnalyzer: MTF фильтр получен из signal_generator.mtf_filter"
-                        )
-                    else:
-                        logger.warning(
-                            "⚠️ ExitAnalyzer: signal_generator.mtf_filter = None"
-                        )
-                elif (
-                    hasattr(signal_generator, "filter_manager")
-                    and signal_generator.filter_manager
-                ):
-                    self.mtf_filter = getattr(
-                        signal_generator.filter_manager, "mtf_filter", None
-                    )
-                    if self.mtf_filter:
-                        logger.debug(
-                            "✅ ExitAnalyzer: MTF фильтр получен из filter_manager.mtf_filter"
-                        )
-                    else:
-                        logger.warning(
-                            "⚠️ ExitAnalyzer: filter_manager.mtf_filter = None"
-                        )
-                else:
-                    logger.warning(
-                        "⚠️ ExitAnalyzer: signal_generator не имеет mtf_filter или filter_manager"
-                    )
-            else:
-                logger.warning(
-                    "⚠️ ExitAnalyzer: signal_generator не передан, MTF фильтр недоступен"
-                )
+            # ✅ FIX: MTF filter получается динамически через _get_mtf_filter()
+            # Не сохраняем здесь, так как signal_generator.initialize() ещё не вызван
+            logger.debug(
+                "✅ ExitAnalyzer: MTF фильтр будет получен динамически через _get_mtf_filter()"
+            )
 
             # Получаем scalping_config из orchestrator
             if hasattr(orchestrator, "scalping_config"):
@@ -215,6 +187,46 @@ class ExitAnalyzer:
         """Установить ExitDecisionLogger"""
         self.exit_decision_logger = exit_decision_logger
         logger.debug("✅ ExitAnalyzer: ExitDecisionLogger установлен")
+
+    def _get_mtf_filter(self):
+        """
+        ✅ FIX (09.01.2026): Динамическое получение MTF фильтра из signal_generator.
+
+        Решает проблему: ExitAnalyzer создаётся ДО вызова signal_generator.initialize(),
+        поэтому mtf_filter ещё None на момент создания ExitAnalyzer.
+        Этот метод получает mtf_filter динамически при каждом использовании.
+
+        Returns:
+            MTF фильтр или None
+        """
+        # Сначала проверяем кэшированное значение
+        if self._mtf_filter is not None:
+            return self._mtf_filter
+
+        # Пробуем получить из signal_generator
+        if self.signal_generator:
+            if (
+                hasattr(self.signal_generator, "mtf_filter")
+                and self.signal_generator.mtf_filter
+            ):
+                self._mtf_filter = self.signal_generator.mtf_filter
+                logger.debug(
+                    "✅ ExitAnalyzer: MTF фильтр получен динамически из signal_generator.mtf_filter"
+                )
+                return self._mtf_filter
+            elif (
+                hasattr(self.signal_generator, "filter_manager")
+                and self.signal_generator.filter_manager
+            ):
+                mtf = getattr(self.signal_generator.filter_manager, "mtf_filter", None)
+                if mtf:
+                    self._mtf_filter = mtf
+                    logger.debug(
+                        "✅ ExitAnalyzer: MTF фильтр получен динамически из filter_manager.mtf_filter"
+                    )
+                    return self._mtf_filter
+
+        return None
 
     def set_conversion_metrics(self, conversion_metrics):
         """
@@ -418,28 +430,50 @@ class ExitAnalyzer:
             # Получаем рыночные данные
             market_data = await self.data_registry.get_market_data(symbol)
 
-            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для анализа закрытия, data_registry только как fallback
+            # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Используем DataRegistry (WebSocket) вместо REST API
+            # Иерархия источников цены (приоритет):
+            # 1. WebSocket real-time (current_tick) - <100ms
+            # 2. Последняя свеча (ohlcv_data) - fallback если WebSocket отстал
+            # 3. Сохраненная цена (last_known_price) - emergency
             current_price = None
-            if self.client and hasattr(self.client, "get_price_limits"):
-                try:
-                    price_limits = await self.client.get_price_limits(symbol)
-                    if price_limits:
-                        current_price = price_limits.get("current_price", 0)
-                        if current_price > 0:
-                            logger.debug(
-                                f"✅ ExitAnalyzer: Используем актуальную цену из стакана для {symbol}: {current_price:.2f}"
-                            )
-                except Exception as e:
+
+            # Приоритет 1: WebSocket real-time из market_data
+            if (
+                market_data
+                and hasattr(market_data, "current_tick")
+                and market_data.current_tick
+            ):
+                if (
+                    hasattr(market_data.current_tick, "price")
+                    and market_data.current_tick.price > 0
+                ):
+                    current_price = market_data.current_tick.price
                     logger.debug(
-                        f"⚠️ ExitAnalyzer: Не удалось получить актуальную цену из стакана для {symbol}: {e}"
+                        f"✅ ExitAnalyzer: WebSocket real-time price for {symbol}: {current_price:.8f}"
                     )
 
-            # Fallback на data_registry если не получили из стакана
+            # Приоритет 2: Fallback на последнюю свечу (если WebSocket недоступен)
             if current_price is None or current_price <= 0:
-                current_price = await self.data_registry.get_price(symbol)
-                if current_price and current_price > 0:
+                if (
+                    market_data
+                    and hasattr(market_data, "ohlcv_data")
+                    and market_data.ohlcv_data
+                ):
+                    current_price = market_data.ohlcv_data[-1].close
                     logger.debug(
-                        f"✅ ExitAnalyzer: Используем цену из data_registry для {symbol}: {current_price:.2f}"
+                        f"⚠️ ExitAnalyzer: Using last candle for {symbol}: {current_price:.8f}"
+                    )
+
+            # Приоритет 3: Fallback на сохраненную цену (если совсем беда)
+            if current_price is None or current_price <= 0:
+                if (
+                    market_data
+                    and hasattr(market_data, "last_known_price")
+                    and market_data.last_known_price
+                ):
+                    current_price = market_data.last_known_price
+                    logger.warning(
+                        f"🔴 ExitAnalyzer: Emergency fallback (last_known_price) for {symbol}: {current_price:.8f}"
                     )
 
             # ✅ ИСПРАВЛЕНО: Проверка current_price на None и <= 0
@@ -1095,8 +1129,9 @@ class ExitAnalyzer:
             SL% для использования
         """
         sl_percent = 2.0  # Fallback значение
-        sl_atr_multiplier = 1.0
-        sl_min_percent = 0.6
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): Обновлены fallback значения с 1.0→2.0 и 0.6→0.9
+        sl_atr_multiplier = 2.0  # Было 1.0 - слишком маленький множитель!
+        sl_min_percent = 0.9  # Было 0.6 - слишком тесный SL!
 
         # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения параметров
         # ✅ НОВОЕ (05.01.2026): Передаем контекст для адаптивных параметров
@@ -1106,20 +1141,6 @@ class ExitAnalyzer:
                 # Получаем контекст для адаптации
                 balance = None
                 drawdown = None
-
-                # ✅ НОВОЕ (07.01.2026): Расчет drawdown для адаптивных параметров
-                # ✅ ИСПРАВЛЕНО (08.01.2026): Проверяем что current_pnl определена перед использованием
-                # Проверяем есть ли доступ к position_pnl для расчета drawdown
-                if current_pnl is not None and isinstance(current_pnl, (int, float)) and current_pnl < 0:
-                    drawdown = abs(
-                        current_pnl
-                    )  # Используем текущий PnL как приблизительную просадку
-                    logger.debug(
-                        f"📊 ExitAnalyzer: drawdown={drawdown:.1f}% (from position PnL) для {symbol}"
-                    )
-                else:
-                    # ✅ ИСПРАВЛЕНО: Если current_pnl не определена или не отрицательна, drawdown = None
-                    drawdown = None
 
                 exit_params = self.parameter_provider.get_exit_params(
                     symbol, regime, balance=balance, drawdown=drawdown
@@ -1131,11 +1152,15 @@ class ExitAnalyzer:
                         )
                     if "sl_atr_multiplier" in exit_params:
                         sl_atr_multiplier = self._to_float(
-                            exit_params["sl_atr_multiplier"], "sl_atr_multiplier", 1.0
+                            exit_params["sl_atr_multiplier"],
+                            "sl_atr_multiplier",
+                            2.0,  # ✅ FIX: 1.0→2.0
                         )
                     if "sl_min_percent" in exit_params:
                         sl_min_percent = self._to_float(
-                            exit_params["sl_min_percent"], "sl_min_percent", 0.6
+                            exit_params["sl_min_percent"],
+                            "sl_min_percent",
+                            0.9,  # ✅ FIX: 0.6→0.9
                         )
                     # ✅ НОВОЕ (03.01.2026): Детальное логирование источников SL параметров
                     logger.info(
@@ -1168,10 +1193,14 @@ class ExitAnalyzer:
                                 sl_percent = float(regime_config["sl_percent"])
                                 sl_atr_based = regime_config.get("sl_atr_based", False)
                                 sl_atr_multiplier = float(
-                                    regime_config.get("sl_atr_multiplier", 1.0)
+                                    regime_config.get(
+                                        "sl_atr_multiplier", 2.0
+                                    )  # ✅ FIX: 1.0→2.0
                                 )
                                 sl_min_percent = float(
-                                    regime_config.get("sl_min_percent", 0.6)
+                                    regime_config.get(
+                                        "sl_min_percent", 0.9
+                                    )  # ✅ FIX: 0.6→0.9
                                 )
                             except (TypeError, ValueError) as e:
                                 logger.warning(
@@ -1201,10 +1230,14 @@ class ExitAnalyzer:
                                         "sl_atr_based", False
                                     )
                                     sl_atr_multiplier = float(
-                                        regime_config.get("sl_atr_multiplier", 1.0)
+                                        regime_config.get(
+                                            "sl_atr_multiplier", 2.0
+                                        )  # ✅ FIX: 1.0→2.0
                                     )
                                     sl_min_percent = float(
-                                        regime_config.get("sl_min_percent", 0.6)
+                                        regime_config.get(
+                                            "sl_min_percent", 0.9
+                                        )  # ✅ FIX: 0.6→0.9
                                     )
                                     # ✅ НОВОЕ (03.01.2026): Логирование источника SL параметров при использовании fallback
                                     logger.info(
@@ -1238,10 +1271,14 @@ class ExitAnalyzer:
                                         "sl_atr_based", False
                                     )
                                     sl_atr_multiplier = float(
-                                        regime_config.get("sl_atr_multiplier", 1.0)
+                                        regime_config.get(
+                                            "sl_atr_multiplier", 2.0
+                                        )  # ✅ FIX: 1.0→2.0
                                     )
                                     sl_min_percent = float(
-                                        regime_config.get("sl_min_percent", 0.6)
+                                        regime_config.get(
+                                            "sl_min_percent", 0.9
+                                        )  # ✅ FIX: 0.6→0.9
                                     )
                                     # ✅ НОВОЕ (03.01.2026): Логирование источника SL параметров при использовании fallback
                                     logger.info(
@@ -1985,7 +2022,8 @@ class ExitAnalyzer:
             )
 
         # Проверка MTF разворота
-        if self.mtf_filter and not reversal_detected:
+        mtf_filter = self._get_mtf_filter()
+        if mtf_filter and not reversal_detected:
             try:
                 # MTF фильтр может показывать разворот тренда на более высоком таймфрейме
                 # Пока упрощенная проверка - можно расширить позже
@@ -2000,22 +2038,19 @@ class ExitAnalyzer:
                 )
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period при ошибке MTF
                 # MTF недоступен из-за ошибки, откладываем SL
-                # ⚠️ ВАЖНО: Grace period НЕ считается разворотом - он только блокирует SL
                 if not order_flow_reversal:
                     self._apply_sl_grace_period(symbol, "MTF ошибка")
-                    # НЕ возвращаем True - grace period не является разворотом!
-        elif not self.mtf_filter:
+                    # ✅ НЕ возвращаем True - grace period не является разворотом!
+        elif not mtf_filter:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period при отсутствии MTF
             logger.warning(
                 f"⚠️ [REVERSAL_CHECK] {symbol} {position_side.upper()}: MTF фильтр недоступен — "
                 f"применяем grace period для SL"
             )
             # Если Order Flow тоже не показал разворот → откладываем SL
-            # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period НЕ является разворотом!
-            # Grace period только блокирует SL, но НЕ должен приводить к закрытию позиции с прибылью
             if not order_flow_reversal:
                 self._apply_sl_grace_period(symbol, "MTF недоступен")
-                # НЕ возвращаем True - grace period не является разворотом!
+                # ✅ НЕ возвращаем результат - grace period не является разворотом!
 
         # ✅ ИТОГОВОЕ ЛОГИРОВАНИЕ
         logger.info(
@@ -2023,8 +2058,6 @@ class ExitAnalyzer:
             f"reversal_detected={reversal_detected}, order_flow={order_flow_reversal}, mtf={mtf_reversal}"
         )
 
-        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Возвращаем ТОЛЬКО реальный разворот (order_flow или mtf)
-        # Grace period НЕ считается разворотом для закрытия позиции с прибылью!
         return reversal_detected
 
     def _apply_sl_grace_period(self, symbol: str, reason: str) -> None:
@@ -2033,15 +2066,11 @@ class ExitAnalyzer:
 
         При недоступности MTF фильтра откладываем срабатывание SL на 30 секунд,
         чтобы избежать преждевременного закрытия позиций, которые могут развернуться.
-
-        ⚠️ ВАЖНО: Grace period НЕ является разворотом! Он только блокирует SL.
+        Grace period НЕ считается разворотом!
 
         Args:
             symbol: Торговый символ
             reason: Причина применения grace period
-
-        Returns:
-            None (grace period не возвращает значение - это не разворот!)
         """
         now = time.time()
         grace_key = f"{symbol}_sl_grace"
@@ -2054,7 +2083,7 @@ class ExitAnalyzer:
                 f"⏳ [GRACE_PERIOD] {symbol}: Начало grace period ({self._sl_grace_duration}s) — {reason}. "
                 f"SL отложен."
             )
-            return  # Grace period активен, но это НЕ разворот!
+            return  # ✅ Просто отмечаем, не возвращаем результат
 
         elapsed = now - last_attempt
 
@@ -2065,7 +2094,7 @@ class ExitAnalyzer:
                 f"⏳ [GRACE_PERIOD] {symbol}: Grace period активен ({remaining:.1f}s осталось) — {reason}. "
                 f"SL отложен."
             )
-            return  # Grace period активен, но это НЕ разворот!
+            return  # ✅ Grace period активен
         else:
             # Grace period истёк — разрешаем SL
             logger.warning(
@@ -2074,26 +2103,32 @@ class ExitAnalyzer:
             )
             # Сбрасываем grace period
             del self._sl_grace_periods[grace_key]
-            return  # Grace period истёк
+            return  # ✅ Grace period истёк
 
     def _is_grace_period_active(self, symbol: str) -> bool:
         """
-        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверка активного grace period.
+        ✅ НОВОЕ (08.01.2026): Проверка активного grace period.
 
         Args:
             symbol: Торговый символ
 
         Returns:
-            True если grace period активен, False если нет
+            True если grace period активен, False если истёк или не существует
         """
         grace_key = f"{symbol}_sl_grace"
         last_attempt = self._sl_grace_periods.get(grace_key)
-        
+
         if not last_attempt:
-            return False
-        
+            return False  # Нет grace period
+
         elapsed = time.time() - last_attempt
-        return elapsed < self._sl_grace_duration
+
+        if elapsed < self._sl_grace_duration:
+            return True  # Grace period активен
+        else:
+            # Grace period истёк
+            del self._sl_grace_periods[grace_key]
+            return False
 
     async def _get_entry_price_and_side(
         self, symbol: str, position: Any, metadata: Any
@@ -2491,13 +2526,7 @@ class ExitAnalyzer:
                             reversal_detected = await self._check_reversal_signals(
                                 symbol, position_side
                             )
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-                            is_grace_period = self._is_grace_period_active(symbol)
-                            if is_grace_period:
-                                logger.debug(
-                                    f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
-                                )
-                            elif reversal_detected:
+                            if reversal_detected:
                                 logger.info(
                                     f"🔄 ExitAnalyzer TRENDING: Обнаружен разворот для {symbol} {position_side.upper()}, "
                                     f"но убыток критический ({pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
@@ -2744,11 +2773,17 @@ class ExitAnalyzer:
 
             # 5. Проверка partial_tp с учетом adaptive_min_holding
             partial_tp_params = self._get_partial_tp_params("trending")
-            if partial_tp_params.get("enabled", False):
-                # ✅ УЛУЧШЕНИЕ #6: Используем оптимизированные триггеры из конфига
-                trigger_percent = partial_tp_params.get(
-                    "trigger_percent", 0.8
-                )  # Обновлено: 0.8% для trending
+            partial_tp_enabled = partial_tp_params.get("enabled", False)
+            trigger_percent = partial_tp_params.get("trigger_percent", 0.8)
+
+            # ✅ FIX (09.01.2026): Улучшенное логирование partial_tp для диагностики
+            logger.debug(
+                f"📊 [PARTIAL_TP] {symbol} TRENDING: enabled={partial_tp_enabled}, "
+                f"pnl={pnl_percent:.2f}% vs trigger={trigger_percent:.2f}%, "
+                f"достаточно для partial_tp={'✅ ДА' if pnl_percent >= trigger_percent else '❌ НЕТ'}"
+            )
+
+            if partial_tp_enabled:
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
                     (
@@ -2803,8 +2838,9 @@ class ExitAnalyzer:
             try:
                 if self.fast_adx:
                     adx_value = self.fast_adx.get_current_adx()
-                if self.mtf_filter:
-                    mtf_result = await self.mtf_filter.check_mtf_confirmation_async(
+                mtf_filter = self._get_mtf_filter()
+                if mtf_filter:
+                    mtf_result = await mtf_filter.check_mtf_confirmation_async(
                         symbol, position_side, current_price, market_data
                     )
                     mtf_signal = "confirm" if mtf_result else "block"
@@ -2858,13 +2894,7 @@ class ExitAnalyzer:
                 reversal_detected = await self._check_reversal_signals(
                     symbol, position_side
                 )
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-                is_grace_period = self._is_grace_period_active(symbol)
-                if is_grace_period:
-                    logger.debug(
-                        f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
-                    )
-                elif reversal_detected:
+                if reversal_detected:
                     logger.info(
                         f"🔄 ExitAnalyzer TRENDING: Обнаружен разворот для {symbol} {position_side.upper()}, "
                         f"но SL достигнут (Gross PnL={gross_pnl_percent:.2f}% <= {sl_threshold:.2f}%). "
@@ -2922,6 +2952,22 @@ class ExitAnalyzer:
                     f"PnL={gross_pnl_percent:.2f}% (gross), {pnl_percent:.2f}% (net), "
                     f"time={minutes_in_position:.1f} min, regime={regime}, нет признаков разворота"
                 )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): ПРОВЕРЯЕМ GRACE PERIOD ПЕРЕД SL
+                if self._is_grace_period_active(symbol):
+                    logger.warning(
+                        f"⏳ [GRACE_PERIOD ЗАЩИТА] {symbol}: SL достигнут но grace period активен! "
+                        f"Откладываем закрытие на следующий раунд."
+                    )
+                    # Не закрываем - жди перепроверки на следующей итерации
+                    return {
+                        "action": "hold",
+                        "reason": "sl_reached_but_grace_period",
+                        "pnl_pct": gross_pnl_percent,
+                        "net_pnl_pct": pnl_percent,
+                        "grace_period_active": True,
+                    }
+
                 self._record_metrics_on_close(
                     symbol=symbol,
                     reason="sl_reached",
@@ -3038,18 +3084,9 @@ class ExitAnalyzer:
             reversal_detected = await self._check_reversal_signals(
                 symbol, position_side
             )
-            
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-            is_grace_period = self._is_grace_period_active(symbol)
-            
-            if is_grace_period:
-                logger.debug(
-                    f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот, "
-                    f"не закрываем позицию по развороту"
-                )
-            elif reversal_detected:
+            if reversal_detected:
                 logger.info(
-                    f"🔄 ExitAnalyzer TRENDING: РЕАЛЬНЫЙ разворот обнаружен для {symbol}, закрываем позицию "
+                    f"🔄 ExitAnalyzer TRENDING: Разворот обнаружен для {symbol}, закрываем позицию "
                     f"(profit={pnl_percent:.2f}%)"
                 )
                 return {
@@ -3222,17 +3259,11 @@ class ExitAnalyzer:
                     reversal_detected = await self._check_reversal_signals(
                         symbol, position_side
                     )
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-                    is_grace_period = self._is_grace_period_active(symbol)
                     logger.info(
                         f"🔍 ExitAnalyzer TRENDING: Результат проверки разворота для {symbol} {position_side.upper()}: "
-                        f"reversal_detected={reversal_detected}, is_grace_period={is_grace_period}"
+                        f"reversal_detected={reversal_detected}"
                     )
-                    if is_grace_period:
-                        logger.debug(
-                            f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
-                        )
-                    elif reversal_detected:
+                    if reversal_detected:
                         # Есть признаки разворота - закрываем по времени
                         logger.info(
                             f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
@@ -3449,17 +3480,11 @@ class ExitAnalyzer:
                             reversal_detected = await self._check_reversal_signals(
                                 symbol, position_side
                             )
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-                            is_grace_period = self._is_grace_period_active(symbol)
                             logger.info(
                                 f"🔍 ExitAnalyzer RANGING: Результат проверки разворота для {symbol} {position_side.upper()}: "
-                                f"reversal_detected={reversal_detected}, is_grace_period={is_grace_period}"
+                                f"reversal_detected={reversal_detected}"
                             )
-                            if is_grace_period:
-                                logger.debug(
-                                    f"🔍 ExitAnalyzer RANGING: Grace period активен для {symbol} - это НЕ разворот"
-                                )
-                            elif reversal_detected:
+                            if reversal_detected:
                                 logger.info(
                                     f"🔄 ExitAnalyzer RANGING: Обнаружен разворот для {symbol} {position_side.upper()}, "
                                     f"но убыток критический ({net_pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
@@ -3764,17 +3789,11 @@ class ExitAnalyzer:
                 reversal_detected = await self._check_reversal_signals(
                     symbol, position_side
                 )
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-                is_grace_period = self._is_grace_period_active(symbol)
                 logger.info(
                     f"🔍 ExitAnalyzer TRENDING: Результат проверки разворота для {symbol} {position_side.upper()}: "
-                    f"reversal_detected={reversal_detected}, is_grace_period={is_grace_period}"
+                    f"reversal_detected={reversal_detected}"
                 )
-                if is_grace_period:
-                    logger.debug(
-                        f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
-                    )
-                elif reversal_detected:
+                if reversal_detected:
                     logger.info(
                         f"🔄 ExitAnalyzer RANGING: Обнаружен разворот для {symbol} {position_side.upper()}, "
                         f"но SL достигнут (Gross PnL={gross_pnl_percent:.2f}% <= {sl_threshold:.2f}%). "
@@ -3842,6 +3861,22 @@ class ExitAnalyzer:
                     f"PnL={gross_pnl_percent:.2f}% (gross), {net_pnl_percent:.2f}% (net), "
                     f"time={minutes_in_position:.1f} min, regime={regime}, нет признаков разворота"
                 )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): ПРОВЕРЯЕМ GRACE PERIOD ПЕРЕД SL (RANGING РЕЖИМ)
+                if self._is_grace_period_active(symbol):
+                    logger.warning(
+                        f"⏳ [GRACE_PERIOD ЗАЩИТА] {symbol}: SL достигнут но grace period активен! "
+                        f"Откладываем закрытие на следующий раунд (RANGING режим)."
+                    )
+                    # Не закрываем - жди перепроверки на следующей итерации
+                    return {
+                        "action": "hold",
+                        "reason": "sl_reached_but_grace_period",
+                        "pnl_pct": gross_pnl_percent,
+                        "net_pnl_pct": net_pnl_percent,
+                        "grace_period_active": True,
+                    }
+
                 # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
                 self._record_metrics_on_close(
                     symbol=symbol,
@@ -4151,25 +4186,17 @@ class ExitAnalyzer:
 
             # 6. Проверка разворота (Order Flow, MTF) - в ranging режиме более строго
             # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки прибыли (реальная прибыль после комиссий)
-            # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period НЕ считается разворотом!
             reversal_detected = await self._check_reversal_signals(
                 symbol, position_side
             )
-            
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-            # Grace period НЕ должен приводить к закрытию позиции с прибылью!
-            is_grace_period = self._is_grace_period_active(symbol)
-            
-            if is_grace_period:
-                logger.debug(
-                    f"🔍 ExitAnalyzer RANGING: Grace period активен для {symbol} - это НЕ разворот, "
-                    f"не закрываем позицию по развороту"
-                )
-            elif (
-                reversal_detected and net_pnl_percent > 0.3
-            ):  # Закрываем только если есть реальная прибыль после комиссий И РЕАЛЬНЫЙ разворот (НЕ grace period!)
+            if (
+                reversal_detected
+                and not self._is_grace_period_active(symbol)
+                and net_pnl_percent > 0.3
+            ):  # Закрываем только если есть реальная прибыль после комиссий И это реальный разворот
                 logger.info(
-                    f"🔄 ExitAnalyzer RANGING: РЕАЛЬНЫЙ разворот обнаружен для {symbol}, закрываем позицию "
+                    f"🔄 ExitAnalyzer RANGING: Разворот обнаружен для {symbol}, закрываем позицию "
                     f"(Net PnL={net_pnl_percent:.2f}%, Gross PnL={gross_pnl_percent:.2f}%)"
                 )
                 return {
@@ -4180,12 +4207,6 @@ class ExitAnalyzer:
                     "reversal_signal": "order_flow_or_mtf",
                     "regime": regime,
                 }
-            elif reversal_detected:
-                # Разворот обнаружен, но прибыль недостаточна - не закрываем
-                logger.debug(
-                    f"🔍 ExitAnalyzer RANGING: Разворот обнаружен для {symbol}, но Net PnL={net_pnl_percent:.2f}% <= 0.3% - "
-                    f"не закрываем (требуется минимум 0.3% прибыли для закрытия по развороту)"
-                )
 
             # 7. ✅ НОВОЕ: Проверка Max Holding - учитываем время в позиции как фактор анализа
             logger.debug(
@@ -4550,16 +4571,10 @@ class ExitAnalyzer:
                 reversal_detected = await self._check_reversal_signals(
                     symbol, position_side
                 )
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-                is_grace_period = self._is_grace_period_active(symbol)
                 logger.info(
                     f"🔍 ExitAnalyzer RANGING: Результат проверки разворота для {symbol} {position_side.upper()}: "
-                    f"reversal_detected={reversal_detected}, is_grace_period={is_grace_period}"
+                    f"reversal_detected={reversal_detected}"
                 )
-                if is_grace_period:
-                    logger.debug(
-                        f"🔍 ExitAnalyzer RANGING: Grace period активен для {symbol} - это НЕ разворот"
-                    )
                 trend_data = await self._analyze_trend_strength(symbol)
                 trend_strength = (
                     trend_data.get("trend_strength", 0) if trend_data else 0
@@ -4569,13 +4584,8 @@ class ExitAnalyzer:
                     f"trend_strength={trend_strength:.2f}"
                 )
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-                if is_grace_period:
-                    logger.debug(
-                        f"🔍 ExitAnalyzer RANGING: Grace period активен для {symbol} - это НЕ разворот, не закрываем по времени"
-                    )
-                elif reversal_detected:
-                    # Есть признаки РЕАЛЬНОГО разворота - закрываем по времени
+                if reversal_detected:
+                    # Есть признаки разворота - закрываем по времени
                     logger.info(
                         f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
                         f"Net прибыль={net_pnl_percent:.2f}% >= {min_profit_threshold_pct:.2f}%, "
@@ -4844,13 +4854,7 @@ class ExitAnalyzer:
                             reversal_detected = await self._check_reversal_signals(
                                 symbol, position_side
                             )
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-                            is_grace_period = self._is_grace_period_active(symbol)
-                            if is_grace_period:
-                                logger.debug(
-                                    f"🔍 ExitAnalyzer TRENDING: Grace period активен для {symbol} - это НЕ разворот"
-                                )
-                            elif reversal_detected:
+                            if reversal_detected:
                                 logger.info(
                                     f"🔄 ExitAnalyzer CHOPPY: Обнаружен разворот для {symbol} {position_side.upper()}, "
                                     f"но убыток критический ({pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
@@ -5104,6 +5108,22 @@ class ExitAnalyzer:
                     f"(SL={sl_percent:.2f}% + spread_buffer={spread_buffer:.4f}%), "
                     f"Net PnL={pnl_percent:.2f}% (с комиссией), режим={regime}"
                 )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): ПРОВЕРЯЕМ GRACE PERIOD ПЕРЕД SL (CHOPPY РЕЖИМ)
+                if self._is_grace_period_active(symbol):
+                    logger.warning(
+                        f"⏳ [GRACE_PERIOD ЗАЩИТА] {symbol}: SL достигнут но grace period активен! "
+                        f"Откладываем закрытие на следующий раунд (CHOPPY режим)."
+                    )
+                    # Не закрываем - жди перепроверки на следующей итерации
+                    return {
+                        "action": "hold",
+                        "reason": "sl_reached_but_grace_period",
+                        "pnl_pct": gross_pnl_percent,
+                        "net_pnl_pct": pnl_percent,
+                        "grace_period_active": True,
+                    }
+
                 self._record_metrics_on_close(
                     symbol=symbol,
                     reason="sl_reached",
@@ -5240,10 +5260,17 @@ class ExitAnalyzer:
             # 5. Проверка partial_tp - в choppy режиме более агрессивно (с учетом adaptive_min_holding)
             # ✅ УЛУЧШЕНИЕ #6: Используем оптимизированные триггеры из конфига
             partial_tp_params = self._get_partial_tp_params("choppy")
-            if partial_tp_params.get("enabled", False):
-                trigger_percent = partial_tp_params.get(
-                    "trigger_percent", 0.6
-                )  # Обновлено: 0.6% для choppy
+            partial_tp_enabled = partial_tp_params.get("enabled", False)
+            trigger_percent = partial_tp_params.get("trigger_percent", 0.6)
+
+            # ✅ FIX (09.01.2026): Улучшенное логирование partial_tp для диагностики
+            logger.debug(
+                f"📊 [PARTIAL_TP] {symbol} CHOPPY: enabled={partial_tp_enabled}, "
+                f"pnl={pnl_percent:.2f}% vs trigger={trigger_percent:.2f}%, "
+                f"достаточно для partial_tp={'✅ ДА' if pnl_percent >= trigger_percent else '❌ НЕТ'}"
+            )
+
+            if partial_tp_enabled:
                 if pnl_percent >= trigger_percent:
                     # ✅ Проверяем adaptive_min_holding перед partial_tp
                     (
@@ -5294,18 +5321,9 @@ class ExitAnalyzer:
             reversal_detected = await self._check_reversal_signals(
                 symbol, position_side
             )
-            
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Проверяем что это РЕАЛЬНЫЙ разворот, а не grace period!
-            is_grace_period = self._is_grace_period_active(symbol)
-            
-            if is_grace_period:
-                logger.debug(
-                    f"🔍 ExitAnalyzer CHOPPY: Grace period активен для {symbol} - это НЕ разворот, "
-                    f"не закрываем позицию по развороту"
-                )
-            elif reversal_detected:
+            if reversal_detected:
                 logger.info(
-                    f"🔄 ExitAnalyzer CHOPPY: РЕАЛЬНЫЙ разворот обнаружен для {symbol}, закрываем позицию "
+                    f"🔄 ExitAnalyzer CHOPPY: Разворот обнаружен для {symbol}, закрываем позицию "
                     f"(profit={pnl_percent:.2f}%)"
                 )
                 return {

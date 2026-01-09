@@ -31,6 +31,8 @@ from .filters import (FundingRateFilter, LiquidityFilter, MomentumFilter,
 from .signals.filter_manager import FilterManager
 from .signals.macd_signal_generator import MACDSignalGenerator
 from .signals.rsi_signal_generator import RSISignalGenerator
+from .signals.trend_following_signal_generator import \
+    TrendFollowingSignalGenerator  # ✅ НОВОЕ (09.01.2026)
 
 
 class FuturesSignalGenerator:
@@ -1382,8 +1384,18 @@ class FuturesSignalGenerator:
                 scalping_config=self.scalping_config,  # ✅ Передаем scalping_config для confidence_config
             )
 
+            # ✅ НОВОЕ (09.01.2026): Инициализируем TrendFollowingSignalGenerator для LONG в uptrend
+            self.trend_following_generator = TrendFollowingSignalGenerator(
+                regime_managers=self.regime_managers,
+                regime_manager=self.regime_manager,
+                get_current_market_price_callback=self._get_current_market_price,
+                get_regime_indicators_params_callback=self._get_regime_indicators_params,
+                scalping_config=self.scalping_config,
+            )
+
             logger.info(
-                "✅ Рефакторированные генераторы сигналов инициализированы: RSISignalGenerator, MACDSignalGenerator"
+                "✅ Рефакторированные генераторы сигналов инициализированы: "
+                "RSISignalGenerator, MACDSignalGenerator, TrendFollowingSignalGenerator"
             )
 
             self.is_initialized = True
@@ -1401,6 +1413,32 @@ class FuturesSignalGenerator:
             logger.warning(
                 "⚠️ FuturesSignalGenerator инициализирован с ошибками, но продолжает работу"
             )
+
+    def _get_current_price(self, market_data: MarketData) -> float:
+        """
+        Получить текущую цену из WebSocket (реальное время) вместо старых OHLCV свечей.
+
+        ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (09.01.2026):
+        - Использует реальную цену из WebSocket (current_tick)
+        - Фалбэк на OHLCV если tick недоступен
+        - Это решает проблему с ордерами, размещаемыми далеко от рынка
+
+        Args:
+            market_data: MarketData объект с реальной информацией
+
+        Returns:
+            float: Текущая цена (реальная из WebSocket или fallback из OHLCV)
+        """
+        # ✅ ПРИОРИТЕТ 1: Использовать реальную цену из WebSocket (current_tick)
+        if market_data.current_tick and market_data.current_tick.price > 0:
+            return market_data.current_tick.price
+
+        # ✅ ПРИОРИТЕТ 2: Fallback на последнюю закрытую свечу (если tick недоступен)
+        if market_data.ohlcv_data:
+            return market_data.ohlcv_data[-1].close
+
+        # ✅ ПРИОРИТЕТ 3: Fallback на нуль (если данных вообще нет)
+        return 0.0
 
     async def generate_signals(
         self, current_positions: Dict = None
@@ -1482,8 +1520,8 @@ class FuturesSignalGenerator:
                         return []
 
                     try:
-                        # Берем последнюю цену закрытия как current_price
-                        current_price = market_data.ohlcv_data[-1].close
+                        # Берем текущую цену из WebSocket (реал-тайм) с fallback на закрытие свечи
+                        current_price = self._get_current_price(market_data)
                         # ✅ ВАЖНО: Проверяем что current_price это число
                         if (
                             not isinstance(current_price, (int, float))
@@ -1642,7 +1680,9 @@ class FuturesSignalGenerator:
                 return []
 
             # Генерация базовых сигналов
-            base_signals = await self._generate_base_signals(symbol, market_data)
+            base_signals = await self._generate_base_signals(
+                symbol, market_data, regime
+            )
 
             # ✅ НОВОЕ (26.12.2025): Логирование причин отсутствия сигналов
             if not base_signals or len(base_signals) == 0:
@@ -1958,11 +1998,14 @@ class FuturesSignalGenerator:
             return None
 
     async def _generate_base_signals(
-        self, symbol: str, market_data: MarketData
+        self, symbol: str, market_data: MarketData, regime: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Генерация базовых торговых сигналов"""
         try:
             signals = []
+
+            # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Инициализируем current_regime в начале метода
+            current_regime = regime  # Используем переданный режим или None
 
             # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Проверяем валидность market_data и свечей ПЕРЕД расчетом индикаторов (БЕЗ FALLBACK)
             if not market_data or not market_data.ohlcv_data:
@@ -2567,7 +2610,7 @@ class FuturesSignalGenerator:
             # Получаем текущую цену для логирования
             current_price_log = 0.0
             if market_data and market_data.ohlcv_data:
-                current_price_log = market_data.ohlcv_data[-1].close
+                current_price_log = self._get_current_price(market_data)
 
             # ✅ ИСПРАВЛЕНО: Правильное форматирование RSI (сначала проверяем тип, потом форматируем)
             rsi_str = (
@@ -2700,6 +2743,34 @@ class FuturesSignalGenerator:
                 signal_stats["macd"]["generated"] = len(macd_signals)
                 signals.extend(macd_signals)
 
+            # ✅ НОВОЕ (09.01.2026): TrendFollowing сигналы для LONG в uptrend
+            if self.trend_following_generator:
+                try:
+                    trend_signals = (
+                        await self.trend_following_generator.generate_signals(
+                            symbol,
+                            indicators,
+                            market_data,
+                            adx_trend,
+                            adx_value,
+                            adx_threshold,
+                        )
+                    )
+                    signal_stats["trend_following"] = {
+                        "generated": len(trend_signals),
+                        "filtered": 0,
+                    }
+                    signals.extend(trend_signals)
+                    if trend_signals:
+                        logger.info(
+                            f"✅ {symbol}: TrendFollowingSignalGenerator добавил {len(trend_signals)} сигналов "
+                            f"(strategies: pullback/breakout/support_bounce)"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ TrendFollowingSignalGenerator ошибка для {symbol}: {e}"
+                    )
+
             # Bollinger Bands сигналы
             bb_signals = await self._generate_bollinger_signals(
                 symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
@@ -2716,16 +2787,6 @@ class FuturesSignalGenerator:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Range-bounce сигналы для ranging режима (FIX 8)
             # Генерируем сигналы отскока от BB границ в ranging режиме
-            # Получаем режим из DataRegistry для range-bounce сигналов
-            current_regime = None
-            try:
-                if self.data_registry:
-                    regime_data = await self.data_registry.get_regime(symbol)
-                    if regime_data:
-                        current_regime = regime_data.get("regime")
-            except Exception:
-                pass
-            
             if current_regime and current_regime.lower() == "ranging":
                 range_bounce_signals = await self._generate_range_bounce_signals(
                     symbol, indicators, market_data
@@ -4803,14 +4864,8 @@ class FuturesSignalGenerator:
             bb_middle = indicators.get("bb_middle", 0)
             rsi = indicators.get("rsi", 0)
             adx = indicators.get("adx", 0)
-            
-            # ✅ ИСПРАВЛЕНО: Получаем цену из свечей или через метод
-            if market_data and market_data.ohlcv_data:
-                candle_close_price = market_data.ohlcv_data[-1].close
-                current_price = await self._get_current_market_price(symbol, candle_close_price)
-            else:
-                logger.warning(f"⚠️ Range-bounce: market_data или свечи отсутствуют для {symbol}")
-                return signals
+            # ✅ ИСПРАВЛЕНИЕ: Используем реал-тайм цену из WebSocket (current_tick) с fallback
+            current_price = self._get_current_price(market_data)
 
             if not all([bb_upper, bb_lower, bb_middle, current_price]):
                 return signals
@@ -5313,9 +5368,9 @@ class FuturesSignalGenerator:
 
             # ✅ АДАПТИВНО: Получаем min_ma_difference_pct из конфига (ПРИОРИТЕТ: per-symbol > режим > fallback)
             min_ma_difference_pct = 0.1  # Fallback значение
+            symbol_profile_found = False
             try:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала проверяем per-symbol overrides из symbol_profiles
-                symbol_profile_found = False
                 try:
                     adaptive_regime = getattr(
                         self.scalping_config, "adaptive_regime", {}
@@ -5450,6 +5505,17 @@ class FuturesSignalGenerator:
                     f"⚠️ Не удалось получить адаптивный min_ma_difference_pct: {e}, используем fallback 0.1%"
                 )
 
+            # ✅ ЛОКАЛЬНЫЙ СМОРОЛ для flat: снижаем порог, если нет явного per-symbol override
+            if (
+                not symbol_profile_found
+                and regime_name_ma == "ranging"
+                and min_ma_difference_pct > 0.005
+            ):
+                logger.debug(
+                    f"ℹ️ RANGING override: min_ma_difference_pct снижён до 0.005% (было {min_ma_difference_pct}%)"
+                )
+                min_ma_difference_pct = 0.005
+
             # ✅ АДАПТИВНО: Получаем confidence значения по режиму
             confidence_config = {}
             if isinstance(signal_gen_config_ma, dict):
@@ -5494,9 +5560,11 @@ class FuturesSignalGenerator:
                 }
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): adx_threshold_ma уже определена в начале метода (строка 3781)
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Блокируем сигналы при идентичных EMA (|EMA12-EMA26|/EMA26 < 0.01%)
-            ema_identity_threshold = 0.0001  # 0.01% - порог идентичности EMA
-            ema_identity_pct = abs(ma_fast - ma_slow) / ma_slow if ma_slow > 0 else 0
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Блокируем сигналы при идентичных EMA (|EMA12-EMA26|/EMA26 < 0.001%)
+            ema_identity_threshold = 0.001  # 0.001% - порог идентичности EMA
+            ema_identity_pct = (
+                abs(ma_fast - ma_slow) / ma_slow * 100 if ma_slow > 0 else 0
+            )
             if ema_identity_pct < ema_identity_threshold:
                 logger.warning(
                     f"🚫 MA сигналы ПОЛНОСТЬЮ ЗАБЛОКИРОВАНЫ для {symbol}: "
@@ -5764,19 +5832,27 @@ class FuturesSignalGenerator:
         # ✅ ИСПРАВЛЕНО (06.01.2026): Улучшенный фильтр объема (рекомендация Copilot)
         # Проверяем объем относительно SMA20 вместо среднего по lookback
         vol_cur = current_candle.volume
+        volume_source = "tick"
+        volume_warmup = False
+        if vol_cur <= 0 and len(candles) >= 2:
+            vol_cur = candles[-2].volume
+            volume_source = "prev_candle"
+        if vol_cur <= 0:
+            volume_warmup = True
+
         vol_sma20 = (
             sum(c.volume for c in candles[-20:]) / 20 if len(candles) >= 20 else 0
         )
-        if vol_sma20 > 0 and vol_cur < vol_sma20 * 1.1:
+        if not volume_warmup and vol_sma20 > 0 and vol_cur < vol_sma20 * 1.1:
             # Блокируем низкообъемные сигналы (шум)
             logger.debug(
                 f"🚫 Импульсный сигнал {symbol} заблокирован: низкий объем "
-                f"(текущий={vol_cur:.0f}, SMA20={vol_sma20:.0f}, ratio={vol_cur/vol_sma20:.2f} < 1.1)"
+                f"(источник={volume_source}, текущий={vol_cur:.0f}, SMA20={vol_sma20:.0f}, ratio={vol_cur/vol_sma20:.2f} < 1.1)"
             )
             return []
 
         avg_volume = sum(c.volume for c in prev_candles) / max(len(prev_candles), 1)
-        if (
+        if not volume_warmup and (
             avg_volume <= 0
             or current_candle.volume < avg_volume * detection_values["min_volume_ratio"]
         ):

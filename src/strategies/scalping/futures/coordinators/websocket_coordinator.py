@@ -356,11 +356,31 @@ class WebSocketCoordinator:
                                 low_24h = float(ticker.get("low24h", price))
                                 open_24h = float(ticker.get("open24h", price))
 
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): Добавляем current_tick для real-time цены
+                                # Создаем объект tick с real-time ценой из WebSocket
+                                class CurrentTick:
+                                    def __init__(self, price, bid, ask, timestamp):
+                                        self.price = price
+                                        self.bid = bid
+                                        self.ask = ask
+                                        self.timestamp = timestamp
+
+                                bid_price = float(ticker.get("bidPx", price))
+                                ask_price = float(ticker.get("askPx", price))
+
+                                current_tick = CurrentTick(
+                                    price=price,
+                                    bid=bid_price,
+                                    ask=ask_price,
+                                    timestamp=time.time(),
+                                )
+
                                 await self.data_registry.update_market_data(
                                     symbol,
                                     {
                                         "price": price,
                                         "last_price": price,
+                                        "current_tick": current_tick,  # ✅ WebSocket real-time цена
                                         "volume": volume_24h,
                                         "volume_ccy": volume_ccy_24h,
                                         "high_24h": high_24h,
@@ -371,7 +391,7 @@ class WebSocketCoordinator:
                                     },
                                 )
                                 logger.debug(
-                                    f"✅ DataRegistry: Обновлены market data для {symbol} (price=${price:.2f})"
+                                    f"✅ DataRegistry: Обновлены market data для {symbol} (price=${price:.2f}, current_tick.price=${current_tick.price:.8f})"
                                 )
                             except Exception as e:
                                 logger.warning(
@@ -415,17 +435,22 @@ class WebSocketCoordinator:
                                                 fast_adx_for_symbol.get_di_minus()
                                             )
 
-                                            indicators_to_save = {
-                                                "adx": adx_value,
-                                                "adx_plus_di": plus_di,
-                                                "adx_minus_di": minus_di,
-                                            }
-                                            await self.data_registry.update_indicators(
-                                                symbol, indicators_to_save
-                                            )
-                                            logger.debug(
-                                                f"✅ DataRegistry: Сохранен ADX для {symbol}: ADX={adx_value:.2f}, +DI={plus_di:.2f}, -DI={minus_di:.2f}"
-                                            )
+                                            if adx_value is None or adx_value <= 0:
+                                                logger.debug(
+                                                    f"ℹ️ FastADX not ready для {symbol}, пропускаем сохранение ADX (значение={adx_value})"
+                                                )
+                                            else:
+                                                indicators_to_save = {
+                                                    "adx": adx_value,
+                                                    "adx_plus_di": plus_di,
+                                                    "adx_minus_di": minus_di,
+                                                }
+                                                await self.data_registry.update_indicators(
+                                                    symbol, indicators_to_save
+                                                )
+                                                logger.debug(
+                                                    f"✅ DataRegistry: Сохранен ADX для {symbol}: ADX={adx_value:.2f}, +DI={plus_di:.2f}, -DI={minus_di:.2f}"
+                                                )
                                         except Exception as e:
                                             logger.debug(
                                                 f"⚠️ Ошибка сохранения ADX в DataRegistry для {symbol}: {e}"
