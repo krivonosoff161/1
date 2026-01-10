@@ -450,6 +450,17 @@ class TrailingStopLoss:
         if self.entry_price == 0:
             return 0.0
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): Защита от price=0
+        # Если current_price = 0, это означает что все источники данных недоступны
+        # В этом случае используем entry_price как fallback для расчета PnL
+        if current_price is None or current_price <= 0:
+            logger.warning(
+                f"⚠️ TSL: Получена некорректная цена (price={current_price}) для расчета PnL, "
+                f"используем entry_price={self.entry_price:.8f} как fallback"
+            )
+            # Используем entry_price как текущую цену (т.е. нулевой PnL)
+            current_price = self.entry_price
+
         # ✅ ПРИОРИТЕТ 1: Если есть margin и unrealizedPnl - считаем от МАРЖИ (как на бирже)
         if margin_used and margin_used > 0 and unrealized_pnl is not None:
             gross_pnl_pct_from_margin = (

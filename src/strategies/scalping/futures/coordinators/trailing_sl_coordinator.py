@@ -1261,6 +1261,20 @@ class TrailingSLCoordinator:
                         exc_info=True,
                     )
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): Валидация current_price перед вызовом should_close_position
+            # Если current_price = 0, это означает критическую проблему с получением данных
+            if current_price is None or current_price <= 0:
+                logger.error(
+                    f"❌ {symbol}: current_price={current_price} перед should_close_position - это критическая ошибка! "
+                    f"Используем entry_price={entry_price:.8f} вместо нее"
+                )
+                current_price = entry_price if entry_price and entry_price > 0 else 0
+                if current_price <= 0:
+                    logger.error(
+                        f"❌ {symbol}: Не удалось получить валидную цену для проверки TSL, пропускаем проверку"
+                    )
+                    return
+
             should_close_by_sl, close_reason = tsl.should_close_position(
                 current_price,
                 trend_strength=trend_strength,
@@ -1786,7 +1800,36 @@ class TrailingSLCoordinator:
 
         # ✅ ПРИОРИТЕТ 4: REST API client fallback (emergency)
         logger.warning(f"🔴 TSL: Falling back to REST API client for {symbol}")
-        return await self._fetch_price_via_client(symbol)
+        client_price = await self._fetch_price_via_client(symbol)
+        if client_price and client_price > 0:
+            return client_price
+
+        # ✅ ПРИОРИТЕТ 5: ФИНАЛЬНЫЙ FALLBACK - Используем entry_price из позиции
+        # Это критически важно для расчета PnL когда все источники данных недоступны
+        try:
+            position = self._get_position(symbol)
+            if position:
+                entry_price = position.get("entry_price") or position.get("avgPx") or 0
+                if isinstance(entry_price, str):
+                    try:
+                        entry_price = float(entry_price)
+                    except (ValueError, TypeError):
+                        entry_price = 0
+                if entry_price and entry_price > 0:
+                    logger.error(
+                        f"🔴 TSL: КРИТИЧЕСКИЙ FALLBACK - Используем entry_price={entry_price:.8f} для {symbol} "
+                        f"(WebSocket, REST API и client недоступны!)"
+                    )
+                    return entry_price
+        except Exception as e:
+            logger.debug(f"⚠️ TSL: Не удалось получить entry_price fallback для {symbol}: {e}")
+
+        # Если даже entry_price недоступен - логируем критическую ошибку
+        logger.error(
+            f"🔴 TSL: КРИТИЧЕСКАЯ ОШИБКА - Не удалось получить цену для {symbol} из всех источников! "
+            f"(WebSocket, DataRegistry, REST API, client и entry_price все недоступны)"
+        )
+        return None
 
     async def _fetch_price_via_client(self, symbol: str) -> Optional[float]:
         """
