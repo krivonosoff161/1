@@ -447,6 +447,13 @@ class TrailingStopLoss:
         Returns:
             Прибыль в процентах ОТ МАРЖИ (с учетом комиссии, если include_fees=True)
         """
+        # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (10.01.2026): Видим ЧТО передано в функцию
+        logger.debug(
+            f"🔍 [PNL_CALC_INPUT] {self._symbol}: current_price={current_price}, "
+            f"margin_used={margin_used}, unrealized_pnl={unrealized_pnl}, "
+            f"entry={self.entry_price}, side={self.side}"
+        )
+        
         if self.entry_price == 0:
             return 0.0
 
