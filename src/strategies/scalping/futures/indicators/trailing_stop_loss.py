@@ -463,6 +463,13 @@ class TrailingStopLoss:
 
         # ✅ ПРИОРИТЕТ 1: Если есть margin и unrealizedPnl - считаем от МАРЖИ (как на бирже)
         if margin_used and margin_used > 0 and unrealized_pnl is not None:
+            # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (10.01.2026): Отслеживаем использование PRIORITY PATH
+            logger.debug(
+                f"🔍 [PNL_CALC] {self._symbol}: PRIORITY_PATH=True, "
+                f"margin={margin_used:.2f}, unrealized_pnl={unrealized_pnl:.2f}, "
+                f"entry={self.entry_price:.2f}, current={current_price:.2f}"
+            )
+            
             gross_pnl_pct_from_margin = (
                 unrealized_pnl / margin_used
             ) * 100  # От маржи!
@@ -498,6 +505,13 @@ class TrailingStopLoss:
                 return gross_pnl_pct_from_margin
 
         # ✅ FALLBACK: Если нет margin - считаем от цены и конвертируем в % от маржи
+        # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (10.01.2026): Проверяем значение self.side перед расчетом
+        logger.debug(
+            f"🔍 [PNL_CALC] {self._symbol}: self.side={self.side}, "
+            f"entry={self.entry_price:.2f}, current={current_price:.2f}, "
+            f"leverage={self.leverage}x, FALLBACK_PATH=True"
+        )
+        
         if self.side == "long":
             gross_profit_pct_from_price = (
                 current_price - self.entry_price
@@ -583,6 +597,22 @@ class TrailingStopLoss:
         Returns:
             Tuple[bool, Optional[str]]: (True, причина_закрытия) если нужно закрыть, (False, None) если нет
         """
+        # ✅ КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем current_price в начале функции
+        # Если цена = 0 или None, используем entry_price как fallback
+        if current_price is None or current_price <= 0:
+            logger.warning(
+                f"⚠️ TSL: should_close_position получила некорректную цену (price={current_price}), "
+                f"используем entry_price={self.entry_price:.8f} как fallback"
+            )
+            current_price = self.entry_price
+            # Если даже entry_price = 0, возвращаем False (не закрываем позицию)
+            if current_price <= 0:
+                logger.error(
+                    f"🔴 TSL: КРИТИЧЕСКАЯ ОШИБКА - И current_price, И entry_price = 0! "
+                    f"Не можем рассчитать TSL, пропускаем проверку."
+                )
+                return (False, None)
+        
         stop_loss = self.get_stop_loss()
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ и передаем margin/unrealized_pnl для правильного расчета от маржи
         profit_pct = self.get_profit_pct(

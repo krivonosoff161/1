@@ -784,6 +784,14 @@ class TrailingSLCoordinator:
                     pos_side = position.get("posSide") or position.get(
                         "position_side", "long"
                     )
+                    
+                    # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (10.01.2026): Проверяем откуда берётся pos_side
+                    pos_side_source = "posSide" if position.get("posSide") else "position_side_or_default"
+                    logger.debug(
+                        f"🔍 [UNREALIZED_PNL_CALC] {symbol}: pos_side='{pos_side}' (source={pos_side_source}), "
+                        f"pos_size={pos_size:.6f}, entry={entry_price:.2f}, current={current_price:.2f}"
+                    )
+                    
                     ct_val = float(position.get("ctVal", "1") or 1)
                     position_value = abs(pos_size) * ct_val
                     if pos_side.lower() == "long":
@@ -1104,9 +1112,11 @@ class TrailingSLCoordinator:
                             else:
                                 logger.error(
                                     f"❌ {symbol}: Критическая ошибка - не удалось получить валидную цену "
-                                    f"(price={current_price}, entry_price недоступен), пропускаем проверку TSL"
+                                    f"(price={current_price}, entry_price недоступен), пропускаем проверку ExitDecisionCoordinator"
                                 )
-                                current_price = 0.0
+                                # ❌ НЕ ИСПОЛЬЗУЕМ current_price = 0.0 - это приводит к profit=-100%
+                                # Вместо этого - пропускаем проверку ExitDecisionCoordinator и используем базовый TSL
+                                exit_decision = None
 
                     # Получаем режим
                     regime = "ranging"

@@ -211,12 +211,26 @@ class FilterManager:
                 # Пытаемся получить из кэша
                 cached_adx_result = self._get_cached_filter_result(symbol, "adx")
                 if cached_adx_result is not None:
+                    # ✅ УЛУЧШЕНИЕ (10.01.2026): Получаем фактические значения ADX для логирования
+                    adx_value = None
+                    plus_di = None
+                    minus_di = None
+                    try:
+                        if market_data and hasattr(market_data, "indicators"):
+                            adx_value = market_data.indicators.get("ADX")
+                            plus_di = market_data.indicators.get("+DI")
+                            minus_di = market_data.indicators.get("-DI")
+                    except:
+                        pass
+                    
                     # Используем кэш - ADX меняется медленно
                     if not cached_adx_result:
-                        # ✅ НОВОЕ (03.01.2026): Детальное логирование блокировки из кэша
+                        # ✅ УЛУЧШЕНО: Логируем значения даже из кэша
+                        adx_str = f"ADX={adx_value:.1f}" if adx_value else "ADX=N/A"
+                        di_str = f", +DI={plus_di:.1f}, -DI={minus_di:.1f}" if plus_di and minus_di else ""
                         logger.info(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - BLOCKED (из кэша) | "
-                            f"Режим: {regime or 'unknown'} | "
+                            f"{adx_str}{di_str}, Режим: {regime or 'unknown'} | "
                             f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
                         )
                         return None
@@ -225,10 +239,12 @@ class FilterManager:
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("ADX")
-                        # ✅ НОВОЕ (03.01.2026): Детальное логирование прохождения из кэша
+                        # ✅ УЛУЧШЕНО: Логируем значения даже из кэша
+                        adx_str = f"ADX={adx_value:.1f}" if adx_value else "ADX=N/A"
+                        di_str = f", +DI={plus_di:.1f}, -DI={minus_di:.1f}" if plus_di and minus_di else ""
                         logger.debug(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - PASSED (из кэша) | "
-                            f"Режим: {regime or 'unknown'} | "
+                            f"{adx_str}{di_str}, Режим: {regime or 'unknown'} | "
                             f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
                         )
                 else:
