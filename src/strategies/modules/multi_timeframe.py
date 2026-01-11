@@ -44,7 +44,7 @@ class MTFConfig(BaseModel):
         default=21, ge=10, le=50, description="Период медленной EMA"
     )
     cache_ttl_seconds: int = Field(
-        default=30, ge=10, le=300, description="Время жизни кэша свечей (секунды)"
+        default=15, ge=5, le=300, description=\"Время жизни кэша свечей (секунды) - ✅ СНИЖЕНО (11.01.2026) с 30 на 15\"
     )
     fail_open_enabled: bool = Field(
         default=False,
@@ -213,31 +213,18 @@ class MultiTimeframeFilter:
                         htf_trend=htf_trend,
                     )
                 else:
-                    # Нейтральный тренд
-                    if self.config.block_neutral:
-                        # Блокируем сигналы при NEUTRAL тренде (более строгая фильтрация)
-                        logger.debug(
-                            f"MTF ❌ {symbol}: LONG заблокирован ({self.config.confirmation_timeframe} NEUTRAL, block_neutral=True)"
-                        )
-                        return MTFResult(
-                            confirmed=False,
-                            blocked=True,
-                            bonus=0,
-                            reason=f"{self.config.confirmation_timeframe} в нейтральном тренде (block_neutral=True)",
-                            htf_trend=htf_trend,
-                        )
-                    else:
-                        # Не подтверждаем, но и не блокируем (менее строгая фильтрация)
-                        logger.debug(
-                            f"MTF ⚠️ {symbol}: LONG не подтвержден ({self.config.confirmation_timeframe} NEUTRAL)"
-                        )
-                        return MTFResult(
-                            confirmed=False,
-                            blocked=False,
-                            bonus=0,
-                            reason=f"{self.config.confirmation_timeframe} в нейтральном тренде",
-                            htf_trend=htf_trend,
-                        )
+                    # Нейтральный тренд: не блокируем, не подтверждаем (рекомендация избежать, но допускаем)
+                    # ✅ СМЯГЧЕНО (11.01.2026): NEUTRAL теперь только совет, а не блок (даже если block_neutral=True)
+                    logger.debug(
+                        f"MTF ⚠️ {symbol}: LONG не подтвержден ({self.config.confirmation_timeframe} NEUTRAL, no penalty)"
+                    )
+                    return MTFResult(
+                        confirmed=False,
+                        blocked=False,
+                        bonus=0,
+                        reason=f"{self.config.confirmation_timeframe} в нейтральном тренде (не блокируем, но бонуса нет)",
+                        htf_trend=htf_trend,
+                    )
 
             elif signal_side == "SHORT":
                 if htf_trend == "BEARISH":
@@ -265,31 +252,18 @@ class MultiTimeframeFilter:
                         htf_trend=htf_trend,
                     )
                 else:
-                    # Нейтральный тренд
-                    if self.config.block_neutral:
-                        # Блокируем сигналы при NEUTRAL тренде (более строгая фильтрация)
-                        logger.debug(
-                            f"MTF ❌ {symbol}: SHORT заблокирован ({self.config.confirmation_timeframe} NEUTRAL, block_neutral=True)"
-                        )
-                        return MTFResult(
-                            confirmed=False,
-                            blocked=True,
-                            bonus=0,
-                            reason=f"{self.config.confirmation_timeframe} в нейтральном тренде (block_neutral=True)",
-                            htf_trend=htf_trend,
-                        )
-                    else:
-                        # Не подтверждаем, но и не блокируем (менее строгая фильтрация)
-                        logger.debug(
-                            f"MTF ⚠️ {symbol}: SHORT не подтвержден ({self.config.confirmation_timeframe} NEUTRAL)"
-                        )
-                        return MTFResult(
-                            confirmed=False,
-                            blocked=False,
-                            bonus=0,
-                            reason=f"{self.config.confirmation_timeframe} в нейтральном тренде",
-                            htf_trend=htf_trend,
-                        )
+                    # Нейтральный тренд: не блокируем, не подтверждаем (рекомендация избежать, но допускаем)
+                    # ✅ СМЯГЧЕНО (11.01.2026): NEUTRAL теперь только совет, а не блок (даже если block_neutral=True)
+                    logger.debug(
+                        f"MTF ⚠️ {symbol}: SHORT не подтвержден ({self.config.confirmation_timeframe} NEUTRAL, no penalty)"
+                    )
+                    return MTFResult(
+                        confirmed=False,
+                        blocked=False,
+                        bonus=0,
+                        reason=f"{self.config.confirmation_timeframe} в нейтральном тренде (не блокируем, но бонуса нет)",
+                        htf_trend=htf_trend,
+                    )
 
             else:
                 logger.error(f"MTF: Неизвестное направление сигнала: {signal_side}")

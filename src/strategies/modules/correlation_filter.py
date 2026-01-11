@@ -26,17 +26,17 @@ class CorrelationFilterConfig(BaseModel):
     enabled: bool = Field(default=True, description="Включить фильтр")
 
     max_correlated_positions: int = Field(
-        default=1,
+        default=2,
         ge=1,
         le=5,
-        description="Макс. кол-во позиций в коррелированных парах одновременно",
+        description="Макс. кол-во позиций в коррелированных парах одновременно (в одном направлении)",
     )
 
     correlation_threshold: float = Field(
-        default=0.7,
+        default=0.8,
         ge=0.5,
         le=1.0,
-        description="Порог высокой корреляции (>0.7 = блокируем)",
+        description="Порог высокой корреляции (>0.8 = предупреждение, не блок)",
     )
 
     block_same_direction_only: bool = Field(
@@ -274,18 +274,19 @@ class CorrelationFilter:
                         correlation_values=correlation_values,
                     )
                 
+                # ✅ СМЯГЧЕНО (11.01.2026): вместо BLOCKED → WARNING, разрешаем вход (мягкий фильтр)
                 logger.warning(
-                    f"🚫 Correlation Filter BLOCKED: {symbol} {signal_side}\n"
+                    f"⚠️ Correlation Filter WARNING: {symbol} {signal_side} — много коррелированных позиций\n"
                     f"   Correlated positions: {correlated_positions}\n"
                     f"   Correlations: {correlation_values}\n"
                     f"   Threshold: {threshold:.2f}\n"
-                    f"   Max allowed: {self.config.max_correlated_positions}"
+                    f"   Max allowed: {self.config.max_correlated_positions} (но разрешаем - мягкий фильтр)"
                 )
-                self._record_decision(blocked=True)
+                self._record_decision(blocked=False)
                 return CorrelationFilterResult(
-                    allowed=False,
-                    blocked=True,
-                    reason=f"Too many correlated positions ({len(correlated_positions)}/{self.config.max_correlated_positions})",
+                    allowed=True,
+                    blocked=False,
+                    reason=f"WARNING: {len(correlated_positions)} correlated positions (soft limit, allowed)",
                     correlated_positions=correlated_positions,
                     correlation_values=correlation_values,
                 )

@@ -69,7 +69,7 @@ class VolumeProfileResult(BaseModel):
     poc_value: Optional[float] = Field(default=None, description="Значение POC")
     vah_value: Optional[float] = Field(default=None, description="Value Area High")
     val_value: Optional[float] = Field(default=None, description="Value Area Low")
-    reason: str = Field(description="Причина решения")
+    reason: str = Field(default="No reason provided", description="Причина решения")
 
 
 class VolumeProfileFilter:
@@ -334,6 +334,13 @@ class VolumeProfileFilter:
                 symbol=symbol,
                 current_price=current_price,
             )
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что результат валиден перед использованием
+            if not result or not isinstance(result, VolumeProfileResult):
+                logger.warning(
+                    f"VolumeProfile: Некорректный результат для {symbol}, позволяем сигнал"
+                )
+                return True  # Fail-open при ошибке
 
             # Добавляем бонус к score сигнала (если есть)
             if result.bonus > 0:

@@ -53,9 +53,9 @@ class FilterManager:
         # Кэш: {symbol: {'adx': val, 'mtf': val, 'pivot': val, 'volume_profile': val, 'liquidity': val, 'order_flow': val, 'ts': now}}
         self.filter_cache: Dict[str, Dict[str, Any]] = {}
         self.filter_cache_ttl_fast: float = (
-            20.0  # TTL 20 секунд (ADX/MTF/Pivot меняются медленно)
+            10.0  # ✅ СНИЖЕНО (11.01.2026): TTL 10 секунд (было 20, для более свежих данных)
         )
-        self.filter_cache_ttl_slow: float = 60.0  # ✅ ГРОК: TTL 60 секунд (VolumeProfile/OrderFlow/Liquidity - тяжелые фильтры с historical data)
+        self.filter_cache_ttl_slow: float = 30.0  # ✅ СНИЖЕНО (11.01.2026): TTL 30 секунд (было 60, для более свежих данных от API)
 
         logger.info("✅ FilterManager инициализирован (с кэшированием фильтров)")
 
