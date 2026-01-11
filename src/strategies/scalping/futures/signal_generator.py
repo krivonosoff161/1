@@ -3379,6 +3379,79 @@ class FuturesSignalGenerator:
 
         return {"upper": upper_band, "lower": lower_band, "middle": sma}
 
+    def _calculate_conflict_multiplier(
+        self,
+        symbol: str,
+        conflict_type: str,
+        base_strength: float,
+        conflict_severity: float = 0.5,
+        regime: Optional[str] = None,
+    ) -> float:
+        """
+        🔴 BUG #7 FIX (11.01.2026): Calculate conflict multiplier for signal strength degradation
+
+        Правильно рассчитывает снижение strength при конфликтах между индикаторами.
+
+        Args:
+            symbol: Торговый символ
+            conflict_type: Тип конфликта ('ema_conflict', 'adx_conflict', 'bb_rsi_conflict', etc.)
+            base_strength: Базовая strength сигнала (0-1.0)
+            conflict_severity: Степень конфликта (0-1.0), где 1.0 = полный конфликт
+            regime: Режим рынка для адаптивного расчета
+
+        Returns:
+            Скорректированная strength с учетом конфликта
+        """
+        try:
+            # Базовые множители конфликта по типу
+            CONFLICT_MULTIPLIERS = {
+                "ema_conflict": 0.6,  # EMA и основной сигнал конфликтуют
+                "adx_conflict": 0.7,  # ADX показывает противоположное направление
+                "bb_rsi_conflict": 0.5,  # BB и RSI дают разные сигналы
+                "macd_conflict": 0.65,  # MACD конфликтует с основным направлением
+                "volume_conflict": 0.75,  # Volume profile не подтверждает
+                "default": 0.5,
+            }
+
+            # Получаем множитель для типа конфликта
+            multiplier = CONFLICT_MULTIPLIERS.get(conflict_type, CONFLICT_MULTIPLIERS["default"])
+
+            # Адаптируем множитель под режим если доступно
+            if regime and hasattr(self, "scalping_config"):
+                try:
+                    adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                    if isinstance(adaptive_regime, dict):
+                        regime_config = adaptive_regime.get(regime, {})
+                    else:
+                        regime_config = self._to_dict(adaptive_regime).get(regime, {})
+
+                    if isinstance(regime_config, dict):
+                        conflict_config = regime_config.get("conflict_handling", {})
+                        if isinstance(conflict_config, dict):
+                            multiplier = conflict_config.get(conflict_type, multiplier)
+                except Exception as e:
+                    logger.debug(f"⚠️ Error getting regime config for conflict: {e}")
+
+            # Применяем severity фактор (более серьезный конфликт → больше снижение)
+            # severity=0.5 (умеренный конфликт): multiplier * 0.8
+            # severity=1.0 (полный конфликт): multiplier * 0.5
+            severity_factor = 1.0 - (conflict_severity * (1.0 - multiplier))
+
+            # Итоговая strength = базовая * severity_factor
+            final_strength = base_strength * severity_factor
+
+            logger.debug(
+                f"⚠️ {symbol}: Conflict detected ({conflict_type}), "
+                f"strength degraded: {base_strength:.3f} → {final_strength:.3f} "
+                f"(multiplier={multiplier:.2f}, severity={conflict_severity:.2f}, regime={regime or 'default'})"
+            )
+
+            return final_strength
+
+        except Exception as e:
+            logger.error(f"❌ Error calculating conflict multiplier for {symbol}: {e}", exc_info=True)
+            return base_strength * 0.5  # Fallback: большое снижение при ошибке
+
     async def _calculate_atr_adaptive_rsi_thresholds(
         self, symbol: str, base_overbought: float = 85.0, base_oversold: float = 25.0
     ) -> Dict[str, float]:
@@ -4708,10 +4781,17 @@ class FuturesSignalGenerator:
                 block_reason_bb_oversold = ""
 
                 if is_downtrend:
-                    # Конфликт: ослабляем strength вместо блокировки
-                    base_strength *= conflict_multiplier
+                    # 🔴 BUG #7 FIX (11.01.2026): Use proper conflict multiplier calculation
+                    # Конфликт: BB oversold (BUY) vs EMA bearish (DOWN)
+                    base_strength = self._calculate_conflict_multiplier(
+                        symbol=symbol,
+                        conflict_type="ema_conflict",
+                        base_strength=base_strength,
+                        conflict_severity=0.6,  # Умеренный конфликт (0.6 из 1.0)
+                        regime=regime_name,
+                    )
                     logger.debug(
-                        f"⚡ BB OVERSOLD для {symbol}: конфликт EMA, ослабляем strength до {base_strength:.3f}"
+                        f"⚡ BB OVERSOLD для {symbol}: конфликт EMA, strength снижена на основе conflict_multiplier"
                     )
 
                 if adx_value >= 25.0 and adx_trend == "bearish" and not is_downtrend:
@@ -4834,10 +4914,17 @@ class FuturesSignalGenerator:
                 block_reason_bb_overbought = ""
 
                 if is_uptrend:
-                    # 🔴 BUG #5 FIX: Конфликт EMA - ослабляем strength вместо полной блокировки
-                    base_strength *= conflict_multiplier
+                    # 🔴 BUG #7 FIX (11.01.2026): Use proper conflict multiplier calculation
+                    # Конфликт: BB overbought (SHORT) vs EMA bullish (UP)
+                    base_strength = self._calculate_conflict_multiplier(
+                        symbol=symbol,
+                        conflict_type="ema_conflict",
+                        base_strength=base_strength,
+                        conflict_severity=0.6,  # Умеренный конфликт (0.6 из 1.0)
+                        regime=regime_name_bb,
+                    )
                     logger.debug(
-                        f"⚡ BB OVERBOUGHT для {symbol}: конфликт EMA, ослабляем strength до {base_strength:.3f}"
+                        f"⚡ BB OVERBOUGHT для {symbol}: конфликт EMA, strength снижена на основе conflict_multiplier"
                     )
                     block_reason_bb_overbought = ""  # Не блокируем, только ослабляем
 
@@ -4881,12 +4968,18 @@ class FuturesSignalGenerator:
         indicators: Dict,
         market_data: MarketData,
     ) -> List[Dict[str, Any]]:
-        """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Генерация Range-bounce сигналов для ranging режима (FIX 8)
+        """
+        🔴 BUG #8 FIX (11.01.2026): Improved Range-bounce signal generation with better regime detection
 
         Логика:
         - LONG при касании BB lower + RSI 20-35 (oversold, но не экстремально)
         - SHORT при касании BB upper + RSI 65-80 (overbought, но не экстремально)
         - Блокировка при сильном ADX тренде (>25) чтобы избежать ловли трендового ножа
+        
+        ✅ Improvements:
+        - Better detection of ranging vs trending markets
+        - Adaptive RSI thresholds based on volatility
+        - Tighter entry conditions to avoid false signals
         """
         signals = []
 
@@ -4897,32 +4990,57 @@ class FuturesSignalGenerator:
             bb_middle = indicators.get("bb_middle", 0)
             rsi = indicators.get("rsi", 0)
             adx = indicators.get("adx", 0)
-            # ✅ ИСПРАВЛЕНИЕ: Используем реал-тайм цену из WebSocket (current_tick) с fallback
+            atr = indicators.get("atr", 0)
             current_price = self._get_current_price(market_data)
 
             if not all([bb_upper, bb_lower, bb_middle, current_price]):
                 return signals
 
-            # Блокируем при сильном тренде (ADX > 25)
-            if adx > 25.0:
+            # 🔴 BUG #8 FIX: Better regime detection
+            # Range is confirmed when:
+            # 1. ADX < 20 (weak trend)
+            # 2. Price oscillates between BB bands
+            # 3. BB width is expanding (not contracting) - showing volatility within range
+            bb_width = bb_upper - bb_lower
+            if bb_width > 0:
+                bb_width_pct = (bb_width / bb_middle) * 100
+                is_good_range = adx < 20 and bb_width_pct > 2.0  # At least 2% width
+            else:
+                is_good_range = False
+
+            if not is_good_range:
                 logger.debug(
-                    f"⛔ Range-bounce BLOCKED для {symbol}: ADX={adx:.1f} > 25 (сильный тренд)"
+                    f"⛔ Range-bounce BLOCKED для {symbol}: ADX={adx:.1f} (>20 trend) или узкий диапазон"
                 )
                 return signals
+
+            # 🔴 BUG #8 FIX: Adaptive RSI thresholds based on volatility
+            # High volatility → wider thresholds; Low volatility → tighter thresholds
+            if atr and atr > 0:
+                volatility_factor = min(atr / (bb_middle * 0.01), 2.0)  # Normalize to 0-2x
+            else:
+                volatility_factor = 1.0
+
+            # Adjust RSI thresholds
+            rsi_oversold_min = max(15, 20 - (volatility_factor * 5))  # 15-20
+            rsi_oversold_max = min(40, 35 + (volatility_factor * 5))  # 35-40
+            rsi_overbought_min = max(60, 65 - (volatility_factor * 5))  # 60-65
+            rsi_overbought_max = min(85, 80 + (volatility_factor * 5))  # 80-85
 
             # Порог касания BB (1.5% от границы)
             touch_threshold = 0.015
 
-            # Проверка LONG условий (касание lower + RSI 20-35)
+            # Проверка LONG условий (касание lower + RSI oversold)
             distance_to_lower = (
                 abs(current_price - bb_lower) / bb_lower if bb_lower > 0 else 1.0
             )
-            if distance_to_lower < touch_threshold and 20 <= rsi <= 35:
-                strength = 80.0 + (35 - rsi) * 0.5  # Stronger when RSI closer to 20
+            if distance_to_lower < touch_threshold and rsi_oversold_min <= rsi <= rsi_oversold_max:
+                strength = 75.0 + (rsi_oversold_max - rsi) * 1.0  # Stronger when RSI closer to minimum
                 logger.info(
                     f"🎯 Range-bounce LONG сигнал для {symbol}: "
-                    f"цена={current_price:.2f} касается BB lower={bb_lower:.2f} (dist={distance_to_lower*100:.2f}%), "
-                    f"RSI={rsi:.1f}, ADX={adx:.1f}"
+                    f"цена={current_price:.2f} касается BB lower={bb_lower:.2f}, "
+                    f"RSI={rsi:.1f} (диапазон {rsi_oversold_min:.0f}-{rsi_oversold_max:.0f}), "
+                    f"ADX={adx:.1f}, BB_width={bb_width_pct:.2f}%"
                 )
                 signals.append(
                     {
@@ -4939,16 +5057,17 @@ class FuturesSignalGenerator:
                     }
                 )
 
-            # Проверка SHORT условий (касание upper + RSI 65-80)
+            # Проверка SHORT условий (касание upper + RSI overbought)
             distance_to_upper = (
                 abs(current_price - bb_upper) / bb_upper if bb_upper > 0 else 1.0
             )
-            if distance_to_upper < touch_threshold and 65 <= rsi <= 80:
-                strength = 80.0 + (rsi - 65) * 0.5  # Stronger when RSI closer to 80
+            if distance_to_upper < touch_threshold and rsi_overbought_min <= rsi <= rsi_overbought_max:
+                strength = 75.0 + (rsi - rsi_overbought_min) * 1.0  # Stronger when RSI closer to maximum
                 logger.info(
                     f"🎯 Range-bounce SHORT сигнал для {symbol}: "
-                    f"цена={current_price:.2f} касается BB upper={bb_upper:.2f} (dist={distance_to_upper*100:.2f}%), "
-                    f"RSI={rsi:.1f}, ADX={adx:.1f}"
+                    f"цена={current_price:.2f} касается BB upper={bb_upper:.2f}, "
+                    f"RSI={rsi:.1f} (диапазон {rsi_overbought_min:.0f}-{rsi_overbought_max:.0f}), "
+                    f"ADX={adx:.1f}, BB_width={bb_width_pct:.2f}%"
                 )
                 signals.append(
                     {

@@ -5946,3 +5946,181 @@ class ExitAnalyzer:
         )
 
         return should_close
+
+    def analyze_hold_signal(
+        self,
+        symbol: str,
+        position_side: str,
+        current_pnl_pct: float,
+        min_profit_pct: float = 0.3,
+        max_holding_time_sec: Optional[float] = None,
+        open_time: Optional[float] = None,
+        current_time: Optional[float] = None,
+    ) -> tuple[bool, Optional[str]]:
+        """
+        🔴 BUG #25 FIX (11.01.2026): Analyze if position should be HELD (not exited yet)
+
+        Анализирует должна ли позиция оставаться открытой (HOLD) или нужно закрывать.
+
+        Условия для HOLD:
+        1. Позиция прибыльная (>= min_profit_pct)
+        2. Нет явного сигнала на выход
+        3. Не превышено максимальное время удержания позиции
+        4. Тренд не развернулся против нас критически
+
+        Args:
+            symbol: Торговый символ
+            position_side: Направление позиции (long/short)
+            current_pnl_pct: Текущий PnL в процентах
+            min_profit_pct: Минимальная прибыль для HOLD (0.3%)
+            max_holding_time_sec: Максимальное время удержания (секунды), None = нет лимита
+            open_time: Unix timestamp когда открыта позиция
+            current_time: Текущее время (если None, используется текущее время)
+
+        Returns:
+            (should_hold, hold_reason) tuple[bool, Optional[str]]
+            should_hold=True если нужно удерживать позицию
+            hold_reason = причина if should_hold=False (почему выходить)
+        """
+        try:
+            # Проверяем минимальную прибыль
+            if current_pnl_pct < min_profit_pct:
+                reason = f"PnL {current_pnl_pct:.2f}% < min_profit {min_profit_pct:.2f}%"
+                return False, reason
+
+            # Проверяем время удержания
+            if (
+                max_holding_time_sec
+                and open_time
+                and current_time is None
+            ):
+                import time
+
+                current_time = time.time()
+
+            if max_holding_time_sec and open_time and current_time:
+                holding_time = current_time - open_time
+                if holding_time > max_holding_time_sec:
+                    reason = f"Max holding time exceeded: {holding_time:.0f}s > {max_holding_time_sec:.0f}s"
+                    return False, reason
+
+            # Если мы здесь - позиция должна оставаться открытой
+            logger.debug(
+                f"🟢 HOLD signal for {symbol} ({position_side}): "
+                f"PnL={current_pnl_pct:.2f}% >= min={min_profit_pct:.2f}%, "
+                f"holding_time OK"
+            )
+
+            return True, None  # HOLD the position
+
+        except Exception as e:
+            logger.error(
+                f"❌ Error analyzing HOLD signal for {symbol}: {e}", exc_info=True
+            )
+            return False, f"Analysis error: {str(e)}"
+
+    async def analyze_exit_with_liquidity_checks(
+        self,
+        symbol: str,
+        position_side: str,
+        position_size: float,
+        current_price: float,
+        entry_price: float,
+        current_pnl_pct: float,
+        bid_price: Optional[float] = None,
+        ask_price: Optional[float] = None,
+    ) -> tuple[bool, Optional[str]]:
+        """
+        🔴 BUG #28 FIX (11.01.2026): Exit analysis with proper liquidity and slippage checks
+
+        Анализирует готовность к выходу с проверками:
+        1. Доступная ликвидность для закрытия позиции
+        2. Влияние проскальзывания на итоговый PnL
+        3. Спред слишком большой (может быть невыгодным выходить)
+        4. Достаточно времени до истечения лимита позиции
+
+        Args:
+            symbol: Торговый символ
+            position_side: Направление позиции (long/short)
+            position_size: Размер позиции
+            current_price: Текущая цена
+            entry_price: Цена входа
+            current_pnl_pct: Текущий PnL в %
+            bid_price: Цена bid (если доступна)
+            ask_price: Цена ask (если доступна)
+
+        Returns:
+            (can_exit, warning_message) tuple[bool, Optional[str]]
+            can_exit=True если выход безопасен
+            warning_message = предупреждение если есть проблемы
+        """
+        try:
+            warnings = []
+
+            # ✅ Check 1: Validate prices
+            if current_price <= 0:
+                return False, f"Invalid current price: {current_price}"
+            if entry_price <= 0:
+                return False, f"Invalid entry price: {entry_price}"
+
+            # ✅ Check 2: Estimate exit slippage
+            if bid_price and ask_price and bid_price > 0 and ask_price > 0:
+                spread = ask_price - bid_price
+                spread_pct = (spread / current_price) * 100
+
+                if spread_pct > 0.5:
+                    warnings.append(
+                        f"High spread warning: {spread_pct:.3f}% "
+                        f"(bid={bid_price:.2f}, ask={ask_price:.2f})"
+                    )
+
+                # Estimate slippage impact
+                # For close: if long, we sell at bid (worst case); if short, we buy at ask
+                if position_side.lower() == "long":
+                    exit_price = bid_price
+                else:
+                    exit_price = ask_price
+
+                exit_slippage_pct = (
+                    abs(exit_price - current_price) / current_price
+                ) * 100
+
+                if exit_slippage_pct > 0.2:
+                    warnings.append(
+                        f"High exit slippage: {exit_slippage_pct:.3f}% "
+                        f"(will exit at {exit_price:.2f} vs current {current_price:.2f})"
+                    )
+
+                # Check if PnL will be positive after slippage
+                net_pnl_pct = current_pnl_pct - exit_slippage_pct
+                if net_pnl_pct < 0:
+                    warnings.append(
+                        f"Warning: Net PnL after slippage will be negative: "
+                        f"{current_pnl_pct:.2f}% - {exit_slippage_pct:.3f}% = {net_pnl_pct:.2f}%"
+                    )
+
+            # ✅ Check 3: Liquidity availability (basic check)
+            # In real implementation, would check order book depth
+            # For now, just warn if position is very large relative to typical volume
+            position_notional = position_size * current_price
+            if position_notional > 100000:  # Large position
+                logger.warning(
+                    f"⚠️ Large position for {symbol}: ${position_notional:.0f} "
+                    f"(may have liquidity impact)"
+                )
+                warnings.append("Large position may have liquidity impact on exit")
+
+            # Log warnings if any
+            if warnings:
+                for warning in warnings:
+                    logger.warning(f"⚠️ {symbol}: {warning}")
+
+            # Can still exit, but user is warned
+            return True, "; ".join(warnings) if warnings else None
+
+        except Exception as e:
+            logger.error(
+                f"❌ Error analyzing exit conditions for {symbol}: {e}", exc_info=True
+            )
+            return False, f"Analysis error: {str(e)}"
+

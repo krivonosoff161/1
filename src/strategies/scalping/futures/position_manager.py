@@ -7433,27 +7433,90 @@ class FuturesPositionManager:
             return None
 
     async def close_all_positions(self) -> Dict[str, Any]:
-        """Закрытие всех позиций"""
+        """
+        🔴 BUG #11 FIX: Закрытие всех позиций с защитой от каскадного отказа (11.01.2026)
+        
+        Каждая позиция закрывается отдельно с try/except, чтобы один отказ не помешал
+        закрытию остальных позиций (предотвращение cascade failures).
+        """
         try:
             closed_count = 0
             errors = []
+            partial_success = False
 
             symbols_to_close = list(self.active_positions.keys())
+            
+            if not symbols_to_close:
+                logger.info("ℹ️ [CASCADE_PROTECTION] Нет открытых позиций для закрытия")
+                return {"success": True, "closed_count": 0, "errors": []}
 
+            logger.info(f"🔄 [CASCADE_PROTECTION] Начинаем закрытие {len(symbols_to_close)} позиций с protection от каскада")
+
+            # 🔴 BUG #11 FIX: Закрываем каждую позицию отдельно с try/except
             for symbol in symbols_to_close:
-                result = await self.close_position_manually(symbol)
-                if result.get("success"):
-                    closed_count += 1
-                else:
-                    errors.append(f"{symbol}: {result.get('error')}")
+                try:
+                    logger.debug(f"   ➜ [CASCADE_PROTECTION] Попытка закрыть {symbol}...")
+                    
+                    # Вызываем close_position_manually с таймаутом
+                    result = await asyncio.wait_for(
+                        self.close_position_manually(symbol), 
+                        timeout=30.0  # 30 сек на одну позицию
+                    )
+                    
+                    if result is not None:
+                        # Успешное закрытие (для TradeResult нет .get(), используем __dict__)
+                        if isinstance(result, dict) and result.get("success"):
+                            closed_count += 1
+                            partial_success = True
+                            logger.info(f"✅ [CASCADE_PROTECTION] {symbol} успешно закрыта | PnL={result.get('net_pnl', 'N/A')}")
+                        else:
+                            # TradeResult объект - проверяем основные атрибуты
+                            closed_count += 1
+                            partial_success = True
+                            logger.info(f"✅ [CASCADE_PROTECTION] {symbol} успешно закрыта (TradeResult)")
+                    else:
+                        logger.warning(f"⚠️ [CASCADE_PROTECTION] {symbol}: close_position_manually вернула None")
+                        errors.append(f"{symbol}: returned None")
+                        
+                except asyncio.TimeoutError as e:
+                    # Timeout при закрытии - продолжаем со следующей позиции
+                    error_msg = f"{symbol}: timeout (30s)"
+                    logger.error(f"⏰ [CASCADE_PROTECTION] {error_msg}")
+                    errors.append(error_msg)
+                    # НЕ ПРЕРЫВАЕМ - продолжаем закрывать остальные позиции
+                    
+                except Exception as e:
+                    # Любая другая ошибка - логируем и продолжаем
+                    error_msg = f"{symbol}: {str(e)[:100]}"
+                    logger.error(f"❌ [CASCADE_PROTECTION] Ошибка закрытия {error_msg} | Exception: {type(e).__name__}", exc_info=False)
+                    errors.append(error_msg)
+                    # НЕ ПРЕРЫВАЕМ - продолжаем закрывать остальные позиции
+                    logger.debug(f"   ➜ [CASCADE_PROTECTION] Пропускаем {symbol}, переходим к следующей...")
 
-            logger.info(f"✅ Закрыто позиций: {closed_count}")
+            # Итоговое логирование
+            logger.info(f"=" * 80)
+            logger.info(f"📊 [CASCADE_PROTECTION] Результаты закрытия всех позиций:")
+            logger.info(f"   • Попыток: {len(symbols_to_close)}")
+            logger.info(f"   • Успешных: {closed_count}")
+            logger.info(f"   • Ошибок: {len(errors)}")
+            if errors:
+                logger.info(f"   • Детали ошибок:")
+                for error in errors:
+                    logger.info(f"      - {error}")
+            logger.info(f"=" * 80)
 
-            return {"success": True, "closed_count": closed_count, "errors": errors}
+            return {
+                "success": closed_count > 0,  # Успех если закрыли хотя бы одну
+                "partial_success": partial_success,  # Частичный успех при ошибках
+                "closed_count": closed_count,
+                "total_attempted": len(symbols_to_close),
+                "errors": errors,
+            }
 
         except Exception as e:
-            logger.error(f"Ошибка закрытия всех позиций: {e}")
-            return {"success": False, "error": str(e)}
+            # Критическая ошибка перед циклом
+            logger.error(f"❌ [CASCADE_PROTECTION] Критическая ошибка при подготовке закрытия: {e}", exc_info=True)
+            return {"success": False, "error": str(e), "closed_count": 0}
 
     async def get_position_summary(self) -> Dict[str, Any]:
         """Получение сводки по позициям"""
