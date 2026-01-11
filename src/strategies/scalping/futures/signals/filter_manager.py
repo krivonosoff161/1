@@ -57,7 +57,10 @@ class FilterManager:
         )
         self.filter_cache_ttl_slow: float = 30.0  # ✅ СНИЖЕНО (11.01.2026): TTL 30 секунд (было 60, для более свежих данных от API)
 
-        logger.info("✅ FilterManager инициализирован (с кэшированием фильтров)")
+        logger.info(
+            f"✅ FilterManager инициализирован с кэшированием: "
+            f"fast={self.filter_cache_ttl_fast:.0f}s, slow={self.filter_cache_ttl_slow:.0f}s"
+        )
 
     def set_adx_filter(self, adx_filter):
         """Установить ADX фильтр"""

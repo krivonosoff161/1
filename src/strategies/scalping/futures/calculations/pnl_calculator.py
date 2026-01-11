@@ -45,20 +45,25 @@ class PnLCalculator:
                 commission_config = commission_config.get("commission", {})
             else:
                 commission_config = getattr(config, "commission", {})
+            
+            # Извлекаем параметры
+            trading_fee_rate = None
+            maker_fee_rate = None
+            taker_fee_rate = None
+            
             if isinstance(commission_config, dict):
-                self.maker_fee_rate = commission_config.get(
-                    "maker_fee_rate", self.maker_fee_rate
-                )
-                self.taker_fee_rate = commission_config.get(
-                    "taker_fee_rate", self.taker_fee_rate
-                )
-            elif hasattr(commission_config, "maker_fee_rate"):
-                self.maker_fee_rate = getattr(
-                    commission_config, "maker_fee_rate", self.maker_fee_rate
-                )
-                self.taker_fee_rate = getattr(
-                    commission_config, "taker_fee_rate", self.taker_fee_rate
-                )
+                trading_fee_rate = commission_config.get("trading_fee_rate")
+                maker_fee_rate = commission_config.get("maker_fee_rate")
+                taker_fee_rate = commission_config.get("taker_fee_rate")
+            elif hasattr(commission_config, "trading_fee_rate"):
+                trading_fee_rate = getattr(commission_config, "trading_fee_rate", None)
+                maker_fee_rate = getattr(commission_config, "maker_fee_rate", None)
+                taker_fee_rate = getattr(commission_config, "taker_fee_rate", None)
+            
+            # ✅ ИСПРАВЛЕНИЕ (11.01.2026): Нормализация legacy trading_fee_rate
+            self.maker_fee_rate, self.taker_fee_rate = self._normalize_fee_rate(
+                trading_fee_rate, maker_fee_rate, taker_fee_rate
+            )
 
         # ✅ FIX: ADAPT_LOAD логирование
         logger.info(f"ADAPT_LOAD maker_fee_rate={self.maker_fee_rate:.4%}")
@@ -67,6 +72,42 @@ class PnLCalculator:
             f"✅ PnLCalculator инициализирован "
             f"(maker={self.maker_fee_rate:.4%}, taker={self.taker_fee_rate:.4%})"
         )
+
+    def _normalize_fee_rate(
+        self, 
+        trading_fee_rate: Optional[float], 
+        maker_fee_rate: Optional[float], 
+        taker_fee_rate: Optional[float]
+    ) -> Tuple[float, float]:
+        """
+        ✅ ИСПРАВЛЕНИЕ (11.01.2026): Нормализация legacy комиссий.
+        
+        Конвертирует trading_fee_rate "на круг" в per-side ставки.
+        
+        Args:
+            trading_fee_rate: Legacy комиссия "на круг" (если есть)
+            maker_fee_rate: Maker комиссия per-side (новый формат)
+            taker_fee_rate: Taker комиссия per-side (новый формат)
+        
+        Returns:
+            (normalized_maker, normalized_taker)
+        """
+        # Если есть legacy trading_fee_rate и нет новых параметров
+        if trading_fee_rate and trading_fee_rate > 0.0003:
+            if not maker_fee_rate and not taker_fee_rate:
+                # Конвертируем per-round в per-side
+                per_side = trading_fee_rate / 2
+                maker = per_side * 0.5
+                taker = per_side * 1.0
+                
+                logger.info(
+                    f"✅ Legacy trading_fee_rate {trading_fee_rate:.4%} нормализован → "
+                    f"maker={maker:.4%}, taker={taker:.4%}"
+                )
+                return maker, taker
+        
+        # Используем новые параметры или fallback
+        return maker_fee_rate or 0.0002, taker_fee_rate or 0.0005
 
     async def calculate_pnl(
         self,

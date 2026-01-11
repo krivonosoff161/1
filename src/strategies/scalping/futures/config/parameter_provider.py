@@ -2,11 +2,7 @@
 Parameter Provider - Единая точка получения параметров торговли.
 
 Обеспечивает централизованный доступ к параметрам из различных источников:
-    def _apply_adaptive_exit_params(
-        self,
-        base_params: Dict[str, Any],
-        symbol: str,
-        regime: Optional[str],
+
                     "max_holding_minutes",
                     {
                         "ranging": 25.0,
@@ -52,60 +48,10 @@ Parameter Provider - Единая точка получения параметр
                         "tp_atr_multiplier",
                         "max_holding_minutes",
                     ]
-                    def _apply_adaptive_exit_params(
-                        self,
-                        base_params: Dict[str, Any],
-                        symbol: str,
-                        regime: Optional[str],
-                        balance: Optional[float],
-                        current_pnl: Optional[float],
-                        drawdown: Optional[float],
-                    ) -> Dict[str, Any]:
-                        """Единая адаптация TP/SL по балансу, PnL и просадке."""
-
-                        adaptive_config = self._get_adaptive_exit_config()
-                        if not adaptive_config.get("enabled", False):
-                            return base_params
-
-                        params = base_params.copy()
-                        adaptations_log: list[str] = []
-
-                        # 1) Баланс
-                        if balance is not None:
-                            balance_adapt = self._adapt_by_balance(balance, params)
-                            if balance_adapt:
-                                params.update(balance_adapt)
-                                adaptations_log.append(
-                                    f"balance tp={balance_adapt.get('tp_atr_multiplier', 'N/A')} sl={balance_adapt.get('sl_atr_multiplier', 'N/A')}"
-                                )
-
-                        # 2) PnL
-                        if current_pnl is not None:
-                            pnl_adapt = self._adapt_tp_by_pnl(current_pnl, params)
-                            if pnl_adapt:
-                                old_tp = params.get("tp_atr_multiplier")
-                                params.update(pnl_adapt)
-                                new_tp = params.get("tp_atr_multiplier")
-                                old_tp_str = f"{old_tp:.2f}" if isinstance(old_tp, (int, float)) else "0"
-                                new_tp_str = f"{new_tp:.2f}" if isinstance(new_tp, (int, float)) else "0"
-                                adaptations_log.append(
-                                    f"pnl tp {old_tp_str}->{new_tp_str} ({current_pnl:.2f}%)"
-                                )
-
-                        # 3) Drawdown
-                        if drawdown is not None:
-                            dd_adapt = self._adapt_sl_by_drawdown(drawdown, params)
-                            if dd_adapt:
-                                old_sl = params.get("sl_atr_multiplier")
-                                params.update(dd_adapt)
-                                new_sl = params.get("sl_atr_multiplier")
-                                old_sl_str = f"{old_sl:.2f}" if isinstance(old_sl, (int, float)) else "0"
-                                new_sl_str = f"{new_sl:.2f}" if isinstance(new_sl, (int, float)) else "0"
-                                adaptations_log.append(
-                                    f"dd sl {old_sl_str}->{new_sl_str} ({drawdown:.2f}%)"
-                                )
-
-                        if adaptations_log:
+                    # ✅ ИСПРАВЛЕНИЕ (11.01.2026): Удален дубликат _apply_adaptive_exit_params
+                    # Основная реализация находится на line 694
+                    
+                    if adaptations_log:
                             logger.debug(
                                 f"[ADAPTIVE_EXIT] {symbol} regime={regime or 'n/a'} | "
                                 f"tp={params.get('tp_atr_multiplier')} sl={params.get('sl_atr_multiplier')} | "
