@@ -55,13 +55,18 @@ class TSLManager:
         """
         # Получаем параметры TSL из конфига
         tsl_params = self.config_manager.get_trailing_sl_params(regime)
+        maker_fee_rate = tsl_params.get("maker_fee_rate")
+        taker_fee_rate = tsl_params.get("taker_fee_rate")
+        trading_fee_rate = tsl_params.get("trading_fee_rate", maker_fee_rate)
 
         # Создаем TSL
         tsl = TrailingStopLoss(
             initial_trail=tsl_params.get("initial_trail", 0.005),
             max_trail=tsl_params.get("max_trail", 0.01),
             min_trail=tsl_params.get("min_trail", 0.003),
-            trading_fee_rate=tsl_params.get("trading_fee_rate", 0.001),
+            trading_fee_rate=trading_fee_rate,
+            maker_fee_rate=maker_fee_rate,
+            taker_fee_rate=taker_fee_rate,
             loss_cut_percent=tsl_params.get("loss_cut_percent"),
             timeout_loss_percent=tsl_params.get("timeout_loss_percent"),
             timeout_minutes=tsl_params.get("timeout_minutes"),

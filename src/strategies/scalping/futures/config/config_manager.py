@@ -582,8 +582,28 @@ class ConfigManager:
         """✅ ЭТАП 4: Возвращает параметры Trailing SL с учетом конфига, fallback значений и адаптацией под режим рынка."""
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем правильные fallback значения (как в конфиге)
         # Эти значения используются ТОЛЬКО если конфиг не загружен
+        # Комиссии: берем из scalping.commission если есть, иначе fallback на maker=0.02%, taker=0.05%
+        commission_config = getattr(self.scalping_config, "commission", None)
+        maker_fee_rate = None
+        taker_fee_rate = None
+        if commission_config:
+            if isinstance(commission_config, dict):
+                maker_fee_rate = commission_config.get("maker_fee_rate")
+                taker_fee_rate = commission_config.get("taker_fee_rate")
+                if maker_fee_rate is None:
+                    maker_fee_rate = commission_config.get("trading_fee_rate")
+            else:
+                maker_fee_rate = getattr(commission_config, "maker_fee_rate", None)
+                taker_fee_rate = getattr(commission_config, "taker_fee_rate", None)
+                if maker_fee_rate is None and hasattr(commission_config, "trading_fee_rate"):
+                    maker_fee_rate = getattr(commission_config, "trading_fee_rate", None)
+
         params: Dict[str, Any] = {
-            "trading_fee_rate": 0.0004,  # ✅ ИСПРАВЛЕНО (04.01.2026): 0.04% на круг (0.02% вход + 0.02% выход для maker на OKX)
+            # trading_fee_rate трактуем как комиссию ЗА СТОРОНУ (maker) для расчета PnL% от маржи
+            # (значения "на круг" конвертируются ниже через maker_fee_rate)
+            "trading_fee_rate": maker_fee_rate or 0.0002,
+            "maker_fee_rate": maker_fee_rate,
+            "taker_fee_rate": taker_fee_rate,
             "initial_trail": 0.005,  # ✅ ИСПРАВЛЕНО: 0.5% (было 0.05 = 5%)
             "max_trail": 0.01,  # ✅ ИСПРАВЛЕНО: 1% (было 0.2 = 20%)
             "min_trail": 0.003,  # ✅ ИСПРАВЛЕНО: 0.3% (было 0.02 = 2%)
@@ -614,6 +634,13 @@ class ConfigManager:
         if trailing_sl_config:
             params["trading_fee_rate"] = self.get_config_value(
                 trailing_sl_config, "trading_fee_rate", params["trading_fee_rate"]
+            )
+            # Явные maker/taker в секции trailing_sl имеют приоритет над scalping.commission
+            params["maker_fee_rate"] = self.get_config_value(
+                trailing_sl_config, "maker_fee_rate", params["maker_fee_rate"]
+            )
+            params["taker_fee_rate"] = self.get_config_value(
+                trailing_sl_config, "taker_fee_rate", params["taker_fee_rate"]
             )
             params["initial_trail"] = self.get_config_value(
                 trailing_sl_config, "initial_trail", params["initial_trail"]
@@ -842,17 +869,30 @@ class ConfigManager:
                 params["high_profit_reduction_percent"] = 30
                 params["high_profit_min_reduction"] = 0.5
 
-        # Нормализуем числовые значения
-        if params["trading_fee_rate"] is not None:
-            try:
-                params["trading_fee_rate"] = max(0.0, float(params["trading_fee_rate"]))
-            except (TypeError, ValueError):
-                logger.warning(
-                    f"⚠️ Не удалось преобразовать trading_fee_rate в float: {params['trading_fee_rate']}"
-                )
-                params[
-                    "trading_fee_rate"
-                ] = 0.0010  # ✅ ОБНОВЛЕНО: 0.10% на круг (0.05% вход + 0.05% выход для taker на OKX)
+        # Нормализуем числовые значения комиссии и конвертируем старые значения "на круг" в ставку за сторону
+        for fee_key, default_value in (
+            ("maker_fee_rate", 0.0002),
+            ("taker_fee_rate", 0.0005),
+            ("trading_fee_rate", 0.0002),
+        ):
+            if params.get(fee_key) is not None:
+                try:
+                    params[fee_key] = max(0.0, float(params[fee_key]))
+                except (TypeError, ValueError):
+                    logger.warning(
+                        f"⚠️ Не удалось преобразовать {fee_key} в float: {params[fee_key]}"
+                    )
+                    params[fee_key] = default_value
+
+        # Если maker не задан, но есть trading_fee_rate (старое поле "на круг"), делим на 2 чтобы получить ставку за сторону
+        if params.get("maker_fee_rate") is None and params.get("trading_fee_rate"):
+            params["maker_fee_rate"] = params["trading_fee_rate"] / 2
+        if params.get("taker_fee_rate") is None and params.get("maker_fee_rate"):
+            # Taker по умолчанию чуть выше maker; если явного нет, используем maker*2.5 (0.05% при maker 0.02%)
+            params["taker_fee_rate"] = params["maker_fee_rate"] * 2.5
+
+        # trading_fee_rate приводим к ставке за сторону (alias maker_fee_rate)
+        params["trading_fee_rate"] = params.get("maker_fee_rate", 0.0002)
 
         # Нормализуем числовые параметры трейлинга
         for key in (

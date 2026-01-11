@@ -424,7 +424,9 @@ class TrailingSLCoordinator:
         initial_trail = params["initial_trail"] or 0.0
         max_trail = params["max_trail"] or initial_trail
         min_trail = params["min_trail"] or 0.0
-        trading_fee_rate = params["trading_fee_rate"] or 0.0
+        maker_fee_rate = params.get("maker_fee_rate")
+        taker_fee_rate = params.get("taker_fee_rate")
+        trading_fee_rate = params.get("trading_fee_rate") or maker_fee_rate or 0.0
 
         # ✅ ЭТАП 4: Создаем TrailingStopLoss с новыми параметрами
         # ✅ КРИТИЧЕСКОЕ: Получаем leverage из конфига для правильного расчета loss_cut от маржи
@@ -440,6 +442,8 @@ class TrailingSLCoordinator:
             max_trail=max_trail,
             min_trail=min_trail,
             trading_fee_rate=trading_fee_rate,
+            maker_fee_rate=maker_fee_rate,
+            taker_fee_rate=taker_fee_rate,
             loss_cut_percent=params["loss_cut_percent"],
             timeout_loss_percent=params["timeout_loss_percent"],
             timeout_minutes=params["timeout_minutes"],

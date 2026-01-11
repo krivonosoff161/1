@@ -2,190 +2,11 @@
 Parameter Provider - Единая точка получения параметров торговли.
 
 Обеспечивает централизованный доступ к параметрам из различных источников:
-- ConfigManager
-- RegimeManager
-- Symbol profiles
-- Adaptive risk parameters
-
-Предотвращает дублирование кода и обеспечивает консистентность параметров.
-"""
-
-from typing import Any, Dict, Optional
-
-from loguru import logger
-
-from .config_manager import ConfigManager
-
-
-class ParameterProvider:
-    """
-    Единая точка получения параметров торговли.
-
-    Объединяет доступ к параметрам из различных источников и предоставляет
-    единый интерфейс для всех модулей системы.
-    """
-
-    def __init__(
+    def _apply_adaptive_exit_params(
         self,
-        config_manager: ConfigManager,
-        regime_manager=None,  # AdaptiveRegimeManager (опционально)
-        data_registry=None,  # DataRegistry (опционально)
-    ):
-        """
-        Инициализация Parameter Provider.
-
-        Args:
-            config_manager: ConfigManager для доступа к конфигурации
-            regime_manager: AdaptiveRegimeManager для режим-специфичных параметров (опционально)
-            data_registry: DataRegistry для текущих режимов (опционально)
-        """
-        self.config_manager = config_manager
-        self.regime_manager = regime_manager
-        self.data_registry = data_registry
-
-        # Кэш для часто используемых параметров
-        self._cache: Dict[str, Any] = {}
-        self._cache_timestamps: Dict[str, float] = {}
-        self._cache_ttl_seconds = 300.0  # ✅ ИСПРАВЛЕНО (28.12.2025): Увеличено с 60 до 300 секунд (5 минут) для снижения нагрузки
-
-        logger.info("✅ ParameterProvider инициализирован")
-
-    def get_regime_params(
-        self,
+        base_params: Dict[str, Any],
         symbol: str,
-        regime: Optional[str] = None,
-        balance: Optional[float] = None,
-    ) -> Dict[str, Any]:
-        """
-        Получить параметры для режима рынка.
-
-        Args:
-            symbol: Торговый символ
-            regime: Режим рынка (trending/ranging/choppy). Если None, определяется автоматически
-            balance: Текущий баланс (для адаптивных параметров)
-
-        Returns:
-            Словарь с параметрами режима:
-            {
-                "min_score_threshold": float,
-                "max_trades_per_hour": int,
-                "position_size_multiplier": float,
-                "tp_atr_multiplier": float,
-                "sl_atr_multiplier": float,
-                "max_holding_minutes": int,
-                "cooldown_after_loss_minutes": int,
-                ...
-            }
-        """
-        try:
-            # Определяем режим если не указан
-            if not regime:
-                regime = self._get_current_regime(symbol)
-
-            # Получаем параметры из ConfigManager
-            regime_params = self.config_manager.get_regime_params(regime)
-
-            # Применяем адаптивные параметры если баланс указан
-            if balance is not None:
-                adaptive_params = self.config_manager.get_adaptive_risk_params(
-                    balance, regime
-                )
-                # Объединяем параметры (адаптивные имеют приоритет)
-                regime_params = {**regime_params, **adaptive_params}
-
-            return regime_params
-
-        except Exception as e:
-            logger.warning(
-                f"⚠️ ParameterProvider: Ошибка получения параметров режима для {symbol}: {e}"
-            )
-            # Возвращаем дефолтные параметры
-            return self._get_default_regime_params()
-
-    def get_exit_params(
-        self,
-        symbol: str,
-        regime: Optional[str] = None,
-        # ✅ НОВОЕ (05.01.2026): Опциональный контекст для адаптации
-        balance: Optional[float] = None,
-        current_pnl: Optional[float] = None,  # Текущий P&L позиции в %
-        drawdown: Optional[float] = None,  # Текущая просадка в %
-        position_size: Optional[float] = None,  # Размер позиции
-        margin_used: Optional[float] = None,  # Используемая маржа
-    ) -> Dict[str, Any]:
-        """
-        Получить параметры выхода (TP/SL) для режима.
-
-        ✅ НОВОЕ (05.01.2026): Поддерживает адаптивные параметры на основе контекста.
-
-        Args:
-            symbol: Торговый символ
-            regime: Режим рынка. Если None, определяется автоматически
-            balance: Текущий баланс (для адаптации по балансу)
-            current_pnl: Текущий P&L позиции в % (для расширения TP)
-            drawdown: Текущая просадка в % (для ужесточения SL)
-            position_size: Размер позиции (для корректировки риска)
-            margin_used: Используемая маржа (для проверки безопасности)
-
-        Returns:
-            Словарь с параметрами выхода (адаптивными если контекст передан):
-            {
-                "tp_atr_multiplier": float,
-                "sl_atr_multiplier": float,
-                "max_holding_minutes": int,
-                "emergency_loss_threshold": float,
-                ...
-            }
-        """
-        try:
-            # Определяем режим если не указан
-            if not regime:
-                regime = self._get_current_regime(symbol)
-
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Получаем exit_params напрямую из raw_config_dict
-            # ConfigManager не имеет метода get_exit_param, получаем через _raw_config_dict
-            exit_params = {}
-            if (
-                hasattr(self.config_manager, "_raw_config_dict")
-                and self.config_manager._raw_config_dict
-            ):
-                all_exit_params = self.config_manager._raw_config_dict.get(
-                    "exit_params", {}
-                )
-                if isinstance(all_exit_params, dict) and regime:
-                    regime_lower = (
-                        regime.lower()
-                        if isinstance(regime, str)
-                        else str(regime).lower()
-                    )
-                    exit_params = all_exit_params.get(regime_lower, {})
-                elif isinstance(all_exit_params, dict):
-                    # Если режим не указан, возвращаем все exit_params
-                    exit_params = all_exit_params
-
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Конвертация типов для всех числовых параметров
-            # Предотвращает TypeError при сравнении str и int/float
-            def _to_float(value: Any, name: str, default: float = 0.0) -> float:
-                """Helper для безопасной конвертации в float"""
-                if value is None:
-                    return default
-                if isinstance(value, (int, float)):
-                    return float(value)
-                if isinstance(value, str):
-                    try:
-                        return float(value)
-                    except (ValueError, TypeError):
-                        logger.warning(
-                            f"⚠️ ParameterProvider: Не удалось конвертировать {name}={value} в float, "
-                            f"используем default={default}"
-                        )
-                        return default
-                return default
-
-            # Конвертируем ключевые параметры
-            if exit_params:
-                exit_params["max_holding_minutes"] = _to_float(
-                    exit_params.get("max_holding_minutes"),
+        regime: Optional[str],
                     "max_holding_minutes",
                     {
                         "ranging": 25.0,
@@ -231,87 +52,67 @@ class ParameterProvider:
                         "tp_atr_multiplier",
                         "max_holding_minutes",
                     ]
-                    for key in per_symbol_keys:
-                        if key in symbol_config:
-                            old_value = exit_params.get(key)
-                            exit_params[key] = _to_float(
-                                symbol_config[key],
-                                key,
-                                exit_params.get(
-                                    key,
-                                    2.0
-                                    if "sl_atr" in key
-                                    else 1.0
-                                    if "tp_atr" in key
-                                    else 25.0,
-                                ),
+                    def _apply_adaptive_exit_params(
+                        self,
+                        base_params: Dict[str, Any],
+                        symbol: str,
+                        regime: Optional[str],
+                        balance: Optional[float],
+                        current_pnl: Optional[float],
+                        drawdown: Optional[float],
+                    ) -> Dict[str, Any]:
+                        """Единая адаптация TP/SL по балансу, PnL и просадке."""
+
+                        adaptive_config = self._get_adaptive_exit_config()
+                        if not adaptive_config.get("enabled", False):
+                            return base_params
+
+                        params = base_params.copy()
+                        adaptations_log: list[str] = []
+
+                        # 1) Баланс
+                        if balance is not None:
+                            balance_adapt = self._adapt_by_balance(balance, params)
+                            if balance_adapt:
+                                params.update(balance_adapt)
+                                adaptations_log.append(
+                                    f"balance tp={balance_adapt.get('tp_atr_multiplier', 'N/A')} sl={balance_adapt.get('sl_atr_multiplier', 'N/A')}"
+                                )
+
+                        # 2) PnL
+                        if current_pnl is not None:
+                            pnl_adapt = self._adapt_tp_by_pnl(current_pnl, params)
+                            if pnl_adapt:
+                                old_tp = params.get("tp_atr_multiplier")
+                                params.update(pnl_adapt)
+                                new_tp = params.get("tp_atr_multiplier")
+                                old_tp_str = f"{old_tp:.2f}" if isinstance(old_tp, (int, float)) else "0"
+                                new_tp_str = f"{new_tp:.2f}" if isinstance(new_tp, (int, float)) else "0"
+                                adaptations_log.append(
+                                    f"pnl tp {old_tp_str}->{new_tp_str} ({current_pnl:.2f}%)"
+                                )
+
+                        # 3) Drawdown
+                        if drawdown is not None:
+                            dd_adapt = self._adapt_sl_by_drawdown(drawdown, params)
+                            if dd_adapt:
+                                old_sl = params.get("sl_atr_multiplier")
+                                params.update(dd_adapt)
+                                new_sl = params.get("sl_atr_multiplier")
+                                old_sl_str = f"{old_sl:.2f}" if isinstance(old_sl, (int, float)) else "0"
+                                new_sl_str = f"{new_sl:.2f}" if isinstance(new_sl, (int, float)) else "0"
+                                adaptations_log.append(
+                                    f"dd sl {old_sl_str}->{new_sl_str} ({drawdown:.2f}%)"
+                                )
+
+                        if adaptations_log:
+                            logger.debug(
+                                f"[ADAPTIVE_EXIT] {symbol} regime={regime or 'n/a'} | "
+                                f"tp={params.get('tp_atr_multiplier')} sl={params.get('sl_atr_multiplier')} | "
+                                f"{' ; '.join(adaptations_log)}"
                             )
-                            sources_log.append(
-                                f"{key}={exit_params[key]} (by_symbol, было={old_value})"
-                            )
-                    # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (03.01.2026): Детальное логирование источников
-                    logger.info(
-                        f"📊 [PARAMS] {symbol} ({regime}): exit_params "
-                        f"sl_atr={exit_params.get('sl_atr_multiplier', 'N/A')}, "
-                        f"tp_atr={exit_params.get('tp_atr_multiplier', 'N/A')}, "
-                        f"max_holding={exit_params.get('max_holding_minutes', 'N/A')}мин, "
-                        f"min_holding={exit_params.get('min_holding_minutes', 'N/A')}мин | "
-                        f"Источники: {', '.join(sources_log) if sources_log else 'exit_params.' + regime}"
-                    )
 
-            # ✅ НОВОЕ (05.01.2026): Применяем адаптацию если передан контекст
-            if balance is not None or current_pnl is not None or drawdown is not None:
-                exit_params = self._apply_adaptive_exit_params(
-                    exit_params, symbol, regime, balance, current_pnl, drawdown
-                )
-
-            return exit_params or {}
-
-        except Exception as e:
-            logger.warning(
-                f"⚠️ ParameterProvider: Ошибка получения exit_params для {symbol}: {e}"
-            )
-            return {}
-
-    def _apply_adaptive_exit_params(
-        self,
-        base_params: Dict[str, Any],
-        symbol: str,
-        regime: Optional[str],
-        balance: Optional[float],
-        current_pnl: Optional[float],
-        drawdown: Optional[float],
-    ) -> Dict[str, Any]:
-        """
-        ✅ НОВОЕ (06.01.2026): Применить адаптивную логику к параметрам выхода.
-
-        Использует плавную интерполяцию по балансу для расчета TP/SL множителей.
-
-        Args:
-            base_params: Базовые параметры выхода
-            symbol: Торговый символ
-            regime: Режим рынка
-            balance: Текущий баланс
-            current_pnl: Текущий P&L позиции в %
-            drawdown: Текущая просадка в %
-
-        Returns:
-            Адаптивные параметры выхода
-        """
-        try:
-            # Проверяем, включена ли адаптация
-            adaptive_config = self._get_adaptive_exit_config()
-            if not adaptive_config.get("enabled", False):
-                logger.debug("⚠️ Адаптивные параметры отключены в конфигурации")
-                return base_params
-
-            # Копируем базовые параметры
-            adaptive_params = base_params.copy()
-
-            # Получаем базовые множители
-            tp_base = base_params.get("tp_atr_multiplier", 2.0)
-            sl_base = base_params.get("sl_atr_multiplier", 1.5)
-
+                        return params
             # Адаптация по балансу (главный фактор)
             if balance is not None:
                 (
@@ -499,60 +300,6 @@ class ParameterProvider:
             )
             return {}
 
-    def get_indicator_params(
-        self, symbol: str, regime: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Получить параметры индикаторов для режима.
-
-        Args:
-            symbol: Торговый символ
-            regime: Режим рынка. Если None, определяется автоматически
-
-        Returns:
-            Словарь с параметрами индикаторов:
-            {
-                "rsi_period": int,
-                "rsi_overbought": float,
-                "rsi_oversold": float,
-                "atr_period": int,
-                "sma_fast": int,
-                "sma_slow": int,
-                "ema_fast": int,
-                "ema_slow": int,
-                ...
-            }
-        """
-        try:
-            # Определяем режим если не указан
-            if not regime:
-                regime = self._get_current_regime(symbol)
-
-            # Получаем параметры режима
-            regime_params = self.get_regime_params(symbol, regime)
-
-            # Извлекаем параметры индикаторов
-            indicators = regime_params.get("indicators", {})
-            if isinstance(indicators, dict):
-                indicators = indicators.copy()
-            elif hasattr(indicators, "__dict__"):
-                indicators = indicators.__dict__.copy()
-            else:
-                indicators = {}
-
-            # ✅ ПРИОРИТЕТ 2 (29.12.2025): Проверка by_symbol.{symbol}.indicators для per-symbol параметров
-            if symbol and hasattr(self.config_manager, "_raw_config_dict"):
-                config_dict = self.config_manager._raw_config_dict
-                by_symbol = config_dict.get("by_symbol", {})
-                symbol_config = by_symbol.get(symbol, {})
-                if isinstance(symbol_config, dict):
-                    symbol_indicators = symbol_config.get("indicators", {})
-                    if isinstance(symbol_indicators, dict):
-                        # Переопределяем параметры из by_symbol (приоритет выше regime)
-                        indicators.update(symbol_indicators)
-                        logger.debug(
-                            f"✅ ParameterProvider: Индикаторы для {symbol} получены из by_symbol: "
-                            f"{list(symbol_indicators.keys())}"
                         )
 
             return indicators
@@ -811,75 +558,6 @@ class ParameterProvider:
 
         self._cache[key] = value
         self._cache_timestamps[key] = time.time()
-
-    def _apply_adaptive_exit_params(
-        self,
-        exit_params: Dict[str, Any],
-        symbol: str,
-        regime: Optional[str],
-        balance: Optional[float],
-        current_pnl: Optional[float],
-        drawdown: Optional[float],
-    ) -> Dict[str, Any]:
-        """
-        ✅ НОВОЕ (05.01.2026): Применить адаптацию параметров выхода на основе контекста.
-
-        Args:
-            exit_params: Базовые параметры выхода
-            symbol: Торговый символ
-            regime: Режим рынка
-            balance: Текущий баланс
-            current_pnl: Текущий P&L позиции в %
-            drawdown: Текущая просадка в %
-
-        Returns:
-            Адаптированные параметры выхода
-        """
-        adapted_params = exit_params.copy()
-        adaptations_log = []
-
-        # 1. Адаптация по балансу
-        if balance is not None:
-            balance_adapt = self._adapt_by_balance(balance, adapted_params)
-            if balance_adapt:
-                adapted_params.update(balance_adapt)
-                adaptations_log.append(
-                    f"balance: TP={balance_adapt.get('tp_atr_multiplier', 'N/A')}, "
-                    f"SL={balance_adapt.get('sl_atr_multiplier', 'N/A')}"
-                )
-
-        # 2. Адаптация TP по P&L
-        if current_pnl is not None:
-            pnl_adapt = self._adapt_tp_by_pnl(current_pnl, adapted_params)
-            if pnl_adapt:
-                old_tp = adapted_params.get("tp_atr_multiplier")
-                adapted_params.update(pnl_adapt)
-                new_tp = adapted_params.get("tp_atr_multiplier")
-                if old_tp != new_tp:
-                    adaptations_log.append(
-                        f"P&L: TP {old_tp:.2f}→{new_tp:.2f} (P&L={current_pnl:.2f}%)"
-                    )
-
-        # 3. Адаптация SL по просадке (Фаза 2 - пока закомментировано)
-        # if drawdown is not None:
-        #     drawdown_adapt = self._adapt_sl_by_drawdown(drawdown, adapted_params)
-        #     if drawdown_adapt:
-        #         old_sl = adapted_params.get("sl_atr_multiplier")
-        #         adapted_params.update(drawdown_adapt)
-        #         new_sl = adapted_params.get("sl_atr_multiplier")
-        #         if old_sl != new_sl:
-        #             adaptations_log.append(
-        #                 f"drawdown: SL {old_sl:.2f}→{new_sl:.2f} (drawdown={drawdown:.2f}%)"
-        #             )
-
-        # Логируем адаптации
-        if adaptations_log:
-            logger.info(
-                f"🔄 [ADAPTIVE] {symbol} ({regime}): "
-                f"Адаптация параметров: {', '.join(adaptations_log)}"
-            )
-
-        return adapted_params
 
     def _adapt_by_balance(
         self, balance: float, exit_params: Dict[str, Any]

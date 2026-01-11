@@ -36,7 +36,9 @@ class TrailingStopLoss:
         initial_trail: float = 0.05,
         max_trail: float = 0.2,
         min_trail: float = 0.02,
-        trading_fee_rate: float = 0.0004,  # ✅ ИСПРАВЛЕНО (04.01.2026): 0.04% на круг (0.02% вход + 0.02% выход для maker на OKX)
+        trading_fee_rate: float = 0.0004,  # ⚠️ Legacy: если передается "на круг", ниже конвертируется в ставку за сторону
+        maker_fee_rate: Optional[float] = None,
+        taker_fee_rate: Optional[float] = None,
         loss_cut_percent: Optional[float] = None,
         timeout_loss_percent: Optional[float] = None,
         timeout_minutes: Optional[float] = None,
@@ -64,15 +66,43 @@ class TrailingStopLoss:
             initial_trail: Начальный трейлинг в % (по умолчанию 0.05%)
             max_trail: Максимальный трейлинг в % (по умолчанию 0.2%)
             min_trail: Минимальный трейлинг в % (по умолчанию 0.02%)
-            trading_fee_rate: Комиссия на круг (открытие + закрытие) в долях (0.0010 = 0.10% для Market/Taker на OKX, проверено по реальным сделкам)
+            trading_fee_rate: Ставка комиссии за сторону (maker). Legacy: если передаётся "на круг", будет конвертирована в ставку за сторону.
+            maker_fee_rate: Явная ставка maker за сторону (приоритет над trading_fee_rate)
+            taker_fee_rate: Явная ставка taker за сторону (приоритет над trading_fee_rate)
             leverage: Leverage позиции (по умолчанию 1.0) - используется для правильного расчета loss_cut от маржи
         """
         self.initial_trail = initial_trail
         self.max_trail = max_trail
         self.min_trail = min_trail
-        self.trading_fee_rate = (
-            trading_fee_rate  # Комиссия на весь цикл (открытие + закрытие)
+        # Комиссии: всегда работаем со ставкой ЗА СТОРОНУ (maker) для расчётов от маржи
+        self.maker_fee_rate = self._normalize_fee_rate(
+            maker_fee_rate if maker_fee_rate is not None else trading_fee_rate,
+            default=0.0002,
         )
+        self.taker_fee_rate = self._normalize_fee_rate(
+            taker_fee_rate if taker_fee_rate is not None else trading_fee_rate,
+            default=0.0005,
+        )
+        # Legacy: если trading_fee_rate передан как ставка "на круг" (>0.03%), делим пополам для стороны
+        if (
+            maker_fee_rate is None
+            and taker_fee_rate is None
+            and trading_fee_rate is not None
+            and trading_fee_rate > 0.0003
+        ):
+            self.maker_fee_rate = self._normalize_fee_rate(
+                trading_fee_rate / 2, default=0.0002
+            )
+            self.taker_fee_rate = self._normalize_fee_rate(
+                0.0005, default=0.0005
+            )
+
+        # Taker по умолчанию не должен быть ниже maker
+        if self.taker_fee_rate <= self.maker_fee_rate:
+            self.taker_fee_rate = max(self.taker_fee_rate, self.maker_fee_rate * 2.0)
+
+        # alias для обратной совместимости (используем ставку за сторону)
+        self.trading_fee_rate = self.maker_fee_rate
         self.current_trail = initial_trail
         self.highest_price = 0.0
         self.lowest_price = float("inf")
@@ -123,6 +153,14 @@ class TrailingStopLoss:
         self._next_trail_profit_target: Optional[float] = None
         self.debug_logger = debug_logger  # ✅ DEBUG LOGGER для логирования
         self._symbol: Optional[str] = None  # ✅ Сохраняем символ для логирования
+
+    @staticmethod
+    def _normalize_fee_rate(value: Optional[float], default: float) -> float:
+        """Нормализует комиссию, защищаясь от None и некорректных типов."""
+        try:
+            return max(0.0, float(value)) if value is not None else default
+        except (TypeError, ValueError):
+            return default
 
     @staticmethod
     def _normalize_percent(value: Optional[float]) -> Optional[float]:
@@ -495,12 +533,12 @@ class TrailingStopLoss:
                     )
                     return gross_pnl_pct_from_margin
                 else:
-                    # После 10 секунд учитываем комиссию
-                    trading_fee_rate = self.trading_fee_rate
+                    # После 10 секунд учитываем комиссию (ставка за сторону)
+                    fee_rate_per_side = self.trading_fee_rate
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Учитываем leverage в комиссиях
                     # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
                     # (т.к. комиссия считается от номинала, а PnL% от маржи)
-                    commission_pct = (trading_fee_rate * 2) * self.leverage * 100
+                    commission_pct = (fee_rate_per_side * 2) * self.leverage * 100
                     net_pnl_pct_from_margin = gross_pnl_pct_from_margin - commission_pct
                     logger.debug(
                         f"💰 TrailingStopLoss: PnL calc: leverage={self.leverage}, "
@@ -546,10 +584,10 @@ class TrailingStopLoss:
                 return gross_profit_pct_from_margin
             else:
                 # После 10 секунд учитываем комиссию
-                trading_fee_rate = self.trading_fee_rate
+                fee_rate_per_side = self.trading_fee_rate
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Учитываем leverage в комиссиях (fallback)
                 # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
-                commission_pct = (trading_fee_rate * 2) * self.leverage * 100
+                commission_pct = (fee_rate_per_side * 2) * self.leverage * 100
                 net_pnl_pct_from_margin = gross_profit_pct_from_margin - commission_pct
                 logger.debug(
                     f"💰 TrailingStopLoss: PnL calc (fallback): leverage={self.leverage}, "

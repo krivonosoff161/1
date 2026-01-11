@@ -228,6 +228,28 @@ class ExitAnalyzer:
 
         return None
 
+    def _get_fee_rate_per_side(self) -> float:
+        """Возвращает ставку комиссии за сторону (maker) с единым источником из scalping_config."""
+        fee_rate = 0.0002
+        commission_config = getattr(self.scalping_config, "commission", None)
+        try:
+            if isinstance(commission_config, dict):
+                fee_rate = commission_config.get(
+                    "maker_fee_rate", commission_config.get("trading_fee_rate", fee_rate)
+                )
+            elif commission_config is not None:
+                fee_rate = getattr(
+                    commission_config,
+                    "maker_fee_rate",
+                    getattr(commission_config, "trading_fee_rate", fee_rate),
+                )
+        except Exception:
+            fee_rate = fee_rate
+        try:
+            return max(0.0, float(fee_rate))
+        except (TypeError, ValueError):
+            return 0.0002
+
     async def _fetch_price_via_rest(self, symbol: str) -> Optional[float]:
         """
         ✅ НОВОЕ (10.01.2026): REST API fallback для получения цены.
@@ -738,27 +760,7 @@ class ExitAnalyzer:
                 else:
                     # ✅ ИСПРАВЛЕНО: После 10 секунд учитываем комиссию с учётом плеча и двух сторон (вход+выход)
                     # Используем maker_fee_rate (0.02%) для limit ордеров, т.к. бот использует limit ордера
-                    trading_fee_rate = (
-                        0.0002  # 0.02% по умолчанию (на одну сторону для maker)
-                    )
-                    if self.scalping_config:
-                        commission_config = getattr(
-                            self.scalping_config, "commission", {}
-                        )
-                        if isinstance(commission_config, dict):
-                            # ✅ ИСПРАВЛЕНО: Используем maker_fee_rate для limit ордеров (0.02% на сторону)
-                            trading_fee_rate = commission_config.get(
-                                "maker_fee_rate",
-                                commission_config.get("trading_fee_rate", 0.0002),
-                            )
-                        elif hasattr(commission_config, "maker_fee_rate"):
-                            trading_fee_rate = getattr(
-                                commission_config, "maker_fee_rate", 0.0002
-                            )
-                        elif hasattr(commission_config, "trading_fee_rate"):
-                            trading_fee_rate = getattr(
-                                commission_config, "trading_fee_rate", 0.0002
-                            )
+                    trading_fee_rate = self._get_fee_rate_per_side()
 
                     # ✅ ИСПРАВЛЕНО: Комиссия учитывает плечо и две стороны (вход + выход)
                     # Получаем leverage из metadata или position
@@ -835,25 +837,7 @@ class ExitAnalyzer:
             else:
                 # ✅ ИСПРАВЛЕНО: Комиссия с учётом плеча и двух сторон (вход+выход)
                 # Используем maker_fee_rate (0.02%) для limit ордеров
-                trading_fee_rate = (
-                    0.0002  # 0.02% по умолчанию (на одну сторону для maker)
-                )
-                if self.scalping_config:
-                    commission_config = getattr(self.scalping_config, "commission", {})
-                    if isinstance(commission_config, dict):
-                        # ✅ ИСПРАВЛЕНО: Используем maker_fee_rate для limit ордеров (0.02% на сторону)
-                        trading_fee_rate = commission_config.get(
-                            "maker_fee_rate",
-                            commission_config.get("trading_fee_rate", 0.0002),
-                        )
-                    elif hasattr(commission_config, "maker_fee_rate"):
-                        trading_fee_rate = getattr(
-                            commission_config, "maker_fee_rate", 0.0002
-                        )
-                    elif hasattr(commission_config, "trading_fee_rate"):
-                        trading_fee_rate = getattr(
-                            commission_config, "trading_fee_rate", 0.0002
-                        )
+                trading_fee_rate = self._get_fee_rate_per_side()
 
                 # Получаем leverage из metadata или position
                 leverage = 5  # Default
