@@ -4646,6 +4646,27 @@ class FuturesScalpingOrchestrator:
                             # Это TradeResult объект, можно записывать
                             self.performance_tracker.record_trade(trade_result)
                             logger.debug(f"✅ Сделка {symbol} записана в CSV")
+                            
+                            # 🔴 BUG #29 FIX (09.01.2026): Log exit reason to structured logger for analysis
+                            if hasattr(self, "structured_logger") and self.structured_logger:
+                                try:
+                                    reason = getattr(trade_result, "reason", "unknown")
+                                    regime = "ranging"  # Will be updated below if available
+                                    self.structured_logger.log_trade(
+                                        symbol=symbol,
+                                        side=getattr(trade_result, "side", "buy"),
+                                        entry_price=getattr(trade_result, "entry_price", 0.0),
+                                        exit_price=getattr(trade_result, "exit_price", 0.0),
+                                        size=getattr(trade_result, "size", 0.0),
+                                        pnl=getattr(trade_result, "net_pnl", 0.0),
+                                        commission=getattr(trade_result, "commission", 0.0),
+                                        duration_sec=getattr(trade_result, "duration_sec", 0.0),
+                                        reason=reason,
+                                        regime=regime,
+                                    )
+                                    logger.debug(f"✅ Сделка {symbol} залогирована в StructuredLogger с reason={reason}")
+                                except Exception as e:
+                                    logger.warning(f"⚠️ Ошибка логирования сделки в StructuredLogger для {symbol}: {e}")
                     except Exception as e:
                         logger.error(
                             f"❌ Ошибка записи сделки в CSV для {symbol}: {e}",

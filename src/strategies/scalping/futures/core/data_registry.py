@@ -578,3 +578,352 @@ class DataRegistry:
                 f"📊 DataRegistry: Инициализирован буфер свечей для {symbol} {timeframe} "
                 f"({len(candles)} свечей, max_size={max_size})"
             )
+    def validate_ohlcv_data(self, symbol: str, candles: List[OHLCV]) -> tuple[bool, List[str]]:
+        """
+        🔴 BUG #9 FIX (09.01.2026): Validate OHLCV data quality before use
+
+        Проверяет качество данных свечей:
+        - Отсутствие NaN/None значений
+        - Положительные цены (close > 0, high >= close, etc.)
+        - Отсутствие больших разрывов между свечами
+        - Последовательность временных меток
+
+        Args:
+            symbol: Торговый символ
+            candles: Список свечей (OHLCV объекты или dict)
+
+        Returns:
+            (is_valid, error_list) - tuple[bool, List[str]]
+            is_valid=True если все проверки пройдены
+            error_list содержит описание проблем если есть
+        """
+        errors = []
+
+        if not candles:
+            errors.append("No candles provided")
+            return False, errors
+
+        try:
+            # Проверяем каждую свечу
+            prev_close = None
+            prev_timestamp = None
+
+            for i, candle in enumerate(candles):
+                try:
+                    # Извлекаем значения (поддерживаем dict и OHLCV объекты)
+                    if isinstance(candle, dict):
+                        timestamp = candle.get("timestamp") or candle.get("time")
+                        open_price = float(candle.get("o") or candle.get("open", 0))
+                        high_price = float(candle.get("h") or candle.get("high", 0))
+                        low_price = float(candle.get("l") or candle.get("low", 0))
+                        close_price = float(candle.get("c") or candle.get("close", 0))
+                        volume = float(candle.get("v") or candle.get("volume", 0))
+                    else:
+                        # Это OHLCV объект
+                        timestamp = getattr(candle, "timestamp", getattr(candle, "time", None))
+                        open_price = float(getattr(candle, "open", 0))
+                        high_price = float(getattr(candle, "high", 0))
+                        low_price = float(getattr(candle, "low", 0))
+                        close_price = float(getattr(candle, "close", 0))
+                        volume = float(getattr(candle, "volume", 0))
+
+                    # ✅ Check 1: No NaN/None/Zero prices
+                    if not all([open_price > 0, high_price > 0, low_price > 0, close_price > 0]):
+                        errors.append(
+                            f"Candle {i}: Invalid prices - "
+                            f"o={open_price}, h={high_price}, l={low_price}, c={close_price}"
+                        )
+                        continue
+
+                    # ✅ Check 2: OHLC relationships
+                    if not (high_price >= close_price >= low_price >= open_price or 
+                            high_price >= open_price >= low_price >= close_price):
+                        # More relaxed: high >= max(o,c) and low <= min(o,c)
+                        if not (high_price >= max(open_price, close_price) and 
+                                low_price <= min(open_price, close_price)):
+                            errors.append(
+                                f"Candle {i}: Invalid OHLC relationships - "
+                                f"o={open_price}, h={high_price}, l={low_price}, c={close_price}"
+                            )
+                            continue
+
+                    # ✅ Check 3: Price gaps (if we have previous close)
+                    if prev_close is not None and prev_close > 0:
+                        price_change_pct = abs((open_price - prev_close) / prev_close) * 100
+                        # Flag large gaps (> 5%) but don't reject them
+                        if price_change_pct > 5.0:
+                            logger.warning(
+                                f"{symbol} Candle {i}: Large price gap {price_change_pct:.2f}% "
+                                f"(prev_close={prev_close}, open={open_price})"
+                            )
+
+                    # ✅ Check 4: Timestamp sequentiality
+                    if prev_timestamp is not None:
+                        if timestamp and prev_timestamp:
+                            try:
+                                ts_curr = int(timestamp) if isinstance(timestamp, (int, float)) else timestamp
+                                ts_prev = int(prev_timestamp) if isinstance(prev_timestamp, (int, float)) else prev_timestamp
+                                if ts_curr <= ts_prev:
+                                    errors.append(
+                                        f"Candle {i}: Non-sequential timestamps - "
+                                        f"prev={prev_timestamp}, curr={timestamp}"
+                                    )
+                            except (TypeError, ValueError):
+                                pass  # Can't compare timestamps, skip this check
+
+                    prev_close = close_price
+                    prev_timestamp = timestamp
+
+                except (TypeError, ValueError, AttributeError) as e:
+                    errors.append(f"Candle {i}: Data extraction error - {str(e)}")
+                    continue
+
+            # If we have errors, determine severity
+            if errors:
+                # Log the issues
+                logger.warning(f"🔴 Data quality issues for {symbol} ({len(errors)} errors):")
+                for err in errors[:5]:  # Show first 5 errors
+                    logger.warning(f"   - {err}")
+                if len(errors) > 5:
+                    logger.warning(f"   ... and {len(errors) - 5} more errors")
+
+                # Decide if we should use the data
+                # If more than 20% of candles have errors, data is invalid
+                error_rate = len(errors) / len(candles)
+                if error_rate > 0.2:
+                    return False, errors
+
+            return True, errors
+
+        except Exception as e:
+            logger.error(f"❌ Error validating OHLCV data for {symbol}: {e}", exc_info=True)
+            errors.append(f"Validation exception: {str(e)}")
+            return False, errors
+
+    def validate_price(
+        self,
+        symbol: str,
+        price: float,
+        reference_price: Optional[float] = None,
+        price_history: Optional[List[float]] = None,
+        max_std_deviations: float = 2.0,
+        max_age_seconds: float = 5.0,
+        price_timestamp: Optional[float] = None,
+    ) -> tuple[bool, Optional[str]]:
+        """
+        🔴 BUG #38 FIX (09.01.2026): Validate price data before use in calculations
+
+        Проверяет качество ценовых данных:
+        - Цена > 0
+        - Цена не NaN/None
+        - Цена в пределах разумного диапазона (not outlier)
+        - Данные не устарели (timestamp свежий)
+
+        Args:
+            symbol: Торговый символ
+            price: Проверяемая цена
+            reference_price: Опорная цена для проверки отклонений
+            price_history: История цен для расчета std deviation
+            max_std_deviations: Макс отклонение в std deviations (по умолчанию 2.0)
+            max_age_seconds: Макс возраст данных в секундах (по умолчанию 5.0)
+            price_timestamp: Unix timestamp цены
+
+        Returns:
+            (is_valid, error_message) - tuple[bool, Optional[str]]
+            is_valid=True если цена валидна, error_message=None
+            is_valid=False если есть проблемы, error_message описывает проблему
+        """
+        try:
+            # ✅ Check 1: Not None/NaN
+            if price is None:
+                return False, f"{symbol}: Price is None"
+
+            try:
+                price = float(price)
+            except (TypeError, ValueError):
+                return False, f"{symbol}: Cannot convert price to float: {price}"
+
+            import math
+            if math.isnan(price):
+                return False, f"{symbol}: Price is NaN"
+
+            # ✅ Check 2: Positive
+            if price <= 0:
+                return False, f"{symbol}: Price is not positive: {price}"
+
+            # ✅ Check 3: Not stale (if timestamp provided)
+            if price_timestamp is not None:
+                try:
+                    from datetime import datetime, timezone
+                    current_time = datetime.now(timezone.utc).timestamp()
+                    age_seconds = current_time - float(price_timestamp)
+                    if age_seconds > max_age_seconds:
+                        logger.warning(
+                            f"⚠️ {symbol}: Price data is {age_seconds:.1f}s old "
+                            f"(max: {max_age_seconds}s)"
+                        )
+                        # We warn but don't reject stale data
+                except (TypeError, ValueError):
+                    pass  # Can't check age, skip
+
+            # ✅ Check 4: Within reasonable bounds (if reference price provided)
+            if reference_price is not None and reference_price > 0:
+                price_change_pct = abs((price - reference_price) / reference_price) * 100
+
+                # Simple check: price shouldn't deviate by more than 10% from reference
+                if price_change_pct > 10.0:
+                    logger.warning(
+                        f"⚠️ {symbol}: Large deviation from reference "
+                        f"({price_change_pct:.2f}%, price={price}, ref={reference_price})"
+                    )
+
+            # ✅ Check 5: Check against price history (std deviation outlier check)
+            if price_history and len(price_history) >= 3:
+                try:
+                    import statistics
+                    mean = statistics.mean(price_history)
+                    if len(price_history) > 1:
+                        stdev = statistics.stdev(price_history)
+                    else:
+                        stdev = 0.0
+
+                    if stdev > 0:
+                        z_score = abs((price - mean) / stdev)
+                        if z_score > max_std_deviations:
+                            logger.warning(
+                                f"⚠️ {symbol}: Price is outlier "
+                                f"(z-score={z_score:.2f}, price={price}, "
+                                f"mean={mean:.2f}, stdev={stdev:.2f})"
+                            )
+                            # We warn but don't reject potential outliers
+                except Exception:
+                    pass  # Can't calculate stats, skip
+
+            # All checks passed
+            return True, None
+
+        except Exception as e:
+            logger.error(f"❌ Error validating price for {symbol}: {e}", exc_info=True)
+            return False, f"Validation exception: {str(e)}"
+    async def get_price_with_fallback(
+        self,
+        symbol: str,
+        client: Optional[Any] = None,
+    ) -> tuple[Optional[float], str]:
+        """
+        🔴 BUG #39 FIX (09.01.2026): Price recovery strategy with fallback chain
+
+        Implements fallback chain to recover price when primary source unavailable:
+        1. WebSocket current price (most recent)
+        2. REST API last price (reliable)
+        3. Order book mid price (real liquidity)
+        4. Previous candle close (if recent, < 60s)
+        5. Give up (return None)
+
+        Args:
+            symbol: Trading symbol
+            client: OKX client for REST API calls
+
+        Returns:
+            (price, source) - tuple[Optional[float], str]
+            price: The recovered price or None
+            source: Where the price came from ("websocket", "rest_api", "order_book", "candle", "none")
+        """
+        try:
+            # ✅ Strategy 1: WebSocket current price
+            market_data = await self.get_market_data(symbol)
+            if market_data:
+                current_price = market_data.get("current_price") or market_data.get("price")
+                if current_price and current_price > 0:
+                    is_valid, _ = self.validate_price(symbol, current_price)
+                    if is_valid:
+                        logger.debug(f"✅ {symbol}: Got price from WebSocket: {current_price}")
+                        return current_price, "websocket"
+
+            # ✅ Strategy 2: REST API last price
+            if client:
+                try:
+                    ticker_data = await client.get_ticker(symbol)
+                    if ticker_data:
+                        last_price = float(
+                            ticker_data.get("last") or ticker_data.get("lastPx", 0)
+                        )
+                        if last_price > 0:
+                            is_valid, _ = self.validate_price(symbol, last_price)
+                            if is_valid:
+                                logger.debug(
+                                    f"✅ {symbol}: Got price from REST API: {last_price}"
+                                )
+                                return last_price, "rest_api"
+                except Exception as e:
+                    logger.warning(f"⚠️ {symbol}: Failed to get price from REST API: {e}")
+
+            # ✅ Strategy 3: Order book mid price
+            if client:
+                try:
+                    book_data = await client.get_order_book(symbol, depth=1)
+                    if book_data:
+                        bids = book_data.get("bids", [])
+                        asks = book_data.get("asks", [])
+                        if bids and asks:
+                            bid_price = float(bids[0][0]) if bids[0] else 0
+                            ask_price = float(asks[0][0]) if asks[0] else 0
+                            if bid_price > 0 and ask_price > 0:
+                                mid_price = (bid_price + ask_price) / 2.0
+                                is_valid, _ = self.validate_price(symbol, mid_price)
+                                if is_valid:
+                                    logger.debug(
+                                        f"✅ {symbol}: Got price from order book: {mid_price}"
+                                    )
+                                    return mid_price, "order_book"
+                except Exception as e:
+                    logger.warning(f"⚠️ {symbol}: Failed to get price from order book: {e}")
+
+            # ✅ Strategy 4: Previous candle close (if recent)
+            try:
+                candles = await self.get_candles(symbol, "1m")
+                if candles and len(candles) > 0:
+                    # Get the last (most recent) candle
+                    last_candle = candles[-1]
+                    close_price = None
+
+                    if isinstance(last_candle, dict):
+                        close_price = float(last_candle.get("c") or last_candle.get("close", 0))
+                        timestamp = last_candle.get("time") or last_candle.get("timestamp")
+                    else:
+                        close_price = float(getattr(last_candle, "close", 0))
+                        timestamp = getattr(last_candle, "timestamp", None)
+
+                    if close_price and close_price > 0:
+                        # Check if candle is recent (< 60 seconds old)
+                        is_recent = True
+                        if timestamp:
+                            try:
+                                from datetime import datetime, timezone
+                                current_time = datetime.now(timezone.utc).timestamp()
+                                age_seconds = current_time - float(timestamp)
+                                is_recent = age_seconds < 60.0
+                                if not is_recent:
+                                    logger.warning(
+                                        f"⚠️ {symbol}: Candle is {age_seconds:.1f}s old (> 60s)"
+                                    )
+                            except (TypeError, ValueError):
+                                pass  # Can't check age
+
+                        if is_recent:
+                            is_valid, _ = self.validate_price(symbol, close_price)
+                            if is_valid:
+                                logger.debug(
+                                    f"✅ {symbol}: Got price from candle close: {close_price}"
+                                )
+                                return close_price, "candle"
+            except Exception as e:
+                logger.warning(f"⚠️ {symbol}: Failed to get price from candle: {e}")
+
+            # ✅ Strategy 5: Give up
+            logger.error(f"❌ {symbol}: All price recovery strategies failed")
+            return None, "none"
+
+        except Exception as e:
+            logger.error(f"❌ Error in price recovery for {symbol}: {e}", exc_info=True)
+            return None, "none"

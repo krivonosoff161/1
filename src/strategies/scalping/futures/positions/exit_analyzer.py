@@ -1466,7 +1466,12 @@ class ExitAnalyzer:
 
                     if best_bid and best_ask and best_ask > 0:
                         spread = best_ask - best_bid
-                        spread_pct = (spread / best_ask) * 100.0  # в процентах
+                        # 🔴 BUG #19 FIX (09.01.2026): Correct spread ratio = (ask-bid) / mid_price * 100, not / ask_price
+                        mid_price = (best_bid + best_ask) / 2.0
+                        if mid_price > 0:
+                            spread_pct = (spread / mid_price) * 100.0  # в процентах
+                        else:
+                            spread_pct = 0.0
                         return spread_pct
         except Exception as e:
             logger.debug(f"⚠️ Не удалось получить спред для {symbol}: {e}")

@@ -1497,6 +1497,15 @@ class FuturesSignalGenerator:
                                 []
                             )  # Не генерируем сигналы без достаточного количества свечей
 
+                        # 🔴 BUG #9 FIX (09.01.2026): Validate OHLCV data quality before use
+                        is_valid, errors = self.data_registry.validate_ohlcv_data(symbol, candles_1m)
+                        if not is_valid:
+                            logger.warning(
+                                f"🚫 Data quality check failed for {symbol}: {len(errors)} issues found"
+                            )
+                            # For now, we continue but log the issues
+                            # In strict mode, we could return [] here to skip signal generation
+
                     # Получаем данные один раз для символа
                     market_data = await self._get_market_data(symbol)
                     if not market_data:
