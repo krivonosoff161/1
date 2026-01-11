@@ -1,21 +1,200 @@
 """
-Parameter Provider - Единая точка получения параметров торговли.
+Parameter Provider - �զ+���-�-T� T¦-TǦ��- ���-��T�TǦ��-��T� ���-T��-�-��T�T��-�- T¦-T����-�-����.
 
-Обеспечивает централизованный доступ к параметрам из различных источников:
+�ަ-��T�����TǦ��-�-��T� TƦ��-T�T��-�������-�-�-�-�-T˦� �+�-T�T�Tæ� �� ���-T��-�-��T�T��-�- ���� T��-������TǦ-T�T� ��T�T¦-TǦ-�����-�-:
+- ConfigManager
+- RegimeManager
+- Symbol profiles
+- Adaptive risk parameters
 
+��T����+�-T¦-T��-Tɦ-��T� �+Tæ-����T��-�-�-�-���� ���-�+�- �� �-�-��T�����TǦ��-�-��T� ���-�-T���T�T¦��-T¦-�-T�T�T� ���-T��-�-��T�T��-�-.
+"""
+
+from typing import Any, Dict, Optional
+
+from loguru import logger
+
+from .config_manager import ConfigManager
+
+
+class ParameterProvider:
+    """
+    �զ+���-�-T� T¦-TǦ��- ���-��T�TǦ��-��T� ���-T��-�-��T�T��-�- T¦-T����-�-����.
+
+    �ަ-Tʦ��+���-TϦ�T� �+�-T�T�Tæ� �� ���-T��-�-��T�T��-�- ���� T��-������TǦ-T�T� ��T�T¦-TǦ-�����-�- �� ��T����+�-T�T¦-�-��TϦ�T�
+    ���+���-T˦� ���-T¦�T�TĦ���T� �+��T� �-T���T� �-�-�+Tæ����� T���T�T¦��-T�.
+    """
+
+    def __init__(
+        self,
+        config_manager: ConfigManager,
+        regime_manager=None,  # AdaptiveRegimeManager (�-��TƦ��-�-�-��Ț-�-)
+        data_registry=None,  # DataRegistry (�-��TƦ��-�-�-��Ț-�-)
+    ):
+        """
+        �ئ-��TƦ��-�������-TƦ�T� Parameter Provider.
+
+        Args:
+            config_manager: ConfigManager �+��T� �+�-T�T�Tæ��- �� ���-�-TĦ���T�T��-TƦ���
+            regime_manager: AdaptiveRegimeManager �+��T� T��������--T�����TƦ�TĦ�TǦ-T�T� ���-T��-�-��T�T��-�- (�-��TƦ��-�-�-��Ț-�-)
+            data_registry: DataRegistry �+��T� T¦���T�Tɦ�T� T��������-�-�- (�-��TƦ��-�-�-��Ț-�-)
+        """
+        self.config_manager = config_manager
+        self.regime_manager = regime_manager
+        self.data_registry = data_registry
+
+        # ��T�T� �+��T� TǦ-T�T¦- ��T����-��Ț�Tæ��-T�T� ���-T��-�-��T�T��-�-
+        self._cache: Dict[str, Any] = {}
+        self._cache_timestamps: Dict[str, float] = {}
+        self._cache_ttl_seconds = 300.0  # ��� �ئ�ߦ�ЦҦۦզݦ� (28.12.2025): ��-������TǦ��-�- T� 60 �+�- 300 T�����Tæ-�+ (5 �-���-T�T�) �+��T� T��-�������-��T� �-�-��T�Tæ�����
+
+        logger.info("��� ParameterProvider ���-��TƦ��-��������T��-�-�-�-")
+
+    def get_regime_params(
+        self,
+        symbol: str,
+        regime: Optional[str] = None,
+        balance: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        �ߦ-��T�TǦ�T�T� ���-T��-�-��T�T�T� �+��T� T��������-�- T�T˦-���-.
+
+        Args:
+            symbol: ��-T����-�-T˦� T����-�-�-��
+            regime: �দ�����- T�T˦-���- (trending/ranging/choppy). ��T����� None, �-��T����+����TϦ�T�T�T� �-�-T¦-�-�-T¦�TǦ�T�����
+            balance: �⦦��T�Tɦ��� �-�-���-�-T� (�+��T� �-�+�-��T¦��-�-T�T� ���-T��-�-��T�T��-�-)
+
+        Returns:
+            �᦬�-�-�-T�T� T� ���-T��-�-��T�T��-�-�� T��������-�-:
+            {
+                "min_score_threshold": float,
+                "max_trades_per_hour": int,
+                "position_size_multiplier": float,
+                "tp_atr_multiplier": float,
+                "sl_atr_multiplier": float,
+                "max_holding_minutes": int,
+                "cooldown_after_loss_minutes": int,
+                ...
+            }
+        """
+        try:
+            # �ަ�T����+����TϦ��- T��������- ��T����� �-�� Tæ��-���-�-
+            if not regime:
+                regime = self._get_current_regime(symbol)
+
+            # �ߦ-��T�TǦ-���- ���-T��-�-��T�T�T� ���� ConfigManager
+            regime_params = self.config_manager.get_regime_params(regime)
+
+            # ��T����-���-TϦ��- �-�+�-��T¦��-�-T˦� ���-T��-�-��T�T�T� ��T����� �-�-���-�-T� Tæ��-���-�-
+            if balance is not None:
+                adaptive_params = self.config_manager.get_adaptive_risk_params(
+                    balance, regime
+                )
+                # �ަ-Tʦ��+���-TϦ��- ���-T��-�-��T�T�T� (�-�+�-��T¦��-�-T˦� ���-��T�T� ��T����-T���T¦�T�)
+                regime_params = {**regime_params, **adaptive_params}
+
+            return regime_params
+
+        except Exception as e:
+            logger.warning(
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� ���-T��-�-��T�T��-�- T��������-�- �+��T� {symbol}: {e}"
+            )
+            # �Ҧ-���-T��-Tɦ-���- �+��TĦ-��T¦-T˦� ���-T��-�-��T�T�T�
+            return self._get_default_regime_params()
+
+    def get_exit_params(
+        self,
+        symbol: str,
+        regime: Optional[str] = None,
+        # ��� �ݦަҦަ� (05.01.2026): �ަ�TƦ��-�-�-��Ț-T˦� ���-�-T¦���T�T� �+��T� �-�+�-��T¦-TƦ���
+        balance: Optional[float] = None,
+        current_pnl: Optional[float] = None,  # �⦦��T�Tɦ��� P&L ���-����TƦ��� �- %
+        drawdown: Optional[float] = None,  # �⦦��T�Tɦ-T� ��T��-T��-�+���- �- %
+        position_size: Optional[float] = None,  # ��-���-��T� ���-����TƦ���
+        margin_used: Optional[float] = None,  # ��T����-��Ț�Tæ��-�-T� �-�-T����-
+    ) -> Dict[str, Any]:
+        """
+        �ߦ-��T�TǦ�T�T� ���-T��-�-��T�T�T� �-T�TŦ-�+�- (TP/SL) �+��T� T��������-�-.
+
+        ��� �ݦަҦަ� (05.01.2026): �ߦ-�+�+��T������-�-��T� �-�+�-��T¦��-�-T˦� ���-T��-�-��T�T�T� �-�- �-T��-�-�-�� ���-�-T¦���T�T¦-.
+
+        Args:
+            symbol: ��-T����-�-T˦� T����-�-�-��
+            regime: �দ�����- T�T˦-���-. ��T����� None, �-��T����+����TϦ�T�T�T� �-�-T¦-�-�-T¦�TǦ�T�����
+            balance: �⦦��T�Tɦ��� �-�-���-�-T� (�+��T� �-�+�-��T¦-TƦ��� ���- �-�-���-�-T�T�)
+            current_pnl: �⦦��T�Tɦ��� P&L ���-����TƦ��� �- % (�+��T� T��-T�TȦ�T����-��T� TP)
+            drawdown: �⦦��T�Tɦ-T� ��T��-T��-�+���- �- % (�+��T� Tæ���T�T¦-TǦ��-��T� SL)
+            position_size: ��-���-��T� ���-����TƦ��� (�+��T� ���-T�T�����T¦�T��-�-���� T���T����-)
+            margin_used: ��T����-��Ț�Tæ��-�-T� �-�-T����- (�+��T� ��T��-�-��T����� �-�����-���-T��-�-T�T¦�)
+
+        Returns:
+            �᦬�-�-�-T�T� T� ���-T��-�-��T�T��-�-�� �-T�TŦ-�+�- (�-�+�-��T¦��-�-T˦-�� ��T����� ���-�-T¦���T�T� ����T����+�-�-):
+            {
+                "tp_atr_multiplier": float,
+                "sl_atr_multiplier": float,
+                "max_holding_minutes": int,
+                "emergency_loss_threshold": float,
+                ...
+            }
+        """
+        try:
+            # �ަ�T����+����TϦ��- T��������- ��T����� �-�� Tæ��-���-�-
+            if not regime:
+                regime = self._get_current_regime(symbol)
+
+            # ��� �ڦ�ئ�ئ�զ�ڦަ� �ئ�ߦ�ЦҦۦզݦئ� (28.12.2025): �ߦ-��T�TǦ-���- exit_params �-�-��T�TϦ-T�T� ���� raw_config_dict
+            # ConfigManager �-�� ���-����T� �-��T¦-�+�- get_exit_param, ���-��T�TǦ-���- TǦ�T����� _raw_config_dict
+            exit_params = {}
+            if (
+                hasattr(self.config_manager, "_raw_config_dict")
+                and self.config_manager._raw_config_dict
+            ):
+                all_exit_params = self.config_manager._raw_config_dict.get(
+                    "exit_params", {}
+                )
+                if isinstance(all_exit_params, dict) and regime:
+                    regime_lower = (
+                        regime.lower()
+                        if isinstance(regime, str)
+                        else str(regime).lower()
+                    )
+                    exit_params = all_exit_params.get(regime_lower, {})
+                elif isinstance(all_exit_params, dict):
+                    # ��T����� T��������- �-�� Tæ��-���-�-, �-�-���-T��-Tɦ-���- �-T��� exit_params
+                    exit_params = all_exit_params
+
+            # ��� �ڦ�ئ�ئ�զ�ڦަ� �ئ�ߦ�ЦҦۦզݦئ� (28.12.2025): �ڦ-�-�-��T�T¦-TƦ�T� T¦����-�- �+��T� �-T���T� TǦ�T����-�-T�T� ���-T��-�-��T�T��-�-
+            # ��T����+�-T¦-T��-Tɦ-��T� TypeError ��T��� T�T��-�-�-���-���� str �� int/float
+            def _to_float(value: Any, name: str, default: float = 0.0) -> float:
+                """Helper �+��T� �-�����-���-T��-�-�� ���-�-�-��T�T¦-TƦ��� �- float"""
+                if value is None:
+                    return default
+                if isinstance(value, (int, float)):
+                    return float(value)
+                if isinstance(value, str):
+                    try:
+                        return float(value)
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"������ ParameterProvider: �ݦ� Tæ+�-���-T�T� ���-�-�-��T�T¦�T��-�-�-T�T� {name}={value} �- float, "
+                            f"��T����-��Ț�Tæ��- default={default}"
+                        )
+                        return default
+                return default
+
+            # �ڦ-�-�-��T�T¦�T�Tæ��- ����T�TǦ��-T˦� ���-T��-�-��T�T�T�
+            if exit_params:
+                exit_params["max_holding_minutes"] = _to_float(
+                    exit_params.get("max_holding_minutes"),
                     "max_holding_minutes",
-                    {
-                        "ranging": 25.0,
-                        "trending": 15.0,  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильный default для trending
-                        "choppy": 10.0,  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильный default для choppy
-                    }.get(
-                        regime.lower() if regime else "ranging", 25.0
-                    ),  # Fallback на ranging если режим не определён
+                    25.0
+                    if regime and regime.lower() == "ranging"
+                    else 120.0,  # Default �+��T� ranging: 25.0, ���-�-TǦ� 120.0
                 )
                 exit_params["sl_atr_multiplier"] = _to_float(
                     exit_params.get("sl_atr_multiplier"),
                     "sl_atr_multiplier",
-                    2.0,  # ✅ Default увеличен с 1.5 до 2.0
+                    2.0,  # ��� Default Tæ-������TǦ��- T� 1.5 �+�- 2.0
                 )
                 exit_params["tp_atr_multiplier"] = _to_float(
                     exit_params.get("tp_atr_multiplier"), "tp_atr_multiplier", 1.0
@@ -31,35 +210,107 @@ Parameter Provider - Единая точка получения параметр
                 exit_params["min_holding_minutes"] = _to_float(
                     exit_params.get("min_holding_minutes"),
                     "min_holding_minutes",
-                    0.5,  # ✅ Default для ranging: 0.5 минуты
+                    0.5,  # ��� Default �+��T� ranging: 0.5 �-���-T�T�T�
                 )
 
-            # ✅ ПРИОРИТЕТ 1 (29.12.2025): Проверка by_symbol для per-symbol параметров
-            # ✅ НОВОЕ (03.01.2026): Логирование источников параметров для понимания работы бота
+            # ��� �ߦ�ئަ�ئ�զ� 1 (29.12.2025): ��T��-�-��T����- by_symbol �+��T� per-symbol ���-T��-�-��T�T��-�-
+            # ��� �ݦަҦަ� (03.01.2026): �ۦ-����T��-�-�-�-���� ��T�T¦-TǦ-�����-�- ���-T��-�-��T�T��-�- �+��T� ���-�-���-�-�-��T� T��-�-�-T�T� �-�-T¦-
             sources_log = []
             if symbol and hasattr(self.config_manager, "_raw_config_dict"):
                 config_dict = self.config_manager._raw_config_dict
                 by_symbol = config_dict.get("by_symbol", {})
                 symbol_config = by_symbol.get(symbol, {})
                 if isinstance(symbol_config, dict):
-                    # Переопределяем параметры из by_symbol (приоритет выше exit_params.{regime})
+                    # �ߦ�T����-��T����+����TϦ��- ���-T��-�-��T�T�T� ���� by_symbol (��T����-T���T¦�T� �-T�TȦ� exit_params.{regime})
                     per_symbol_keys = [
                         "sl_atr_multiplier",
                         "tp_atr_multiplier",
                         "max_holding_minutes",
                     ]
-                    # ✅ ИСПРАВЛЕНИЕ (11.01.2026): Удален дубликат _apply_adaptive_exit_params
-                    # Основная реализация находится на line 694
-                    
-                    if adaptations_log:
-                            logger.debug(
-                                f"[ADAPTIVE_EXIT] {symbol} regime={regime or 'n/a'} | "
-                                f"tp={params.get('tp_atr_multiplier')} sl={params.get('sl_atr_multiplier')} | "
-                                f"{' ; '.join(adaptations_log)}"
+                    for key in per_symbol_keys:
+                        if key in symbol_config:
+                            old_value = exit_params.get(key)
+                            exit_params[key] = _to_float(
+                                symbol_config[key],
+                                key,
+                                exit_params.get(
+                                    key,
+                                    2.0
+                                    if "sl_atr" in key
+                                    else 1.0
+                                    if "tp_atr" in key
+                                    else 25.0,
+                                ),
                             )
+                            sources_log.append(
+                                f"{key}={exit_params[key]} (by_symbol, �-T˦��-={old_value})"
+                            )
+                    # ��� �ڦ�ئ�ئ�զ�ڦަ� ��ۦ���զݦئ� �ۦަӦئ�ަҦЦݦئ� (03.01.2026): �Ԧ�T¦-��Ț-�-�� ���-����T��-�-�-�-���� ��T�T¦-TǦ-�����-�-
+                    logger.info(
+                        f"���� [PARAMS] {symbol} ({regime}): exit_params "
+                        f"sl_atr={exit_params.get('sl_atr_multiplier', 'N/A')}, "
+                        f"tp_atr={exit_params.get('tp_atr_multiplier', 'N/A')}, "
+                        f"max_holding={exit_params.get('max_holding_minutes', 'N/A')}�-���-, "
+                        f"min_holding={exit_params.get('min_holding_minutes', 'N/A')}�-���- | "
+                        f"��T�T¦-TǦ-������: {', '.join(sources_log) if sources_log else 'exit_params.' + regime}"
+                    )
 
-                        return params
-            # Адаптация по балансу (главный фактор)
+            # ��� �ݦަҦަ� (05.01.2026): ��T����-���-TϦ��- �-�+�-��T¦-TƦ�T� ��T����� ����T����+�-�- ���-�-T¦���T�T�
+            if balance is not None or current_pnl is not None or drawdown is not None:
+                exit_params = self._apply_adaptive_exit_params(
+                    exit_params, symbol, regime, balance, current_pnl, drawdown
+                )
+
+            return exit_params or {}
+
+        except Exception as e:
+            logger.warning(
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� exit_params �+��T� {symbol}: {e}"
+            )
+            return {}
+
+    def _apply_adaptive_exit_params(
+        self,
+        base_params: Dict[str, Any],
+        symbol: str,
+        regime: Optional[str],
+        balance: Optional[float],
+        current_pnl: Optional[float],
+        drawdown: Optional[float],
+    ) -> Dict[str, Any]:
+        """
+        ��� �ݦަҦަ� (06.01.2026): ��T����-���-��T�T� �-�+�-��T¦��-�-T�T� ���-������T� �� ���-T��-�-��T�T��-�- �-T�TŦ-�+�-.
+
+        ��T����-��Ț�Tæ�T� �����-�-�-T�T� ���-T¦�T����-��T�TƦ�T� ���- �-�-���-�-T�T� �+��T� T��-T�TǦ�T¦- TP/SL �-�-�-����T¦�������.
+
+        Args:
+            base_params: �Ѧ-���-�-T˦� ���-T��-�-��T�T�T� �-T�TŦ-�+�-
+            symbol: ��-T����-�-T˦� T����-�-�-��
+            regime: �দ�����- T�T˦-���-
+            balance: �⦦��T�Tɦ��� �-�-���-�-T�
+            current_pnl: �⦦��T�Tɦ��� P&L ���-����TƦ��� �- %
+            drawdown: �⦦��T�Tɦ-T� ��T��-T��-�+���- �- %
+
+        Returns:
+            �Ц+�-��T¦��-�-T˦� ���-T��-�-��T�T�T� �-T�TŦ-�+�-
+        """
+        try:
+            # ��T��-�-��T�TϦ��-, �-����T�TǦ��-�- ���� �-�+�-��T¦-TƦ�T�
+            adaptive_config = self._get_adaptive_exit_config()
+            if not adaptive_config.get("enabled", False):
+                logger.debug(
+                    "������ �Ц+�-��T¦��-�-T˦� ���-T��-�-��T�T�T� �-T¦���T�TǦ��-T� �- ���-�-TĦ���T�T��-TƦ���"
+                )
+                return base_params
+
+            # �ڦ-����T�Tæ��- �-�-���-�-T˦� ���-T��-�-��T�T�T�
+            adaptive_params = base_params.copy()
+
+            # �ߦ-��T�TǦ-���- �-�-���-�-T˦� �-�-�-����T¦�����
+            tp_base = base_params.get("tp_atr_multiplier", 2.0)
+            sl_base = base_params.get("sl_atr_multiplier", 1.5)
+
+            # �Ц+�-��T¦-TƦ�T� ���- �-�-���-�-T�T� (�����-�-�-T˦� TĦ-��T¦-T�)
             if balance is not None:
                 (
                     balance_factor_tp,
@@ -69,32 +320,32 @@ Parameter Provider - Единая точка получения параметр
                 adaptive_params["sl_atr_multiplier"] = sl_base * balance_factor_sl
 
                 logger.debug(
-                    f"💰 [ADAPTIVE] {symbol}: Баланс ${balance:.0f} → "
-                    f"TP: {tp_base:.2f} × {balance_factor_tp:.3f} = {adaptive_params['tp_atr_multiplier']:.2f}, "
-                    f"SL: {sl_base:.2f} × {balance_factor_sl:.3f} = {adaptive_params['sl_atr_multiplier']:.2f}"
+                    f"���- [ADAPTIVE] {symbol}: �Ѧ-���-�-T� ${balance:.0f} ��� "
+                    f"TP: {tp_base:.2f} +� {balance_factor_tp:.3f} = {adaptive_params['tp_atr_multiplier']:.2f}, "
+                    f"SL: {sl_base:.2f} +� {balance_factor_sl:.3f} = {adaptive_params['sl_atr_multiplier']:.2f}"
                 )
 
-            # Адаптация по P&L позиции
+            # �Ц+�-��T¦-TƦ�T� ���- P&L ���-����TƦ���
             if current_pnl is not None:
                 pnl_factor = self._calculate_pnl_adaptation_factor(current_pnl)
                 if pnl_factor != 1.0:
                     adaptive_params["tp_atr_multiplier"] *= pnl_factor
                     logger.debug(
-                        f"📈 [ADAPTIVE] {symbol}: P&L {current_pnl:.1f}% → "
-                        f"TP расширение ×{pnl_factor:.3f} = {adaptive_params['tp_atr_multiplier']:.2f}"
+                        f"���� [ADAPTIVE] {symbol}: P&L {current_pnl:.1f}% ��� "
+                        f"TP T��-T�TȦ�T����-���� +�{pnl_factor:.3f} = {adaptive_params['tp_atr_multiplier']:.2f}"
                     )
 
-            # Адаптация по просадке
+            # �Ц+�-��T¦-TƦ�T� ���- ��T��-T��-�+����
             if drawdown is not None:
                 drawdown_factor = self._calculate_drawdown_adaptation_factor(drawdown)
                 if drawdown_factor != 1.0:
                     adaptive_params["sl_atr_multiplier"] *= drawdown_factor
                     logger.debug(
-                        f"📉 [ADAPTIVE] {symbol}: Просадка {drawdown:.1f}% → "
-                        f"SL ужесточение ×{drawdown_factor:.3f} = {adaptive_params['sl_atr_multiplier']:.2f}"
+                        f"���� [ADAPTIVE] {symbol}: ��T��-T��-�+���- {drawdown:.1f}% ��� "
+                        f"SL Tæ���T�T¦-TǦ��-���� +�{drawdown_factor:.3f} = {adaptive_params['sl_atr_multiplier']:.2f}"
                     )
 
-            # Ограничения на финальные значения
+            # �ަ�T��-�-��TǦ��-��T� �-�- TĦ��-�-��Ț-T˦� ���-�-TǦ��-��T�
             adaptive_params["tp_atr_multiplier"] = min(
                 max(adaptive_params["tp_atr_multiplier"], 1.0), 5.0
             )
@@ -102,23 +353,19 @@ Parameter Provider - Единая точка получения параметр
                 max(adaptive_params["sl_atr_multiplier"], 0.5), 3.0
             )
 
-            # Логирование итоговых адаптивных параметров
-            # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Добавлена защита от NoneType при форматировании
-            balance_str = f"${balance:.0f}" if balance is not None else "N/A"
-            pnl_str = f"{current_pnl:.1f}%" if current_pnl is not None else "N/A"
-            drawdown_str = f"{drawdown:.1f}%" if drawdown is not None else "N/A"
+            # �ۦ-����T��-�-�-�-���� ��T¦-���-�-T�T� �-�+�-��T¦��-�-T�T� ���-T��-�-��T�T��-�-
             logger.info(
-                f"🎯 [ADAPTIVE] {symbol} ({regime}): Финальные параметры → "
+                f"���� [ADAPTIVE] {symbol} ({regime}): �䦬�-�-��Ț-T˦� ���-T��-�-��T�T�T� ��� "
                 f"TP: {adaptive_params['tp_atr_multiplier']:.2f}, "
                 f"SL: {adaptive_params['sl_atr_multiplier']:.2f} | "
-                f"Контекст: баланс={balance_str}, P&L={pnl_str}, просадка={drawdown_str}"
+                f"�ڦ-�-T¦���T�T�: �-�-���-�-T�=${balance:.0f}, P&L={current_pnl:.1f}%, ��T��-T��-�+���-={drawdown:.1f}%"
             )
 
             return adaptive_params
 
         except Exception as e:
             logger.warning(
-                f"⚠️ ParameterProvider: Ошибка применения адаптивных параметров для {symbol}: {e}"
+                f"������ ParameterProvider: ��TȦ��-���- ��T����-���-���-��T� �-�+�-��T¦��-�-T�T� ���-T��-�-��T�T��-�- �+��T� {symbol}: {e}"
             )
             return base_params
 
@@ -126,16 +373,16 @@ Parameter Provider - Единая точка получения параметр
         self, regime: str, symbol: Optional[str] = None
     ) -> Dict[str, float]:
         """
-        Получить адаптивные параметры Smart Close для режима.
+        �ߦ-��T�TǦ�T�T� �-�+�-��T¦��-�-T˦� ���-T��-�-��T�T�T� Smart Close �+��T� T��������-�-.
 
-        Приоритет:
+        ��T����-T���T¦�T�:
         1. by_symbol.{symbol}.smart_close.{regime}
         2. exit_params.smart_close.{regime}
-        3. Default значения
+        3. Default ���-�-TǦ��-��T�
 
         Args:
-            regime: Режим рынка (trending, ranging, choppy)
-            symbol: Торговый символ (опционально, для per-symbol параметров)
+            regime: �দ�����- T�T˦-���- (trending, ranging, choppy)
+            symbol: ��-T����-�-T˦� T����-�-�-�� (�-��TƦ��-�-�-��Ț-�-, �+��T� per-symbol ���-T��-�-��T�T��-�-)
 
         Returns:
             {
@@ -146,7 +393,7 @@ Parameter Provider - Единая точка получения параметр
         defaults = {"reversal_score_threshold": 2.0, "trend_against_threshold": 0.7}
 
         try:
-            # ✅ ПРИОРИТЕТ 1: by_symbol.{symbol}.smart_close.{regime}
+            # ��� �ߦ�ئަ�ئ�զ� 1: by_symbol.{symbol}.smart_close.{regime}
             if symbol and hasattr(self.config_manager, "_raw_config_dict"):
                 config_dict = self.config_manager._raw_config_dict
                 by_symbol = config_dict.get("by_symbol", {})
@@ -176,13 +423,13 @@ Parameter Provider - Единая точка получения параметр
                                         trend_threshold
                                     )
                                 logger.debug(
-                                    f"✅ ParameterProvider: Smart Close параметры для {symbol} ({regime}) "
-                                    f"получены из by_symbol: reversal={params['reversal_score_threshold']}, "
+                                    f"��� ParameterProvider: Smart Close ���-T��-�-��T�T�T� �+��T� {symbol} ({regime}) "
+                                    f"���-��T�TǦ��-T� ���� by_symbol: reversal={params['reversal_score_threshold']}, "
                                     f"trend={params['trend_against_threshold']}"
                                 )
                                 return params
 
-            # ✅ ПРИОРИТЕТ 2: exit_params.smart_close.{regime}
+            # ��� �ߦ�ئަ�ئ�զ� 2: exit_params.smart_close.{regime}
             if hasattr(self.config_manager, "_raw_config_dict"):
                 config_dict = self.config_manager._raw_config_dict
                 exit_params = config_dict.get("exit_params", {})
@@ -211,48 +458,102 @@ Parameter Provider - Единая точка получения параметр
                                         trend_threshold
                                     )
                                 logger.debug(
-                                    f"✅ ParameterProvider: Smart Close параметры для {regime} "
-                                    f"получены из exit_params: reversal={params['reversal_score_threshold']}, "
+                                    f"��� ParameterProvider: Smart Close ���-T��-�-��T�T�T� �+��T� {regime} "
+                                    f"���-��T�TǦ��-T� ���� exit_params: reversal={params['reversal_score_threshold']}, "
                                     f"trend={params['trend_against_threshold']}"
                                 )
                                 return params
         except Exception as e:
             logger.debug(
-                f"⚠️ ParameterProvider: Ошибка получения Smart Close параметров для {symbol or 'default'} ({regime}): {e}"
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� Smart Close ���-T��-�-��T�T��-�- �+��T� {symbol or 'default'} ({regime}): {e}"
             )
 
-        # По умолчанию возвращаем стандартные значения
+        # �ߦ- Tæ-�-��TǦ-�-��T� �-�-���-T��-Tɦ-���- T�T¦-�-�+�-T�T¦-T˦� ���-�-TǦ��-��T�
         logger.debug(
-            f"✅ ParameterProvider: Smart Close параметры для {regime} - используются default: "
+            f"��� ParameterProvider: Smart Close ���-T��-�-��T�T�T� �+��T� {regime} - ��T����-��Ț�T�T�T�T�T� default: "
             f"reversal={defaults['reversal_score_threshold']}, trend={defaults['trend_against_threshold']}"
         )
         return defaults
 
     def get_symbol_params(self, symbol: str) -> Dict[str, Any]:
         """
-        Получить параметры для конкретного символа.
+        �ߦ-��T�TǦ�T�T� ���-T��-�-��T�T�T� �+��T� ���-�-��T���T¦-�-���- T����-�-�-���-.
 
         Args:
-            symbol: Торговый символ
+            symbol: ��-T����-�-T˦� T����-�-�-��
 
         Returns:
-            Словарь с параметрами символа из symbol_profiles
+            �᦬�-�-�-T�T� T� ���-T��-�-��T�T��-�-�� T����-�-�-���- ���� symbol_profiles
         """
         try:
             return self.config_manager.get_symbol_profile(symbol) or {}
         except Exception as e:
             logger.warning(
-                f"⚠️ ParameterProvider: Ошибка получения параметров символа {symbol}: {e}"
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� ���-T��-�-��T�T��-�- T����-�-�-���- {symbol}: {e}"
             )
             return {}
 
+    def get_indicator_params(
+        self, symbol: str, regime: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        �ߦ-��T�TǦ�T�T� ���-T��-�-��T�T�T� ���-�+�����-T¦-T��-�- �+��T� T��������-�-.
+
+        Args:
+            symbol: ��-T����-�-T˦� T����-�-�-��
+            regime: �দ�����- T�T˦-���-. ��T����� None, �-��T����+����TϦ�T�T�T� �-�-T¦-�-�-T¦�TǦ�T�����
+
+        Returns:
+            �᦬�-�-�-T�T� T� ���-T��-�-��T�T��-�-�� ���-�+�����-T¦-T��-�-:
+            {
+                "rsi_period": int,
+                "rsi_overbought": float,
+                "rsi_oversold": float,
+                "atr_period": int,
+                "sma_fast": int,
+                "sma_slow": int,
+                "ema_fast": int,
+                "ema_slow": int,
+                ...
+            }
+        """
+        try:
+            # �ަ�T����+����TϦ��- T��������- ��T����� �-�� Tæ��-���-�-
+            if not regime:
+                regime = self._get_current_regime(symbol)
+
+            # �ߦ-��T�TǦ-���- ���-T��-�-��T�T�T� T��������-�-
+            regime_params = self.get_regime_params(symbol, regime)
+
+            # �ئ��-�������-���- ���-T��-�-��T�T�T� ���-�+�����-T¦-T��-�-
+            indicators = regime_params.get("indicators", {})
+            if isinstance(indicators, dict):
+                indicators = indicators.copy()
+            elif hasattr(indicators, "__dict__"):
+                indicators = indicators.__dict__.copy()
+            else:
+                indicators = {}
+
+            # ��� �ߦ�ئަ�ئ�զ� 2 (29.12.2025): ��T��-�-��T����- by_symbol.{symbol}.indicators �+��T� per-symbol ���-T��-�-��T�T��-�-
+            if symbol and hasattr(self.config_manager, "_raw_config_dict"):
+                config_dict = self.config_manager._raw_config_dict
+                by_symbol = config_dict.get("by_symbol", {})
+                symbol_config = by_symbol.get(symbol, {})
+                if isinstance(symbol_config, dict):
+                    symbol_indicators = symbol_config.get("indicators", {})
+                    if isinstance(symbol_indicators, dict):
+                        # �ߦ�T����-��T����+����TϦ��- ���-T��-�-��T�T�T� ���� by_symbol (��T����-T���T¦�T� �-T�TȦ� regime)
+                        indicators.update(symbol_indicators)
+                        logger.debug(
+                            f"��� ParameterProvider: �ئ-�+�����-T¦-T�T� �+��T� {symbol} ���-��T�TǦ��-T� ���� by_symbol: "
+                            f"{list(symbol_indicators.keys())}"
                         )
 
             return indicators
 
         except Exception as e:
             logger.warning(
-                f"⚠️ ParameterProvider: Ошибка получения параметров индикаторов для {symbol}: {e}"
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� ���-T��-�-��T�T��-�- ���-�+�����-T¦-T��-�- �+��T� {symbol}: {e}"
             )
             return {}
 
@@ -260,11 +561,11 @@ Parameter Provider - Единая точка получения параметр
         self, symbol: str, regime: Optional[str] = None
     ) -> Dict[str, float]:
         """
-        Получить пороги RSI для режима и символа.
+        �ߦ-��T�TǦ�T�T� ���-T��-���� RSI �+��T� T��������-�- �� T����-�-�-���-.
 
         Args:
-            symbol: Торговый символ
-            regime: Режим рынка. Если None, определяется автоматически
+            symbol: ��-T����-�-T˦� T����-�-�-��
+            regime: �দ�����- T�T˦-���-. ��T����� None, �-��T����+����TϦ�T�T�T� �-�-T¦-�-�-T¦�TǦ�T�����
 
         Returns:
             {
@@ -282,7 +583,7 @@ Parameter Provider - Единая точка получения параметр
             }
         except Exception as e:
             logger.warning(
-                f"⚠️ ParameterProvider: Ошибка получения RSI порогов для {symbol}: {e}"
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� RSI ���-T��-���-�- �+��T� {symbol}: {e}"
             )
             return {"overbought": 70, "oversold": 30, "period": 14}
 
@@ -290,14 +591,14 @@ Parameter Provider - Единая точка получения параметр
         self, symbol: str, regime: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Получить параметры модулей (фильтров) для режима.
+        �ߦ-��T�TǦ�T�T� ���-T��-�-��T�T�T� �-�-�+Tæ����� (TĦ���T�T�T��-�-) �+��T� T��������-�-.
 
         Args:
-            symbol: Торговый символ
-            regime: Режим рынка. Если None, определяется автоматически
+            symbol: ��-T����-�-T˦� T����-�-�-��
+            regime: �দ�����- T�T˦-���-. ��T����� None, �-��T����+����TϦ�T�T�T� �-�-T¦-�-�-T¦�TǦ�T�����
 
         Returns:
-            Словарь с параметрами модулей:
+            �᦬�-�-�-T�T� T� ���-T��-�-��T�T��-�-�� �-�-�+Tæ�����:
             {
                 "mtf_block_opposite": bool,
                 "mtf_score_bonus": int,
@@ -307,14 +608,14 @@ Parameter Provider - Единая точка получения параметр
             }
         """
         try:
-            # Определяем режим если не указан
+            # �ަ�T����+����TϦ��- T��������- ��T����� �-�� Tæ��-���-�-
             if not regime:
                 regime = self._get_current_regime(symbol)
 
-            # Получаем параметры режима
+            # �ߦ-��T�TǦ-���- ���-T��-�-��T�T�T� T��������-�-
             regime_params = self.get_regime_params(symbol, regime)
 
-            # Извлекаем параметры модулей
+            # �ئ��-�������-���- ���-T��-�-��T�T�T� �-�-�+Tæ�����
             modules = regime_params.get("modules", {})
             if isinstance(modules, dict):
                 return modules
@@ -325,7 +626,7 @@ Parameter Provider - Единая точка получения параметр
 
         except Exception as e:
             logger.warning(
-                f"⚠️ ParameterProvider: Ошибка получения параметров модулей для {symbol}: {e}"
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� ���-T��-�-��T�T��-�- �-�-�+Tæ����� �+��T� {symbol}: {e}"
             )
             return {}
 
@@ -333,15 +634,15 @@ Parameter Provider - Единая точка получения параметр
         self, symbol: str, balance: float, regime: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Получить параметры управления рисками.
+        �ߦ-��T�TǦ�T�T� ���-T��-�-��T�T�T� Tæ�T��-�-�����-��T� T���T����-�-��.
 
         Args:
-            symbol: Торговый символ
-            balance: Текущий баланс
-            regime: Режим рынка. Если None, определяется автоматически
+            symbol: ��-T����-�-T˦� T����-�-�-��
+            balance: �⦦��T�Tɦ��� �-�-���-�-T�
+            regime: �দ�����- T�T˦-���-. ��T����� None, �-��T����+����TϦ�T�T�T� �-�-T¦-�-�-T¦�TǦ�T�����
 
         Returns:
-            Словарь с параметрами риска:
+            �᦬�-�-�-T�T� T� ���-T��-�-��T�T��-�-�� T���T����-:
             {
                 "max_margin_per_trade": float,
                 "max_daily_loss_percent": float,
@@ -351,18 +652,18 @@ Parameter Provider - Единая точка получения параметр
             }
         """
         try:
-            # Определяем режим если не указан
+            # �ަ�T����+����TϦ��- T��������- ��T����� �-�� Tæ��-���-�-
             if not regime:
                 regime = self._get_current_regime(symbol)
 
-            # Получаем адаптивные параметры риска
+            # �ߦ-��T�TǦ-���- �-�+�-��T¦��-�-T˦� ���-T��-�-��T�T�T� T���T����-
             risk_params = self.config_manager.get_adaptive_risk_params(balance, regime)
 
             return risk_params
 
         except Exception as e:
             logger.warning(
-                f"⚠️ ParameterProvider: Ошибка получения параметров риска для {symbol}: {e}"
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� ���-T��-�-��T�T��-�- T���T����- �+��T� {symbol}: {e}"
             )
             return {}
 
@@ -370,50 +671,50 @@ Parameter Provider - Единая точка получения параметр
         self, symbol: str, regime: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Получить параметры Trailing Stop Loss.
+        �ߦ-��T�TǦ�T�T� ���-T��-�-��T�T�T� Trailing Stop Loss.
 
         Args:
-            symbol: Торговый символ
-            regime: Режим рынка. Если None, определяется автоматически
+            symbol: ��-T����-�-T˦� T����-�-�-��
+            regime: �দ�����- T�T˦-���-. ��T����� None, �-��T����+����TϦ�T�T�T� �-�-T¦-�-�-T¦�TǦ�T�����
 
         Returns:
-            Словарь с параметрами TSL
+            �᦬�-�-�-T�T� T� ���-T��-�-��T�T��-�-�� TSL
         """
         try:
-            # Определяем режим если не указан
+            # �ަ�T����+����TϦ��- T��������- ��T����� �-�� Tæ��-���-�-
             if not regime:
                 regime = self._get_current_regime(symbol)
 
             return self.config_manager.get_trailing_sl_params(regime=regime) or {}
         except Exception as e:
             logger.warning(
-                f"⚠️ ParameterProvider: Ошибка получения TSL параметров для {symbol}: {e}"
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� TSL ���-T��-�-��T�T��-�- �+��T� {symbol}: {e}"
             )
             return {}
 
     def _get_current_regime(self, symbol: str) -> str:
         """
-        Получить текущий режим рынка для символа.
+        �ߦ-��T�TǦ�T�T� T¦���T�Tɦ��� T��������- T�T˦-���- �+��T� T����-�-�-���-.
 
-        ✅ ИСПРАВЛЕНИЕ #22 (04.01.2026): Логируем fallback режим "ranging"
+        ��� �ئ�ߦ�ЦҦۦզݦئ� #22 (04.01.2026): �ۦ-����T�Tæ��- fallback T��������- "ranging"
         """
         """
-        Получить текущий режим рынка для символа.
+        �ߦ-��T�TǦ�T�T� T¦���T�Tɦ��� T��������- T�T˦-���- �+��T� T����-�-�-���-.
 
         Args:
-            symbol: Торговый символ
+            symbol: ��-T����-�-T˦� T����-�-�-��
 
         Returns:
-            Режим рынка (trending/ranging/choppy) или "ranging" по умолчанию
+            �দ�����- T�T˦-���- (trending/ranging/choppy) ������ "ranging" ���- Tæ-�-��TǦ-�-��T�
         """
         try:
-            # Пробуем получить из DataRegistry (синхронный метод)
+            # ��T��-�-Tæ��- ���-��T�TǦ�T�T� ���� DataRegistry (T����-T�T��-�-�-T˦� �-��T¦-�+)
             if self.data_registry:
                 regime = self.data_registry.get_regime_name_sync(symbol)
                 if regime:
                     return regime.lower()
 
-            # Пробуем получить из RegimeManager
+            # ��T��-�-Tæ��- ���-��T�TǦ�T�T� ���� RegimeManager
             if self.regime_manager:
                 regime = self.regime_manager.get_current_regime()
                 if regime:
@@ -425,21 +726,21 @@ Parameter Provider - Единая точка получения параметр
 
         except Exception as e:
             logger.warning(
-                f"⚠️ ParameterProvider: Ошибка определения режима для {symbol}: {e}"
+                f"������ ParameterProvider: ��TȦ��-���- �-��T����+�������-��T� T��������-�- �+��T� {symbol}: {e}"
             )
 
-        # ✅ ИСПРАВЛЕНИЕ #22 (04.01.2026): Логируем fallback режим "ranging"
+        # ��� �ئ�ߦ�ЦҦۦզݦئ� #22 (04.01.2026): �ۦ-����T�Tæ��- fallback T��������- "ranging"
         logger.warning(
-            f"⚠️ ParameterProvider: Режим не определен для {symbol}, используется fallback 'ranging'"
+            f"������ ParameterProvider: �দ�����- �-�� �-��T����+�������- �+��T� {symbol}, ��T����-��Ț�Tæ�T�T�T� fallback 'ranging'"
         )
         return "ranging"
 
     def _get_default_regime_params(self) -> Dict[str, Any]:
         """
-        Получить дефолтные параметры режима.
+        �ߦ-��T�TǦ�T�T� �+��TĦ-��T¦-T˦� ���-T��-�-��T�T�T� T��������-�-.
 
         Returns:
-            Словарь с дефолтными параметрами
+            �᦬�-�-�-T�T� T� �+��TĦ-��T¦-T˦-�� ���-T��-�-��T�T��-�-��
         """
         return {
             "min_score_threshold": 2.0,
@@ -453,30 +754,28 @@ Parameter Provider - Единая точка получения параметр
 
     def clear_cache(self, key: Optional[str] = None) -> None:
         """
-        Очистить кэш параметров.
+        ��TǦ�T�T¦�T�T� ��T�T� ���-T��-�-��T�T��-�-.
 
         Args:
-            key: Ключ для очистки (если None - очистить весь кэш)
+            key: �ڦ�T�T� �+��T� �-TǦ�T�T¦��� (��T����� None - �-TǦ�T�T¦�T�T� �-��T�T� ��T�T�)
         """
-        import time
-
         if key:
             self._cache.pop(key, None)
             self._cache_timestamps.pop(key, None)
         else:
             self._cache.clear()
             self._cache_timestamps.clear()
-            logger.debug("✅ ParameterProvider: Кэш очищен")
+            logger.debug("��� ParameterProvider: ��T�T� �-TǦ�Tɦ��-")
 
     def get_cached_value(self, key: str) -> Optional[Any]:
         """
-        Получить значение из кэша.
+        �ߦ-��T�TǦ�T�T� ���-�-TǦ��-���� ���� ��T�TȦ-.
 
         Args:
-            key: Ключ кэша
+            key: �ڦ�T�T� ��T�TȦ-
 
         Returns:
-            Значение из кэша или None
+            �צ-�-TǦ��-���� ���� ��T�TȦ- ������ None
         """
         import time
 
@@ -487,18 +786,18 @@ Parameter Provider - Единая точка получения параметр
         current_time = time.time()
 
         if current_time - cache_time > self._cache_ttl_seconds:
-            # Кэш устарел
+            # ��T�T� T�T�T¦-T�����
             return None
 
         return self._cache[key]
 
     def set_cached_value(self, key: str, value: Any) -> None:
         """
-        Сохранить значение в кэш.
+        ��-T�T��-�-��T�T� ���-�-TǦ��-���� �- ��T�T�.
 
         Args:
-            key: Ключ кэша
-            value: Значение для кэширования
+            key: �ڦ�T�T� ��T�TȦ-
+            value: �צ-�-TǦ��-���� �+��T� ��T�TȦ�T��-�-�-�-��T�
         """
         import time
 
@@ -509,16 +808,16 @@ Parameter Provider - Единая точка получения параметр
         self, balance: float, exit_params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        ✅ НОВОЕ (05.01.2026): Адаптация TP/SL по балансу.
+        ��� �ݦަҦަ� (05.01.2026): �Ц+�-��T¦-TƦ�T� TP/SL ���- �-�-���-�-T�T�.
 
         Args:
-            balance: Текущий баланс
-            exit_params: Базовые параметры выхода
+            balance: �⦦��T�Tɦ��� �-�-���-�-T�
+            exit_params: �Ѧ-���-�-T˦� ���-T��-�-��T�T�T� �-T�TŦ-�+�-
 
         Returns:
-            Словарь с адаптированными параметрами (если применена адаптация)
+            �᦬�-�-�-T�T� T� �-�+�-��T¦�T��-�-�-�-�-T˦-�� ���-T��-�-��T�T��-�-�� (��T����� ��T����-���-���-�- �-�+�-��T¦-TƦ�T�)
         """
-        # Получаем конфигурацию адаптации
+        # �ߦ-��T�TǦ-���- ���-�-TĦ���T�T��-TƦ�T� �-�+�-��T¦-TƦ���
         adaptive_config = self._get_adaptive_exit_config()
 
         if not adaptive_config.get("enabled", False):
@@ -528,7 +827,7 @@ Parameter Provider - Единая точка получения параметр
         if not balance_config:
             return {}
 
-        # Определяем профиль баланса
+        # �ަ�T����+����TϦ��- ��T��-TĦ���T� �-�-���-�-T��-
         if balance < 1500:
             profile = "small"
         elif balance < 3500:
@@ -540,7 +839,7 @@ Parameter Provider - Единая точка получения параметр
         if not profile_config:
             return {}
 
-        # Применяем множители
+        # ��T����-���-TϦ��- �-�-�-����T¦�����
         tp_multiplier = profile_config.get("tp_multiplier", 1.0)
         sl_multiplier = profile_config.get("sl_multiplier", 1.0)
 
@@ -559,16 +858,16 @@ Parameter Provider - Единая точка получения параметр
         self, current_pnl: float, exit_params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        ✅ НОВОЕ (05.01.2026): Расширение TP при сильном P&L.
+        ��� �ݦަҦަ� (05.01.2026): ��-T�TȦ�T����-���� TP ��T��� T�����Ț-�-�- P&L.
 
         Args:
-            current_pnl: Текущий P&L позиции в %
-            exit_params: Базовые параметры выхода
+            current_pnl: �⦦��T�Tɦ��� P&L ���-����TƦ��� �- %
+            exit_params: �Ѧ-���-�-T˦� ���-T��-�-��T�T�T� �-T�TŦ-�+�-
 
         Returns:
-            Словарь с адаптированным TP (если применена адаптация)
+            �᦬�-�-�-T�T� T� �-�+�-��T¦�T��-�-�-�-�-T˦- TP (��T����� ��T����-���-���-�- �-�+�-��T¦-TƦ�T�)
         """
-        # Получаем конфигурацию адаптации
+        # �ߦ-��T�TǦ-���- ���-�-TĦ���T�T��-TƦ�T� �-�+�-��T¦-TƦ���
         adaptive_config = self._get_adaptive_exit_config()
 
         if not adaptive_config.get("enabled", False):
@@ -581,14 +880,16 @@ Parameter Provider - Единая точка получения параметр
         base_tp = exit_params.get("tp_atr_multiplier", 2.0)
         extension_threshold = pnl_config.get(
             "extension_threshold", 0.8
-        )  # 80% от базового TP
-        max_extension = pnl_config.get("max_extension", 0.5)  # Макс +0.5x
-        extension_factor = pnl_config.get("extension_factor", 0.3)  # Коэффициент
+        )  # 80% �-T� �-�-���-�-�-���- TP
+        max_extension = pnl_config.get("max_extension", 0.5)  # �ܦ-��T� +0.5x
+        extension_factor = pnl_config.get(
+            "extension_factor", 0.3
+        )  # �ڦ-T�T�TĦ�TƦ����-T�
 
-        # Если P&L уже превысил порог расширения
+        # ��T����� P&L Tæ��� ��T����-T�T����� ���-T��-�� T��-T�TȦ�T����-��T�
         threshold_pnl = base_tp * extension_threshold
         if current_pnl > threshold_pnl:
-            # Рассчитываем расширение
+            # ��-T�T�TǦ�T�T˦-�-���- T��-T�TȦ�T����-����
             excess_pnl = current_pnl - threshold_pnl
             extension = min(excess_pnl * extension_factor, max_extension)
             new_tp = base_tp + extension
@@ -601,18 +902,18 @@ Parameter Provider - Единая точка получения параметр
         self, drawdown: float, exit_params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        ✅ НОВОЕ (05.01.2026): Ужесточение SL при просадке.
+        ��� �ݦަҦަ� (05.01.2026): �㦦��T�T¦-TǦ��-���� SL ��T��� ��T��-T��-�+����.
 
-        Фаза 2 - будет реализовано позже.
+        ��-���- 2 - �-Tæ+��T� T����-�������-�-�-�-�- ���-������.
 
         Args:
-            drawdown: Текущая просадка в %
-            exit_params: Базовые параметры выхода
+            drawdown: �⦦��T�Tɦ-T� ��T��-T��-�+���- �- %
+            exit_params: �Ѧ-���-�-T˦� ���-T��-�-��T�T�T� �-T�TŦ-�+�-
 
         Returns:
-            Словарь с адаптированным SL (если применена адаптация)
+            �᦬�-�-�-T�T� T� �-�+�-��T¦�T��-�-�-�-�-T˦- SL (��T����� ��T����-���-���-�- �-�+�-��T¦-TƦ�T�)
         """
-        # Получаем конфигурацию адаптации
+        # �ߦ-��T�TǦ-���- ���-�-TĦ���T�T��-TƦ�T� �-�+�-��T¦-TƦ���
         adaptive_config = self._get_adaptive_exit_config()
 
         if not adaptive_config.get("enabled", False):
@@ -624,10 +925,12 @@ Parameter Provider - Единая точка получения параметр
 
         base_sl = exit_params.get("sl_atr_multiplier", 1.5)
         tightening_threshold = drawdown_config.get("tightening_threshold", 5.0)  # 5%
-        max_tightening = drawdown_config.get("max_tightening", 0.3)  # Макс +0.3x
-        tightening_factor = drawdown_config.get("tightening_factor", 0.1)  # Коэффициент
+        max_tightening = drawdown_config.get("max_tightening", 0.3)  # �ܦ-��T� +0.3x
+        tightening_factor = drawdown_config.get(
+            "tightening_factor", 0.1
+        )  # �ڦ-T�T�TĦ�TƦ����-T�
 
-        # Если просадка > порога, ужесточаем SL
+        # ��T����� ��T��-T��-�+���- > ���-T��-���-, Tæ���T�T¦-TǦ-���- SL
         if drawdown > tightening_threshold:
             excess_drawdown = drawdown - tightening_threshold
             tightening = min(excess_drawdown * tightening_factor, max_tightening)
@@ -637,151 +940,51 @@ Parameter Provider - Единая точка получения параметр
 
         return {}
 
-    def _apply_adaptive_exit_params(
-        self,
-        base_params: Dict[str, Any],
-        symbol: str,
-        regime: Optional[str],
-        balance: Optional[float],
-        current_pnl: Optional[float],
-        drawdown: Optional[float],
-    ) -> Dict[str, Any]:
-        """
-        ✅ НОВОЕ (06.01.2026): Применить адаптивную логику к параметрам выхода.
-
-        Использует плавную интерполяцию по балансу для расчета TP/SL множителей.
-
-        Args:
-            base_params: Базовые параметры выхода
-            symbol: Торговый символ
-            regime: Режим рынка
-            balance: Текущий баланс
-            current_pnl: Текущий P&L позиции в %
-            drawdown: Текущая просадка в %
-
-        Returns:
-            Адаптивные параметры выхода
-        """
-        try:
-            # Проверяем, включена ли адаптация
-            adaptive_config = self._get_adaptive_exit_config()
-            if not adaptive_config.get("enabled", False):
-                logger.debug("⚠️ Адаптивные параметры отключены в конфигурации")
-                return base_params
-
-            # Копируем базовые параметры
-            adaptive_params = base_params.copy()
-
-            # Получаем базовые множители
-            tp_base = base_params.get("tp_atr_multiplier", 2.0)
-            sl_base = base_params.get("sl_atr_multiplier", 1.5)
-
-            # Адаптация по балансу (главный фактор)
-            if balance is not None:
-                (
-                    balance_factor_tp,
-                    balance_factor_sl,
-                ) = self._calculate_balance_adaptation_factors(balance)
-                adaptive_params["tp_atr_multiplier"] = tp_base * balance_factor_tp
-                adaptive_params["sl_atr_multiplier"] = sl_base * balance_factor_sl
-
-                logger.debug(
-                    f"💰 [ADAPTIVE] {symbol}: Баланс ${balance:.0f} → "
-                    f"TP: {tp_base:.2f} × {balance_factor_tp:.3f} = {adaptive_params['tp_atr_multiplier']:.2f}, "
-                    f"SL: {sl_base:.2f} × {balance_factor_sl:.3f} = {adaptive_params['sl_atr_multiplier']:.2f}"
-                )
-
-            # Адаптация по P&L позиции
-            if current_pnl is not None:
-                pnl_factor = self._calculate_pnl_adaptation_factor(current_pnl)
-                if pnl_factor != 1.0:
-                    adaptive_params["tp_atr_multiplier"] *= pnl_factor
-                    logger.debug(
-                        f"📈 [ADAPTIVE] {symbol}: P&L {current_pnl:.1f}% → "
-                        f"TP расширение ×{pnl_factor:.3f} = {adaptive_params['tp_atr_multiplier']:.2f}"
-                    )
-
-            # Адаптация по просадке
-            if drawdown is not None:
-                drawdown_factor = self._calculate_drawdown_adaptation_factor(drawdown)
-                if drawdown_factor != 1.0:
-                    adaptive_params["sl_atr_multiplier"] *= drawdown_factor
-                    logger.debug(
-                        f"📉 [ADAPTIVE] {symbol}: Просадка {drawdown:.1f}% → "
-                        f"SL ужесточение ×{drawdown_factor:.3f} = {adaptive_params['sl_atr_multiplier']:.2f}"
-                    )
-
-            # Ограничения на финальные значения
-            adaptive_params["tp_atr_multiplier"] = min(
-                max(adaptive_params["tp_atr_multiplier"], 1.0), 5.0
-            )
-            adaptive_params["sl_atr_multiplier"] = min(
-                max(adaptive_params["sl_atr_multiplier"], 0.5), 3.0
-            )
-
-            # Логирование итоговых адаптивных параметров
-            # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Добавлена защита от NoneType при форматировании
-            balance_str = f"${balance:.0f}" if balance is not None else "N/A"
-            pnl_str = f"{current_pnl:.1f}%" if current_pnl is not None else "N/A"
-            drawdown_str = f"{drawdown:.1f}%" if drawdown is not None else "N/A"
-            logger.info(
-                f"🎯 [ADAPTIVE] {symbol} ({regime}): Финальные параметры → "
-                f"TP: {adaptive_params['tp_atr_multiplier']:.2f}, "
-                f"SL: {adaptive_params['sl_atr_multiplier']:.2f} | "
-                f"Контекст: баланс={balance_str}, P&L={pnl_str}, просадка={drawdown_str}"
-            )
-
-            return adaptive_params
-
-        except Exception as e:
-            logger.warning(
-                f"⚠️ ParameterProvider: Ошибка применения адаптивных параметров для {symbol}: {e}"
-            )
-            return base_params
-
     def _calculate_balance_adaptation_factors(
         self, balance: float
     ) -> tuple[float, float]:
         """
-        Рассчитать коэффициенты адаптации по балансу (плавная интерполяция).
+        ��-T�T�TǦ�T¦-T�T� ���-T�T�TĦ�TƦ����-T�T� �-�+�-��T¦-TƦ��� ���- �-�-���-�-T�T� (�����-�-�-�-T� ���-T¦�T����-��T�TƦ�T�).
 
-        Использует линейную интерполяцию между порогами для плавного перехода.
+        ��T����-��Ț�Tæ�T� �����-�����-T�T� ���-T¦�T����-��T�TƦ�T� �-�����+T� ���-T��-���-�-�� �+��T� �����-�-�-�-���- ����T���TŦ-�+�-.
 
         Returns:
             (tp_factor, sl_factor)
         """
-        # Пороги из тестирования
-        SMALL_THRESHOLD = 1500  # < $1500 - консервативный
-        LARGE_THRESHOLD = 3500  # >= $3500 - агрессивный
+        # �ߦ-T��-���� ���� T¦�T�T¦�T��-�-�-�-��T�
+        SMALL_THRESHOLD = 1500  # < $1500 - ���-�-T���T��-�-T¦��-�-T˦�
+        LARGE_THRESHOLD = 3500  # >= $3500 - �-��T���T�T����-�-T˦�
 
-        # Коэффициенты для каждого диапазона
-        SMALL_TP = 0.9  # Консервативный TP для низких балансов
-        SMALL_SL = 0.9  # Ужесточенный SL для низких балансов
-        MEDIUM_TP = 1.0  # Стандартный TP
-        MEDIUM_SL = 1.0  # Стандартный SL
-        LARGE_TP = 1.1  # Агрессивный TP для высоких балансов
-        LARGE_SL = 1.0  # Стандартный SL для высоких балансов
+        # �ڦ-T�T�TĦ�TƦ����-T�T� �+��T� ���-���+�-���- �+���-���-���-�-�-
+        SMALL_TP = (
+            0.9  # �ڦ-�-T���T��-�-T¦��-�-T˦� TP �+��T� �-��������T� �-�-���-�-T��-�-
+        )
+        SMALL_SL = 0.9  # �㦦��T�T¦-TǦ��-�-T˦� SL �+��T� �-��������T� �-�-���-�-T��-�-
+        MEDIUM_TP = 1.0  # ��T¦-�-�+�-T�T¦-T˦� TP
+        MEDIUM_SL = 1.0  # ��T¦-�-�+�-T�T¦-T˦� SL
+        LARGE_TP = 1.1  # �Ц�T���T�T����-�-T˦� TP �+��T� �-T�T��-����T� �-�-���-�-T��-�-
+        LARGE_SL = 1.0  # ��T¦-�-�+�-T�T¦-T˦� SL �+��T� �-T�T��-����T� �-�-���-�-T��-�-
 
         if balance < SMALL_THRESHOLD:
-            # От $500 до SMALL_THRESHOLD: интерполяция от консервативного к стандартному
+            # ��T� $500 �+�- SMALL_THRESHOLD: ���-T¦�T����-��T�TƦ�T� �-T� ���-�-T���T��-�-T¦��-�-�-���- �� T�T¦-�-�+�-T�T¦-�-�-T�
             if balance <= 500:
-                # Очень низкий баланс - максимально консервативный
+                # ��TǦ��-T� �-���������� �-�-���-�-T� - �-�-��T����-�-��Ț-�- ���-�-T���T��-�-T¦��-�-T˦�
                 tp_factor = 0.8
                 sl_factor = 0.8
             else:
-                # Линейная интерполяция от 0.8 до 0.9
+                # �ۦ��-�����-�-T� ���-T¦�T����-��T�TƦ�T� �-T� 0.8 �+�- 0.9
                 ratio = (balance - 500) / (SMALL_THRESHOLD - 500)
                 tp_factor = 0.8 + (SMALL_TP - 0.8) * ratio
                 sl_factor = 0.8 + (SMALL_SL - 0.8) * ratio
 
         elif balance < LARGE_THRESHOLD:
-            # От SMALL_THRESHOLD до LARGE_THRESHOLD: интерполяция от 0.9 до 1.0
+            # ��T� SMALL_THRESHOLD �+�- LARGE_THRESHOLD: ���-T¦�T����-��T�TƦ�T� �-T� 0.9 �+�- 1.0
             ratio = (balance - SMALL_THRESHOLD) / (LARGE_THRESHOLD - SMALL_THRESHOLD)
             tp_factor = SMALL_TP + (MEDIUM_TP - SMALL_TP) * ratio
             sl_factor = SMALL_SL + (MEDIUM_SL - SMALL_SL) * ratio
 
         else:
-            # От LARGE_THRESHOLD и выше: интерполяция от 1.0 до 1.1 (до баланса $5000)
+            # ��T� LARGE_THRESHOLD �� �-T�TȦ�: ���-T¦�T����-��T�TƦ�T� �-T� 1.0 �+�- 1.1 (�+�- �-�-���-�-T��- $5000)
             if balance >= 5000:
                 tp_factor = LARGE_TP
                 sl_factor = LARGE_SL
@@ -794,34 +997,34 @@ Parameter Provider - Единая точка получения параметр
 
     def _calculate_pnl_adaptation_factor(self, current_pnl: float) -> float:
         """
-        Рассчитать коэффициент адаптации по P&L позиции.
+        ��-T�T�TǦ�T¦-T�T� ���-T�T�TĦ�TƦ����-T� �-�+�-��T¦-TƦ��� ���- P&L ���-����TƦ���.
 
-        При положительном P&L расширяет TP для захвата прибыли.
+        ��T��� ���-���-����T¦���Ț-�-�- P&L T��-T�TȦ�T�TϦ�T� TP �+��T� ���-TŦ-�-T¦- ��T����-T˦���.
         """
-        # Расширение TP при сильном профите
+        # ��-T�TȦ�T����-���� TP ��T��� T�����Ț-�-�- ��T��-TĦ�T¦�
         if current_pnl > 5.0:  # > 5%
-            extension = min((current_pnl - 5.0) * 0.3, 0.5)  # Макс +0.5x
+            extension = min((current_pnl - 5.0) * 0.3, 0.5)  # �ܦ-��T� +0.5x
             return 1.0 + extension
         return 1.0
 
     def _calculate_drawdown_adaptation_factor(self, drawdown: float) -> float:
         """
-        Рассчитать коэффициент адаптации по просадке.
+        ��-T�T�TǦ�T¦-T�T� ���-T�T�TĦ�TƦ����-T� �-�+�-��T¦-TƦ��� ���- ��T��-T��-�+����.
 
-        При высокой просадке ужесточает SL для защиты капитала.
+        ��T��� �-T�T��-���-�� ��T��-T��-�+���� Tæ���T�T¦-TǦ-��T� SL �+��T� ���-Tɦ�T�T� ���-����T¦-���-.
         """
-        # Ужесточение SL при просадке
+        # �㦦��T�T¦-TǦ��-���� SL ��T��� ��T��-T��-�+����
         if drawdown > 5.0:  # > 5%
-            tightening = min((drawdown - 5.0) * 0.1, 0.3)  # Макс +0.3x
+            tightening = min((drawdown - 5.0) * 0.1, 0.3)  # �ܦ-��T� +0.3x
             return 1.0 + tightening
         return 1.0
 
     def _get_adaptive_exit_config(self) -> Dict[str, Any]:
         """
-        ✅ НОВОЕ (05.01.2026): Получить конфигурацию адаптивных параметров выхода.
+        ��� �ݦަҦަ� (05.01.2026): �ߦ-��T�TǦ�T�T� ���-�-TĦ���T�T��-TƦ�T� �-�+�-��T¦��-�-T�T� ���-T��-�-��T�T��-�- �-T�TŦ-�+�-.
 
         Returns:
-            Словарь с конфигурацией адаптации
+            �᦬�-�-�-T�T� T� ���-�-TĦ���T�T��-TƦ����� �-�+�-��T¦-TƦ���
         """
         try:
             if hasattr(self.config_manager, "_raw_config_dict"):
@@ -829,12 +1032,12 @@ Parameter Provider - Единая точка получения параметр
                 return config_dict.get("adaptive_exit_params", {})
         except Exception as e:
             logger.debug(
-                f"⚠️ ParameterProvider: Ошибка получения adaptive_exit_params: {e}"
+                f"������ ParameterProvider: ��TȦ��-���- ���-��T�TǦ��-��T� adaptive_exit_params: {e}"
             )
 
-        # Возвращаем дефолтную конфигурацию
+        # �Ҧ-���-T��-Tɦ-���- �+��TĦ-��T¦-T�T� ���-�-TĦ���T�T��-TƦ�T�
         return {
-            "enabled": False,  # По умолчанию выключено
+            "enabled": False,  # �ߦ- Tæ-�-��TǦ-�-��T� �-T˦���T�TǦ��-�-
             "balance_adaptation": {
                 "small": {"tp_multiplier": 0.9, "sl_multiplier": 0.9},
                 "medium": {"tp_multiplier": 1.0, "sl_multiplier": 1.0},
@@ -847,7 +1050,7 @@ Parameter Provider - Единая точка получения параметр
                 "extension_factor": 0.3,
             },
             "drawdown_adaptation": {
-                "enabled": False,  # Фаза 2
+                "enabled": False,  # ��-���- 2
                 "tightening_threshold": 5.0,
                 "max_tightening": 0.3,
                 "tightening_factor": 0.1,

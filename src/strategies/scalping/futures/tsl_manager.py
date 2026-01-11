@@ -8,7 +8,7 @@ TSL Manager для Futures торговли.
 - Интеграция с ConfigManager
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from loguru import logger
 
@@ -168,22 +168,36 @@ class TSLManager:
 
         return new_stop_loss
 
-    def check_should_close(self, symbol: str, current_price: float) -> bool:
+    async def check_should_close(
+        self, symbol: str, current_price: float, **kwargs
+    ) -> Tuple[bool, Optional[str]]:
         """
-        Проверить нужно ли закрывать позицию по TSL.
+        Проверить нужно ли закрывать позицию по TSL (асинхронно).
 
         Args:
             symbol: Торговый символ
             current_price: Текущая цена
+            **kwargs: дополнительные параметры для логики TSL
 
         Returns:
-            bool: True если нужно закрыть
+            Tuple[bool, Optional[str]]: (True, причина_закрытия) если нужно закрыть, (False, None) если нет
         """
         tsl = self.get_tsl(symbol)
         if not tsl:
-            return False
+            return (False, None)
 
-        return tsl.should_close(current_price)
+        # Вызов асинхронной логики TrailingStopLoss
+        if hasattr(tsl, "should_close_position"):
+            # Если should_close_position асинхронная
+            result = tsl.should_close_position(current_price, **kwargs)
+            if hasattr(result, "__await__"):
+                return await result
+            else:
+                return result
+        else:
+            # Fallback: старый синхронный метод
+            closed = tsl.should_close(current_price)
+            return (closed, "legacy")
 
     def get_all_tsl(self) -> Dict[str, TrailingStopLoss]:
         """

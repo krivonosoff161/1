@@ -14,7 +14,6 @@ Logic:
 """
 
 import time
-from datetime import datetime
 from typing import Dict, List, Optional, Union
 
 import aiohttp
@@ -44,7 +43,10 @@ class MTFConfig(BaseModel):
         default=21, ge=10, le=50, description="Период медленной EMA"
     )
     cache_ttl_seconds: int = Field(
-        default=15, ge=5, le=300, description=\"Время жизни кэша свечей (секунды) - ✅ СНИЖЕНО (11.01.2026) с 30 на 15\"
+        default=15,
+        ge=5,
+        le=300,
+        description="Cache TTL in seconds. Reduced from 30 to 15 on 11.01.2026",
     )
     fail_open_enabled: bool = Field(
         default=False,

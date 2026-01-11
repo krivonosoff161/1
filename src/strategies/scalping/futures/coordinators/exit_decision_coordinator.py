@@ -13,7 +13,6 @@ Exit Decision Coordinator - Координатор решений о закры�
 Предотвращает конфликты между системами и обеспечивает единую логику приоритетов.
 """
 
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -239,7 +238,9 @@ class ExitDecisionCoordinator:
 
             # Проверяем, сработал ли trailing stop
             # ✅ ИСПРАВЛЕНО (08.01.2026): Метод должен быть should_close_position, а не should_close
-            should_close, reason = trailing_stop.should_close_position(current_price)
+            should_close, reason = await trailing_stop.should_close_position(
+                current_price
+            )
             if should_close:
                 return {
                     "action": "close",

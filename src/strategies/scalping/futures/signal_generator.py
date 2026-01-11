@@ -8,10 +8,9 @@ Futures Signal Generator для скальпинг стратегии.
 - Фильтрация сигналов по силе и качеству
 """
 
-import asyncio
 import copy
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import numpy as np  # ✅ Для per-symbol ATR расчётов
 from loguru import logger
@@ -19,14 +18,10 @@ from loguru import logger
 from src.config import BotConfig, ScalpingConfig
 from src.indicators import IndicatorManager
 from src.models import OHLCV, MarketData
-from src.strategies.modules.correlation_filter import CorrelationFilter
-from src.strategies.modules.multi_timeframe import MultiTimeframeFilter
-from src.strategies.modules.pivot_points import PivotPointsFilter
-from src.strategies.modules.volume_profile_filter import VolumeProfileFilter
 
 from .adaptivity.regime_manager import AdaptiveRegimeManager
-from .filters import (FundingRateFilter, LiquidityFilter, MomentumFilter,
-                      OrderFlowFilter, VolatilityRegimeFilter)
+from .filters import (FundingRateFilter, LiquidityFilter, OrderFlowFilter,
+                      VolatilityRegimeFilter)
 # ✅ РЕФАКТОРИНГ: Импортируем FilterManager и новые генераторы сигналов
 from .signals.filter_manager import FilterManager
 from .signals.macd_signal_generator import MACDSignalGenerator
@@ -62,12 +57,14 @@ class FuturesSignalGenerator:
 
         # Менеджер индикаторов
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Используем TA-Lib обертки для ускорения на 70-85%
-        from src.indicators import (TALIB_AVAILABLE, TALibATR,
-                                    TALibBollingerBands, TALibEMA, TALibMACD,
-                                    TALibRSI, TALibSMA)
+        from src.indicators import TALIB_AVAILABLE
 
         if TALIB_AVAILABLE:
             from loguru import logger
+
+            from src.indicators import (TALibATR, TALibBollingerBands,
+                                        TALibEMA, TALibMACD, TALibRSI,
+                                        TALibSMA)
 
             logger.info(
                 "✅ TA-Lib индикаторы доступны - используется оптимизированная версия (ускорение 70-85%)"
@@ -781,8 +778,9 @@ class FuturesSignalGenerator:
                     block_opposite=mtf_block_opposite,  # ✅ Используем из конфига (по умолчанию False)
                     ema_fast_period=8,
                     ema_slow_period=21,
-                    cache_ttl_seconds=30,  # Кэш на 30 секунд
+                    cache_ttl_seconds=10,  # Кэш на 10 секунд
                 )
+                logger.info(f"✅ MTF Filter TTL установлен: 10s")
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Инициализируем MTF фильтр с DataRegistry и StructuredLogger
                 self.mtf_filter = MultiTimeframeFilter(
@@ -831,16 +829,16 @@ class FuturesSignalGenerator:
                                 if isinstance(regime_obj, str)
                                 else str(regime_obj).lower()
                             )
-                except:
-                    pass
+                except Exception as exc:
+                    logger.debug("Ignored error in optional block: %s", exc)
 
                 # Получаем параметры из режима
                 regime_params = None
                 if hasattr(self, "regime_manager") and self.regime_manager:
                     try:
                         regime_params = self.regime_manager.get_current_parameters()
-                    except:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Ignored error in optional block: %s", exc)
 
                 adx_threshold = 18.0  # Fallback
                 adx_di_difference = 1.5  # Fallback
@@ -893,8 +891,8 @@ class FuturesSignalGenerator:
                                 if isinstance(regime_obj, str)
                                 else str(regime_obj).lower()
                             )
-                except:
-                    pass
+                except Exception as exc:
+                    logger.debug("Ignored error in optional block: %s", exc)
 
                 signal_gen_config_corr = getattr(
                     self.scalping_config, "signal_generator", {}
@@ -1052,8 +1050,8 @@ class FuturesSignalGenerator:
                                 if isinstance(regime_obj, str)
                                 else str(regime_obj).lower()
                             )
-                except:
-                    pass
+                except Exception as exc:
+                    logger.debug("Ignored error in optional block: %s", exc)
 
                 signal_gen_config_pivot = getattr(
                     self.scalping_config, "signal_generator", {}
@@ -1156,7 +1154,7 @@ class FuturesSignalGenerator:
                         use_last_n_days=pivot_use_days,
                         level_tolerance_percent=pivot_tolerance,
                         score_bonus_near_level=pivot_bonus,
-                        cache_ttl_seconds=3600,  # 1 час кэш
+                        cache_ttl_seconds=30,  # Кэш на 30 секунд
                     )
 
                     try:
@@ -1316,7 +1314,7 @@ class FuturesSignalGenerator:
                         score_bonus_in_value_area=vp_bonus_va,
                         score_bonus_near_poc=vp_bonus_poc,
                         poc_tolerance_percent=vp_poc_tolerance,
-                        cache_ttl_seconds=600,  # 10 минут кэш
+                        cache_ttl_seconds=30,  # Кэш на 30 секунд
                     )
 
                     try:
@@ -1498,7 +1496,9 @@ class FuturesSignalGenerator:
                             )  # Не генерируем сигналы без достаточного количества свечей
 
                         # 🔴 BUG #9 FIX (09.01.2026): Validate OHLCV data quality before use
-                        is_valid, errors = self.data_registry.validate_ohlcv_data(symbol, candles_1m)
+                        is_valid, errors = self.data_registry.validate_ohlcv_data(
+                            symbol, candles_1m
+                        )
                         if not is_valid:
                             logger.warning(
                                 f"🚫 Data quality check failed for {symbol}: {len(errors)} issues found"
@@ -2464,8 +2464,10 @@ class FuturesSignalGenerator:
                                         )  # БЕЗ FALLBACK
                                         if atr_from_provider and atr_from_provider > 0:
                                             atr_val = atr_from_provider
-                                    except Exception:
-                                        pass
+                                    except Exception as exc:
+                                        logger.debug(
+                                            "Ignored error in optional block: %s", exc
+                                        )
                 except Exception as e:
                     logger.debug(
                         f"⚠️ Не удалось получить ADX/ATR из DataRegistry для логирования {symbol}: {e}"
@@ -2663,8 +2665,8 @@ class FuturesSignalGenerator:
                     regime_data = await self.data_registry.get_regime(symbol)
                     if regime_data:
                         current_regime_for_vol = regime_data.get("regime", "").lower()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Ignored error in optional block: %s", exc)
 
             if current_regime_for_vol == "choppy":
                 # Получаем ATR для расчета волатильности
@@ -2801,8 +2803,8 @@ class FuturesSignalGenerator:
                     rsi_overbought_threshold = self.scalping_config.get(
                         "rsi_overbought", 75
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Ignored error in optional block: %s", exc)
 
             # Проверяем условия для SHORT сигнала
             rsi_overbought = rsi_value > rsi_overbought_threshold
@@ -2816,9 +2818,11 @@ class FuturesSignalGenerator:
                 )  # Нормализация от 75 до 105
                 macd_strength = min(
                     1.0,
-                    abs(macd_line - signal_line) / abs(signal_line)
-                    if signal_line
-                    else 0.5,
+                    (
+                        abs(macd_line - signal_line) / abs(signal_line)
+                        if signal_line
+                        else 0.5
+                    ),
                 )
                 adx_strength = min(
                     1.0, (adx_value - 25.0) / 50.0
@@ -3210,8 +3214,8 @@ class FuturesSignalGenerator:
                                         current_regime_for_adx_fallback = (
                                             regime_data.get("regime", "ranging").lower()
                                         )
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.debug("Ignored error in optional block: %s", exc)
 
                             adx_blocking_threshold_fallback = (
                                 30.0  # Fallback для ranging
@@ -3261,8 +3265,8 @@ class FuturesSignalGenerator:
                             current_regime_log = regime_data.get(
                                 "regime", "ranging"
                             ).lower()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Ignored error in optional block: %s", exc)
 
                 adx_threshold_log = 30.0
                 if current_regime_log == "trending":
@@ -3414,12 +3418,16 @@ class FuturesSignalGenerator:
             }
 
             # Получаем множитель для типа конфликта
-            multiplier = CONFLICT_MULTIPLIERS.get(conflict_type, CONFLICT_MULTIPLIERS["default"])
+            multiplier = CONFLICT_MULTIPLIERS.get(
+                conflict_type, CONFLICT_MULTIPLIERS["default"]
+            )
 
             # Адаптируем множитель под режим если доступно
             if regime and hasattr(self, "scalping_config"):
                 try:
-                    adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
+                    adaptive_regime = getattr(
+                        self.scalping_config, "adaptive_regime", {}
+                    )
                     if isinstance(adaptive_regime, dict):
                         regime_config = adaptive_regime.get(regime, {})
                     else:
@@ -3449,7 +3457,10 @@ class FuturesSignalGenerator:
             return final_strength
 
         except Exception as e:
-            logger.error(f"❌ Error calculating conflict multiplier for {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"❌ Error calculating conflict multiplier for {symbol}: {e}",
+                exc_info=True,
+            )
             return base_strength * 0.5  # Fallback: большое снижение при ошибке
 
     async def _calculate_atr_adaptive_rsi_thresholds(
@@ -3971,8 +3982,8 @@ class FuturesSignalGenerator:
                             if isinstance(regime_obj, str)
                             else str(regime_obj).lower()
                         )
-            except:
-                pass
+            except Exception as exc:
+                logger.debug("Ignored error in optional block: %s", exc)
 
             # Получаем confidence значения из конфига
             signal_gen_config_conf = getattr(
@@ -4057,8 +4068,8 @@ class FuturesSignalGenerator:
                             current_regime_rsi_oversold = regime_data.get(
                                 "regime", "ranging"
                             ).lower()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Ignored error in optional block: %s", exc)
 
                 adx_threshold_rsi_oversold = 30.0  # Fallback для ranging
                 if current_regime_rsi_oversold == "trending":
@@ -4211,8 +4222,8 @@ class FuturesSignalGenerator:
                             if isinstance(regime_obj, str)
                             else str(regime_obj).lower()
                         )
-            except:
-                pass
+            except Exception as exc:
+                logger.debug("Ignored error in optional block: %s", exc)
 
             signal_gen_config_macd = getattr(
                 self.scalping_config, "signal_generator", {}
@@ -4340,8 +4351,8 @@ class FuturesSignalGenerator:
                             current_regime_macd_divider_bullish = regime_data.get(
                                 "regime", "ranging"
                             ).lower()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Ignored error in optional block: %s", exc)
 
                 # Адаптивный делитель: Trending=120 (агрессивно), Ranging=180 (консервативно), Choppy=150 (баланс)
                 macd_strength_divider_bullish = 180.0  # Fallback для ranging
@@ -4440,8 +4451,8 @@ class FuturesSignalGenerator:
                             current_regime_macd_bullish = regime_data.get(
                                 "regime", "ranging"
                             ).lower()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Ignored error in optional block: %s", exc)
 
                 adx_threshold_macd_bullish = 30.0  # Fallback для ranging
                 if current_regime_macd_bullish == "trending":
@@ -4609,8 +4620,8 @@ class FuturesSignalGenerator:
                             if isinstance(regime_obj, str)
                             else str(regime_obj).lower()
                         )
-            except:
-                pass
+            except Exception as exc:
+                logger.debug("Ignored error in optional block: %s", exc)
 
             signal_gen_config_bb = getattr(self.scalping_config, "signal_generator", {})
             confidence_config_bb = {}
@@ -4717,9 +4728,11 @@ class FuturesSignalGenerator:
 
                 # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим, а не отменяем сигнал
                 base_strength = min(
-                    (lower - current_price) / (middle - lower)
-                    if (middle - lower) > 0
-                    else 0.5,
+                    (
+                        (lower - current_price) / (middle - lower)
+                        if (middle - lower) > 0
+                        else 0.5
+                    ),
                     1.0,
                 )
 
@@ -4850,9 +4863,11 @@ class FuturesSignalGenerator:
 
                 # ✅ ЗАДАЧА #7: При конфликте снижаем strength адаптивно под режим, а не отменяем сигнал
                 base_strength = min(
-                    (current_price - upper) / (upper - middle)
-                    if (upper - middle) > 0
-                    else 0.5,
+                    (
+                        (current_price - upper) / (upper - middle)
+                        if (upper - middle) > 0
+                        else 0.5
+                    ),
                     1.0,
                 )
 
@@ -4975,7 +4990,7 @@ class FuturesSignalGenerator:
         - LONG при касании BB lower + RSI 20-35 (oversold, но не экстремально)
         - SHORT при касании BB upper + RSI 65-80 (overbought, но не экстремально)
         - Блокировка при сильном ADX тренде (>25) чтобы избежать ловли трендового ножа
-        
+
         ✅ Improvements:
         - Better detection of ranging vs trending markets
         - Adaptive RSI thresholds based on volatility
@@ -5017,7 +5032,9 @@ class FuturesSignalGenerator:
             # 🔴 BUG #8 FIX: Adaptive RSI thresholds based on volatility
             # High volatility → wider thresholds; Low volatility → tighter thresholds
             if atr and atr > 0:
-                volatility_factor = min(atr / (bb_middle * 0.01), 2.0)  # Normalize to 0-2x
+                volatility_factor = min(
+                    atr / (bb_middle * 0.01), 2.0
+                )  # Normalize to 0-2x
             else:
                 volatility_factor = 1.0
 
@@ -5034,8 +5051,13 @@ class FuturesSignalGenerator:
             distance_to_lower = (
                 abs(current_price - bb_lower) / bb_lower if bb_lower > 0 else 1.0
             )
-            if distance_to_lower < touch_threshold and rsi_oversold_min <= rsi <= rsi_oversold_max:
-                strength = 75.0 + (rsi_oversold_max - rsi) * 1.0  # Stronger when RSI closer to minimum
+            if (
+                distance_to_lower < touch_threshold
+                and rsi_oversold_min <= rsi <= rsi_oversold_max
+            ):
+                strength = (
+                    75.0 + (rsi_oversold_max - rsi) * 1.0
+                )  # Stronger when RSI closer to minimum
                 logger.info(
                     f"🎯 Range-bounce LONG сигнал для {symbol}: "
                     f"цена={current_price:.2f} касается BB lower={bb_lower:.2f}, "
@@ -5061,8 +5083,13 @@ class FuturesSignalGenerator:
             distance_to_upper = (
                 abs(current_price - bb_upper) / bb_upper if bb_upper > 0 else 1.0
             )
-            if distance_to_upper < touch_threshold and rsi_overbought_min <= rsi <= rsi_overbought_max:
-                strength = 75.0 + (rsi - rsi_overbought_min) * 1.0  # Stronger when RSI closer to maximum
+            if (
+                distance_to_upper < touch_threshold
+                and rsi_overbought_min <= rsi <= rsi_overbought_max
+            ):
+                strength = (
+                    75.0 + (rsi - rsi_overbought_min) * 1.0
+                )  # Stronger when RSI closer to maximum
                 logger.info(
                     f"🎯 Range-bounce SHORT сигнал для {symbol}: "
                     f"цена={current_price:.2f} касается BB upper={bb_upper:.2f}, "
@@ -5110,8 +5137,8 @@ class FuturesSignalGenerator:
                     regime_data = await self.data_registry.get_regime(symbol)
                     if regime_data:
                         current_regime_ma = regime_data.get("regime", "ranging").lower()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Ignored error in optional block: %s", exc)
 
             adx_threshold_ma = 30.0  # Fallback для ranging
             if current_regime_ma == "trending":
@@ -5807,10 +5834,10 @@ class FuturesSignalGenerator:
                             ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
                             "timestamp": datetime.now(),
                             "indicator_value": ma_fast,
-                            "confidence": confidence_config.get("bullish_strong", 0.7)
-                            if price_direction == "up"
-                            else confidence_config.get(
-                                "bullish_normal", 0.5
+                            "confidence": (
+                                confidence_config.get("bullish_strong", 0.7)
+                                if price_direction == "up"
+                                else confidence_config.get("bullish_normal", 0.5)
                             ),  # ✅ АДАПТИВНО: Из конфига
                         }
                     )
@@ -5877,10 +5904,10 @@ class FuturesSignalGenerator:
                             ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
                             "timestamp": datetime.now(),
                             "indicator_value": ma_fast,
-                            "confidence": confidence_config.get("bearish_strong", 0.7)
-                            if price_direction == "down"
-                            else confidence_config.get(
-                                "bearish_normal", 0.5
+                            "confidence": (
+                                confidence_config.get("bearish_strong", 0.7)
+                                if price_direction == "down"
+                                else confidence_config.get("bearish_normal", 0.5)
                             ),  # ✅ АДАПТИВНО: Из конфига
                         }
                     )
@@ -6817,8 +6844,8 @@ class FuturesSignalGenerator:
                     regime_params_obj = regime_manager.get_current_parameters()
                     if regime_params_obj:
                         regime_params = self._to_dict(regime_params_obj)
-                except:
-                    pass
+                except Exception as exc:
+                    logger.debug("Ignored error in optional block: %s", exc)
 
             for signal in signals:
                 # ✅ КОНФИГУРИРУЕМАЯ Блокировка SHORT/LONG сигналов
@@ -7429,8 +7456,8 @@ class FuturesSignalGenerator:
                             if isinstance(regime_obj, str)
                             else str(regime_obj).lower()
                         )
-            except:
-                pass
+            except Exception as exc:
+                logger.debug("Ignored error in optional block: %s", exc)
 
             signal_gen_config_min = getattr(
                 self.scalping_config, "signal_generator", {}
@@ -7583,9 +7610,11 @@ class FuturesSignalGenerator:
                 "buy_signals": buy_signals,
                 "sell_signals": sell_signals,
                 "signal_types": signal_types,
-                "last_signal_time": self.signal_history[-1]["timestamp"]
-                if self.signal_history
-                else None,
+                "last_signal_time": (
+                    self.signal_history[-1]["timestamp"]
+                    if self.signal_history
+                    else None
+                ),
             }
 
         except Exception as e:

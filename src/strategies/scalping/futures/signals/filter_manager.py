@@ -52,9 +52,7 @@ class FilterManager:
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Кэш фильтров для снижения времени signals на 50-60%
         # Кэш: {symbol: {'adx': val, 'mtf': val, 'pivot': val, 'volume_profile': val, 'liquidity': val, 'order_flow': val, 'ts': now}}
         self.filter_cache: Dict[str, Dict[str, Any]] = {}
-        self.filter_cache_ttl_fast: float = (
-            10.0  # ✅ СНИЖЕНО (11.01.2026): TTL 10 секунд (было 20, для более свежих данных)
-        )
+        self.filter_cache_ttl_fast: float = 10.0  # ✅ СНИЖЕНО (11.01.2026): TTL 10 секунд (было 20, для более свежих данных)
         self.filter_cache_ttl_slow: float = 30.0  # ✅ СНИЖЕНО (11.01.2026): TTL 30 секунд (было 60, для более свежих данных от API)
 
         logger.info(
@@ -166,7 +164,7 @@ class FilterManager:
     ) -> Dict[str, Any]:
         """
         Применить все фильтры к сигналу.
-        ✅ ГРОК ОПТИМИЗАЦИЯ: Использует кэш для ADX/MTF/Pivot/VolumeProfile (TTL 20s)
+        ✅ ГРОК ОПТИМИЗАЦИЯ: Использует кэш для ADX/MTF/Pivot/VolumeProfile (TTL 10s/30s)
 
         Порядок применения:
         1. Pre-filters: ADX (тренд), Volatility
@@ -229,17 +227,15 @@ class FilterManager:
                     try:
                         if market_data and hasattr(market_data, "indicators"):
                             indicators = market_data.indicators
-                            adx_value = _get_indicator(
-                                indicators, "adx", "ADX"
-                            )
+                            adx_value = _get_indicator(indicators, "adx", "ADX")
                             plus_di = _get_indicator(
                                 indicators, "adx_plus_di", "+DI", "DI_PLUS"
                             )
                             minus_di = _get_indicator(
                                 indicators, "adx_minus_di", "-DI", "DI_MINUS"
                             )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Ignored error in optional block: %s", exc)
 
                     # Используем кэш - ADX меняется медленно
                     if not cached_adx_result:
@@ -253,7 +249,7 @@ class FilterManager:
                         logger.info(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - BLOCKED (из кэша) | "
                             f"{adx_str}{di_str}, Режим: {regime or 'unknown'} | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_fast:.0f}s)"
                         )
                         return None
                     else:
@@ -271,7 +267,7 @@ class FilterManager:
                         logger.debug(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - PASSED (из кэша) | "
                             f"{adx_str}{di_str}, Режим: {regime or 'unknown'} | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_fast:.0f}s)"
                         )
                 else:
                     # Кэша нет - вычисляем и сохраняем
@@ -300,24 +296,15 @@ class FilterManager:
             if market_data and hasattr(market_data, "indicators"):
                 indicators = market_data.indicators
                 adx_value = _get_indicator(indicators, "adx", "ADX")
-                di_plus = _get_indicator(
-                    indicators, "adx_plus_di", "+DI", "DI_PLUS"
-                )
-                di_minus = _get_indicator(
-                    indicators, "adx_minus_di", "-DI", "DI_MINUS"
-                )
+                di_plus = _get_indicator(indicators, "adx_plus_di", "+DI", "DI_PLUS")
+                di_minus = _get_indicator(indicators, "adx_minus_di", "-DI", "DI_MINUS")
 
             signal_side = signal.get("side", "").lower()
 
             # Если ADX > 20 (сильный тренд) и направление против сигнала - блокируем
             signal_type_str = signal.get("type", "unknown")
             if adx_value and adx_value > 20:
-                if (
-                    signal_side == "buy"
-                    and di_minus
-                    and di_plus
-                    and di_minus > di_plus
-                ):
+                if signal_side == "buy" and di_minus and di_plus and di_minus > di_plus:
                     # LONG сигнал, но тренд вниз (DI- > DI+)
                     logger.info(
                         f"📊 [FILTER] {symbol} ({signal_type_str} LONG): ADX Direction Filter - BLOCKED | "
@@ -388,7 +375,7 @@ class FilterManager:
                         logger.info(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): MTF Filter - BLOCKED (из кэша) | "
                             f"Режим: {regime or 'unknown'} | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_fast:.0f}s)"
                         )
                         return None
                     else:
@@ -398,7 +385,7 @@ class FilterManager:
                         logger.debug(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): MTF Filter - PASSED (из кэша) | "
                             f"Режим: {regime or 'unknown'} | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_fast:.0f}s)"
                         )
                 else:
                     # Кэша нет - вычисляем и сохраняем
@@ -476,7 +463,7 @@ class FilterManager:
                         logger.info(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Pivot Points Filter - BLOCKED (из кэша) | "
                             f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'} | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s, Pivot Points обновляются раз в день)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_fast:.0f}s, Pivot Points обновляются раз в день)"
                         )
                         return None
                     else:
@@ -486,7 +473,7 @@ class FilterManager:
                         logger.debug(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Pivot Points Filter - PASSED (из кэша) | "
                             f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'} | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=20s)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_fast:.0f}s)"
                         )
                 else:
                     # Кэша нет - вычисляем и сохраняем
@@ -516,14 +503,14 @@ class FilterManager:
                 logger.warning(f"⚠️ Ошибка Pivot Points фильтра для {symbol}: {e}")
 
         # 6. Volume Profile Filter (проверка объема)
-        # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш перед расчетом (TTL 60s для тяжелых фильтров)
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш перед расчетом (TTL 30s для тяжелых фильтров)
         if self.volume_profile_filter:
             try:
                 signal_side_str = signal.get("side", "").upper()
                 signal_type_str = signal.get("type", "unknown")
                 signal_price = signal.get("price", 0.0)
 
-                # Пытаемся получить из кэша (используем медленный TTL 60s)
+                # Пытаемся получить из кэша (используем медленный TTL 30s)
                 cached_vp_result = self._get_cached_filter_result(
                     symbol, "volume_profile", use_slow_ttl=True
                 )
@@ -533,7 +520,7 @@ class FilterManager:
                         logger.info(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Volume Profile Filter - BLOCKED (из кэша) | "
                             f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'} | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s, Volume Profile обновляется медленно)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_slow:.0f}s, Volume Profile обновляется медленно)"
                         )
                         return None
                     else:
@@ -543,7 +530,7 @@ class FilterManager:
                         logger.debug(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Volume Profile Filter - PASSED (из кэша) | "
                             f"Цена: ${signal_price:.2f}, Режим: {regime or 'unknown'} | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_slow:.0f}s)"
                         )
                 else:
                     # Кэша нет - вычисляем и сохраняем
@@ -573,7 +560,7 @@ class FilterManager:
                 logger.warning(f"⚠️ Ошибка Volume Profile фильтра для {symbol}: {e}")
 
         # 7. Liquidity Filter (проверка ликвидности)
-        # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш перед расчетом (TTL 60s для тяжелых фильтров)
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш перед расчетом (TTL 30s для тяжелых фильтров)
         liquidity_relax = (
             float(impulse_relax.get("liquidity", 1.0)) if is_impulse else 1.0
         )
@@ -582,7 +569,7 @@ class FilterManager:
                 signal_side_str = signal.get("side", "").upper()
                 signal_type_str = signal.get("type", "unknown")
 
-                # Пытаемся получить из кэша (используем медленный TTL 60s)
+                # Пытаемся получить из кэша (используем медленный TTL 30s)
                 cached_liquidity_result = self._get_cached_filter_result(
                     symbol, "liquidity", use_slow_ttl=True
                 )
@@ -592,7 +579,7 @@ class FilterManager:
                         logger.info(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Liquidity Filter - BLOCKED (из кэша) | "
                             f"Режим: {regime or 'unknown'}, Relax: {liquidity_relax:.2f}x | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s, Liquidity обновляется через API)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_slow:.0f}s, Liquidity обновляется через API)"
                         )
                         return None
                     else:
@@ -602,7 +589,7 @@ class FilterManager:
                         logger.debug(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Liquidity Filter - PASSED (из кэша) | "
                             f"Режим: {regime or 'unknown'}, Relax: {liquidity_relax:.2f}x | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_slow:.0f}s)"
                         )
                 else:
                     # Кэша нет - вычисляем и сохраняем
@@ -636,7 +623,7 @@ class FilterManager:
         # ==================== MARKET FILTERS ====================
 
         # 8. Order Flow Filter (проверка потока ордеров)
-        # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш перед расчетом (TTL 60s для тяжелых фильтров)
+        # ✅ ГРОК ОПТИМИЗАЦИЯ: Проверяем кэш перед расчетом (TTL 30s для тяжелых фильтров)
         order_flow_relax = (
             float(impulse_relax.get("order_flow", 1.0)) if is_impulse else 1.0
         )
@@ -645,7 +632,7 @@ class FilterManager:
                 signal_side_str = signal.get("side", "").upper()
                 signal_type_str = signal.get("type", "unknown")
 
-                # Пытаемся получить из кэша (используем медленный TTL 60s)
+                # Пытаемся получить из кэша (используем медленный TTL 30s)
                 cached_of_result = self._get_cached_filter_result(
                     symbol, "order_flow", use_slow_ttl=True
                 )
@@ -655,7 +642,7 @@ class FilterManager:
                         logger.info(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Order Flow Filter - BLOCKED (из кэша) | "
                             f"Режим: {regime or 'unknown'}, Relax: {order_flow_relax:.2f}x | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s, Order Flow обновляется через API)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_slow:.0f}s, Order Flow обновляется через API)"
                         )
                         return None
                     else:
@@ -665,7 +652,7 @@ class FilterManager:
                         logger.debug(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): Order Flow Filter - PASSED (из кэша) | "
                             f"Режим: {regime or 'unknown'}, Relax: {order_flow_relax:.2f}x | "
-                            f"Источник: FilterManager._get_cached_filter_result() (TTL=60s)"
+                            f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_slow:.0f}s)"
                         )
                 else:
                     # Кэша нет - вычисляем и сохраняем

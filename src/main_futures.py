@@ -87,19 +87,22 @@ async def main():
 
             # Futures уникальные параметры (должны быть в
             # config_futures.yaml)
-            futures_required_keys = {
-                "scalping": "futures scalping config",
-                "margin_mode": "futures margin mode",
-                "leverage": "futures leverage",
-            }
+            # Требуемые параметры берём из scalping (leverage там по факту)
+            scalping_config = getattr(config, "scalping", None)
+            leverage = (
+                getattr(scalping_config, "leverage", None) if scalping_config else None
+            )
+            margin_mode = (
+                getattr(scalping_config, "margin_mode", None)
+                if scalping_config
+                else None
+            )
 
-            config_dict = config.__dict__ if hasattr(config, "__dict__") else {}
-
-            # Проверяем наличие Futures параметров
             missing_futures_keys = []
-            for key in futures_required_keys.keys():
-                if key not in config_dict or getattr(config, key, None) is None:
-                    missing_futures_keys.append(key)
+            if scalping_config is None:
+                missing_futures_keys.append("scalping")
+            if leverage is None:
+                missing_futures_keys.append("scalping.leverage")
 
             if missing_futures_keys:
                 logger.error("❌ BUG #30: Конфигурация NOT для Futures режима!")
@@ -112,10 +115,14 @@ async def main():
                 )
                 logger.info("💡 Используйте файл: config/config_futures.yaml")
                 logger.info(
-                    "💡 Убедитесь что конфиг содержит 'scalping', "
-                    "'margin_mode', 'leverage'"
+                    "💡 Убедитесь что конфиг содержит 'scalping' и 'scalping.leverage'"
                 )
                 return
+
+            if margin_mode is None:
+                logger.warning(
+                    "⚠️ margin_mode не указан в конфиге. Используется режим по умолчанию (isolated)."
+                )
 
             # Проверяем что случайно не загрузился spot конфиг
             spot_detected = False

@@ -55,9 +55,9 @@ class LoggerFactory:
 
         # Удаляем дефолтный handler
         logger.remove()
-        
-        # 🔴 BUG #37 FIX: Patch logger to add correlation ID
-        logger.patch(LoggerFactory._add_correlation_id)
+
+        # 🔴 BUG #37 FIX: Patch logger to add correlation ID (global patcher)
+        logger.configure(patcher=LoggerFactory._add_correlation_id)
 
         # 1. КОНСОЛЬ (INFO+) - для мониторинга в реальном времени
         logger.add(

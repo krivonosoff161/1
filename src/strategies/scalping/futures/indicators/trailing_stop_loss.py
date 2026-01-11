@@ -83,6 +83,9 @@ class TrailingStopLoss:
             taker_fee_rate if taker_fee_rate is not None else trading_fee_rate,
             default=0.0005,
         )
+        logger.info(
+            f"TrailingStopLoss комиссии: maker={self.maker_fee_rate:.5f}, taker={self.taker_fee_rate:.5f}, trading_fee_rate={trading_fee_rate}"
+        )
         # Legacy: если trading_fee_rate передан как ставка "на круг" (>0.03%), делим пополам для стороны
         if (
             maker_fee_rate is None
@@ -93,9 +96,7 @@ class TrailingStopLoss:
             self.maker_fee_rate = self._normalize_fee_rate(
                 trading_fee_rate / 2, default=0.0002
             )
-            self.taker_fee_rate = self._normalize_fee_rate(
-                0.0005, default=0.0005
-            )
+            self.taker_fee_rate = self._normalize_fee_rate(0.0005, default=0.0005)
 
         # Taker по умолчанию не должен быть ниже maker
         if self.taker_fee_rate <= self.maker_fee_rate:
@@ -491,7 +492,7 @@ class TrailingStopLoss:
             f"margin_used={margin_used}, unrealized_pnl={unrealized_pnl}, "
             f"entry={self.entry_price}, side={self.side}"
         )
-        
+
         if self.entry_price == 0:
             return 0.0
 
@@ -514,7 +515,7 @@ class TrailingStopLoss:
                 f"margin={margin_used:.2f}, unrealized_pnl={unrealized_pnl:.2f}, "
                 f"entry={self.entry_price:.2f}, current={current_price:.2f}"
             )
-            
+
             gross_pnl_pct_from_margin = (
                 unrealized_pnl / margin_used
             ) * 100  # От маржи!
@@ -556,7 +557,7 @@ class TrailingStopLoss:
             f"entry={self.entry_price:.2f}, current={current_price:.2f}, "
             f"leverage={self.leverage}x, FALLBACK_PATH=True"
         )
-        
+
         if self.side == "long":
             gross_profit_pct_from_price = (
                 current_price - self.entry_price
@@ -657,7 +658,7 @@ class TrailingStopLoss:
                     f"Не можем рассчитать TSL, пропускаем проверку."
                 )
                 return (False, None)
-        
+
         stop_loss = self.get_stop_loss()
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ и передаем margin/unrealized_pnl для правильного расчета от маржи
         # ✅ НОВОЕ (10.01.2026): Если current_price == entry_price (fallback), не считаем комиссию

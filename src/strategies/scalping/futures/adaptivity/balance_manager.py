@@ -7,30 +7,29 @@ Adaptive Balance Manager для OKX Trading Bot
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 # 🔴 BUG #33 FIX: Bridge logging to loguru
 from loguru import logger as loguru_logger
-# Redirect stdlib logging to loguru
-logging.basicConfig(handlers=[InterceptHandler()], level=logging.DEBUG)
+
 
 class InterceptHandler(logging.Handler):
     """Перенаправляет стандартные логи logging в loguru"""
+
     def emit(self, record):
         # Получаем имя логгера из стандартного logging
-        logger_name = record.name
         level = record.levelno
-        try:
-            frame = logging.currentframe().f_back
-        except:
-            frame = None
-        
+
         # Перенаправляем в loguru
         loguru_logger.log(level, record.getMessage())
 
+
 logger = loguru_logger
+
+# Redirect stdlib logging to loguru
+logging.basicConfig(handlers=[InterceptHandler()], level=logging.DEBUG)
 
 
 class BalanceProfile(Enum):
