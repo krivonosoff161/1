@@ -10,6 +10,9 @@ from typing import Optional
 
 from loguru import logger
 
+# 🔴 BUG #37 FIX: Import correlation ID context
+from .correlation_id_context import CorrelationIdContext
+
 
 class LoggerFactory:
     """
@@ -17,6 +20,17 @@ class LoggerFactory:
 
     Создает и настраивает логгеры для разных компонентов системы.
     """
+
+    @staticmethod
+    def _add_correlation_id(record):
+        """
+        🔴 BUG #37 FIX: Add correlation ID to all log records
+        """
+        correlation_id = CorrelationIdContext.get_correlation_id()
+        if correlation_id:
+            record["extra"]["correlation_id"] = correlation_id
+        else:
+            record["extra"]["correlation_id"] = "N/A"
 
     @staticmethod
     def setup_futures_logging(
@@ -41,6 +55,9 @@ class LoggerFactory:
 
         # Удаляем дефолтный handler
         logger.remove()
+        
+        # 🔴 BUG #37 FIX: Patch logger to add correlation ID
+        logger.patch(LoggerFactory._add_correlation_id)
 
         # 1. КОНСОЛЬ (INFO+) - для мониторинга в реальном времени
         logger.add(
@@ -50,6 +67,7 @@ class LoggerFactory:
                 "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
                 "<level>{level: <8}</level> | "
                 "<cyan>{name}</cyan>:<cyan>{function}</cyan> | "
+                "[<yellow>{extra[correlation_id]}</yellow>] | "
                 "<level>{message}</level>"
             ),
             colorize=True,
@@ -62,6 +80,7 @@ class LoggerFactory:
             format=(
                 "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
                 "{level: <8} | "
+                "[{extra[correlation_id]}] | "  # 🔴 BUG #37 FIX: Add correlation ID
                 "{name}:{function}:{line} | "
                 "{message}"
             ),
@@ -81,6 +100,7 @@ class LoggerFactory:
             format=(
                 "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
                 "{level: <8} | "
+                "[{extra[correlation_id]}] | "  # 🔴 BUG #37 FIX: Add correlation ID
                 "{name}:{function} | "
                 "{message}"
             ),
@@ -96,6 +116,7 @@ class LoggerFactory:
             format=(
                 "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
                 "{level: <8} | "
+                "[{extra[correlation_id]}] | "  # 🔴 BUG #37 FIX: Add correlation ID
                 "{name}:{function}:{line} | "
                 "{message}\n{exception}"
             ),

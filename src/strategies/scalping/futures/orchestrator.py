@@ -5121,11 +5121,30 @@ class FuturesScalpingOrchestrator:
                     # Проверяем, не архивировали ли мы уже вчерашние файлы
                     if last_archive_date != yesterday_str:
                         # Ищем ВСЕ файлы за вчерашний день (с ротацией могут быть _1, _2, _3 и т.д.)
-                        pattern = f"futures_main_{yesterday_str}*.log"
-                        log_files = sorted(log_dir.glob(pattern))
+                        # 🔴 BUG #36 FIX (11.01.2026): Archive ALL log files, not just futures_main
+                        log_patterns = [
+                            f"futures_main_{yesterday_str}*.log",
+                            f"info_{yesterday_str}*.log",
+                            f"errors_{yesterday_str}*.log",
+                        ]
+                        
+                        log_files = []
+                        for pattern in log_patterns:
+                            log_files.extend(sorted(log_dir.glob(pattern)))
+                        
+                        # Also archive structured logs
+                        structured_dir = log_dir / "structured"
+                        if structured_dir.exists():
+                            structured_patterns = [
+                                f"trades_{yesterday_str}*.jsonl",
+                                f"signals_{yesterday_str}*.jsonl",
+                                f"candles_*.jsonl",
+                            ]
+                            for pattern in structured_patterns:
+                                log_files.extend(sorted(structured_dir.glob(pattern)))
 
                         if log_files:
-                            zip_name = f"futures_main_{yesterday_str}.zip"
+                            zip_name = f"futures_logs_{yesterday_str}.zip"
                             zip_path = archive_dir / zip_name
 
                             # Архивируем только если архив еще не существует
@@ -5136,18 +5155,23 @@ class FuturesScalpingOrchestrator:
                                     ) as zipf:
                                         # Добавляем все лог файлы за вчерашний день
                                         for log_file in log_files:
-                                            zipf.write(log_file, log_file.name)
+                                            # Preserve directory structure in archive
+                                            arcname = str(log_file.relative_to(log_dir))
+                                            zipf.write(log_file, arcname)
                                             logger.debug(
-                                                f"   📄 Добавлен в архив: {log_file.name}"
+                                                f"   📄 Добавлен в архив: {arcname}"
                                             )
 
                                         logger.info(
-                                            f"✅ Архивировано {len(log_files)} лог файлов за {yesterday_str}"
+                                            f"✅ Архивировано {len(log_files)} лог файлов за {yesterday_str} (all types)"
                                         )
 
                                         # Ищем соответствующие файлы сделок
                                         trades_json = (
                                             trades_dir / f"trades_{yesterday_str}.json"
+                                        )
+                                        trades_jsonl = (
+                                            trades_dir / f"trades_{yesterday_str}.jsonl"
                                         )
                                         trades_csv = (
                                             trades_dir / f"trades_{yesterday_str}.csv"
@@ -5157,6 +5181,12 @@ class FuturesScalpingOrchestrator:
                                             zipf.write(trades_json, trades_json.name)
                                             logger.debug(
                                                 f"   📄 Добавлен в архив: {trades_json.name}"
+                                            )
+                                        
+                                        if trades_jsonl.exists():
+                                            zipf.write(trades_jsonl, trades_jsonl.name)
+                                            logger.debug(
+                                                f"   📄 Добавлен в архив: {trades_jsonl.name}"
                                             )
 
                                         if trades_csv.exists():

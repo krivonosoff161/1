@@ -17,6 +17,7 @@ sys.path.insert(0, str(project_root))
 
 from src.config import BotConfig
 from src.strategies.scalping.futures.logging.logger_factory import LoggerFactory
+from src.strategies.scalping.futures.logging.correlation_id_context import CorrelationIdContext
 from src.strategies.scalping.futures.orchestrator import \
     FuturesScalpingOrchestrator
 
@@ -30,8 +31,12 @@ from loguru import logger
 async def main():
     """Основная функция запуска Futures бота"""
     orchestrator = None
+    # 🔴 BUG #37 FIX (11.01.2026): Generate and set correlation ID for session tracing
+    session_correlation_id = CorrelationIdContext.generate_id(prefix="session")
+    CorrelationIdContext.set_correlation_id(session_correlation_id)
+    
     try:
-        logger.info("🚀 Запуск Futures торгового бота...")
+        logger.info(f"🚀 Запуск Futures торгового бота... (session={session_correlation_id})")
 
         # Загружаем конфигурацию
         config_path = project_root / "config" / "config_futures.yaml"
