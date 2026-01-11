@@ -622,9 +622,11 @@ class TrailingStopLoss:
         
         stop_loss = self.get_stop_loss()
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ и передаем margin/unrealized_pnl для правильного расчета от маржи
+        # ✅ НОВОЕ (10.01.2026): Если current_price == entry_price (fallback), не считаем комиссию
+        is_fallback_price = (current_price == self.entry_price) and (current_price != 0)
         profit_pct = self.get_profit_pct(
             current_price,
-            include_fees=True,
+            include_fees=not is_fallback_price,  # Не считаем комиссию если это fallback цена
             margin_used=margin_used,
             unrealized_pnl=unrealized_pnl,
         )

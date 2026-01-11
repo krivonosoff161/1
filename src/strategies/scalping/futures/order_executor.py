@@ -1553,10 +1553,23 @@ class FuturesOrderExecutor:
             # Решение: Получаем текущий bid-ask и размещаем цену ВНУТРИ спреда, а не на краях
             try:
                 # Получаем текущий спред (bid-ask)
-                market_data = await self.client.get_market_data(symbol)
+                # ✅ ИСПРАВЛЕНО (10.01.2026): Используем data_registry вместо несуществующего client.get_market_data()
+                market_data = None
+                if self.data_registry:
+                    market_data = await self.data_registry.get_market_data(symbol)
+                
+                if not market_data and self.client:
+                    # Fallback на REST API если DataRegistry недоступен
+                    try:
+                        ticker = await self.client.get_ticker(symbol)
+                        if ticker:
+                            market_data = ticker
+                    except Exception as e:
+                        logger.debug(f"⚠️ order_executor: Fallback на REST API ошибка: {e}")
+                
                 if market_data:
-                    current_bid = float(market_data.get("bid_price", 0))
-                    current_ask = float(market_data.get("ask_price", 0))
+                    current_bid = float(market_data.get("bid_price") or market_data.get("bidPx", 0))
+                    current_ask = float(market_data.get("ask_price") or market_data.get("askPx", 0))
 
                     if current_bid > 0 and current_ask > 0:
                         # Параметры для размещения цены

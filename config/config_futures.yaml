@@ -423,9 +423,9 @@ scalping:
       modules:
         multi_timeframe:
           block_opposite: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Блокировать контр-трендовые SHORT в UP-trending
-          block_neutral: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Блокировать при неопределённом тренде
+          block_neutral: false  # ✅ ИСПРАВЛЕНО (10.01.2026): Разрешить BUY при нейтральном MTF (было: true, блокировало 99% BUY)
           score_bonus: 2  # ✅ ИСПРАВЛЕНО: Увеличен бонус для подтверждённых трендовых сигналов
-          confirmation_timeframe: "5m"  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Изменено с 15m для быстрого реагирования
+          confirmation_timeframe: "15m"  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Изменено с 1m для быстрого реагирования
           fail_open_enabled: false  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Отключить пропуск без подтверждения
           fail_open_blocks: 3
           fail_open_cooldown_seconds: 60
@@ -504,7 +504,7 @@ scalping:
       modules:
         multi_timeframe:
           block_opposite: true
-          block_neutral: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Блокировать при неопределённом тренде
+          block_neutral: false  # ✅ ИСПРАВЛЕНО (10.01.2026): Разрешить BUY при нейтральном MTF (было: true, блокировало 99% BUY)
           score_bonus: 1.5  # ✅ ИСПРАВЛЕНО: Снижено с 2 до 1.5 для ranging (менее агрессивно блокируем counter-trend сделки)
           confirmation_timeframe: "5m"
           fail_open_enabled: false  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Отключить fail-open для строгой фильтрации

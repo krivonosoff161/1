@@ -228,6 +228,42 @@ class ExitAnalyzer:
 
         return None
 
+    async def _fetch_price_via_rest(self, symbol: str) -> Optional[float]:
+        """
+        ✅ НОВОЕ (10.01.2026): REST API fallback для получения цены.
+        
+        Вызывается когда DataRegistry не имеет свежей цены.
+        Используется как 4-й уровень fallback в _analyze_position_impl.
+        
+        Args:
+            symbol: Торговая пара (например "BTC-USDT")
+            
+        Returns:
+            float: Текущая цена или None если получить не удалось
+        """
+        if not self.client:
+            return None
+            
+        try:
+            # OKX REST API метод получения текущей цены
+            ticker = await self.client.get_ticker(symbol)
+            if ticker and isinstance(ticker, dict):
+                price = ticker.get("last") or ticker.get("lastPx")
+                if price:
+                    try:
+                        price_float = float(price)
+                        if price_float > 0:
+                            logger.debug(
+                                f"✅ ExitAnalyzer._fetch_price_via_rest: {symbol} = {price_float:.8f}"
+                            )
+                            return price_float
+                    except (ValueError, TypeError):
+                        pass
+        except Exception as e:
+            logger.debug(f"⚠️ ExitAnalyzer._fetch_price_via_rest: Ошибка для {symbol}: {e}")
+            
+        return None
+
     def set_conversion_metrics(self, conversion_metrics):
         """
         ✅ НОВОЕ (26.12.2025): Установить ConversionMetrics для отслеживания конверсии.
@@ -477,19 +513,38 @@ class ExitAnalyzer:
                     )
 
             # ✅ ИСПРАВЛЕНО: Проверка current_price на None и <= 0
-            if current_price is None:
+            if current_price is None or current_price <= 0:
                 analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
-                logger.warning(
-                    f"⚠️ ExitAnalyzer: current_price is None для {symbol} (за {analysis_time:.2f}ms)"
-                )
-                return None
-
-            if current_price <= 0:
-                analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
-                logger.error(
-                    f"❌ ExitAnalyzer: current_price <= 0 ({current_price}) для {symbol} (за {analysis_time:.2f}ms)"
-                )
-                return None
+                
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): 4-й уровень fallback - REST API
+                # Если DataRegistry пуст, пытаемся получить цену через REST API перед тем как вернуть None
+                if self.client:
+                    try:
+                        logger.warning(
+                            f"⚠️ ExitAnalyzer: current_price is None/0 для {symbol}, "
+                            f"пытаемся получить через REST API (за {analysis_time:.2f}ms)"
+                        )
+                        rest_price = await self._fetch_price_via_rest(symbol)
+                        if rest_price and rest_price > 0:
+                            logger.warning(
+                                f"✅ ExitAnalyzer: REST API fallback успешен для {symbol}: {rest_price:.8f}"
+                            )
+                            current_price = rest_price
+                        else:
+                            logger.error(
+                                f"❌ ExitAnalyzer: REST API fallback вернул None/0 для {symbol}"
+                            )
+                            return None
+                    except Exception as e:
+                        logger.error(
+                            f"❌ ExitAnalyzer: REST API fallback ошибка для {symbol}: {e}"
+                        )
+                        return None
+                else:
+                    logger.error(
+                        f"❌ ExitAnalyzer: current_price is None/0 для {symbol} и нет REST API клиента"
+                    )
+                    return None
 
             # Анализируем в зависимости от режима
             decision = None
