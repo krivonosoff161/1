@@ -917,7 +917,14 @@ class FuturesSignalGenerator:
                     if thresholds_obj:
                         by_regime = getattr(thresholds_obj, "by_regime", None)
                         if by_regime and regime_name_corr:
-                            thresholds_config = getattr(by_regime, regime_name_corr, {})
+                            # 🔴 BUG #6 FIX: Convert to dict first to handle case sensitivity
+                            if isinstance(by_regime, dict):
+                                thresholds_config = by_regime.get(regime_name_corr, {})
+                            else:
+                                by_regime_dict = self._to_dict(by_regime)
+                                thresholds_config = by_regime_dict.get(
+                                    regime_name_corr, {}
+                                )
                         if not thresholds_config:
                             thresholds_config = thresholds_obj  # Fallback на базовые
 
@@ -1476,13 +1483,14 @@ class FuturesSignalGenerator:
                 """Внутренняя функция для генерации сигналов одного символа"""
                 try:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Проверяем наличие свечей перед генерацией сигналов
-                    # Это предотвращает генерацию сигналов до загрузки свечей
+                    # 🔴 BUG #4 FIX (09.01.2026): Снижена граница с 30 до 15 свечей для ранней генерации сигналов
+                    # Это предотвращает генерацию сигналов до загрузки свечей, но не блокирует их 30-45 минут
                     if self.data_registry:
                         candles_1m = await self.data_registry.get_candles(symbol, "1m")
-                        if not candles_1m or len(candles_1m) < 30:
+                        if not candles_1m or len(candles_1m) < 15:
                             logger.debug(
                                 f"⚠️ Недостаточно свечей для {symbol} "
-                                f"(нужно минимум 30, получено {len(candles_1m) if candles_1m else 0}), "
+                                f"(нужно минимум 15, получено {len(candles_1m) if candles_1m else 0}), "
                                 f"пропускаем генерацию сигналов"
                             )
                             return (
@@ -1848,8 +1856,8 @@ class FuturesSignalGenerator:
                     candles_1m = await self.data_registry.get_candles(symbol, "1m")
 
                     if (
-                        candles_1m and len(candles_1m) >= 30
-                    ):  # Минимум 30 свечей для индикаторов
+                        candles_1m and len(candles_1m) >= 15
+                    ):  # 🔴 BUG #4 FIX: Снижена граница с 30 до 15 свечей для ранней генерации сигналов
                         logger.debug(
                             f"📊 Получено {len(candles_1m)} свечей 1m для {symbol} из DataRegistry"
                         )
@@ -1863,11 +1871,17 @@ class FuturesSignalGenerator:
                     else:
                         count = len(candles_1m) if candles_1m else 0
                         if count >= 10:
+                            # 🔴 BUG #4 FIX: Вернуть рано с 10+ свечей вместо ждать 30
                             # Есть базовый минимум — не дергаем REST, подождем накопления
                             logger.debug(
-                                f"⏳ Недостаточно свечей из DataRegistry для {symbol}: {count}/30 — ждём без REST"
+                                f"✅ Достаточно свечей из DataRegistry для {symbol}: {count}/15 (было 30) — начинаем генерацию сигналов"
                             )
-                            return None
+                            # Создаем MarketData с доступными свечами, вместо return None
+                            return MarketData(
+                                symbol=symbol,
+                                timeframe="1m",
+                                ohlcv_data=candles_1m,
+                            )
                         else:
                             logger.info(
                                 f"REST_FALLBACK {symbol} — в буфере {count}/10 свечей, загружаем историю через API"
@@ -2532,18 +2546,18 @@ class FuturesSignalGenerator:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): Заменён жёсткий блок на мягкий fallback
             # Если ADX=0 после всех попыток → генерируем сигналы в degraded режиме (ranging, без ADX-проверок)
             if adx_value <= 0 or adx_for_log <= 0:
-                    logger.warning(
-                        f"⚠️ [ADX] {symbol}: ADX не получен из DataRegistry/fallback "
-                        f"(adx_value={adx_value}, adx_for_log={adx_for_log}, adx_from_registry={adx_from_registry}). "
-                        f"Продолжаем генерацию в degraded режиме: adx_trend=ranging, adx_value=0. "
-                        f"Свечей: {len(candles)}, indicators: {list(indicator_results.keys())}"
-                    )
-                    # Degraded mode: принудительно устанавливаем ranging и ADX=0
-                    adx_trend = "ranging"
-                    adx_value = 0.0
-                    adx_plus_di = 0.0
-                    adx_minus_di = 0.0
-                    # НЕ блокируем генерацию - продолжаем работу
+                logger.warning(
+                    f"⚠️ [ADX] {symbol}: ADX не получен из DataRegistry/fallback "
+                    f"(adx_value={adx_value}, adx_for_log={adx_for_log}, adx_from_registry={adx_from_registry}). "
+                    f"Продолжаем генерацию в degraded режиме: adx_trend=ranging, adx_value=0. "
+                    f"Свечей: {len(candles)}, indicators: {list(indicator_results.keys())}"
+                )
+                # Degraded mode: принудительно устанавливаем ranging и ADX=0
+                adx_trend = "ranging"
+                adx_value = 0.0
+                adx_plus_di = 0.0
+                adx_minus_di = 0.0
+                # НЕ блокируем генерацию - продолжаем работу
 
             # ✅ ИСПРАВЛЕНО: Определяем направление тренда ДО логирования (после fallback)
             if adx_value > 0:
@@ -3692,7 +3706,10 @@ class FuturesSignalGenerator:
                     if isinstance(adaptive_regime, dict):
                         regime_params = adaptive_regime.get(regime_key, {})
                     else:
-                        regime_params = getattr(adaptive_regime, regime_key, None)
+                        # 🔴 BUG #6 FIX: Normalize to dict first, don't use getattr with lowercase
+                        # Pydantic models have uppercase attribute names, dict has lowercase keys
+                        regime_params_dict = self._to_dict(adaptive_regime)
+                        regime_params = regime_params_dict.get(regime_key, {})
 
                     if regime_params:
                         regime_params_dict = self._to_dict(regime_params)
@@ -4128,7 +4145,26 @@ class FuturesSignalGenerator:
             else:
                 confidence_obj = getattr(signal_gen_config_macd, "confidence", None)
                 if confidence_obj and regime_name_macd:
-                    regime_confidence = getattr(confidence_obj, regime_name_macd, None)
+                    # 🔴 BUG #6 FIX: Convert to dict first to handle case sensitivity
+                    if isinstance(confidence_obj, dict):
+                        regime_confidence = confidence_obj.get(regime_name_macd, None)
+                    else:
+                        confidence_obj_dict = self._to_dict(confidence_obj)
+                        regime_confidence_dict = confidence_obj_dict.get(
+                            regime_name_macd, {}
+                        )
+
+                        # Convert dict back to object for getattr access
+                        class _RegimeConfidence:
+                            def __init__(self, d):
+                                for k, v in d.items():
+                                    setattr(self, k, v)
+
+                        regime_confidence = (
+                            _RegimeConfidence(regime_confidence_dict)
+                            if regime_confidence_dict
+                            else None
+                        )
                     if regime_confidence:
                         confidence_config_macd = {
                             "macd_signal": getattr(
@@ -4505,7 +4541,26 @@ class FuturesSignalGenerator:
             else:
                 confidence_obj = getattr(signal_gen_config_bb, "confidence", None)
                 if confidence_obj and regime_name_bb:
-                    regime_confidence = getattr(confidence_obj, regime_name_bb, None)
+                    # 🔴 BUG #6 FIX: Convert to dict first to handle case sensitivity
+                    if isinstance(confidence_obj, dict):
+                        regime_confidence = confidence_obj.get(regime_name_bb, None)
+                    else:
+                        confidence_obj_dict = self._to_dict(confidence_obj)
+                        regime_confidence_dict = confidence_obj_dict.get(
+                            regime_name_bb, {}
+                        )
+
+                        # Convert dict back to object for getattr access
+                        class _RegimeConfidence:
+                            def __init__(self, d):
+                                for k, v in d.items():
+                                    setattr(self, k, v)
+
+                        regime_confidence = (
+                            _RegimeConfidence(regime_confidence_dict)
+                            if regime_confidence_dict
+                            else None
+                        )
                     if regime_confidence:
                         confidence_config_bb = {
                             "rsi_signal": getattr(regime_confidence, "rsi_signal", 0.6),
@@ -4597,7 +4652,9 @@ class FuturesSignalGenerator:
                         if isinstance(adaptive_regime, dict):
                             regime_config = adaptive_regime.get(regime_name_bb, {})
                         else:
-                            regime_config = getattr(adaptive_regime, regime_name_bb, {})
+                            # 🔴 BUG #6 FIX: Convert to dict first to handle case sensitivity
+                            adaptive_regime_dict = self._to_dict(adaptive_regime)
+                            regime_config = adaptive_regime_dict.get(regime_name_bb, {})
 
                         if isinstance(regime_config, dict):
                             strength_multipliers = regime_config.get(
@@ -4636,8 +4693,8 @@ class FuturesSignalGenerator:
                     )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Снижен порог ADX с 25 до 20 + блокировка конфликта EMA
-                # Блокируем BUY сигналы при сильном нисходящем тренде (ADX>=20) ИЛИ при конфликте EMA
-                # ✅ КРИТИЧЕСКОЕ: Блокируем при конфликте EMA (BB oversold + EMA bearish) вместо снижения strength
+                # 🔴 BUG #5 FIX (09.01.2026): BB oversold не блокируется при ADX<25 bearish, только ослабляется
+                # Блокируем BUY сигналы ТОЛЬКО при очень сильном нисходящем тренде (ADX>=25, не 20!)
                 should_block_bb_oversold = False
                 block_reason_bb_oversold = ""
 
@@ -4648,9 +4705,11 @@ class FuturesSignalGenerator:
                         f"⚡ BB OVERSOLD для {symbol}: конфликт EMA, ослабляем strength до {base_strength:.3f}"
                     )
 
-                if adx_value >= 20.0 and adx_trend == "bearish":
+                if adx_value >= 25.0 and adx_trend == "bearish" and not is_downtrend:
+                    # 🔴 BUG #5 FIX: Только блокируем если ADX ОЧЕНЬ высокий (>=25) И нет EMA поддержки
+                    # Если EMA показывает конфликт (is_downtrend=True), сигнал уже ослаблен выше
                     should_block_bb_oversold = True
-                    block_reason_bb_oversold = f"ADX={adx_value:.1f} >= 20 показывает нисходящий тренд (против тренда)"
+                    block_reason_bb_oversold = f"ADX={adx_value:.1f} >= 25 показывает сильный нисходящий тренд (против тренда)"
 
                 if should_block_bb_oversold:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование конфликта с указанием всех параметров
@@ -4719,7 +4778,9 @@ class FuturesSignalGenerator:
                         if isinstance(adaptive_regime, dict):
                             regime_config = adaptive_regime.get(regime_name_bb, {})
                         else:
-                            regime_config = getattr(adaptive_regime, regime_name_bb, {})
+                            # 🔴 BUG #6 FIX: Convert to dict first to handle case sensitivity
+                            adaptive_regime_dict = self._to_dict(adaptive_regime)
+                            regime_config = adaptive_regime_dict.get(regime_name_bb, {})
 
                         if isinstance(regime_config, dict):
                             strength_multipliers = regime_config.get(
@@ -4758,19 +4819,24 @@ class FuturesSignalGenerator:
                     )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Снижен порог ADX с 25 до 20 + блокировка конфликта EMA
-                # Блокируем SELL сигналы при сильном восходящем тренде (ADX>=20) ИЛИ при конфликте EMA
-                # ✅ КРИТИЧЕСКОЕ: Блокируем при конфликте EMA (BB overbought + EMA bullish) вместо снижения strength
+                # 🔴 BUG #5 FIX (09.01.2026): BB overbought ослабляется (не блокируется) при EMA конфликте
+                # Блокируем SELL сигналы ТОЛЬКО при очень сильном восходящем тренде (ADX>=25, не 20!)
                 should_block_bb_overbought = False
                 block_reason_bb_overbought = ""
 
                 if is_uptrend:
-                    # Конфликт: BB overbought (SHORT) vs EMA bullish (UP) - ПОЛНАЯ БЛОКИРОВКА
-                    should_block_bb_overbought = True
-                    block_reason_bb_overbought = f"конфликт EMA (EMA_12={ema_fast:.2f} > EMA_26={ema_slow:.2f}, цена={current_price:.2f})"
+                    # 🔴 BUG #5 FIX: Конфликт EMA - ослабляем strength вместо полной блокировки
+                    base_strength *= conflict_multiplier
+                    logger.debug(
+                        f"⚡ BB OVERBOUGHT для {symbol}: конфликт EMA, ослабляем strength до {base_strength:.3f}"
+                    )
+                    block_reason_bb_overbought = ""  # Не блокируем, только ослабляем
 
-                if adx_value >= 20.0 and adx_trend == "bullish":
+                if adx_value >= 25.0 and adx_trend == "bullish" and not is_uptrend:
+                    # 🔴 BUG #5 FIX: Только блокируем если ADX ОЧЕНЬ высокий (>=25) И нет EMA поддержки
+                    # Если EMA показывает конфликт (is_uptrend=True), сигнал уже ослаблен выше
                     should_block_bb_overbought = True
-                    block_reason_bb_overbought = f"ADX={adx_value:.1f} >= 20 показывает восходящий тренд (против тренда)"
+                    block_reason_bb_overbought = f"ADX={adx_value:.1f} >= 25 показывает сильный восходящий тренд (против тренда)"
 
                 if should_block_bb_overbought:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование конфликта с указанием всех параметров
@@ -5485,7 +5551,26 @@ class FuturesSignalGenerator:
             else:
                 confidence_obj = getattr(signal_gen_config_ma, "confidence", None)
                 if confidence_obj and regime_name_ma:
-                    regime_confidence = getattr(confidence_obj, regime_name_ma, None)
+                    # 🔴 BUG #6 FIX: Convert to dict first to handle case sensitivity
+                    if isinstance(confidence_obj, dict):
+                        regime_confidence = confidence_obj.get(regime_name_ma, None)
+                    else:
+                        confidence_obj_dict = self._to_dict(confidence_obj)
+                        regime_confidence_dict = confidence_obj_dict.get(
+                            regime_name_ma, {}
+                        )
+
+                        # Convert dict back to object for getattr access
+                        class _RegimeConfidence:
+                            def __init__(self, d):
+                                for k, v in d.items():
+                                    setattr(self, k, v)
+
+                        regime_confidence = (
+                            _RegimeConfidence(regime_confidence_dict)
+                            if regime_confidence_dict
+                            else None
+                        )
                     if regime_confidence:
                         confidence_config = {
                             "bullish_strong": getattr(
