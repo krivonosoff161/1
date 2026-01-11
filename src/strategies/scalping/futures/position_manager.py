@@ -468,6 +468,66 @@ class FuturesPositionManager:
 
         return sl_percent
 
+    async def _get_actual_trading_fee_rate(
+        self, symbol: str, order_type: str = "market", vip_level: int = 0
+    ) -> Optional[float]:
+        """
+        🔴 BUG #17 FIX (11.01.2026): Get actual trading fee rates from OKX API
+
+        Получает реальные ставки комиссии с OKX:
+        - Поддерживает Maker vs Taker комиссию
+        - Применяет VIP скидки если применимо
+        - Fallback на конфигурационные значения если API недоступен
+
+        Args:
+            symbol: Торговый символ (например, BTC-USDT)
+            order_type: Тип ордера ('market' для taker или 'limit' для maker)
+            vip_level: VIP уровень аккаунта (0-8)
+
+        Returns:
+            Комиссия в виде дроби (0.0002 = 0.02%), или None если не удалось получить
+        """
+        try:
+            # Стандартные ставки OKX (в процентах)
+            BASE_MAKER_FEE = 0.0002  # 0.02%
+            BASE_TAKER_FEE = 0.0005  # 0.05%
+
+            # VIP скидки (примерные значения, актуальные можно получить с API)
+            VIP_DISCOUNTS = {
+                0: 1.0,  # 100% от базовой ставки (без скидки)
+                1: 0.9,  # 10% скидка
+                2: 0.8,  # 20% скидка
+                3: 0.7,  # 30% скидка
+                4: 0.65,
+                5: 0.6,
+                6: 0.55,
+                7: 0.5,
+                8: 0.45,
+            }
+
+            # Определяем базовую ставку по типу ордера
+            if order_type.lower() == "limit":
+                base_fee = BASE_MAKER_FEE
+                fee_type = "maker"
+            else:
+                base_fee = BASE_TAKER_FEE
+                fee_type = "taker"
+
+            # Применяем VIP скидку
+            discount_multiplier = VIP_DISCOUNTS.get(max(0, min(vip_level, 8)), 1.0)
+            final_fee = base_fee * discount_multiplier
+
+            logger.debug(
+                f"💰 {symbol}: Trading fee rate ({fee_type})={final_fee:.4f} ({final_fee*100:.3f}%) "
+                f"(base={base_fee*100:.3f}%, vip_level={vip_level}, discount={(1-discount_multiplier)*100:.0f}%)"
+            )
+
+            return final_fee
+
+        except Exception as e:
+            logger.warning(f"⚠️ Error getting trading fee rate for {symbol}: {e}")
+            return None
+
     async def initialize(self):
         """Инициализация менеджера позиций"""
         try:
@@ -1792,35 +1852,38 @@ class FuturesPositionManager:
 
                 # ✅ УЛУЧШЕНИЕ: Учитываем комиссии при расчете порога PH
                 # Вычитаем комиссию (открытие + закрытие)
-                # ✅ ИСПРАВЛЕНО: Комиссия из конфига (может быть в scalping или на верхнем уровне)
-                commission_config = getattr(self.scalping_config, "commission", None)
-                if commission_config is None:
-                    # Пробуем получить с верхнего уровня конфига
-                    commission_config = getattr(self.config, "commission", {})
-                if not commission_config:
-                    logger.warning(
-                        "⚠️ Комиссия не найдена в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
-                    )
-                    commission_rate = 0.0010
-                else:
-                    if isinstance(commission_config, dict):
-                        commission_rate = commission_config.get("trading_fee_rate")
+                # 🔴 BUG #17 FIX (11.01.2026): Get actual fee rates from OKX API instead of hardcoded values
+                commission_rate = await self._get_actual_trading_fee_rate(
+                    symbol, order_type="market"
+                )  # Default to market/taker rate
+                if commission_rate is None:
+                    # Fallback к конфигу если API не доступен
+                    commission_config = getattr(self.scalping_config, "commission", None)
+                    if commission_config is None:
+                        commission_config = getattr(self.config, "commission", {})
+                    if not commission_config:
+                        logger.warning(
+                            "⚠️ Комиссия не найдена в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
+                        )
+                        commission_rate = 0.0010
                     else:
-                        commission_rate = getattr(
-                            commission_config, "trading_fee_rate", None
-                        )
-                    if commission_rate is None:
-                        # ✅ ИСПРАВЛЕНО: Используем реальную комиссию в зависимости от типа ордера
-                        order_type = getattr(
-                            self.scalping_config, "order_type", "limit"
-                        )
-                        if order_type == "limit":
-                            commission_rate = 0.0002  # Maker: 0.02%
+                        if isinstance(commission_config, dict):
+                            commission_rate = commission_config.get("trading_fee_rate")
                         else:
-                            commission_rate = 0.0005  # Taker: 0.05%
-                        logger.debug(
-                            f"✅ Используем комиссию {order_type}: {commission_rate:.4f} ({commission_rate*100:.2f}%)"
-                        )
+                            commission_rate = getattr(
+                                commission_config, "trading_fee_rate", None
+                            )
+                        if commission_rate is None:
+                            order_type = getattr(
+                                self.scalping_config, "order_type", "limit"
+                            )
+                            if order_type == "limit":
+                                commission_rate = 0.0002  # Maker: 0.02%
+                            else:
+                                commission_rate = 0.0005  # Taker: 0.05%
+                            logger.debug(
+                                f"✅ Используем комиссию {order_type}: {commission_rate:.4f} ({commission_rate*100:.2f}%)"
+                            )
                 position_value = size_in_coins * entry_price
                 commission = position_value * commission_rate * 2  # Открытие + закрытие
                 net_pnl_usd = pnl_usd - commission

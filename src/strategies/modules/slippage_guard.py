@@ -604,6 +604,75 @@ class SlippageGuard:
             f"spread={self.max_spread_percent:.3f}%, timeout={self.order_timeout}с"
         )
 
+    def calculate_dynamic_slippage(
+        self,
+        order_size: float,
+        bid_price: float,
+        ask_price: float,
+        symbol: str = "",
+        bid_depth: Optional[float] = None,
+        ask_depth: Optional[float] = None,
+    ) -> float:
+        """
+        🔴 BUG #16 FIX (11.01.2026): Calculate slippage dynamically based on order size and liquidity
+
+        Рассчитывает проскальзывание на основе:
+        - Размера ордера
+        - Доступной ликвидности на разных уровнях стакана
+        - Спреда bid-ask
+
+        Args:
+            order_size: Размер ордера в контрактах/монетах
+            bid_price: Цена bid
+            ask_price: Цена ask
+            symbol: Символ (для логирования)
+            bid_depth: Глубина ликвидности на bid (если доступна)
+            ask_depth: Глубина ликвидности на ask (если доступна)
+
+        Returns:
+            Рассчитанное проскальзывание в процентах
+        """
+        try:
+            if bid_price <= 0 or ask_price <= 0 or order_size <= 0:
+                return self.max_slippage_percent  # Fallback к максимуму если данные плохие
+
+            mid_price = (bid_price + ask_price) / 2.0
+            spread = ask_price - bid_price
+            spread_pct = (spread / mid_price) * 100
+
+            # Базовое проскальзывание = половина спреда
+            base_slippage = spread_pct / 2.0
+
+            # Если есть информация о глубине, добавляем фактор проскальзывания
+            if bid_depth and ask_depth and bid_depth > 0:
+                # Проскальзывание от размера ордера:
+                # Если ордер больше чем доступная ликвидность, цена движется дальше
+                liquidity_ratio = min(order_size / bid_depth, 1.0) if bid_depth > 0 else 0.5
+                liquidity_slippage = liquidity_ratio * spread_pct * 0.5  # 50% спреда за проскальзывание
+
+                total_slippage = base_slippage + liquidity_slippage
+            else:
+                # Без информации о глубине: базовое + 20% от спреда
+                total_slippage = base_slippage + (spread_pct * 0.2)
+
+            # Ограничиваем максимальным проскальзыванием
+            final_slippage = min(total_slippage, self.max_slippage_percent)
+
+            logger.debug(
+                f"💱 {symbol}: Calculated slippage={final_slippage:.3f}% "
+                f"(base={base_slippage:.3f}%, spread={spread_pct:.4f}%, size={order_size})"
+            )
+
+            return final_slippage
+
+        except Exception as e:
+            logger.error(
+                f"❌ Error calculating dynamic slippage for {symbol}: {e}", exc_info=True
+            )
+            return self.max_slippage_percent
+
+
+
 
 # Пример использования
 if __name__ == "__main__":
