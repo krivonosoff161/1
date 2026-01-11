@@ -15,11 +15,16 @@ project_root = Path(
 ).parent.parent  # Переходим на уровень выше (из src в корень)
 sys.path.insert(0, str(project_root))
 
-from loguru import logger
-
 from src.config import BotConfig
+from src.strategies.scalping.futures.logging.logger_factory import LoggerFactory
 from src.strategies.scalping.futures.orchestrator import \
     FuturesScalpingOrchestrator
+
+# 🔴 BUG #31 FIX (11.01.2026): Single logging setup via LoggerFactory
+LoggerFactory.setup_futures_logging(log_dir="logs/futures", log_level="DEBUG")
+
+# Import logger AFTER LoggerFactory setup
+from loguru import logger
 
 
 async def main():
@@ -115,32 +120,8 @@ async def main():
 
 
 if __name__ == "__main__":
-    # Настройка логирования
-    logger.remove()
-
-    # ✅ КОНСОЛЬ: только INFO и выше (чтобы не засорять экран)
-    logger.add(
-        sys.stdout,
-        level="INFO",
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    )
-
-    # ✅ ФАЙЛ: ВСЕ логи (DEBUG+) с ротацией по размеру (5 MB)
-    # Создаем директорию для логов, если её нет
-    log_dir = Path("logs/futures")
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    logger.add(
-        str(log_dir / "futures_main_{time:YYYY-MM-DD}.log"),  # Имя файла с датой
-        level="DEBUG",  # ✅ ВСЕ уровни логирования
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        rotation="5 MB",  # ✅ Ротация при достижении 5 MB - создает новый файл (futures_main_YYYY-MM-DD_1.log, _2.log и т.д.)
-        retention="7 days",  # ✅ Храним 7 дней
-        # ✅ УБРАНО compression="zip" - при ротации создаются обычные файлы, архивация в ZIP происходит один раз в сутки в 00:05 UTC
-        encoding="utf-8",
-        backtrace=True,  # Полный backtrace при ошибках
-        diagnose=True,  # Дополнительная диагностика
-    )
-
+    # ✅ Логирование уже настроено в LoggerFactory (L19)
+    # 🔴 BUG #31 FIX: Removed duplicate logging setup - was causing double logger initialization
+    
     # Запуск
     asyncio.run(main())

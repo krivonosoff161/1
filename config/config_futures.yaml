@@ -1939,8 +1939,10 @@ futures_modules:
 
   # Max Size Limiter
   max_size_limiter:
-    max_single_size_usd: 150.0  # ✅ ОПТИМИЗИРОВАНО: Максимальный размер одной позиции ($150, было $1000) - соответствует max_position_usd
-    max_total_size_usd: 600.0  # ✅ ОПТИМИЗИРОВАНО: Максимальный общий размер позиций ($600 = 5 × $120, было $5000) - для баланса 800-900 USD
+    # 🔴 BUG #23 FIX (11.01.2026): Changed from hardcoded $ to % of equity
+    # Now configured as: max_single = 20% of balance, max_total = 80% of balance
+    max_single_size_percent: 0.20  # 20% of account balance per position
+    max_total_size_percent: 0.80   # 80% of account balance total
     max_positions: 5  # Максимальное количество позиций (по одной на символ)
     size_step_btc: 0.001  # Шаг размера для BTC (0.001 BTC)
     size_step_eth: 0.01  # Шаг размера для ETH (0.01 ETH)

@@ -603,28 +603,36 @@ class FuturesScalpingOrchestrator:
             max_size_limiter_config = getattr(futures_modules, "max_size_limiter", None)
 
         if max_size_limiter_config:
-            max_single_size_usd = getattr(
-                max_size_limiter_config, "max_single_size_usd", 150.0
+            # 🔴 BUG #23 FIX: Read % of equity instead of hardcoded $
+            max_single_size_percent = getattr(
+                max_size_limiter_config, "max_single_size_percent", 0.20
             )
-            max_total_size_usd = getattr(
-                max_size_limiter_config, "max_total_size_usd", 600.0
+            max_total_size_percent = getattr(
+                max_size_limiter_config, "max_total_size_percent", 0.80
             )
             max_positions = getattr(max_size_limiter_config, "max_positions", 5)
+            
+            # Default to fallback balance, will be updated dynamically during trading
+            default_balance = 1000.0
+            max_single_size_usd = default_balance * max_single_size_percent
+            max_total_size_usd = default_balance * max_total_size_percent
+            
             logger.info(
-                f"✅ MaxSizeLimiter инициализирован из конфига: "
-                f"max_single=${max_single_size_usd:.2f}, "
-                f"max_total=${max_total_size_usd:.2f}, "
+                f"✅ MaxSizeLimiter инициализирован из конфига (% of balance): "
+                f"max_single={max_single_size_percent:.1%} (${max_single_size_usd:.2f}), "
+                f"max_total={max_total_size_percent:.1%} (${max_total_size_usd:.2f}), "
                 f"max_positions={max_positions}"
             )
         else:
             # Fallback значения (для обратной совместимости)
-            max_single_size_usd = 150.0
-            max_total_size_usd = 600.0
+            default_balance = 1000.0
+            max_single_size_usd = default_balance * 0.20
+            max_total_size_usd = default_balance * 0.80
             max_positions = 5
             logger.warning(
-                f"⚠️ MaxSizeLimiter config не найден в конфиге, используем fallback значения: "
-                f"max_single=${max_single_size_usd:.2f}, "
-                f"max_total=${max_total_size_usd:.2f}, "
+                f"⚠️ MaxSizeLimiter config не найден в конфиге, используем fallback значения (% of balance): "
+                f"max_single=20% (${max_single_size_usd:.2f}), "
+                f"max_total=80% (${max_total_size_usd:.2f}), "
                 f"max_positions={max_positions}"
             )
 

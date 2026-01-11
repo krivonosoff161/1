@@ -41,6 +41,11 @@ class AdaptiveLeverage:
         # Минимальный и максимальный леверидж
         self.min_leverage = 3
         self.max_leverage = 30
+        
+        # 🔴 BUG #24 FIX: Leverage limits as % of equity, not hardcoded $
+        # These will be used to calculate margin thresholds dynamically
+        self.position_size_limit_1_percent = 0.10  # 10% of equity
+        self.position_size_limit_2_percent = 0.05  # 5% of equity
 
     async def calculate_leverage(
         self,
@@ -118,30 +123,39 @@ class AdaptiveLeverage:
                 leverage = min(leverage, 10)  # Максимум 10x для ranging
 
             # ✅ КРИТИЧНОЕ ИСПРАВЛЕНИЕ (25.12.2025): Ограничение плеча по размеру позиции
+            # 🔴 BUG #24 FIX: Use % of equity instead of hardcoded $ values
             # ВАЖНО: position_size_usd может быть как margin, так и notional
             # Если это margin, то notional = margin * leverage (будет пересчитано в signal_coordinator)
             # Если это notional, то используем напрямую
             # Для безопасности считаем, что это margin, и применяем более строгие ограничения
-            if position_size_usd is not None and position_size_usd > 0:
-                # ✅ УЛУЧШЕНО: Более строгие ограничения для защиты от ADL
-                # Для позиций с margin > $100 (notional > $1000 при 10x) снижаем плечо
-                if position_size_usd > 100:
-                    leverage = min(
-                        leverage, 10
-                    )  # Максимум 10x для позиций с margin > $100
-                    logger.info(
-                        f"🔒 [LEVERAGE_LIMIT] {signal.get('symbol', 'N/A')}: Margin ${position_size_usd:.2f} > $100, "
-                        f"ограничение плеча до 10x (было {leverage}x) для защиты от ADL"
-                    )
-                elif position_size_usd > 50:
-                    leverage = min(
-                        leverage, 15
-                    )  # Максимум 15x для позиций с margin > $50
-                    logger.info(
-                        f"🔒 [LEVERAGE_LIMIT] {signal.get('symbol', 'N/A')}: Margin ${position_size_usd:.2f} > $50, "
-                        f"ограничение плеча до 15x (было {leverage}x)"
-                    )
-                # Позиции с margin <= $50 могут использовать до 20x (уже ограничено max_leverage и ranging)
+            if position_size_usd is not None and position_size_usd > 0 and client:
+                try:
+                    # Get current balance to calculate thresholds as % of equity
+                    current_balance = await client.get_balance() if hasattr(client, 'get_balance') else None
+                    if current_balance and current_balance > 0:
+                        # Calculate margin limits as % of equity
+                        limit_high = current_balance * self.position_size_limit_1_percent  # 10%
+                        limit_medium = current_balance * self.position_size_limit_2_percent  # 5%
+                        
+                        if position_size_usd > limit_high:
+                            leverage = min(leverage, 10)
+                            logger.info(
+                                f"🔒 [LEVERAGE_LIMIT] {signal.get('symbol', 'N/A')}: Margin ${position_size_usd:.2f} > ${limit_high:.2f} (10% of equity), "
+                                f"ограничение плеча до 10x для защиты от ADL"
+                            )
+                        elif position_size_usd > limit_medium:
+                            leverage = min(leverage, 15)
+                            logger.info(
+                                f"🔒 [LEVERAGE_LIMIT] {signal.get('symbol', 'N/A')}: Margin ${position_size_usd:.2f} > ${limit_medium:.2f} (5% of equity), "
+                                f"ограничение плеча до 15x"
+                            )
+                except Exception as e:
+                    logger.debug(f"⚠️ [LEVERAGE_LIMIT] Error calculating equity-based limits: {e}")
+                    # Fallback to old hardcoded values for backward compatibility
+                    if position_size_usd > 100:
+                        leverage = min(leverage, 10)
+                    elif position_size_usd > 50:
+                        leverage = min(leverage, 15)
 
             # Ограничиваем минимальным и максимальным значением
             leverage = max(self.min_leverage, min(self.max_leverage, leverage))

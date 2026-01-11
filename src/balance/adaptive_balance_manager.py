@@ -11,7 +11,16 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+# 🔴 BUG #33 FIX: Bridge logging to loguru
+from loguru import logger as loguru_logger
+logging.basicConfig(handlers=[InterceptHandler()], level=logging.DEBUG)
+
+class InterceptHandler(logging.Handler):
+    """Перенаправляет стандартные логи logging в loguru"""
+    def emit(self, record):
+        loguru_logger.log(record.levelno, record.getMessage())
+
+logger = loguru_logger
 
 
 class BalanceProfile(Enum):

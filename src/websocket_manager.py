@@ -15,7 +15,16 @@ from typing import Any, Callable, Dict, List, Optional
 import websockets
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
-logger = logging.getLogger(__name__)
+# 🔴 BUG #33 FIX: Bridge logging to loguru
+from loguru import logger as loguru_logger
+logging.basicConfig(handlers=[InterceptHandler()], level=logging.DEBUG)
+
+class InterceptHandler(logging.Handler):
+    """Перенаправляет стандартные логи logging в loguru"""
+    def emit(self, record):
+        loguru_logger.log(record.levelno, record.getMessage())
+
+logger = loguru_logger
 
 
 @dataclass

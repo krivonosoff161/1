@@ -387,9 +387,9 @@ class FuturesOrderExecutor:
 
                         if md_ts:
                             md_age_sec = time.time() - md_ts
-                            if md_age_sec is not None and md_age_sec > 0.5:
+                            if md_age_sec is not None and md_age_sec > 1.0:
                                 logger.warning(
-                                    f"⚠️ DataRegistry price for {symbol} устарела на {md_age_sec:.3f}s (>0.5s)"
+                                    f"⚠️ DataRegistry price for {symbol} устарела на {md_age_sec:.3f}s (>1.0s)  🔴 BUG #5 FIX"
                                 )
                 except Exception as e:
                     logger.debug(
@@ -828,14 +828,14 @@ class FuturesOrderExecutor:
             try:
                 pl_ts = price_limits.get("timestamp", 0) if price_limits else 0
                 pl_age = (time.time() - pl_ts) if pl_ts else None
-                if md_age_sec is not None and md_age_sec > 0.5:
+                if md_age_sec is not None and md_age_sec > 1.0:  # 🔴 BUG #5 FIX: 0.5 → 1.0
                     logger.error(
                         f"❌ Отклоняем размещение ордера по {symbol}: нет свежей WS-цены (DataRegistry {md_age_sec:.3f}s)"
                     )
                     raise ValueError("Stale price data: websocket is old")
 
-                # Дополнительный контроль: если price_limits тоже старые (>0.5s)
-                if pl_age is not None and pl_age > 0.5:
+                # Дополнительный контроль: если price_limits тоже старые (>1.0s)  🔴 BUG #5 FIX
+                if pl_age is not None and pl_age > 1.0:  # 🔴 BUG #5 FIX: 0.5 → 1.0
                     logger.error(
                         f"❌ Отклоняем размещение ордера по {symbol}: нет свежей price_limits ({pl_age:.3f}s)"
                     )
@@ -1469,7 +1469,7 @@ class FuturesOrderExecutor:
                 post_only = limit_order_config.get("post_only", True)
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Проверка свежести цены перед POST_ONLY
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Отключение POST_ONLY при высокой волатильности (>0.5%)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Отключение POST_ONLY при высокой волатильности (>0.8-1%)  🔴 BUG #6 FIX
             price_limits = None  # Инициализируем для использования ниже
             if post_only:
                 # Проверяем свежесть цены
@@ -1492,7 +1492,7 @@ class FuturesOrderExecutor:
                             price_diff_pct = (
                                 abs(price - current_price) / current_price * 100.0
                             )
-                            if price_diff_pct > 0.5:  # Расхождение > 0.5%
+                            if price_diff_pct > 0.8:  # 🔴 BUG #6 FIX: 0.5% → 0.8% (more lenient)
                                 logger.warning(
                                     f"⚠️ Лимитная цена {price:.2f} отличается от текущей {current_price:.2f} "
                                     f"на {price_diff_pct:.2f}%, отключаем POST_ONLY"

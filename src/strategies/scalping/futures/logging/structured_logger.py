@@ -46,6 +46,7 @@ class StructuredLogger:
     ) -> None:
         """
         Логировать сделку.
+        🔴 BUG #34 FIX (11.01.2026): Changed from JSON array to JSONL (append-only) format
 
         Args:
             symbol: Торговый символ
@@ -78,25 +79,13 @@ class StructuredLogger:
                 "regime": regime,
             }
 
-            # Сохраняем в файл
+            # 🔴 BUG #34 FIX: Use JSONL (append-only) format instead of reading entire file
             date_str = datetime.now().strftime("%Y-%m-%d")
-            filepath = self.log_dir / f"trades_{date_str}.json"
+            filepath = self.log_dir / f"trades_{date_str}.jsonl"
 
-            # Читаем существующие записи
-            trades = []
-            if filepath.exists():
-                try:
-                    with open(filepath, "r", encoding="utf-8") as f:
-                        trades = json.load(f)
-                except:
-                    trades = []
-
-            # Добавляем новую запись
-            trades.append(log_entry)
-
-            # Сохраняем обратно
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(trades, f, indent=2, ensure_ascii=False)
+            # Append single JSON line instead of rewriting entire file
+            with open(filepath, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
             logger.debug(f"✅ StructuredLogger: Сделка {symbol} сохранена в {filepath}")
 
@@ -117,6 +106,7 @@ class StructuredLogger:
     ) -> None:
         """
         Логировать сигнал.
+        🔴 BUG #34 FIX: Using JSONL (append-only) format
 
         Args:
             symbol: Торговый символ
@@ -139,20 +129,10 @@ class StructuredLogger:
             }
 
             date_str = datetime.now().strftime("%Y-%m-%d")
-            filepath = self.log_dir / f"signals_{date_str}.json"
+            filepath = self.log_dir / f"signals_{date_str}.jsonl"
 
-            signals = []
-            if filepath.exists():
-                try:
-                    with open(filepath, "r", encoding="utf-8") as f:
-                        signals = json.load(f)
-                except:
-                    signals = []
-
-            signals.append(log_entry)
-
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(signals, f, indent=2, ensure_ascii=False)
+            with open(filepath, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
             logger.debug(f"✅ StructuredLogger: Сигнал {symbol} сохранен в {filepath}")
 
@@ -172,6 +152,7 @@ class StructuredLogger:
     ) -> None:
         """
         Логировать инициализацию буфера свечей.
+        🔴 BUG #34 FIX: Using JSONL (append-only)
 
         Args:
             symbol: Торговый символ
@@ -192,20 +173,10 @@ class StructuredLogger:
             }
 
             date_str = datetime.now().strftime("%Y-%m-%d")
-            filepath = self.log_dir / f"candles_init_{date_str}.json"
+            filepath = self.log_dir / f"candles_init_{date_str}.jsonl"
 
-            entries = []
-            if filepath.exists():
-                try:
-                    with open(filepath, "r", encoding="utf-8") as f:
-                        entries = json.load(f)
-                except:
-                    entries = []
-
-            entries.append(log_entry)
-
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(entries, f, indent=2, ensure_ascii=False)
+            with open(filepath, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
             logger.debug(
                 f"✅ StructuredLogger: Инициализация свечей {symbol} {timeframe} сохранена"
