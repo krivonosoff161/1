@@ -5,7 +5,6 @@
 """
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -15,17 +14,19 @@ project_root = Path(
 ).parent.parent  # Переходим на уровень выше (из src в корень)
 sys.path.insert(0, str(project_root))
 
-from src.config import BotConfig
-from src.strategies.scalping.futures.logging.logger_factory import LoggerFactory
-from src.strategies.scalping.futures.logging.correlation_id_context import CorrelationIdContext
+from src.config import BotConfig  # noqa: E402
+from src.strategies.scalping.futures.logging.correlation_id_context import \
+    CorrelationIdContext  # noqa: E402
+from src.strategies.scalping.futures.logging.logger_factory import \
+    LoggerFactory  # noqa: E402
 from src.strategies.scalping.futures.orchestrator import \
-    FuturesScalpingOrchestrator
+    FuturesScalpingOrchestrator  # noqa: E402
 
 # 🔴 BUG #31 FIX (11.01.2026): Single logging setup via LoggerFactory
 LoggerFactory.setup_futures_logging(log_dir="logs/futures", log_level="DEBUG")
 
 # Import logger AFTER LoggerFactory setup
-from loguru import logger
+from loguru import logger  # noqa: E402
 
 
 async def main():
@@ -34,9 +35,11 @@ async def main():
     # 🔴 BUG #37 FIX (11.01.2026): Generate and set correlation ID for session tracing
     session_correlation_id = CorrelationIdContext.generate_id(prefix="session")
     CorrelationIdContext.set_correlation_id(session_correlation_id)
-    
+
     try:
-        logger.info(f"🚀 Запуск Futures торгового бота... (session={session_correlation_id})")
+        logger.info(
+            f"🚀 Запуск Futures торгового бота... (session={session_correlation_id})"
+        )
 
         # Загружаем конфигурацию
         config_path = project_root / "config" / "config_futures.yaml"
@@ -53,22 +56,94 @@ async def main():
                 )
                 return
 
-        # 🔴 BUG #26 FIX: Явная валидация что Futures режим использует config_futures.yaml
+        # 🔴 BUG #26 FIX: Явная валидация что Futures режим использует
+        # config_futures.yaml
         if "config_futures.yaml" not in str(config_path):
             logger.error(
-                "❌ КРИТИЧЕСКАЯ ОШИБКА: Futures режим должен использовать config_futures.yaml"
+                "❌ КРИТИЧЕСКАЯ ОШИБКА: Futures режим должен использовать "
+                "config_futures.yaml"
             )
             logger.error(f"   Загруженный путь: {config_path}")
-            logger.info(
-                "💡 Используйте явно: python -m src.main_futures"
-            )
+            logger.info("💡 Используйте явно: python -m src.main_futures")
             return
 
         logger.info(f"✓ Конфиг: {config_path}")
-        logger.info(f"✓ Режим: Futures (с левериджем)")
+        logger.info("✓ Режим: Futures (с левериджем)")
 
         # Создаем конфигурацию
         config = BotConfig.load_from_file(str(config_path))
+
+        # 🔴 BUG #30 FIX: Валидация что конфиг содержит Futures параметры,
+        # не Spot (11.01.2026)
+        # Проверяем что конфиг не содержит spot-специфичные настройки
+        try:
+            # Spot режимы (есть в config.yaml, не должны быть в
+            # config_futures.yaml)
+            spot_keys_to_check = {
+                "paper_trading_mode": "spot",  # Spot имеет paper_trading_mode
+                "websocket_spot": "spot",  # Spot WebSocket отличается
+                "cache_klines_locally": "spot",  # Spot может кэшировать
+            }
+
+            # Futures уникальные параметры (должны быть в
+            # config_futures.yaml)
+            futures_required_keys = {
+                "scalping": "futures scalping config",
+                "margin_mode": "futures margin mode",
+                "leverage": "futures leverage",
+            }
+
+            config_dict = config.__dict__ if hasattr(config, "__dict__") else {}
+
+            # Проверяем наличие Futures параметров
+            missing_futures_keys = []
+            for key in futures_required_keys.keys():
+                if key not in config_dict or getattr(config, key, None) is None:
+                    missing_futures_keys.append(key)
+
+            if missing_futures_keys:
+                logger.error("❌ BUG #30: Конфигурация NOT для Futures режима!")
+                logger.error(
+                    f"   Отсутствуют параметры: " f"{', '.join(missing_futures_keys)}"
+                )
+                logger.error(
+                    "   Это похоже на Spot конфигурацию, "
+                    "но использован --mode futures"
+                )
+                logger.info("💡 Используйте файл: config/config_futures.yaml")
+                logger.info(
+                    "💡 Убедитесь что конфиг содержит 'scalping', "
+                    "'margin_mode', 'leverage'"
+                )
+                return
+
+            # Проверяем что случайно не загрузился spot конфиг
+            spot_detected = False
+            for spot_key in spot_keys_to_check.keys():
+                if hasattr(config, spot_key) and getattr(config, spot_key) is not None:
+                    spot_detected = True
+                    logger.warning(
+                        f"⚠️ BUG #30: Обнаружен spot параметр "
+                        f"'{spot_key}' в futures конфиге"
+                    )
+
+            if spot_detected:
+                logger.error(
+                    "❌ BUG #30: Конфиг содержит Spot параметры - " "НЕПРАВИЛЬНЫЙ РЕЖИМ!"
+                )
+                logger.info("💡 Проверьте что используется config/config_futures.yaml")
+                return
+
+            logger.debug(
+                "✅ BUG #30: Конфиг валиден для Futures режима "
+                "(все параметры на месте)"
+            )
+
+        except Exception as e:
+            logger.error(f"❌ BUG #30: Ошибка валидации конфига: {e}")
+            logger.debug("", exc_info=True)
+            # Продолжаем работу, но логируем предупреждение
+            logger.warning("⚠️ Убедитесь что используется config_futures.yaml")
 
         # Проверяем конфигурацию
         if (
@@ -84,7 +159,8 @@ async def main():
         # Предупреждение о рисках Futures торговли
         logger.warning("⚠️ ВНИМАНИЕ: Futures торговля связана с высокими рисками!")
         logger.warning(
-            "⚠️ Используйте только те средства, потерю которых можете себе позволить!"
+            "⚠️ Используйте только те средства, "
+            "потерю которых можете себе позволить!"
         )
         logger.warning("⚠️ Рекомендуется начать с sandbox режима для тестирования!")
 
@@ -126,7 +202,8 @@ async def main():
 
 if __name__ == "__main__":
     # ✅ Логирование уже настроено в LoggerFactory (L19)
-    # 🔴 BUG #31 FIX: Removed duplicate logging setup - was causing double logger initialization
-    
+    # 🔴 BUG #31 FIX: Removed duplicate logging setup -
+    # was causing double logger initialization
+
     # Запуск
     asyncio.run(main())

@@ -10,7 +10,7 @@
 
 Использование:
     from src.strategies.modules.debug_logger import DebugLogger
-    
+
     debug_logger = DebugLogger(enabled=True, csv_export=True)
     debug_logger.log_tick(symbol="BTC-USDT", regime="ranging", ...)
 """
@@ -55,7 +55,8 @@ class DebugLogger:
         self,
         enabled: bool = True,
         csv_export: bool = True,
-        csv_dir: str = "logs/futures/debug",  # ✅ ИЗМЕНЕНО: logs/futures/debug вместо logs/debug
+        csv_dir: str = "logs/futures/debug",  # ✅ ИЗМЕНЕНО: logs/futures/debug
+        # вместо logs/debug
         verbose: bool = True,
     ):
         """
@@ -74,6 +75,12 @@ class DebugLogger:
         self.csv_file = None
         self.csv_writer = None
         self.session_start = datetime.now()
+
+        # 🔴 BUG #35 FIX: Buffer для CSV writes вместо flush каждый раз (11.01.2026)
+        self.csv_buffer = []  # Буферизация записей
+        self.csv_buffer_size = 100  # Flush после 100 записей
+        self.last_flush_time = time.time()  # Для периодического flush
+        self.flush_interval_sec = 5.0  # Flush каждые 5 сек даже если мало записей
 
         if not self.enabled:
             return
@@ -98,13 +105,24 @@ class DebugLogger:
                 ],
             )
             self.csv_writer.writeheader()
+            self.csv_file.flush()  # Flush только заголовок
 
-        logger.info(f"✅ DebugLogger инициализирован: CSV в {self.csv_dir}")
+        logger.info(
+            f"✅ DebugLogger инициализирован: CSV в {self.csv_dir} "
+            f"(buffer={self.csv_buffer_size})"
+        )
 
     def __del__(self):
-        """Закрытие CSV файла при удалении объекта."""
-        if self.csv_file:
-            self.csv_file.close()
+        """🔴 BUG #35 FIX: Закрытие CSV файла с финальным flush буфера (11.01.2026)"""
+        try:
+            # 🔴 BUG #35 FIX: Flush всех оставшихся записей из буфера
+            self._flush_csv_buffer(force=True)
+
+            if self.csv_file:
+                self.csv_file.close()
+                logger.debug("✅ CSV файл закрыт (buffer flushed)")
+        except Exception as e:
+            logger.error(f"❌ Ошибка закрытия CSV файла: {e}")
 
     def _log(
         self,
@@ -154,21 +172,62 @@ class DebugLogger:
         elif level == "error":
             logger.error(message)
 
-        # Экспортируем в CSV
+        # 🔴 BUG #35 FIX: Буферизация CSV записей вместо immediate flush (11.01.2026)
+        # Экспортируем в CSV с буферизацией
         if self.csv_export and self.csv_writer:
-            self.csv_writer.writerow(
-                {
-                    "timestamp": timestamp_str,
-                    "event_type": event_type,
-                    "symbol": symbol,
-                    "data": data_str,
-                }
-            )
-            self.csv_file.flush()
+            row = {
+                "timestamp": timestamp_str,
+                "event_type": event_type,
+                "symbol": symbol,
+                "data": data_str,
+            }
+            self.csv_buffer.append(row)
+
+            # Flush буфера если достаточно записей или прошло время
+            current_time = time.time()
+            time_since_flush = current_time - self.last_flush_time
+
+            if (
+                len(self.csv_buffer) >= self.csv_buffer_size
+                or time_since_flush >= self.flush_interval_sec
+            ):
+                self._flush_csv_buffer()
 
     # ============================================================================
     # ПУБЛИЧНЫЕ МЕТОДЫ ДЛЯ ЛОГИРОВАНИЯ
     # ============================================================================
+
+    def _flush_csv_buffer(self, force: bool = False) -> None:
+        """
+        🔴 BUG #35 FIX: Flush CSV буфера на диск (11.01.2026)
+
+        Записывает накопленные строки в CSV файл и очищает буфер.
+
+        Args:
+            force: Если True, flush независимо от размера буфера
+        """
+        if not self.csv_export or not self.csv_writer or not self.csv_buffer:
+            return
+
+        try:
+            # Пишем все строки из буфера в файл
+            for row in self.csv_buffer:
+                self.csv_writer.writerow(row)
+
+            # Flush файла на диск
+            if self.csv_file:
+                self.csv_file.flush()
+
+            # Очищаем буфер
+            buffer_size = len(self.csv_buffer)
+            self.csv_buffer.clear()
+            self.last_flush_time = time.time()
+
+            if force or buffer_size >= 10:  # Логируем только при значительных flush
+                logger.debug(f"✅ CSV buffer flushed: {buffer_size} rows written")
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка flush CSV буфера: {e}")
 
     def log_tick(
         self,
