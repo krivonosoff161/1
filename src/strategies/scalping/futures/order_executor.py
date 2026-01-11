@@ -2218,27 +2218,47 @@ class FuturesOrderExecutor:
 
             # ✅ ИСПРАВЛЕНИЕ: Если цена не указана, получаем текущую цену
             if entry_price == 0.0:
+                # 🔴 BUG #9 FIX: убираем магические цены BTC/ETH, берем реальные данные
                 try:
-                    import aiohttp
+                    # Попытка 1: DataRegistry (WebSocket актуальная цена)
+                    if hasattr(self, "data_registry") and self.data_registry:
+                        price_from_registry = await self.data_registry.get_price(symbol)
+                        if price_from_registry and price_from_registry > 0:
+                            entry_price = price_from_registry
 
-                    inst_id = f"{symbol}-SWAP"
-                    url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(url) as resp:
-                            if resp.status == 200:
-                                data = await resp.json()
-                                if data.get("code") == "0" and data.get("data"):
-                                    ticker = data["data"][0]
-                                    entry_price = float(ticker.get("last", "0"))
+                    # Попытка 2: REST ticker
+                    if entry_price == 0.0:
+                        import aiohttp
+
+                        inst_id = f"{symbol}-SWAP"
+                        url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(url) as resp:
+                                if resp.status == 200:
+                                    data = await resp.json()
+                                    if data.get("code") == "0" and data.get("data"):
+                                        ticker = data["data"][0]
+                                        entry_price = float(ticker.get("last", "0"))
+
+                    # Попытка 3: price_limits current_price
+                    if entry_price == 0.0 and hasattr(self, "client") and self.client:
+                        try:
+                            price_limits = await self.client.get_price_limits(symbol)
+                            if price_limits and price_limits.get("current_price"):
+                                entry_price = float(price_limits.get("current_price"))
+                        except Exception:
+                            pass
+
                 except Exception as e:
                     logger.error(f"❌ Не удалось получить цену для {symbol}: {e}")
-                    # Fallback
-                    if "BTC" in symbol:
-                        entry_price = 110000.0
-                    elif "ETH" in symbol:
-                        entry_price = 3900.0
-                    else:
-                        entry_price = 50000.0
+
+                if entry_price == 0.0:
+                    logger.error(
+                        f"❌ BUG #9: Не удалось получить актуальную цену для {symbol}, отменяем расчет TP/SL"
+                    )
+                    raise ValueError(
+                        f"Cannot calculate TP/SL without entry price for {symbol}"
+                    )
 
             if entry_price == 0.0:
                 logger.error(f"❌ Цена для {symbol} = 0, невозможно рассчитать TP/SL")

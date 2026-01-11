@@ -208,6 +208,14 @@ class FilterManager:
                 signal_side_str = signal.get("side", "").upper()
                 signal_type_str = signal.get("type", "unknown")
 
+                def _get_indicator(indicators: Any, *keys):
+                    if not indicators or not isinstance(indicators, dict):
+                        return None
+                    for key in keys:
+                        if key in indicators:
+                            return indicators.get(key)
+                    return None
+
                 # Пытаемся получить из кэша
                 cached_adx_result = self._get_cached_filter_result(symbol, "adx")
                 if cached_adx_result is not None:
@@ -217,17 +225,28 @@ class FilterManager:
                     minus_di = None
                     try:
                         if market_data and hasattr(market_data, "indicators"):
-                            adx_value = market_data.indicators.get("ADX")
-                            plus_di = market_data.indicators.get("+DI")
-                            minus_di = market_data.indicators.get("-DI")
-                    except:
+                            indicators = market_data.indicators
+                            adx_value = _get_indicator(
+                                indicators, "adx", "ADX"
+                            )
+                            plus_di = _get_indicator(
+                                indicators, "adx_plus_di", "+DI", "DI_PLUS"
+                            )
+                            minus_di = _get_indicator(
+                                indicators, "adx_minus_di", "-DI", "DI_MINUS"
+                            )
+                    except Exception:
                         pass
-                    
+
                     # Используем кэш - ADX меняется медленно
                     if not cached_adx_result:
                         # ✅ УЛУЧШЕНО: Логируем значения даже из кэша
                         adx_str = f"ADX={adx_value:.1f}" if adx_value else "ADX=N/A"
-                        di_str = f", +DI={plus_di:.1f}, -DI={minus_di:.1f}" if plus_di and minus_di else ""
+                        di_str = (
+                            f", +DI={plus_di:.1f}, -DI={minus_di:.1f}"
+                            if plus_di is not None and minus_di is not None
+                            else ""
+                        )
                         logger.info(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - BLOCKED (из кэша) | "
                             f"{adx_str}{di_str}, Режим: {regime or 'unknown'} | "
@@ -241,7 +260,11 @@ class FilterManager:
                         signal["filters_passed"].append("ADX")
                         # ✅ УЛУЧШЕНО: Логируем значения даже из кэша
                         adx_str = f"ADX={adx_value:.1f}" if adx_value else "ADX=N/A"
-                        di_str = f", +DI={plus_di:.1f}, -DI={minus_di:.1f}" if plus_di and minus_di else ""
+                        di_str = (
+                            f", +DI={plus_di:.1f}, -DI={minus_di:.1f}"
+                            if plus_di is not None and minus_di is not None
+                            else ""
+                        )
                         logger.debug(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - PASSED (из кэша) | "
                             f"{adx_str}{di_str}, Режим: {regime or 'unknown'} | "
@@ -273,49 +296,47 @@ class FilterManager:
         try:
             if market_data and hasattr(market_data, "indicators"):
                 indicators = market_data.indicators
-                adx_value = (
-                    indicators.get("ADX") if isinstance(indicators, dict) else None
+                adx_value = _get_indicator(indicators, "adx", "ADX")
+                di_plus = _get_indicator(
+                    indicators, "adx_plus_di", "+DI", "DI_PLUS"
                 )
-                di_plus = (
-                    indicators.get("DI_PLUS") if isinstance(indicators, dict) else None
-                )
-                di_minus = (
-                    indicators.get("DI_MINUS") if isinstance(indicators, dict) else None
+                di_minus = _get_indicator(
+                    indicators, "adx_minus_di", "-DI", "DI_MINUS"
                 )
 
-                signal_side = signal.get("side", "").lower()
+            signal_side = signal.get("side", "").lower()
 
-                # Если ADX > 20 (сильный тренд) и направление против сигнала - блокируем
-                signal_type_str = signal.get("type", "unknown")
-                if adx_value and adx_value > 20:
-                    if (
-                        signal_side == "buy"
-                        and di_minus
-                        and di_plus
-                        and di_minus > di_plus
-                    ):
-                        # LONG сигнал, но тренд вниз (DI- > DI+)
-                        logger.info(
-                            f"📊 [FILTER] {symbol} ({signal_type_str} LONG): ADX Direction Filter - BLOCKED | "
-                            f"Сильный нисходящий тренд против LONG сигнала: ADX={adx_value:.1f} > 20.0, "
-                            f"DI-={di_minus:.1f} > DI+={di_plus:.1f} | "
-                            f"Источник: MarketData.indicators (дополнительная проверка направления тренда)"
-                        )
-                        return None
-                    elif (
-                        signal_side == "sell"
-                        and di_plus
-                        and di_minus
-                        and di_plus > di_minus
-                    ):
-                        # SHORT сигнал, но тренд вверх (DI+ > DI-)
-                        logger.info(
-                            f"📊 [FILTER] {symbol} ({signal_type_str} SHORT): ADX Direction Filter - BLOCKED | "
-                            f"Сильный восходящий тренд против SHORT сигнала: ADX={adx_value:.1f} > 20.0, "
-                            f"DI+={di_plus:.1f} > DI-={di_minus:.1f} | "
-                            f"Источник: MarketData.indicators (дополнительная проверка направления тренда)"
-                        )
-                        return None
+            # Если ADX > 20 (сильный тренд) и направление против сигнала - блокируем
+            signal_type_str = signal.get("type", "unknown")
+            if adx_value and adx_value > 20:
+                if (
+                    signal_side == "buy"
+                    and di_minus
+                    and di_plus
+                    and di_minus > di_plus
+                ):
+                    # LONG сигнал, но тренд вниз (DI- > DI+)
+                    logger.info(
+                        f"📊 [FILTER] {symbol} ({signal_type_str} LONG): ADX Direction Filter - BLOCKED | "
+                        f"Сильный нисходящий тренд против LONG сигнала: ADX={adx_value:.1f} > 20.0, "
+                        f"DI-={di_minus:.1f} > DI+={di_plus:.1f} | "
+                        f"Источник: MarketData.indicators (дополнительная проверка направления тренда)"
+                    )
+                    return None
+                elif (
+                    signal_side == "sell"
+                    and di_plus
+                    and di_minus
+                    and di_plus > di_minus
+                ):
+                    # SHORT сигнал, но тренд вверх (DI+ > DI-)
+                    logger.info(
+                        f"📊 [FILTER] {symbol} ({signal_type_str} SHORT): ADX Direction Filter - BLOCKED | "
+                        f"Сильный восходящий тренд против SHORT сигнала: ADX={adx_value:.1f} > 20.0, "
+                        f"DI+={di_plus:.1f} > DI-={di_minus:.1f} | "
+                        f"Источник: MarketData.indicators (дополнительная проверка направления тренда)"
+                    )
+                    return None
         except Exception as e:
             logger.debug(f"⚠️ Ошибка проверки направления тренда для {symbol}: {e}")
 

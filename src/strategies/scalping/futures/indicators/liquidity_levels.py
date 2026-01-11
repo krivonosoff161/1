@@ -231,10 +231,22 @@ class LiquidityLevelsDetector:
                     "depth_usd": total_ask_depth,
                 }
 
+            # 🔴 BUG #7 FIX (undefined symbol in logging): защищаемся от None/liquidity отсутствует
+            below_distance = (
+                below_liquidity.get("distance_pct", 0.0)
+                if below_liquidity
+                else 0.0
+            )
+            above_distance = (
+                above_liquidity.get("distance_pct", 0.0)
+                if above_liquidity
+                else 0.0
+            )
+
             logger.debug(
                 f"LiquidityLevels: {symbol} @ {current_price:.2f} - "
-                f"below: {max_bid_volume:,.0f} USD @ {max_bid_price:.2f} ({below_liquidity['distance_pct']:.2f}%), "
-                f"above: {max_ask_volume:,.0f} USD @ {max_ask_price:.2f} ({above_liquidity['distance_pct']:.2f}%)"
+                f"below: {max_bid_volume:,.0f} USD @ {max_bid_price:.2f} ({below_distance:.2f}%), "
+                f"above: {max_ask_volume:,.0f} USD @ {max_ask_price:.2f} ({above_distance:.2f}%)"
             )
 
         except Exception as e:

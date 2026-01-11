@@ -47,6 +47,13 @@ class OrderCoordinator:
         self.last_orders_cache = last_orders_cache_ref  # Ссылка на кэш
         self._last_amend_ts: Dict[str, float] = {}
 
+        # 🔴 BUG #8 FIX: Drift threshold из конфига (по умолчанию 0.1%)
+        order_executor_config = getattr(self.scalping_config, "order_executor", {})
+        limit_order_config = order_executor_config.get("limit_order", {})
+        self.drift_cancel_threshold_pct: float = float(
+            limit_order_config.get("drift_cancel_pct", 0.1)
+        )
+
         logger.info("✅ OrderCoordinator initialized")
 
     async def monitor_limit_orders(self):
@@ -153,30 +160,30 @@ class OrderCoordinator:
                                             if current_price > 0 and order_price > 0:
                                                 # Проверяем отклонение цены от ордера
                                                 if side == "buy":
-                                                    # Для BUY: если текущая цена ушла вниз > 0.1% от ордера
+                                                    # Для BUY: если текущая цена ушла вниз > drift_cancel_threshold_pct
                                                     price_drift_pct = (
                                                         (order_price - current_price)
                                                         / order_price
                                                     ) * 100.0
-                                                    # ✅ НОВОЕ: НЕ отменять если цена близка к исполнению (< 0.1%)
-                                                    if abs(price_drift_pct) < 0.1:
+                                                    # ✅ НОВОЕ: НЕ отменять если цена близка к исполнению (< threshold)
+                                                    if abs(price_drift_pct) < self.drift_cancel_threshold_pct:
                                                         price_close_to_execution = True
                                                     elif (
-                                                        price_drift_pct > 0.1
-                                                    ):  # Цена ушла вниз > 0.1%
+                                                        price_drift_pct > self.drift_cancel_threshold_pct
+                                                    ):  # Цена ушла вниз > threshold
                                                         should_cancel_early = True
                                                 else:  # sell
-                                                    # Для SELL: если текущая цена ушла вверх > 0.1% от ордера
+                                                    # Для SELL: если текущая цена ушла вверх > drift_cancel_threshold_pct
                                                     price_drift_pct = (
                                                         (current_price - order_price)
                                                         / order_price
                                                     ) * 100.0
-                                                    # ✅ НОВОЕ: НЕ отменять если цена близка к исполнению (< 0.1%)
-                                                    if abs(price_drift_pct) < 0.1:
+                                                    # ✅ НОВОЕ: НЕ отменять если цена близка к исполнению (< threshold)
+                                                    if abs(price_drift_pct) < self.drift_cancel_threshold_pct:
                                                         price_close_to_execution = True
                                                     elif (
-                                                        price_drift_pct > 0.1
-                                                    ):  # Цена ушла вверх > 0.1%
+                                                        price_drift_pct > self.drift_cancel_threshold_pct
+                                                    ):  # Цена ушла вверх > threshold
                                                         should_cancel_early = True
                                     except Exception as e:
                                         logger.debug(

@@ -822,26 +822,25 @@ class FuturesRiskManager:
             if position_overrides.get("max_position_usd") is not None:
                 symbol_max = float(position_overrides["max_position_usd"])
                 balance_max = max_usd_size
-                if symbol_max > max_usd_size:
-                    max_usd_size = symbol_max
-                    logger.debug(
-                        f"📊 Max position size из symbol_profiles (${symbol_max:.2f}) больше "
-                        f"balance_profile (${balance_max:.2f}), используем ${symbol_max:.2f}"
+
+                # 🔴 BUG #28 FIX: используем min(per_symbol, global) и логируем конфликт
+                if symbol_max < balance_max:
+                    logger.info(
+                        f"⚠️ max_position_usd per-symbol (${symbol_max:.2f}) < global (${balance_max:.2f}), используем min=${symbol_max:.2f}"
                     )
+                    max_usd_size = symbol_max
                 else:
+                    max_usd_size = balance_max
                     logger.debug(
-                        f"📊 Max position size из symbol_profiles (${symbol_max:.2f}) меньше или равно "
-                        f"balance_profile (${balance_max:.2f}), игнорируем (используем ${balance_max:.2f})"
+                        f"📊 max_position_usd per-symbol (${symbol_max:.2f}) >= global (${balance_max:.2f}), оставляем global ${balance_max:.2f}"
                     )
 
-                if symbol_max < min_usd_size:
+                if max_usd_size < min_usd_size:
                     logger.error(
-                        f"❌ ОШИБКА КОНФИГУРАЦИИ: max_position_usd из symbol_profiles (${symbol_max:.2f}) меньше "
-                        f"min_position_usd (${min_usd_size:.2f})! Невозможно открыть позицию. "
-                        f"Исправьте конфиг: увеличьте max_position_usd или уменьшите min_position_usd для {symbol}."
+                        f"❌ ОШИБКА КОНФИГУРАЦИИ: max_position_usd (${max_usd_size:.2f}) < min_position_usd (${min_usd_size:.2f}) для {symbol}"
                     )
                     raise ValueError(
-                        f"max_position_usd (${symbol_max:.2f}) < min_position_usd (${min_usd_size:.2f}) для {symbol}"
+                        f"max_position_usd (${max_usd_size:.2f}) < min_position_usd (${min_usd_size:.2f}) для {symbol}"
                     )
 
             if position_overrides.get("max_position_percent") is not None:

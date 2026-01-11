@@ -218,10 +218,23 @@ class PositionSync:
                         position_dict = pos.copy()
 
                         # Создаем метаданные
+                        # 🔴 BUG #19 FIX: используем биржевые времена cTime/openTime для DRIFT_ADD (если есть)
+                        entry_ts_ms = None
+                        for key in ["cTime", "openTime", "c_time", "open_time"]:
+                            if key in pos and pos.get(key):
+                                try:
+                                    entry_ts_ms = float(pos.get(key))
+                                    break
+                                except Exception:
+                                    entry_ts_ms = None
+
+                        if entry_ts_ms:
+                            entry_dt = datetime.fromtimestamp(entry_ts_ms / 1000.0, tz=timezone.utc)
+                        else:
+                            entry_dt = datetime.now(timezone.utc)
+
                         metadata = PositionMetadata(
-                            entry_time=datetime.now(
-                                timezone.utc
-                            ),  # Используем текущее время, т.к. точное время входа неизвестно
+                            entry_time=entry_dt,
                             position_side=pos_side,
                             entry_price=entry_price if entry_price > 0 else None,
                             size_in_coins=size_in_coins,

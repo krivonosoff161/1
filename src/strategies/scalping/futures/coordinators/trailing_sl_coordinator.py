@@ -297,6 +297,25 @@ class TrailingSLCoordinator:
             # Fallback на config_manager
             params = self.config_manager.get_trailing_sl_params(regime=regime)
 
+        # 🔴 BUG #39 FIX: безопасный словарь параметров с дефолтами
+        if not params:
+            params = {}
+        params.setdefault("initial_trail", 0.005)
+        params.setdefault("max_trail", params.get("initial_trail", 0.005))
+        params.setdefault("min_trail", 0.003)
+        params.setdefault("trading_fee_rate", 0.001)
+        params.setdefault("loss_cut_percent", None)
+        params.setdefault("timeout_loss_percent", None)
+        params.setdefault("timeout_minutes", None)
+        params.setdefault("min_holding_minutes", None)
+        params.setdefault("min_profit_to_close", None)
+        params.setdefault("extend_time_on_profit", False)
+        params.setdefault("extend_time_multiplier", 1.0)
+        params.setdefault("min_critical_hold_seconds", 30.0)
+        params.setdefault("trail_growth_low_multiplier", 1.5)
+        params.setdefault("trail_growth_medium_multiplier", 2.0)
+        params.setdefault("trail_growth_high_multiplier", 3.0)
+
         # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Логирование параметра enabled из конфига
         tsl_config = getattr(self.scalping_config, "trailing_sl", {})
         tsl_enabled = getattr(tsl_config, "enabled", False)
