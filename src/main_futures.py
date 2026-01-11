@@ -43,6 +43,20 @@ async def main():
                 )
                 return
 
+        # 🔴 BUG #26 FIX: Явная валидация что Futures режим использует config_futures.yaml
+        if "config_futures.yaml" not in str(config_path):
+            logger.error(
+                "❌ КРИТИЧЕСКАЯ ОШИБКА: Futures режим должен использовать config_futures.yaml"
+            )
+            logger.error(f"   Загруженный путь: {config_path}")
+            logger.info(
+                "💡 Используйте явно: python -m src.main_futures"
+            )
+            return
+
+        logger.info(f"✓ Конфиг: {config_path}")
+        logger.info(f"✓ Режим: Futures (с левериджем)")
+
         # Создаем конфигурацию
         config = BotConfig.load_from_file(str(config_path))
 

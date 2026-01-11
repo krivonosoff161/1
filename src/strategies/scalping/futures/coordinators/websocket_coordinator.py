@@ -326,12 +326,11 @@ class WebSocketCoordinator:
                 if "last" in ticker:
                     price = float(ticker["last"])
 
-                    # ✅ Дедупликация тикеров: пропускаем дубликаты
-                    if price == self.last_prices.get(symbol):
-                        logger.debug(
-                            f"⏭️ Тикер пропущен (дубликат): {symbol} price={price:.2f}"
-                        )
-                        return
+                    # 🔴 BUG #1 FIX: УДАЛЕНА ДЕДУПЛИКАЦИЯ ПО ЦЕНЕ
+                    # Была проблема: if price == self.last_prices.get(symbol): return
+                    # Это блокировала обновления when price unchanged
+                    # Но даже при одной цене нужно обновлять updated_at и проверки!
+                    
                     self.last_prices[symbol] = price
 
                     # ✅ АТОМАРНО: Обновляем свечи, market_data и индикаторы под одним lock

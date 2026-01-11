@@ -80,8 +80,13 @@ api:
 # Общие настройки торговли
 trading:
   symbols:
+    # 🔴 BUG #27 FIX: Синхронизировано с scalping.symbols
+    # ДОЛЖНО совпадать полностью!
     - "BTC-USDT"
     - "ETH-USDT"
+    - "SOL-USDT"
+    - "DOGE-USDT"
+    - "XRP-USDT"
   base_currency: "USDT"
   trading_mode: "futures"
 

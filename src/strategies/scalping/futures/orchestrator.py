@@ -89,6 +89,22 @@ class FuturesScalpingOrchestrator:
         self.scalping_config = config.scalping
         self.risk_config = config.risk
 
+        # 🔴 BUG #27 FIX: Валидация что trading.symbols = scalping.symbols
+        trading_symbols = set(config.trading.symbols)
+        scalping_symbols = set(self.scalping_config.symbols)
+        
+        if trading_symbols != scalping_symbols:
+            logger.error("❌ КРИТИЧЕСКАЯ ОШИБКА: trading.symbols ≠ scalping.symbols")
+            logger.error(f"   trading.symbols: {sorted(trading_symbols)}")
+            logger.error(f"   scalping.symbols: {sorted(scalping_symbols)}")
+            logger.error(f"   Разница: {trading_symbols.symmetric_difference(scalping_symbols)}")
+            raise ValueError(
+                "Список символов в config должен совпадать! "
+                "Отредактируйте config_futures.yaml так чтобы trading.symbols = scalping.symbols"
+            )
+        
+        logger.info(f"✓ Символы синхронизированы: {sorted(scalping_symbols)}")
+
         # ✅ ЭТАП 1: Config Manager для работы с конфигурацией
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Загружаем raw YAML для доступа к exit_params
         # exit_params находится в корне YAML, но не в BotConfig модели

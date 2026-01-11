@@ -392,6 +392,8 @@ class AdaptiveRegimeManager:
 
         # ✅ ИСПОЛЬЗУЕМ НАСТОЯЩИЙ ADX через FastADX вместо ADX Proxy
         # Обновляем FastADX с историческими данными
+        # 🔴 BUG #2 FIX: Reset состояния перед update() чтобы избежать накопления
+        self.fast_adx.reset()
         for candle in candles[-self.fast_adx.period :]:
             self.fast_adx.update(high=candle.high, low=candle.low, close=candle.close)
 

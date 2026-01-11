@@ -261,6 +261,16 @@ class PositionScalingManager:
                 logger.warning(
                     f"⚠️ [POSITION_SCALING] Ошибка получения PnL с биржи для {symbol}: {e}"
                 )
+                current_pnl_percent = None
+
+            # 🔴 BUG #15 FIX: Проверяем что PnL получен (не None) перед использованием
+            if current_pnl_percent is None:
+                return {
+                    "can_add": False,
+                    "reason": "Не удалось получить актуальный PnL с биржи",
+                    "addition_count": addition_count,
+                    "current_pnl_percent": None,
+                }
 
             # 5. Проверка убытка
             max_loss_for_addition = scaling_config["max_loss_for_addition"]

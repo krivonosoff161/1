@@ -55,6 +55,34 @@ class FastADX:
 
         logger.info(f"FastADX инициализирован: period={period}, threshold={threshold}")
 
+    def reset(self):
+        """🔴 BUG #2 FIX: Reset состояния ADX перед новым расчетом.
+        
+        Необходимо для предотвращения накопления состояния между 
+        несколькими вызовами detect_regime().
+        """
+        self.di_plus_history.clear()
+        self.di_minus_history.clear()
+        self.adx_history.clear()
+        self.tr_history.clear()
+        self.plus_dm_history.clear()
+        self.minus_dm_history.clear()
+        self.dx_history.clear()
+
+        self.current_high = 0.0
+        self.current_low = 0.0
+        self.current_close = 0.0
+        self.prev_high = 0.0
+        self.prev_low = 0.0
+        self.prev_close = 0.0
+
+        self._smoothed_tr: Optional[float] = None
+        self._smoothed_plus_dm: Optional[float] = None
+        self._smoothed_minus_dm: Optional[float] = None
+        self._smoothed_adx: Optional[float] = None
+        
+        logger.debug(f"FastADX reset: состояние очищено")
+
     def update(self, high: float, low: float, close: float):
         """Обновление индикатора новыми данными свечи."""
         if self.prev_high == 0 and self.prev_low == 0:

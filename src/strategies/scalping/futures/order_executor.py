@@ -1568,8 +1568,17 @@ class FuturesOrderExecutor:
                         logger.debug(f"⚠️ order_executor: Fallback на REST API ошибка: {e}")
                 
                 if market_data:
-                    current_bid = float(market_data.get("bid_price") or market_data.get("bidPx", 0))
-                    current_ask = float(market_data.get("ask_price") or market_data.get("askPx", 0))
+                    # 🔴 BUG #3 FIX: Маппирование current_tick.bid/ask → bid_price/ask_price
+                    # WebSocketCoordinator пишет current_tick (bid/ask)
+                    # OrderExecutor читает bid_price/ask_price
+                    current_tick = market_data.get("current_tick")
+                    if current_tick and hasattr(current_tick, "bid") and hasattr(current_tick, "ask"):
+                        current_bid = float(current_tick.bid) if current_tick.bid else 0.0
+                        current_ask = float(current_tick.ask) if current_tick.ask else 0.0
+                    else:
+                        # Fallback на прямое чтение если current_tick недоступен
+                        current_bid = float(market_data.get("bid_price") or market_data.get("bidPx", 0))
+                        current_ask = float(market_data.get("ask_price") or market_data.get("askPx", 0))
 
                     if current_bid > 0 and current_ask > 0:
                         # Параметры для размещения цены

@@ -1762,14 +1762,9 @@ class FuturesRiskManager:
             return True
 
         try:
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Используем правильное имя метода check_liquidation_risk
-            # Метод не async, поэтому убираем await
-            # Нужно получить current_price и margin для проверки
-            # Пока используем упрощенную проверку - получаем текущую цену из data_registry или клиента
+            # 🔴 BUG #21 FIX: Получаем РЕАЛЬНУЮ маржу от API, не position_size
             current_price = entry_price  # Fallback: используем entry_price если не можем получить текущую
-            margin = (
-                position_size_usd  # Упрощение: используем position_size_usd как маржу
-            )
+            margin = None
 
             # Пытаемся получить текущую цену
             try:
@@ -1780,17 +1775,34 @@ class FuturesRiskManager:
             except Exception:
                 pass
 
-            # Пытаемся получить реальную маржу
+            # 🔴 BUG #21 FIX: Получаем маржу из позиции через API
             try:
-                if self.data_registry:
-                    margin_used = await self.data_registry.get_margin_used()
-                    if margin_used is not None:
-                        # Используем часть использованной маржи для этой позиции
-                        margin = position_size_usd  # Упрощение
-            except Exception:
-                pass
+                if self.client:
+                    # Получаем информацию о позиции из OKX API
+                    positions_data = await self.client.get_positions()
+                    if positions_data:
+                        for pos in positions_data:
+                            if pos.get("instId") == f"{symbol}-SWAP":
+                                # margin field содержит РЕАЛЬНУЮ маржу, не нотионал
+                                margin = float(pos.get("margin", 0))
+                                logger.debug(
+                                    f"✓ Получена маржа для {symbol}: {margin} USDT"
+                                )
+                                break
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось получить маржу из API: {e}")
 
-            # ✅ ИСПРАВЛЕНО: Вызываем check_liquidation_risk (не async, без await)
+            # Fallback: если маржа не получена
+            if margin is None or margin == 0:
+                # Оцениваем маржу как position_size / leverage
+                estimated_leverage = self.config.risk.leverage if hasattr(self.config.risk, 'leverage') else 10
+                margin = position_size_usd / estimated_leverage
+                logger.warning(
+                    f"⚠️ Маржа не получена от API, используем оценку: {margin} USDT "
+                    f"(position_size={position_size_usd}, leverage={estimated_leverage})"
+                )
+
+            # ✅ Вызываем check_liquidation_risk с правильной маржой
             return self.liquidation_protector.check_liquidation_risk(
                 symbol=symbol,
                 position_size=position_size_usd,

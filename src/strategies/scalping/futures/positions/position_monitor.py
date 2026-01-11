@@ -165,15 +165,16 @@ class PositionMonitor:
                 position = await self.position_registry.get_position(symbol)
                 metadata = await self.position_registry.get_metadata(symbol)
                 market_data = await self.data_registry.get_market_data(symbol)
-                current_price = 0.0
+                
+                # 🔴 BUG #10 FIX: 4-уровневый fallback для current_price
+                current_price = self._get_current_price_with_fallback(
+                    symbol=symbol,
+                    market_data=market_data,
+                    position=position
+                )
+                
                 regime = "ranging"
 
-                if market_data:
-                    current_price = (
-                        market_data.current_price
-                        if hasattr(market_data, "current_price")
-                        else 0.0
-                    )
                 if hasattr(self.data_registry, "get_regime_name_sync"):
                     regime = (
                         self.data_registry.get_regime_name_sync(symbol) or "ranging"
@@ -281,3 +282,66 @@ class PositionMonitor:
                 exc_info=True,
             )
             return None
+
+    async def _get_current_price_with_fallback(self, symbol: str, market_data, position) -> float:
+        """🔴 BUG #10 FIX: 4-уровневый каскадный fallback для получения current_price.
+        
+        Уровни:
+        1. DataRegistry (last_tick/mark из WS)
+        2. REST mark_price
+        3. REST last_price
+        4. Запомненная цена в памяти (TTL 5-15s)
+        
+        Args:
+            symbol: Торговый символ
+            market_data: Данные от DataRegistry
+            position: Позиция (для fallback entry_price)
+            
+        Returns:
+            float: Валидная текущая цена или entry_price как последний fallback
+        """
+        # Level 1: DataRegistry (WS)
+        if market_data:
+            if isinstance(market_data, dict):
+                price = market_data.get("price") or market_data.get("last_price")
+                if price:
+                    return float(price)
+                
+                # Try current_tick
+                tick = market_data.get("current_tick")
+                if tick and hasattr(tick, "price"):
+                    return float(tick.price)
+            elif hasattr(market_data, "price"):
+                return float(market_data.price)
+        
+        # Level 2 & 3: REST API (mark_price, last_price)
+        if self.client:
+            try:
+                ticker = await self.client.get_ticker(symbol)
+                if ticker:
+                    mark_price = ticker.get("markPx")
+                    if mark_price:
+                        return float(mark_price)
+                    last_price = ticker.get("last")
+                    if last_price:
+                        return float(last_price)
+            except Exception as e:
+                logger.debug(f"⚠️ REST price fallback ошибка для {symbol}: {e}")
+        
+        # Level 4: last_known_price (из памяти, TTL 5-15s)
+        if hasattr(self, "_last_known_prices"):
+            last_price, timestamp = self._last_known_prices.get(symbol, (None, 0))
+            import time
+            if last_price and (time.time() - timestamp) < 15:  # TTL 15s
+                return float(last_price)
+        
+        # Ultimate fallback: entry_price если есть
+        if position and hasattr(position, "entry_price"):
+            logger.warning(
+                f"⚠️ PositionMonitor {symbol}: Используется entry_price={position.entry_price} "
+                f"(все уровни fallback исчерпаны)"
+            )
+            return float(position.entry_price) if position.entry_price else 0.0
+        
+        logger.warning(f"⚠️ PositionMonitor {symbol}: current_price=0.0 (нет данных на всех уровнях)")
+        return 0.0

@@ -87,17 +87,17 @@ class PositionSync:
         """
         now = time.time()
 
-        # ✅ АДАПТИВНО: Интервал синхронизации из конфига
-        base_interval_min = 5.0  # Fallback
+        # 🔴 BUG #12 FIX: Интервал 5 мин → 30-60s для скальпинга
+        base_interval_min = 1.0  # 60 секунд (было 5 минут)
         if self.scalping_config:
             sync_config = getattr(self.scalping_config, "sync", {})
             if isinstance(sync_config, dict):
                 base_interval_min = sync_config.get(
-                    "positions_sync_interval_minutes", 5.0
+                    "positions_sync_interval_minutes", 1.0
                 )
             elif hasattr(sync_config, "positions_sync_interval_minutes"):
                 base_interval_min = getattr(
-                    sync_config, "positions_sync_interval_minutes", 5.0
+                    sync_config, "positions_sync_interval_minutes", 1.0
                 )
 
         sync_interval = base_interval_min * 60.0  # Конвертируем в секунды
@@ -105,11 +105,29 @@ class PositionSync:
         if not force and (now - self._last_positions_sync) < sync_interval:
             return
 
-        try:
-            exchange_positions = await self.client.get_positions()
-        except Exception as e:
-            logger.debug(f"⚠️ Не удалось синхронизировать позиции с биржей: {e}")
-            return
+        # 🔴 BUG #12 FIX: Retry логика при REST ошибке (2-3 попытки с backoff)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                exchange_positions = await self.client.get_positions()
+                break  # Успешно получили - выходим из цикла
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    # Exponential backoff: 0.5s, 1s, 2s
+                    backoff_time = (0.5 * (2 ** attempt))
+                    logger.warning(
+                        f"⚠️ PositionSync попытка {attempt + 1}/{max_retries} ошибка: {e}. "
+                        f"Повторная попытка через {backoff_time}s..."
+                    )
+                    await asyncio.sleep(backoff_time)
+                else:
+                    logger.warning(
+                        f"⚠️ PositionSync: Не удалось синхронизировать позиции после {max_retries} попыток: {e}. "
+                        f"Продолжаем с локальным state (может быть рассинхронизация)"
+                    )
+                    exchange_positions = []
+                    # НЕ возвращаемся! Продолжаем с локальным state
+                    break
 
         self._last_positions_sync = now
         seen_symbols: set[str] = set()

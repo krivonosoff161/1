@@ -1327,7 +1327,18 @@ class FuturesPositionManager:
                     f"⚠️ Не удалось получить актуальную цену для {symbol}, используем markPx: {e}"
                 )
 
-            if size == 0 or entry_price == 0 or current_price == 0:
+            # 🔴 BUG #14 FIX: Если price=0, используем fallback 4-уровневый (как Bug #10)
+            if current_price == 0:
+                try:
+                    current_price = await self._get_current_price_with_fallback(symbol)
+                    if current_price == 0:
+                        logger.warning(f"⚠️ BUG #14: Не удалось получить цену для SL проверки {symbol}, пропускаем")
+                        return False
+                except Exception as e:
+                    logger.warning(f"⚠️ BUG #14: Ошибка fallback для {symbol}: {e}, пропускаем SL")
+                    return False
+
+            if size == 0 or entry_price == 0:
                 return False
 
             # ✅ Проверяем только если TSL не активен
@@ -4900,13 +4911,17 @@ class FuturesPositionManager:
                 logger.error(f"❌ Ошибка закрытия позиции {symbol}: {error_msg}")
                 return None
 
-        except Exception as e:
-            logger.error(f"Ошибка закрытия позиции: {e}")
+        except asyncio.TimeoutError as e:
+            # 🔴 BUG #13 FIX: При timeout REST call не удаляем позицию - подождем следующей синхронизации
+            logger.error(f"⏰ [BUG #13] Timeout при закрытии {symbol} ({reason}): {e}")
+            logger.info(f"   → Не удаляем позицию из реестра (подождем PositionSync)")
+            logger.info(f"   → Позиция остается в active_positions для переповторной попытки")
             return None
-
-    async def _emergency_close_position(self, position: Dict[str, Any]):
-        """Экстренное закрытие позиции"""
-        try:
+        except Exception as e:
+            # 🔴 BUG #13 FIX: При других ошибках REST тоже не удаляем автоматически
+            logger.error(f"❌ Ошибка закрытия позиции: {e}")
+            logger.debug(f"   → Exception type: {type(e).__name__}")
+            logger.info(f"   → Позиция {symbol} остается в реестре (подождем PositionSync очередного цикла)")
             symbol = position.get("instId", "").replace("-SWAP", "")
             logger.critical(f"🚨 ЭКСТРЕННОЕ ЗАКРЫТИЕ ПОЗИЦИИ: {symbol}")
 
