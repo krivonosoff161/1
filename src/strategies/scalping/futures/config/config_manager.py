@@ -384,7 +384,7 @@ class ConfigManager:
 
                     if regimes_found:
                         logger.info(
-                            f"✅ exit_params загружены для режимов:\n   "
+                            "✅ exit_params загружены для режимов:\n   "
                             + "\n   ".join(regimes_found)
                         )
                     else:
@@ -400,9 +400,7 @@ class ConfigManager:
                         exit_params, "max_holding_minutes", None
                     )
                     if min_profit or max_holding:
-                        logger.info(
-                            f"✅ exit_params загружены (плоская структура): min_profit_to_close={min_profit}%, max_holding_minutes={max_holding}"
-                        )
+                        logger.info("✅ exit_params загружены (плоская структура)")
                     else:
                         logger.warning(
                             "⚠️ exit_params найдены, но не содержат ожидаемых параметров"
@@ -595,8 +593,12 @@ class ConfigManager:
             else:
                 maker_fee_rate = getattr(commission_config, "maker_fee_rate", None)
                 taker_fee_rate = getattr(commission_config, "taker_fee_rate", None)
-                if maker_fee_rate is None and hasattr(commission_config, "trading_fee_rate"):
-                    maker_fee_rate = getattr(commission_config, "trading_fee_rate", None)
+                if maker_fee_rate is None and hasattr(
+                    commission_config, "trading_fee_rate"
+                ):
+                    maker_fee_rate = getattr(
+                        commission_config, "trading_fee_rate", None
+                    )
 
         params: Dict[str, Any] = {
             # trading_fee_rate трактуем как комиссию ЗА СТОРОНУ (maker) для расчета PnL% от маржи
@@ -1364,29 +1366,30 @@ class ConfigManager:
         # поэтому просто проверяем наличие и используем fallback если отсутствует
         for param in required_params:
             if param not in validated or validated[param] is None:
-                # Fallback если параметр не найден в объединенных параметрах
-                logger.warning(
-                    f"⚠️ Параметр {param} не найден в конфиге для режима={regime}, профиль={profile_name}, "
-                    f"используем fallback значение: {fallback_params[param]}. "
+                logger.error(
+                    f"❌ Критический параметр {param} не найден в конфиге для режима={regime}, профиль={profile_name}. "
                     f"Добавьте параметр в config_futures.yaml: risk.by_regime.{regime}.{param} или risk.by_balance.{profile_name}.{param}"
                 )
-                validated[param] = fallback_params[param]
+                raise ValueError(
+                    f"Критический risk/limit параметр {param} отсутствует для режима={regime}, профиль={profile_name}. Торговля остановлена."
+                )
             elif (
                 not isinstance(validated[param], (int, float)) or validated[param] <= 0
             ):
                 logger.error(
-                    f"❌ Параметр {param} имеет недопустимое значение: {validated[param]}, "
-                    f"используем fallback значение: {fallback_params[param]}. "
-                    f"Исправьте значение в config_futures.yaml"
+                    f"❌ Критический параметр {param} имеет недопустимое значение: {validated[param]} для режима={regime}, профиль={profile_name}. "
+                    f"Исправьте значение в config_futures.yaml. Торговля остановлена."
                 )
-                validated[param] = fallback_params[param]
+                raise ValueError(
+                    f"Критический risk/limit параметр {param} невалиден (значение: {validated[param]}) для режима={regime}, профиль={profile_name}. Торговля остановлена."
+                )
 
         # Валидация strength_multipliers
         if "strength_multipliers" not in validated or not isinstance(
             validated["strength_multipliers"], dict
         ):
             logger.warning(
-                f"⚠️ strength_multipliers не найден в конфиге, используем fallback значения"
+                "⚠️ strength_multipliers не найден в конфиге, используем fallback значения"
             )
             validated["strength_multipliers"] = fallback_params["strength_multipliers"]
         else:
@@ -1400,8 +1403,7 @@ class ConfigManager:
                     or sm[key] <= 0
                 ):
                     logger.warning(
-                        f"⚠️ strength_multipliers[{key}] не найден или невалиден, "
-                        f"используем fallback: {fallback_sm[key]}"
+                        f"⚠️ strength_multipliers[{key}] не найден или невалиден, используем fallback: {fallback_sm[key]}"
                     )
                     sm[key] = fallback_sm[key]
 
@@ -1410,7 +1412,7 @@ class ConfigManager:
             validated["strength_thresholds"], dict
         ):
             logger.warning(
-                f"⚠️ strength_thresholds не найден в конфиге, используем fallback значения"
+                "⚠️ strength_thresholds не найден в конфиге, используем fallback значения"
             )
             validated["strength_thresholds"] = fallback_params["strength_thresholds"]
         else:
@@ -1545,8 +1547,7 @@ class ConfigManager:
                     # При инициализации RegimeManager может быть еще не готов
                     if signal_generator is None:
                         logger.debug(
-                            f"⚠️ Режим не определен (signal_generator не передан), используется fallback 'ranging'. "
-                            f"Это нормально при инициализации."
+                            "⚠️ Режим не определен (signal_generator не передан), используется fallback 'ranging'. Это нормально при инициализации."
                         )
                     else:
                         # ✅ ИСПРАВЛЕНО (25.12.2025): Проверяем, инициализирован ли RegimeManager
@@ -1569,12 +1570,11 @@ class ConfigManager:
                         # Логируем только если RegimeManager не инициализирован
                         if not regime_manager_initialized:
                             logger.debug(
-                                f"⚠️ Режим не определен (RegimeManager еще не инициализирован), используется fallback 'ranging'. "
-                                f"Это нормально при старте бота."
+                                "⚠️ Режим не определен (RegimeManager еще не инициализирован), используется fallback 'ranging'. Это нормально при старте бота."
                             )
                         else:
                             logger.warning(
-                                f"⚠️ Режим не определен (RegimeManager инициализирован, но режим не определен), используется fallback 'ranging'"
+                                "⚠️ Режим не определен (RegimeManager инициализирован, но режим не определен), используется fallback 'ranging'"
                             )
 
             # Нормализуем режим (может быть uppercase или lowercase)

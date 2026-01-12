@@ -1794,20 +1794,31 @@ class FuturesRiskManager:
             # Fallback: если маржа не получена
             if margin is None or margin == 0:
                 # Оцениваем маржу как position_size / leverage
-                estimated_leverage = self.config.risk.leverage if hasattr(self.config.risk, 'leverage') else 10
+                estimated_leverage = (
+                    self.config.risk.leverage
+                    if hasattr(self.config.risk, "leverage")
+                    else 10
+                )
                 margin = position_size_usd / estimated_leverage
                 logger.warning(
                     f"⚠️ Маржа не получена от API, используем оценку: {margin} USDT "
                     f"(position_size={position_size_usd}, leverage={estimated_leverage})"
                 )
 
-            # ✅ Вызываем check_liquidation_risk с правильной маржой
-            return self.liquidation_protector.check_liquidation_risk(
+            # ✅ Формируем позицию как dict для LiquidationProtector
+            position = {
+                "side": side,
+                "size": position_size_usd,
+                "entry_price": entry_price,
+                "avgPx": entry_price,
+                "mark_price": current_price,
+                "margin": margin,
+            }
+            # Вызываем check_liquidation_risk с правильными аргументами
+            return await self.liquidation_protector.check_liquidation_risk(
                 symbol=symbol,
-                position_size=position_size_usd,
-                entry_price=entry_price,
-                current_price=current_price,
-                margin=margin,
+                position=position,
+                balance=margin,
             )
         except Exception as e:
             logger.error(f"❌ Error checking liquidation risk: {e}")

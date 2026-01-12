@@ -36,6 +36,36 @@ def round_to_step(value: float, step: float) -> float:
 
 
 class OKXFuturesClient:
+
+        async def get_ticker(self, symbol: str) -> dict:
+            """
+            Получить тикер (цену) для символа через REST API (для совместимости с ExitAnalyzer).
+            Args:
+                symbol: Торговый символ (например, 'ETH-USDT')
+            Returns:
+                dict с ключами 'last', 'bid', 'ask', 'high', 'low', 'vol', 'ts' и т.д., либо пустой dict при ошибке
+            """
+            try:
+                result = await self._make_request(
+                    "GET",
+                    "/api/v5/market/ticker",
+                    params={"instId": f"{symbol}-SWAP"},
+                )
+                if result.get("code") == "0" and result.get("data"):
+                    ticker = result["data"][0]
+                    # Приводим к универсальному виду
+                    return {
+                        "last": float(ticker.get("last", 0)),
+                        "bid": float(ticker.get("bidPx", 0)),
+                        "ask": float(ticker.get("askPx", 0)),
+                        "high": float(ticker.get("high24h", 0)),
+                        "low": float(ticker.get("low24h", 0)),
+                        "vol": float(ticker.get("vol24h", 0)),
+                        "ts": int(ticker.get("ts", 0)),
+                    }
+            except Exception as e:
+                logger.warning(f"⚠️ get_ticker: Ошибка получения тикера для {symbol}: {e}")
+            return {}
     """
     OKX Futures API Client (USDT-Margined Perpetual Swaps)
     - isolated margin only (safe-by-default)

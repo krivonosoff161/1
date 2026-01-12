@@ -20,14 +20,20 @@ from src.indicators import IndicatorManager
 from src.models import OHLCV, MarketData
 
 from .adaptivity.regime_manager import AdaptiveRegimeManager
-from .filters import (FundingRateFilter, LiquidityFilter, OrderFlowFilter,
-                      VolatilityRegimeFilter)
+from .filters import (
+    FundingRateFilter,
+    LiquidityFilter,
+    OrderFlowFilter,
+    VolatilityRegimeFilter,
+)
+
 # ✅ РЕФАКТОРИНГ: Импортируем FilterManager и новые генераторы сигналов
 from .signals.filter_manager import FilterManager
 from .signals.macd_signal_generator import MACDSignalGenerator
 from .signals.rsi_signal_generator import RSISignalGenerator
-from .signals.trend_following_signal_generator import \
-    TrendFollowingSignalGenerator  # ✅ НОВОЕ (09.01.2026)
+from .signals.trend_following_signal_generator import (
+    TrendFollowingSignalGenerator,  # ✅ НОВОЕ (09.01.2026)
+)
 
 
 class FuturesSignalGenerator:
@@ -62,9 +68,14 @@ class FuturesSignalGenerator:
         if TALIB_AVAILABLE:
             from loguru import logger
 
-            from src.indicators import (TALibATR, TALibBollingerBands,
-                                        TALibEMA, TALibMACD, TALibRSI,
-                                        TALibSMA)
+            from src.indicators import (
+                TALibATR,
+                TALibBollingerBands,
+                TALibEMA,
+                TALibMACD,
+                TALibRSI,
+                TALibSMA,
+            )
 
             logger.info(
                 "✅ TA-Lib индикаторы доступны - используется оптимизированная версия (ускорение 70-85%)"
@@ -481,8 +492,10 @@ class FuturesSignalGenerator:
                     self._adaptive_regime_dict = adaptive_regime_dict
 
                     from .adaptivity.regime_manager import (
-                        IndicatorParameters, ModuleParameters,
-                        RegimeParameters)
+                        IndicatorParameters,
+                        ModuleParameters,
+                        RegimeParameters,
+                    )
 
                     def create_regime_params(
                         regime_name: str,
@@ -711,8 +724,9 @@ class FuturesSignalGenerator:
                         and self.regime_manager
                         and self.data_registry
                     ):
-                        from .adaptivity.filter_parameters import \
-                            AdaptiveFilterParameters
+                        from .adaptivity.filter_parameters import (
+                            AdaptiveFilterParameters,
+                        )
 
                         self.adaptive_filter_params = AdaptiveFilterParameters(
                             config_manager=self.config_manager,
@@ -732,7 +746,9 @@ class FuturesSignalGenerator:
             # ✅ Инициализация Multi-Timeframe фильтра
             try:
                 from src.strategies.modules.multi_timeframe import (
-                    MTFConfig, MultiTimeframeFilter)
+                    MTFConfig,
+                    MultiTimeframeFilter,
+                )
 
                 # ✅ ИСПРАВЛЕНИЕ: Используем параметры из базового конфига или режима
                 # Получаем параметры MTF из базового конфига (или дефолты)
@@ -780,7 +796,7 @@ class FuturesSignalGenerator:
                     ema_slow_period=21,
                     cache_ttl_seconds=10,  # Кэш на 10 секунд
                 )
-                logger.info(f"✅ MTF Filter TTL установлен: 10s")
+                logger.info("✅ MTF Filter TTL установлен: 10s")
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Инициализируем MTF фильтр с DataRegistry и StructuredLogger
                 self.mtf_filter = MultiTimeframeFilter(
@@ -803,35 +819,14 @@ class FuturesSignalGenerator:
 
             # ✅ НОВОЕ (26.12.2025): Инициализация DirectionAnalyzer
             self.direction_analyzer = None
-            try:
-                from .analysis.direction_analyzer import DirectionAnalyzer
-
-                # DirectionAnalyzer будет инициализирован после установки fast_adx
-                logger.info(
-                    "✅ DirectionAnalyzer будет инициализирован после установки fast_adx"
-                )
-            except Exception as e:
-                logger.warning(f"⚠️ Не удалось импортировать DirectionAnalyzer: {e}")
+            # DirectionAnalyzer будет инициализирован после установки fast_adx (импорт удалён как неиспользуемый)
 
             # ✅ Инициализация ADX Filter (ПРОВЕРКА ТРЕНДА)
             try:
-                from src.strategies.modules.adx_filter import (ADXFilter,
-                                                               ADXFilterConfig)
+                from src.strategies.modules.adx_filter import ADXFilter, ADXFilterConfig
 
                 # Получаем параметры ADX из текущего режима
-                regime_name_adx = "ranging"  # Fallback
-                try:
-                    if hasattr(self, "regime_manager") and self.regime_manager:
-                        regime_obj = self.regime_manager.get_current_regime()
-                        if regime_obj:
-                            regime_name_adx = (
-                                regime_obj.lower()
-                                if isinstance(regime_obj, str)
-                                else str(regime_obj).lower()
-                            )
-                except Exception as exc:
-                    logger.debug("Ignored error in optional block: %s", exc)
-
+                # regime_name_adx = "ranging"  # Fallback (удалено как неиспользуемое)
                 # Получаем параметры из режима
                 regime_params = None
                 if hasattr(self, "regime_manager") and self.regime_manager:
@@ -868,7 +863,9 @@ class FuturesSignalGenerator:
             # ✅ Инициализация Correlation Filter
             try:
                 from src.strategies.modules.correlation_filter import (
-                    CorrelationFilter, CorrelationFilterConfig)
+                    CorrelationFilter,
+                    CorrelationFilterConfig,
+                )
 
                 # Получаем параметры из базового конфига
                 corr_config_data = None
@@ -1008,7 +1005,9 @@ class FuturesSignalGenerator:
             # ✅ Инициализация Pivot Points Filter
             try:
                 from src.strategies.modules.pivot_points import (
-                    PivotPointsConfig, PivotPointsFilter)
+                    PivotPointsConfig,
+                    PivotPointsFilter,
+                )
 
                 # Получаем параметры из базового конфига
                 pivot_config_data = None
@@ -1154,7 +1153,7 @@ class FuturesSignalGenerator:
                         use_last_n_days=pivot_use_days,
                         level_tolerance_percent=pivot_tolerance,
                         score_bonus_near_level=pivot_bonus,
-                        cache_ttl_seconds=30,  # Кэш на 30 секунд
+                        cache_ttl_seconds=300,  # Кэш на 300 секунд (минимум PivotPointsConfig)
                     )
 
                     try:
@@ -1191,7 +1190,9 @@ class FuturesSignalGenerator:
             # ✅ Инициализация Volume Profile Filter
             try:
                 from src.strategies.modules.volume_profile_filter import (
-                    VolumeProfileConfig, VolumeProfileFilter)
+                    VolumeProfileConfig,
+                    VolumeProfileFilter,
+                )
 
                 # Получаем параметры из базового конфига
                 vp_config_data = None
@@ -1314,7 +1315,7 @@ class FuturesSignalGenerator:
                         score_bonus_in_value_area=vp_bonus_va,
                         score_bonus_near_poc=vp_bonus_poc,
                         poc_tolerance_percent=vp_poc_tolerance,
-                        cache_ttl_seconds=30,  # Кэш на 30 секунд
+                        cache_ttl_seconds=60,  # Кэш на 60 секунд (минимум VolumeProfileConfig)
                     )
 
                     try:
@@ -1554,7 +1555,7 @@ class FuturesSignalGenerator:
                         # detect_regime() только определяет режим, но не сохраняет его
                         # update_regime() определяет И сохраняет режим в DataRegistry
                         if hasattr(regime_manager, "update_regime"):
-                            new_regime = await regime_manager.update_regime(
+                            await regime_manager.update_regime(
                                 market_data.ohlcv_data, current_price
                             )
                             # update_regime возвращает None если режим не изменился, или новый режим если изменился
@@ -1901,7 +1902,6 @@ class FuturesSignalGenerator:
                     )
 
             # Fallback: если DataRegistry недоступен или свечей <10 — запрашиваем через REST API для первичной инициализации
-            import time
 
             import aiohttp
 
@@ -3958,8 +3958,7 @@ class FuturesSignalGenerator:
 
             # ✅ ПРИОРИТЕТ 2.5 (28.12.2025): Логирование параметров EMA
             logger.debug(
-                f"📊 {symbol} EMA параметры: fast_period={ema_fast_period_rsi}, slow_period={ema_slow_period_rsi}, "
-                f"EMA_fast={ema_fast:.2f}, EMA_slow={ema_slow:.2f}, цена={current_price:.2f}"
+                f"📊 {symbol} EMA параметры: fast_period={ema_fast_period_rsi}, slow_period={ema_slow_period_rsi}, EMA_fast={ema_fast:.2f}, EMA_slow={ema_slow:.2f}, цена={current_price:.2f}"
             )
 
             # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
@@ -4409,10 +4408,7 @@ class FuturesSignalGenerator:
                             strength_multipliers = getattr(
                                 regime_config, "strength_multipliers", None
                             )
-                            if strength_multipliers:
-                                conflict_multiplier = getattr(
-                                    strength_multipliers, "conflict", 0.5
-                                )
+                            # conflict_multiplier не используется, удалено для чистоты
                     except Exception as e:
                         logger.debug(
                             f"⚠️ Не удалось получить conflict_multiplier для {regime_name_macd}: {e}"
@@ -4531,10 +4527,7 @@ class FuturesSignalGenerator:
                             strength_multipliers = getattr(
                                 regime_config, "strength_multipliers", None
                             )
-                            if strength_multipliers:
-                                conflict_multiplier = getattr(
-                                    strength_multipliers, "conflict", 0.5
-                                )
+                            # conflict_multiplier не используется, удалено для чистоты
                     except Exception as e:
                         logger.debug(
                             f"⚠️ Не удалось получить conflict_multiplier для {regime_name_macd}: {e}"
@@ -4801,7 +4794,7 @@ class FuturesSignalGenerator:
                         conflict_type="ema_conflict",
                         base_strength=base_strength,
                         conflict_severity=0.6,  # Умеренный конфликт (0.6 из 1.0)
-                        regime=regime_name,
+                        regime=regime_name_bb,
                     )
                     logger.debug(
                         f"⚡ BB OVERSOLD для {symbol}: конфликт EMA, strength снижена на основе conflict_multiplier"
@@ -6402,14 +6395,7 @@ class FuturesSignalGenerator:
                         base_regime_filters, filters_profile
                     )
 
-                liquidity_override = self._to_dict(filters_profile.get("liquidity", {}))
-                order_flow_override = self._to_dict(
-                    filters_profile.get("order_flow", {})
-                )
-                funding_override = self._to_dict(filters_profile.get("funding", {}))
-                volatility_override = self._to_dict(
-                    filters_profile.get("volatility", {})
-                )
+                # удалены неиспользуемые переменные: liquidity_override, order_flow_override, funding_override, volatility_override
 
                 symbol_impulse_profile = self._to_dict(
                     regime_profile.get("impulse", {})
@@ -6473,8 +6459,9 @@ class FuturesSignalGenerator:
                             regime_params = regime_manager.get_current_parameters()
                             if regime_params and hasattr(regime_params, "modules"):
                                 adx_modules = regime_params.modules
-                                from src.strategies.modules.adx_filter import \
-                                    ADXFilterConfig
+                                from src.strategies.modules.adx_filter import (
+                                    ADXFilterConfig,
+                                )
 
                                 adx_new_config = ADXFilterConfig(
                                     enabled=True,
@@ -6560,8 +6547,9 @@ class FuturesSignalGenerator:
                                 regime_params = regime_manager.get_current_parameters()
                                 if regime_params and hasattr(regime_params, "modules"):
                                     # Обновляем параметры CorrelationFilter из текущего режима
-                                    from src.strategies.modules.correlation_filter import \
-                                        CorrelationFilterConfig
+                                    from src.strategies.modules.correlation_filter import (
+                                        CorrelationFilterConfig,
+                                    )
 
                                     corr_modules = regime_params.modules
                                     corr_new_config = CorrelationFilterConfig(
@@ -6598,8 +6586,9 @@ class FuturesSignalGenerator:
                                 regime_params = regime_manager.get_current_parameters()
                                 if regime_params and hasattr(regime_params, "modules"):
                                     # Обновляем параметры MTF из текущего режима
-                                    from src.strategies.modules.multi_timeframe import \
-                                        MTFConfig
+                                    from src.strategies.modules.multi_timeframe import (
+                                        MTFConfig,
+                                    )
 
                                     mtf_modules = regime_params.modules
                                     # ✅ ИСПРАВЛЕНО: Округляем score_bonus до int (может быть float в конфиге)
@@ -7018,6 +7007,7 @@ class FuturesSignalGenerator:
                     )
 
                 liquidity_override = self._to_dict(filters_profile.get("liquidity", {}))
+                liquidity_override = self._to_dict(filters_profile.get("liquidity", {}))
                 order_flow_override = self._to_dict(
                     filters_profile.get("order_flow", {})
                 )
@@ -7088,8 +7078,9 @@ class FuturesSignalGenerator:
                             regime_params = regime_manager.get_current_parameters()
                             if regime_params and hasattr(regime_params, "modules"):
                                 adx_modules = regime_params.modules
-                                from src.strategies.modules.adx_filter import \
-                                    ADXFilterConfig
+                                from src.strategies.modules.adx_filter import (
+                                    ADXFilterConfig,
+                                )
 
                                 adx_new_config = ADXFilterConfig(
                                     enabled=True,
@@ -7175,8 +7166,9 @@ class FuturesSignalGenerator:
                                 regime_params = regime_manager.get_current_parameters()
                                 if regime_params and hasattr(regime_params, "modules"):
                                     # Обновляем параметры CorrelationFilter из текущего режима
-                                    from src.strategies.modules.correlation_filter import \
-                                        CorrelationFilterConfig
+                                    from src.strategies.modules.correlation_filter import (
+                                        CorrelationFilterConfig,
+                                    )
 
                                     corr_modules = regime_params.modules
                                     corr_new_config = CorrelationFilterConfig(
@@ -7214,8 +7206,9 @@ class FuturesSignalGenerator:
                                 if regime_params and hasattr(regime_params, "modules"):
                                     mtf_modules = regime_params.modules
                                     # Обновляем параметры MTF из текущего режима
-                                    from src.strategies.modules.multi_timeframe import \
-                                        MultiTimeframeConfig
+                                    from src.strategies.modules.multi_timeframe import (
+                                        MultiTimeframeConfig,
+                                    )
 
                                     mtf_new_config = MultiTimeframeConfig(
                                         enabled=True,
@@ -7240,7 +7233,7 @@ class FuturesSignalGenerator:
                 # ✅ Проверка Pivot Points (если фильтр инициализирован)
                 if self.pivot_filter:
                     try:
-                        pivot_params = filters_profile.get("pivot_points", {})
+                        # удалена неиспользуемая переменная: pivot_params
                         if not self.pivot_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
@@ -7254,7 +7247,7 @@ class FuturesSignalGenerator:
                 # ✅ Проверка Volume Profile (если фильтр инициализирован)
                 if self.volume_filter:
                     try:
-                        vp_params = filters_profile.get("volume_profile", {})
+                        # удалена неиспользуемая переменная: vp_params
                         if not self.volume_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
@@ -7319,7 +7312,7 @@ class FuturesSignalGenerator:
                 # ✅ Проверка Funding Rate (если фильтр инициализирован)
                 if self.funding_filter:
                     try:
-                        funding_params = filters_profile.get("funding", {})
+                        # удалена неиспользуемая переменная: funding_params
                         if not self.funding_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
@@ -7333,7 +7326,7 @@ class FuturesSignalGenerator:
                 # ✅ Проверка Volatility (если фильтр инициализирован)
                 if self.volatility_filter:
                     try:
-                        volatility_params = filters_profile.get("volatility", {})
+                        # удалена неиспользуемая переменная: volatility_params
                         if not self.volatility_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
@@ -7523,7 +7516,7 @@ class FuturesSignalGenerator:
             if thresholds_config_min and thresholds_config_min.get(
                 "min_signal_strength"
             ):
-                source_info = f"thresholds_config"
+                source_info = "thresholds_config"
             elif (
                 hasattr(self.scalping_config, "by_symbol") and first_symbol != "UNKNOWN"
             ):

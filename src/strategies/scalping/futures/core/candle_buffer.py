@@ -39,11 +39,18 @@ class CandleBuffer:
         Добавить новую свечу в буфер.
 
         Если буфер заполнен, удаляется самая старая свеча (FIFO).
+        Не добавляет свечу, если timestamp совпадает с последней (фильтрация дубликатов).
 
         Args:
             candle: Свеча OHLCV
         """
         async with self._lock:
+            # Фильтрация дубликатов по timestamp
+            if self._candles and getattr(
+                self._candles[-1], "timestamp", None
+            ) == getattr(candle, "timestamp", None):
+                # logger.debug(f"⏩ CandleBuffer: Дубликат свечи по timestamp {candle.timestamp} — не добавлен")
+                return
             self._candles.append(candle)
 
             # Если превышен max_size, удаляем самую старую свечу
