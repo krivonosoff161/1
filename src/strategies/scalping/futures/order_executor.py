@@ -725,7 +725,18 @@ class FuturesOrderExecutor:
 
             # Tier 1: WebSocket real-time from DataRegistry
             try:
+                # Проверка свежести данных и авто-reconnect WebSocket
                 if hasattr(self, "data_registry") and self.data_registry:
+                    # Авто-реинициализация DataRegistry при stale данных
+                    await self.data_registry.auto_reinit(
+                        symbol, fetch_market_data_callback=self._fetch_price_rest
+                    )
+                    # Авто-reconnect WebSocket
+                    if (
+                        hasattr(self, "websocket_coordinator")
+                        and self.websocket_coordinator
+                    ):
+                        await self.websocket_coordinator.auto_reconnect()
                     market_data = await self.data_registry.get_market_data(symbol)
                     if (
                         market_data
@@ -752,7 +763,6 @@ class FuturesOrderExecutor:
                             logger.debug(
                                 f"✅ OrderExecutor: WebSocket price for limit calc: {current_price:.2f} (bid={best_bid:.2f}, ask={best_ask:.2f})"
                             )
-                            # Создаем price_limits структуру для совместимости
                             price_limits = {
                                 "current_price": current_price,
                                 "best_bid": best_bid,
@@ -828,7 +838,9 @@ class FuturesOrderExecutor:
             try:
                 pl_ts = price_limits.get("timestamp", 0) if price_limits else 0
                 pl_age = (time.time() - pl_ts) if pl_ts else None
-                if md_age_sec is not None and md_age_sec > 1.0:  # 🔴 BUG #5 FIX: 0.5 → 1.0
+                if (
+                    md_age_sec is not None and md_age_sec > 1.0
+                ):  # 🔴 BUG #5 FIX: 0.5 → 1.0
                     logger.error(
                         f"❌ Отклоняем размещение ордера по {symbol}: нет свежей WS-цены (DataRegistry {md_age_sec:.3f}s)"
                     )
@@ -1492,7 +1504,9 @@ class FuturesOrderExecutor:
                             price_diff_pct = (
                                 abs(price - current_price) / current_price * 100.0
                             )
-                            if price_diff_pct > 0.8:  # 🔴 BUG #6 FIX: 0.5% → 0.8% (more lenient)
+                            if (
+                                price_diff_pct > 0.8
+                            ):  # 🔴 BUG #6 FIX: 0.5% → 0.8% (more lenient)
                                 logger.warning(
                                     f"⚠️ Лимитная цена {price:.2f} отличается от текущей {current_price:.2f} "
                                     f"на {price_diff_pct:.2f}%, отключаем POST_ONLY"
@@ -1557,7 +1571,7 @@ class FuturesOrderExecutor:
                 market_data = None
                 if self.data_registry:
                     market_data = await self.data_registry.get_market_data(symbol)
-                
+
                 if not market_data and self.client:
                     # Fallback на REST API если DataRegistry недоступен
                     try:
@@ -1565,20 +1579,34 @@ class FuturesOrderExecutor:
                         if ticker:
                             market_data = ticker
                     except Exception as e:
-                        logger.debug(f"⚠️ order_executor: Fallback на REST API ошибка: {e}")
-                
+                        logger.debug(
+                            f"⚠️ order_executor: Fallback на REST API ошибка: {e}"
+                        )
+
                 if market_data:
                     # 🔴 BUG #3 FIX: Маппирование current_tick.bid/ask → bid_price/ask_price
                     # WebSocketCoordinator пишет current_tick (bid/ask)
                     # OrderExecutor читает bid_price/ask_price
                     current_tick = market_data.get("current_tick")
-                    if current_tick and hasattr(current_tick, "bid") and hasattr(current_tick, "ask"):
-                        current_bid = float(current_tick.bid) if current_tick.bid else 0.0
-                        current_ask = float(current_tick.ask) if current_tick.ask else 0.0
+                    if (
+                        current_tick
+                        and hasattr(current_tick, "bid")
+                        and hasattr(current_tick, "ask")
+                    ):
+                        current_bid = (
+                            float(current_tick.bid) if current_tick.bid else 0.0
+                        )
+                        current_ask = (
+                            float(current_tick.ask) if current_tick.ask else 0.0
+                        )
                     else:
                         # Fallback на прямое чтение если current_tick недоступен
-                        current_bid = float(market_data.get("bid_price") or market_data.get("bidPx", 0))
-                        current_ask = float(market_data.get("ask_price") or market_data.get("askPx", 0))
+                        current_bid = float(
+                            market_data.get("bid_price") or market_data.get("bidPx", 0)
+                        )
+                        current_ask = float(
+                            market_data.get("ask_price") or market_data.get("askPx", 0)
+                        )
 
                     if current_bid > 0 and current_ask > 0:
                         # Параметры для размещения цены
@@ -2231,7 +2259,9 @@ class FuturesOrderExecutor:
                         import aiohttp
 
                         inst_id = f"{symbol}-SWAP"
-                        url = f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                        url = (
+                            f"https://www.okx.com/api/v5/market/ticker?instId={inst_id}"
+                        )
                         async with aiohttp.ClientSession() as session:
                             async with session.get(url) as resp:
                                 if resp.status == 200:

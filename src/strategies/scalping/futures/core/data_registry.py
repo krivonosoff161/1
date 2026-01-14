@@ -36,27 +36,51 @@ class DataRegistry:
 
     def __init__(self):
         """Инициализация реестра"""
-        # Market data: symbol -> {price, volume, candles, etc.}
         self._market_data: Dict[str, Dict[str, Any]] = {}
-
-        # Indicators: symbol -> {indicator_name -> value}
         self._indicators: Dict[str, Dict[str, Any]] = {}
-
-        # Regimes: symbol -> {regime: str, params: dict, updated_at: datetime}
         self._regimes: Dict[str, Dict[str, Any]] = {}
-
-        # Balance: {balance: float, profile: str, updated_at: datetime}
         self._balance: Optional[Dict[str, Any]] = None
-
-        # Margin: {used: float, available: float, total: float, updated_at: datetime}
         self._margin: Optional[Dict[str, Any]] = None
-
-        # ✅ НОВОЕ: CandleBuffer для каждого символа и таймфрейма
-        # Структура: symbol -> timeframe -> CandleBuffer
-        # Например: "BTC-USDT" -> "1m" -> CandleBuffer(max_size=200)
         self._candle_buffers: Dict[str, Dict[str, CandleBuffer]] = {}
-
         self._lock = asyncio.Lock()
+        # TTL для данных (секунды)
+        self.market_data_ttl = 5.0
+        self.indicator_ttl = 2.0
+        self.regime_ttl = 10.0
+        self.balance_ttl = 10.0
+        self.margin_ttl = 10.0
+
+    async def is_stale(self, symbol: str) -> bool:
+        """Проверяет, устарели ли рыночные данные для символа"""
+        async with self._lock:
+            md = self._market_data.get(symbol, {})
+            updated_at = md.get("updated_at")
+            if not updated_at or not isinstance(updated_at, datetime):
+                return True
+            age = (datetime.now() - updated_at).total_seconds()
+            return age > self.market_data_ttl
+
+    async def auto_reinit(self, symbol: str, fetch_market_data_callback=None):
+        """Автоматически реинициализирует данные, если они устарели"""
+        if await self.is_stale(symbol):
+            logger.warning(
+                f"⚠️ DataRegistry: Данные для {symbol} устарели, авто-реинициализация..."
+            )
+            if fetch_market_data_callback:
+                try:
+                    new_data = await fetch_market_data_callback(symbol)
+                    if new_data:
+                        await self.update_market_data(symbol, new_data)
+                        logger.info(
+                            f"✅ DataRegistry: Данные для {symbol} обновлены через авто-реинициализацию"
+                        )
+                        return True
+                except Exception as e:
+                    logger.error(
+                        f"❌ DataRegistry: Ошибка авто-реинициализации {symbol}: {e}"
+                    )
+            return False
+        return True
 
     # ==================== MARKET DATA ====================
 
@@ -578,7 +602,10 @@ class DataRegistry:
                 f"📊 DataRegistry: Инициализирован буфер свечей для {symbol} {timeframe} "
                 f"({len(candles)} свечей, max_size={max_size})"
             )
-    def validate_ohlcv_data(self, symbol: str, candles: List[OHLCV]) -> tuple[bool, List[str]]:
+
+    def validate_ohlcv_data(
+        self, symbol: str, candles: List[OHLCV]
+    ) -> tuple[bool, List[str]]:
         """
         🔴 BUG #9 FIX (09.01.2026): Validate OHLCV data quality before use
 
@@ -620,7 +647,9 @@ class DataRegistry:
                         volume = float(candle.get("v") or candle.get("volume", 0))
                     else:
                         # Это OHLCV объект
-                        timestamp = getattr(candle, "timestamp", getattr(candle, "time", None))
+                        timestamp = getattr(
+                            candle, "timestamp", getattr(candle, "time", None)
+                        )
                         open_price = float(getattr(candle, "open", 0))
                         high_price = float(getattr(candle, "high", 0))
                         low_price = float(getattr(candle, "low", 0))
@@ -628,7 +657,9 @@ class DataRegistry:
                         volume = float(getattr(candle, "volume", 0))
 
                     # ✅ Check 1: No NaN/None/Zero prices
-                    if not all([open_price > 0, high_price > 0, low_price > 0, close_price > 0]):
+                    if not all(
+                        [open_price > 0, high_price > 0, low_price > 0, close_price > 0]
+                    ):
                         errors.append(
                             f"Candle {i}: Invalid prices - "
                             f"o={open_price}, h={high_price}, l={low_price}, c={close_price}"
@@ -636,11 +667,15 @@ class DataRegistry:
                         continue
 
                     # ✅ Check 2: OHLC relationships
-                    if not (high_price >= close_price >= low_price >= open_price or 
-                            high_price >= open_price >= low_price >= close_price):
+                    if not (
+                        high_price >= close_price >= low_price >= open_price
+                        or high_price >= open_price >= low_price >= close_price
+                    ):
                         # More relaxed: high >= max(o,c) and low <= min(o,c)
-                        if not (high_price >= max(open_price, close_price) and 
-                                low_price <= min(open_price, close_price)):
+                        if not (
+                            high_price >= max(open_price, close_price)
+                            and low_price <= min(open_price, close_price)
+                        ):
                             errors.append(
                                 f"Candle {i}: Invalid OHLC relationships - "
                                 f"o={open_price}, h={high_price}, l={low_price}, c={close_price}"
@@ -649,7 +684,9 @@ class DataRegistry:
 
                     # ✅ Check 3: Price gaps (if we have previous close)
                     if prev_close is not None and prev_close > 0:
-                        price_change_pct = abs((open_price - prev_close) / prev_close) * 100
+                        price_change_pct = (
+                            abs((open_price - prev_close) / prev_close) * 100
+                        )
                         # Flag large gaps (> 5%) but don't reject them
                         if price_change_pct > 5.0:
                             logger.warning(
@@ -661,8 +698,16 @@ class DataRegistry:
                     if prev_timestamp is not None:
                         if timestamp and prev_timestamp:
                             try:
-                                ts_curr = int(timestamp) if isinstance(timestamp, (int, float)) else timestamp
-                                ts_prev = int(prev_timestamp) if isinstance(prev_timestamp, (int, float)) else prev_timestamp
+                                ts_curr = (
+                                    int(timestamp)
+                                    if isinstance(timestamp, (int, float))
+                                    else timestamp
+                                )
+                                ts_prev = (
+                                    int(prev_timestamp)
+                                    if isinstance(prev_timestamp, (int, float))
+                                    else prev_timestamp
+                                )
                                 if ts_curr <= ts_prev:
                                     errors.append(
                                         f"Candle {i}: Non-sequential timestamps - "
@@ -681,7 +726,9 @@ class DataRegistry:
             # If we have errors, determine severity
             if errors:
                 # Log the issues
-                logger.warning(f"🔴 Data quality issues for {symbol} ({len(errors)} errors):")
+                logger.warning(
+                    f"🔴 Data quality issues for {symbol} ({len(errors)} errors):"
+                )
                 for err in errors[:5]:  # Show first 5 errors
                     logger.warning(f"   - {err}")
                 if len(errors) > 5:
@@ -696,7 +743,9 @@ class DataRegistry:
             return True, errors
 
         except Exception as e:
-            logger.error(f"❌ Error validating OHLCV data for {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"❌ Error validating OHLCV data for {symbol}: {e}", exc_info=True
+            )
             errors.append(f"Validation exception: {str(e)}")
             return False, errors
 
@@ -744,6 +793,7 @@ class DataRegistry:
                 return False, f"{symbol}: Cannot convert price to float: {price}"
 
             import math
+
             if math.isnan(price):
                 return False, f"{symbol}: Price is NaN"
 
@@ -755,6 +805,7 @@ class DataRegistry:
             if price_timestamp is not None:
                 try:
                     from datetime import datetime, timezone
+
                     current_time = datetime.now(timezone.utc).timestamp()
                     age_seconds = current_time - float(price_timestamp)
                     if age_seconds > max_age_seconds:
@@ -768,7 +819,9 @@ class DataRegistry:
 
             # ✅ Check 4: Within reasonable bounds (if reference price provided)
             if reference_price is not None and reference_price > 0:
-                price_change_pct = abs((price - reference_price) / reference_price) * 100
+                price_change_pct = (
+                    abs((price - reference_price) / reference_price) * 100
+                )
 
                 # Simple check: price shouldn't deviate by more than 10% from reference
                 if price_change_pct > 10.0:
@@ -781,6 +834,7 @@ class DataRegistry:
             if price_history and len(price_history) >= 3:
                 try:
                     import statistics
+
                     mean = statistics.mean(price_history)
                     if len(price_history) > 1:
                         stdev = statistics.stdev(price_history)
@@ -805,6 +859,7 @@ class DataRegistry:
         except Exception as e:
             logger.error(f"❌ Error validating price for {symbol}: {e}", exc_info=True)
             return False, f"Validation exception: {str(e)}"
+
     async def get_price_with_fallback(
         self,
         symbol: str,
@@ -833,11 +888,15 @@ class DataRegistry:
             # ✅ Strategy 1: WebSocket current price
             market_data = await self.get_market_data(symbol)
             if market_data:
-                current_price = market_data.get("current_price") or market_data.get("price")
+                current_price = market_data.get("current_price") or market_data.get(
+                    "price"
+                )
                 if current_price and current_price > 0:
                     is_valid, _ = self.validate_price(symbol, current_price)
                     if is_valid:
-                        logger.debug(f"✅ {symbol}: Got price from WebSocket: {current_price}")
+                        logger.debug(
+                            f"✅ {symbol}: Got price from WebSocket: {current_price}"
+                        )
                         return current_price, "websocket"
 
             # ✅ Strategy 2: REST API last price
@@ -856,7 +915,9 @@ class DataRegistry:
                                 )
                                 return last_price, "rest_api"
                 except Exception as e:
-                    logger.warning(f"⚠️ {symbol}: Failed to get price from REST API: {e}")
+                    logger.warning(
+                        f"⚠️ {symbol}: Failed to get price from REST API: {e}"
+                    )
 
             # ✅ Strategy 3: Order book mid price
             if client:
@@ -877,7 +938,9 @@ class DataRegistry:
                                     )
                                     return mid_price, "order_book"
                 except Exception as e:
-                    logger.warning(f"⚠️ {symbol}: Failed to get price from order book: {e}")
+                    logger.warning(
+                        f"⚠️ {symbol}: Failed to get price from order book: {e}"
+                    )
 
             # ✅ Strategy 4: Previous candle close (if recent)
             try:
@@ -888,8 +951,12 @@ class DataRegistry:
                     close_price = None
 
                     if isinstance(last_candle, dict):
-                        close_price = float(last_candle.get("c") or last_candle.get("close", 0))
-                        timestamp = last_candle.get("time") or last_candle.get("timestamp")
+                        close_price = float(
+                            last_candle.get("c") or last_candle.get("close", 0)
+                        )
+                        timestamp = last_candle.get("time") or last_candle.get(
+                            "timestamp"
+                        )
                     else:
                         close_price = float(getattr(last_candle, "close", 0))
                         timestamp = getattr(last_candle, "timestamp", None)
@@ -900,6 +967,7 @@ class DataRegistry:
                         if timestamp:
                             try:
                                 from datetime import datetime, timezone
+
                                 current_time = datetime.now(timezone.utc).timestamp()
                                 age_seconds = current_time - float(timestamp)
                                 is_recent = age_seconds < 60.0

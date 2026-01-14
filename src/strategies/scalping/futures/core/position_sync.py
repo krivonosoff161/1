@@ -87,22 +87,25 @@ class PositionSync:
         """
         now = time.time()
 
-        # 🔴 BUG #12 FIX: Интервал 5 мин → 30-60s для скальпинга
-        base_interval_min = 1.0  # 60 секунд (было 5 минут)
+        # Интервал синхронизации: 30–60 сек
+        base_interval_min = 0.5  # 30 секунд по умолчанию
         if self.scalping_config:
             sync_config = getattr(self.scalping_config, "sync", {})
             if isinstance(sync_config, dict):
                 base_interval_min = sync_config.get(
-                    "positions_sync_interval_minutes", 1.0
+                    "positions_sync_interval_minutes", 0.5
                 )
             elif hasattr(sync_config, "positions_sync_interval_minutes"):
                 base_interval_min = getattr(
-                    sync_config, "positions_sync_interval_minutes", 1.0
+                    sync_config, "positions_sync_interval_minutes", 0.5
                 )
 
         sync_interval = base_interval_min * 60.0  # Конвертируем в секунды
 
         if not force and (now - self._last_positions_sync) < sync_interval:
+            logger.debug(
+                f"⏳ PositionSync: слишком рано для новой синхронизации (интервал {sync_interval}s)"
+            )
             return
 
         # 🔴 BUG #12 FIX: Retry логика при REST ошибке (2-3 попытки с backoff)
@@ -114,7 +117,7 @@ class PositionSync:
             except Exception as e:
                 if attempt < max_retries - 1:
                     # Exponential backoff: 0.5s, 1s, 2s
-                    backoff_time = (0.5 * (2 ** attempt))
+                    backoff_time = 0.5 * (2**attempt)
                     logger.warning(
                         f"⚠️ PositionSync попытка {attempt + 1}/{max_retries} ошибка: {e}. "
                         f"Повторная попытка через {backoff_time}s..."
@@ -229,7 +232,9 @@ class PositionSync:
                                     entry_ts_ms = None
 
                         if entry_ts_ms:
-                            entry_dt = datetime.fromtimestamp(entry_ts_ms / 1000.0, tz=timezone.utc)
+                            entry_dt = datetime.fromtimestamp(
+                                entry_ts_ms / 1000.0, tz=timezone.utc
+                            )
                         else:
                             entry_dt = datetime.now(timezone.utc)
 

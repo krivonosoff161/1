@@ -23,21 +23,25 @@ from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
 from src.config import BotConfig
+
 # Futures-специфичные модули безопасности
 from src.strategies.modules.liquidation_guard import LiquidationGuard
 from src.strategies.modules.slippage_guard import SlippageGuard
 from src.strategies.modules.trading_statistics import TradingStatistics
 
 from ..spot.performance_tracker import PerformanceTracker
+
 # ✅ РЕФАКТОРИНГ: Импортируем новые модули
 from .calculations.margin_calculator import MarginCalculator
 from .config.config_manager import ConfigManager
 from .config.parameter_provider import ParameterProvider
-from .coordinators.exit_decision_coordinator import \
-    ExitDecisionCoordinator  # ✅ НОВОЕ (26.12.2025): Координатор решений о закрытии
+from .coordinators.exit_decision_coordinator import (
+    ExitDecisionCoordinator,  # ✅ НОВОЕ (26.12.2025): Координатор решений о закрытии
+)
 from .coordinators.order_coordinator import OrderCoordinator
-from .coordinators.priority_resolver import \
-    PriorityResolver  # ✅ НОВОЕ (26.12.2025): Резолвер приоритетов
+from .coordinators.priority_resolver import (
+    PriorityResolver,  # ✅ НОВОЕ (26.12.2025): Резолвер приоритетов
+)
 from .coordinators.signal_coordinator import SignalCoordinator
 from .coordinators.smart_exit_coordinator import SmartExitCoordinator
 from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
@@ -54,10 +58,12 @@ from .logging.structured_logger import StructuredLogger
 from .order_executor import FuturesOrderExecutor
 from .position_manager import FuturesPositionManager
 from .positions.entry_manager import EntryManager
-from .positions.exit_analyzer import \
-    ExitAnalyzer  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
-from .positions.position_monitor import \
-    PositionMonitor  # ✅ НОВОЕ: PositionMonitor для периодического мониторинга позиций
+from .positions.exit_analyzer import (
+    ExitAnalyzer,  # ✅ НОВОЕ: ExitAnalyzer для анализа закрытия
+)
+from .positions.position_monitor import (
+    PositionMonitor,  # ✅ НОВОЕ: PositionMonitor для периодического мониторинга позиций
+)
 from .positions.position_scaling_manager import PositionScalingManager
 from .private_websocket_manager import PrivateWebSocketManager
 from .risk.adaptive_leverage import AdaptiveLeverage
@@ -92,17 +98,19 @@ class FuturesScalpingOrchestrator:
         # 🔴 BUG #27 FIX: Валидация что trading.symbols = scalping.symbols
         trading_symbols = set(config.trading.symbols)
         scalping_symbols = set(self.scalping_config.symbols)
-        
+
         if trading_symbols != scalping_symbols:
             logger.error("❌ КРИТИЧЕСКАЯ ОШИБКА: trading.symbols ≠ scalping.symbols")
             logger.error(f"   trading.symbols: {sorted(trading_symbols)}")
             logger.error(f"   scalping.symbols: {sorted(scalping_symbols)}")
-            logger.error(f"   Разница: {trading_symbols.symmetric_difference(scalping_symbols)}")
+            logger.error(
+                f"   Разница: {trading_symbols.symmetric_difference(scalping_symbols)}"
+            )
             raise ValueError(
                 "Список символов в config должен совпадать! "
                 "Отредактируйте config_futures.yaml так чтобы trading.symbols = scalping.symbols"
             )
-        
+
         logger.info(f"✓ Символы синхронизированы: {sorted(scalping_symbols)}")
 
         # ✅ ЭТАП 1: Config Manager для работы с конфигурацией
@@ -611,12 +619,12 @@ class FuturesScalpingOrchestrator:
                 max_size_limiter_config, "max_total_size_percent", 0.80
             )
             max_positions = getattr(max_size_limiter_config, "max_positions", 5)
-            
+
             # Default to fallback balance, will be updated dynamically during trading
             default_balance = 1000.0
             max_single_size_usd = default_balance * max_single_size_percent
             max_total_size_usd = default_balance * max_total_size_percent
-            
+
             logger.info(
                 f"✅ MaxSizeLimiter инициализирован из конфига (% of balance): "
                 f"max_single={max_single_size_percent:.1%} (${max_single_size_usd:.2f}), "
@@ -3981,7 +3989,15 @@ class FuturesScalpingOrchestrator:
         Returns:
             Текущая цена или None если не удалось получить
         """
+        # 1. Проверка свежести данных DataRegistry
+        if hasattr(self, "data_registry") and self.data_registry:
+            # Попытка авто-реинициализации если данные устарели
+            await self.data_registry.auto_reinit(
+                symbol, fetch_market_data_callback=self._fetch_market_data_rest
+            )
+        # 2. Проверка WebSocket и авто-reconnect
         if hasattr(self, "websocket_coordinator") and self.websocket_coordinator:
+            await self.websocket_coordinator.auto_reconnect()
             return await self.websocket_coordinator.get_current_price_fallback(symbol)
         # Fallback для случая, когда координатор еще не инициализирован
         return None
@@ -4646,27 +4662,44 @@ class FuturesScalpingOrchestrator:
                             # Это TradeResult объект, можно записывать
                             self.performance_tracker.record_trade(trade_result)
                             logger.debug(f"✅ Сделка {symbol} записана в CSV")
-                            
+
                             # 🔴 BUG #29 FIX (09.01.2026): Log exit reason to structured logger for analysis
-                            if hasattr(self, "structured_logger") and self.structured_logger:
+                            if (
+                                hasattr(self, "structured_logger")
+                                and self.structured_logger
+                            ):
                                 try:
                                     reason = getattr(trade_result, "reason", "unknown")
-                                    regime = "ranging"  # Will be updated below if available
+                                    regime = (
+                                        "ranging"  # Will be updated below if available
+                                    )
                                     self.structured_logger.log_trade(
                                         symbol=symbol,
                                         side=getattr(trade_result, "side", "buy"),
-                                        entry_price=getattr(trade_result, "entry_price", 0.0),
-                                        exit_price=getattr(trade_result, "exit_price", 0.0),
+                                        entry_price=getattr(
+                                            trade_result, "entry_price", 0.0
+                                        ),
+                                        exit_price=getattr(
+                                            trade_result, "exit_price", 0.0
+                                        ),
                                         size=getattr(trade_result, "size", 0.0),
                                         pnl=getattr(trade_result, "net_pnl", 0.0),
-                                        commission=getattr(trade_result, "commission", 0.0),
-                                        duration_sec=getattr(trade_result, "duration_sec", 0.0),
+                                        commission=getattr(
+                                            trade_result, "commission", 0.0
+                                        ),
+                                        duration_sec=getattr(
+                                            trade_result, "duration_sec", 0.0
+                                        ),
                                         reason=reason,
                                         regime=regime,
                                     )
-                                    logger.debug(f"✅ Сделка {symbol} залогирована в StructuredLogger с reason={reason}")
+                                    logger.debug(
+                                        f"✅ Сделка {symbol} залогирована в StructuredLogger с reason={reason}"
+                                    )
                                 except Exception as e:
-                                    logger.warning(f"⚠️ Ошибка логирования сделки в StructuredLogger для {symbol}: {e}")
+                                    logger.warning(
+                                        f"⚠️ Ошибка логирования сделки в StructuredLogger для {symbol}: {e}"
+                                    )
                     except Exception as e:
                         logger.error(
                             f"❌ Ошибка записи сделки в CSV для {symbol}: {e}",
@@ -5148,11 +5181,11 @@ class FuturesScalpingOrchestrator:
                             f"info_{yesterday_str}*.log",
                             f"errors_{yesterday_str}*.log",
                         ]
-                        
+
                         log_files = []
                         for pattern in log_patterns:
                             log_files.extend(sorted(log_dir.glob(pattern)))
-                        
+
                         # Also archive structured logs
                         structured_dir = log_dir / "structured"
                         if structured_dir.exists():
@@ -5203,7 +5236,7 @@ class FuturesScalpingOrchestrator:
                                             logger.debug(
                                                 f"   📄 Добавлен в архив: {trades_json.name}"
                                             )
-                                        
+
                                         if trades_jsonl.exists():
                                             zipf.write(trades_jsonl, trades_jsonl.name)
                                             logger.debug(

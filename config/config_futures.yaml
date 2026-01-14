@@ -1269,7 +1269,7 @@ scalping:
   order_executor:
     limit_order:
       # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличен offset до 0.10% для гарантии исполнения
-      limit_offset_percent: 0.10  # ✅ ИСПРАВЛЕНО (07.01.2026): с 0.05% до 0.10% для гарантии исполнения maker
+      limit_offset_percent: 0.03  # ✅ УМЕНЬШЕНО (14.01.2026): с 0.10% до 0.03% для гарантии исполнения ближе к рынку
       max_wait_seconds: 60  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 30 до 60 сек для больше времени на исполнение
       auto_cancel_enabled: true  # Автоматическая отмена после таймаута
       auto_replace_enabled: true  # Автоматическая замена ордера с новой ценой
@@ -1280,16 +1280,16 @@ scalping:
       # ✅ АДАПТИВНО: Параметры по режимам рынка
       by_regime:
         trending:
-          limit_offset_percent: 0.12  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.05% до 0.12% для тренда
+          limit_offset_percent: 0.05  # ✅ УМЕНЬШЕНО (14.01.2026): с 0.12% до 0.05% для тренда
           max_wait_seconds: 60  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 30 до 60 сек
           use_market_order: false  # Используем лимитные ордера в тренде
           post_only: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Включено maker fee
         ranging:
-          limit_offset_percent: 0.10  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.05% до 0.10% для ranging
+          limit_offset_percent: 0.04  # ✅ УМЕНЬШЕНО (14.01.2026): с 0.10% до 0.04% для ranging
           max_wait_seconds: 60  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 30 до 60 сек
           post_only: true  # ✅ Maker fee 0.02% вместо taker 0.05%
         choppy:
-          limit_offset_percent: 0.15  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.05% до 0.15% для choppy (больше волатильности)
+          limit_offset_percent: 0.05  # ✅ УМЕНЬШЕНО (14.01.2026): с 0.15% до 0.05% для choppy (ближе к рынку)
           max_wait_seconds: 60  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 30 до 60 сек
           use_market_order: false  # Используем лимитные ордера в хаосе
           post_only: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Включено maker fee
@@ -1297,7 +1297,7 @@ scalping:
       # ✅ НОВОЕ: Настройки для каждой пары (приоритет выше, чем by_regime)
       by_symbol:
         "BTC-USDT":
-          limit_offset_percent: 0.08  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.03% до 0.08% для гарантии исполнения
+          limit_offset_percent: 0.03  # ✅ УМЕНЬШЕНО (14.01.2026): с 0.08% до 0.03% для гарантии исполнения ближе к рынку
           by_regime:
             trending:
               limit_offset_percent: 0.10  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.05% до 0.10%
@@ -1306,41 +1306,41 @@ scalping:
             choppy:
               limit_offset_percent: 0.15  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): с 0.06% до 0.15%
         "ETH-USDT":
-          limit_offset_percent: 0.04  # ✅ Немного больше для ETH
+          limit_offset_percent: 0.03  # ✅ УМЕНЬШЕНО (14.01.2026): ближе к рынку
           by_regime:
             trending:
-              limit_offset_percent: 0.06
+              limit_offset_percent: 0.03
             ranging:
-              limit_offset_percent: 0.10
+              limit_offset_percent: 0.04
             choppy:
-              limit_offset_percent: 0.08
+              limit_offset_percent: 0.05
         "SOL-USDT":
-          limit_offset_percent: 0.05  # ✅ Средний offset для SOL
+          limit_offset_percent: 0.03  # ✅ УМЕНЬШЕНО (14.01.2026): ближе к рынку
           by_regime:
             trending:
-              limit_offset_percent: 0.08
+              limit_offset_percent: 0.03
             ranging:
-              limit_offset_percent: 0.12
+              limit_offset_percent: 0.04
             choppy:
-              limit_offset_percent: 0.10
+              limit_offset_percent: 0.05
         "DOGE-USDT":
-          limit_offset_percent: 0.08  # ✅ Больший offset для высокой волатильности DOGE
+          limit_offset_percent: 0.03  # ✅ УМЕНЬШЕНО (14.01.2026): ближе к рынку
           by_regime:
             trending:
-              limit_offset_percent: 0.10
+              limit_offset_percent: 0.03
             ranging:
-              limit_offset_percent: 0.15
+              limit_offset_percent: 0.04
             choppy:
-              limit_offset_percent: 0.12
+              limit_offset_percent: 0.05
         "XRP-USDT":
-          limit_offset_percent: 0.10  # ✅ Больший offset для низкой ликвидности XRP
+          limit_offset_percent: 0.03  # ✅ УМЕНЬШЕНО (14.01.2026): ближе к рынку
           by_regime:
             trending:
-              limit_offset_percent: 0.12
+              limit_offset_percent: 0.03
             ranging:
-              limit_offset_percent: 0.18
+              limit_offset_percent: 0.04
             choppy:
-              limit_offset_percent: 0.15
+              limit_offset_percent: 0.05
   
   # RSI параметры (адаптированы для Futures)
   rsi_period: 14
