@@ -628,6 +628,7 @@ class FuturesSignalGenerator:
                         "min_regime_duration_minutes", 15
                     )
                     base_confirmations = detection_dict.get("required_confirmations", 3)
+                    score_log_symbols = detection_dict.get("score_log_symbols", [])
 
                     trending_params = create_regime_params("trending")
                     ranging_params = create_regime_params("ranging")
@@ -642,6 +643,7 @@ class FuturesSignalGenerator:
                         trend_strength_percent=base_trend_strength,
                         min_regime_duration_minutes=base_min_duration,
                         required_confirmations=base_confirmations,
+                        score_log_symbols=score_log_symbols,
                         trending_params=trending_params,
                         ranging_params=ranging_params,
                         choppy_params=choppy_params,
@@ -698,6 +700,7 @@ class FuturesSignalGenerator:
                             required_confirmations=symbol_detection.get(
                                 "required_confirmations", base_confirmations
                             ),
+                            score_log_symbols=score_log_symbols,
                             trending_params=symbol_trending_params,
                             ranging_params=symbol_ranging_params,
                             choppy_params=symbol_choppy_params,

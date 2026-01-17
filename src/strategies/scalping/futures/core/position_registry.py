@@ -26,6 +26,7 @@ class PositionMetadata:
     entry_price: Optional[float] = None
     position_side: Optional[str] = None  # long, short
     order_id: Optional[str] = None
+    order_type: Optional[str] = None
     tp_percent: Optional[float] = None
     sl_percent: Optional[float] = None
     leverage: Optional[int] = None
@@ -55,6 +56,7 @@ class PositionMetadata:
             "entry_price": self.entry_price,
             "position_side": self.position_side,
             "order_id": self.order_id,
+            "order_type": self.order_type,
             "tp_percent": self.tp_percent,
             "sl_percent": self.sl_percent,
             "leverage": self.leverage,
@@ -137,6 +139,7 @@ class PositionMetadata:
                 data.get("position_side")
             ),  # str - не критично, но для единообразия
             order_id=deepcopy(data.get("order_id")),
+            order_type=deepcopy(data.get("order_type")),
             tp_percent=data.get("tp_percent"),  # float - не нужен deepcopy
             sl_percent=data.get("sl_percent"),  # float - не нужен deepcopy
             leverage=data.get("leverage"),  # int - не нужен deepcopy

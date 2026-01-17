@@ -838,13 +838,17 @@ class FuturesOrderExecutor:
             try:
                 pl_ts = price_limits.get("timestamp", 0) if price_limits else 0
                 pl_age = (time.time() - pl_ts) if pl_ts else None
-                if (
-                    md_age_sec is not None and md_age_sec > 1.0
-                ):  # 🔴 BUG #5 FIX: 0.5 → 1.0
-                    logger.error(
-                        f"❌ Отклоняем размещение ордера по {symbol}: нет свежей WS-цены (DataRegistry {md_age_sec:.3f}s)"
-                    )
-                    raise ValueError("Stale price data: websocket is old")
+                if md_age_sec is not None and md_age_sec > 1.0:
+                    if price_limits_source == "rest":
+                        logger.warning(
+                            f"⚠️ {symbol}: WS price stale ({md_age_sec:.3f}s), "
+                            f"but REST price_limits are in use"
+                        )
+                    else:  # 🔴 BUG #5 FIX: 0.5 → 1.0
+                        logger.error(
+                            f"❌ Отклоняем размещение ордера по {symbol}: нет свежей WS-цены (DataRegistry {md_age_sec:.3f}s)"
+                        )
+                        raise ValueError("Stale price data: websocket is old")
 
                 # Дополнительный контроль: если price_limits тоже старые (>1.0s)  🔴 BUG #5 FIX
                 if pl_age is not None and pl_age > 1.0:  # 🔴 BUG #5 FIX: 0.5 → 1.0
@@ -1783,6 +1787,33 @@ class FuturesOrderExecutor:
                 error_data = result.get("data", [{}])[0] if result.get("data") else {}
                 error_code = error_data.get("sCode", "")
                 error_msg = error_data.get("sMsg", "")
+
+                # ✅ OKX: Client order ID already exists (51016) -> проверяем ордер по clOrdId
+                if error_code == "51016" or "51016" in str(error_code):
+                    try:
+                        existing = await self.client.get_order_by_clordid(
+                            symbol, cl_ord_id
+                        )
+                        if existing:
+                            existing_order_id = existing[0].get("ordId")
+                            logger.warning(
+                                f"⚠️ clOrdId уже существует, ордер найден на бирже: {existing_order_id}"
+                            )
+                            return {
+                                "success": True,
+                                "order_id": existing_order_id,
+                                "order_type": "limit",
+                                "symbol": symbol,
+                                "side": side,
+                                "size": size,
+                                "price": price,
+                                "timestamp": datetime.now(),
+                                "recovered": True,
+                            }
+                    except Exception as lookup_error:
+                        logger.warning(
+                            f"⚠️ Не удалось проверить ордер по clOrdId: {lookup_error}"
+                        )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ошибка 51006: Order price is not within the price limit
                 # Проверяем код ошибки и сообщение более гибко

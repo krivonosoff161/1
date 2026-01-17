@@ -121,6 +121,7 @@ class RegimeConfig:
     # Защита от частого переключения
     min_regime_duration_minutes: int = 15  # Минимум 15 мин в одном режиме
     required_confirmations: int = 3  # Нужно 3 подтверждения для переключения
+    score_log_symbols: List[str] = field(default_factory=list)
     # Параметры для каждого режима
     # ⚠️ ВАЖНО: Эти дефолты используются ТОЛЬКО как fallback если конфиг не загружен!
     # В реальной работе параметры загружаются из config.yaml через signal_generator
@@ -207,7 +208,10 @@ class AdaptiveRegimeManager:
         self._regime_cache: Dict[
             str, Tuple[RegimeType, datetime]
         ] = {}  # {symbol: (regime, timestamp)}
-        self._cache_ttl_seconds = 30  # Кэш действителен 30 секунд
+        self._cache_ttl_seconds = 5  # Diagnostic: TTL 5s for fresher regime detection
+        self._score_log_symbols = {
+            s.upper() for s in (getattr(config, "score_log_symbols", []) or [])
+        }
         # Статистика
         self.regime_switches: Dict[str, int] = {}
         # ✅ НОВОЕ: Модуль статистики для динамической адаптации
@@ -641,10 +645,15 @@ class AdaptiveRegimeManager:
         from datetime import timedelta
 
         cache_key = f"{len(candles)}_{current_price:.2f}"
+        force_recalc = (
+            bool(self._score_log_symbols)
+            and isinstance(self.symbol, str)
+            and self.symbol.upper() in self._score_log_symbols
+        )
         if cache_key in self._regime_cache:
             cached_regime, cache_time = self._regime_cache[cache_key]
             time_since_cache = (datetime.utcnow() - cache_time).total_seconds()
-            if time_since_cache < self._cache_ttl_seconds:
+            if time_since_cache < self._cache_ttl_seconds and not force_recalc:
                 logger.debug(
                     f"✅ RegimeManager: Используем кэшированный режим {cached_regime.value} "
                     f"(кэш {time_since_cache:.1f}с назад)"

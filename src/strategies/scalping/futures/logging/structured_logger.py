@@ -95,6 +95,40 @@ class StructuredLogger:
                 exc_info=True,
             )
 
+    def log_exit_diagnosis(
+        self,
+        symbol: str,
+        cause: str,
+        rule: str,
+        pnl_pct: Optional[float],
+        tsl_state: Optional[Dict[str, Any]],
+        sl_tp_targets: Optional[Dict[str, Any]],
+    ) -> None:
+        """Логировать диагностику закрытия позиции."""
+        try:
+            log_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "type": "position_exit_diagnosis",
+                "symbol": symbol,
+                "cause": cause,
+                "rule": rule,
+                "pnl_pct": pnl_pct,
+                "tsl_state": tsl_state,
+                "sl_tp_targets": sl_tp_targets,
+            }
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            filepath = self.log_dir / f"position_exit_diagnosis_{date_str}.jsonl"
+            with open(filepath, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+            logger.debug(
+                f"✅ StructuredLogger: Exit diagnosis {symbol} сохранен в {filepath}"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ StructuredLogger: Ошибка логирования exit diagnosis для {symbol}: {e}",
+                exc_info=True,
+            )
+
     def log_signal(
         self,
         symbol: str,
@@ -198,6 +232,7 @@ class StructuredLogger:
         high: float,
         low: float,
         close: float,
+        volume: Optional[float] = None,
     ) -> None:
         """
         Логировать создание новой свечи.
@@ -225,6 +260,8 @@ class StructuredLogger:
                 "low": low,
                 "close": close,
             }
+            if volume is not None:
+                log_entry["volume"] = volume
 
             date_str = datetime.now().strftime("%Y-%m-%d")
             filepath = self.log_dir / f"candles_new_{date_str}.json"

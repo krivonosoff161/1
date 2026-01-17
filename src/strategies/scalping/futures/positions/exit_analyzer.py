@@ -228,21 +228,35 @@ class ExitAnalyzer:
 
         return None
 
-    def _get_fee_rate_per_side(self) -> float:
-        """Возвращает ставку комиссии за сторону (maker) с единым источником из scalping_config."""
+    def _get_fee_rate_per_side(self, order_type: str = "market") -> float:
+        """Возвращает ставку комиссии за сторону (maker/taker) из scalping_config."""
         fee_rate = 0.0002
         commission_config = getattr(self.scalping_config, "commission", None)
         try:
             if isinstance(commission_config, dict):
-                fee_rate = commission_config.get(
-                    "maker_fee_rate", commission_config.get("trading_fee_rate", fee_rate)
-                )
+                if order_type == "market":
+                    fee_rate = commission_config.get(
+                        "taker_fee_rate",
+                        commission_config.get("trading_fee_rate", fee_rate),
+                    )
+                else:
+                    fee_rate = commission_config.get(
+                        "maker_fee_rate",
+                        commission_config.get("trading_fee_rate", fee_rate),
+                    )
             elif commission_config is not None:
-                fee_rate = getattr(
-                    commission_config,
-                    "maker_fee_rate",
-                    getattr(commission_config, "trading_fee_rate", fee_rate),
-                )
+                if order_type == "market":
+                    fee_rate = getattr(
+                        commission_config,
+                        "taker_fee_rate",
+                        getattr(commission_config, "trading_fee_rate", fee_rate),
+                    )
+                else:
+                    fee_rate = getattr(
+                        commission_config,
+                        "maker_fee_rate",
+                        getattr(commission_config, "trading_fee_rate", fee_rate),
+                    )
         except Exception:
             fee_rate = fee_rate
         try:
@@ -253,19 +267,19 @@ class ExitAnalyzer:
     async def _fetch_price_via_rest(self, symbol: str) -> Optional[float]:
         """
         ✅ НОВОЕ (10.01.2026): REST API fallback для получения цены.
-        
+
         Вызывается когда DataRegistry не имеет свежей цены.
         Используется как 4-й уровень fallback в _analyze_position_impl.
-        
+
         Args:
             symbol: Торговая пара (например "BTC-USDT")
-            
+
         Returns:
             float: Текущая цена или None если получить не удалось
         """
         if not self.client:
             return None
-            
+
         try:
             # OKX REST API метод получения текущей цены
             ticker = await self.client.get_ticker(symbol)
@@ -282,8 +296,10 @@ class ExitAnalyzer:
                     except (ValueError, TypeError):
                         pass
         except Exception as e:
-            logger.debug(f"⚠️ ExitAnalyzer._fetch_price_via_rest: Ошибка для {symbol}: {e}")
-            
+            logger.debug(
+                f"⚠️ ExitAnalyzer._fetch_price_via_rest: Ошибка для {symbol}: {e}"
+            )
+
         return None
 
     def set_conversion_metrics(self, conversion_metrics):
@@ -537,7 +553,7 @@ class ExitAnalyzer:
             # ✅ ИСПРАВЛЕНО: Проверка current_price на None и <= 0
             if current_price is None or current_price <= 0:
                 analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): 4-й уровень fallback - REST API
                 # Если DataRegistry пуст, пытаемся получить цену через REST API перед тем как вернуть None
                 if self.client:
@@ -760,7 +776,17 @@ class ExitAnalyzer:
                 else:
                     # ✅ ИСПРАВЛЕНО: После 10 секунд учитываем комиссию с учётом плеча и двух сторон (вход+выход)
                     # Используем maker_fee_rate (0.02%) для limit ордеров, т.к. бот использует limit ордера
-                    trading_fee_rate = self._get_fee_rate_per_side()
+                    entry_order_type = "market"
+                    if metadata and getattr(metadata, "order_type", None):
+                        entry_order_type = str(metadata.order_type).lower()
+                    elif (
+                        position
+                        and isinstance(position, dict)
+                        and position.get("order_type")
+                    ):
+                        entry_order_type = str(position.get("order_type")).lower()
+                    entry_fee_rate = self._get_fee_rate_per_side(entry_order_type)
+                    exit_fee_rate = self._get_fee_rate_per_side("market")
 
                     # ✅ ИСПРАВЛЕНО: Комиссия учитывает плечо и две стороны (вход + выход)
                     # Получаем leverage из metadata или position
@@ -784,7 +810,7 @@ class ExitAnalyzer:
                     # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
                     # (т.к. комиссия считается от номинала, а PnL% от маржи)
                     commission_pct = (
-                        (trading_fee_rate * 2) * leverage * 100
+                        (entry_fee_rate + exit_fee_rate) * leverage * 100
                     )  # 0.02% × 2 × leverage = 0.2% при leverage=5
                     net_pnl_pct = gross_pnl_pct - commission_pct
                     logger.debug(
@@ -837,7 +863,17 @@ class ExitAnalyzer:
             else:
                 # ✅ ИСПРАВЛЕНО: Комиссия с учётом плеча и двух сторон (вход+выход)
                 # Используем maker_fee_rate (0.02%) для limit ордеров
-                trading_fee_rate = self._get_fee_rate_per_side()
+                entry_order_type = "market"
+                if metadata and getattr(metadata, "order_type", None):
+                    entry_order_type = str(metadata.order_type).lower()
+                elif (
+                    position
+                    and isinstance(position, dict)
+                    and position.get("order_type")
+                ):
+                    entry_order_type = str(position.get("order_type")).lower()
+                entry_fee_rate = self._get_fee_rate_per_side(entry_order_type)
+                exit_fee_rate = self._get_fee_rate_per_side("market")
 
                 # Получаем leverage из metadata или position
                 leverage = 5  # Default
@@ -858,11 +894,56 @@ class ExitAnalyzer:
                         leverage = 5
 
                 # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
-                commission_pct = (trading_fee_rate * 2) * leverage * 100
+                commission_pct = (entry_fee_rate + exit_fee_rate) * leverage * 100
                 net_profit_pct = gross_profit_pct - commission_pct
                 return net_profit_pct
         else:
             return gross_profit_pct
+
+    def _get_effective_leverage(
+        self, position: Optional[Any] = None, metadata: Optional[Any] = None
+    ) -> float:
+        """Определяем фактическое плечо позиции с безопасным fallback."""
+        leverage = None
+        if metadata and hasattr(metadata, "leverage") and metadata.leverage:
+            try:
+                leverage = float(metadata.leverage)
+            except (TypeError, ValueError):
+                leverage = None
+        if leverage is None and position and isinstance(position, dict):
+            try:
+                leverage_val = position.get("leverage")
+                leverage = float(leverage_val) if leverage_val else None
+            except (TypeError, ValueError):
+                leverage = None
+        if leverage is None and self.scalping_config:
+            leverage = getattr(self.scalping_config, "leverage", None)
+        try:
+            leverage = float(leverage) if leverage else 1.0
+        except (TypeError, ValueError):
+            leverage = 1.0
+        return max(1.0, leverage)
+
+    def _get_exit_leverage_scale(
+        self, position: Optional[Any] = None, metadata: Optional[Any] = None
+    ) -> float:
+        """Масштабирует exit-проценты под текущее плечо, если включено."""
+        scale_enabled = True
+        reference_leverage = None
+        if self.config_manager and hasattr(self.config_manager, "_raw_config_dict"):
+            cfg = self.config_manager._raw_config_dict or {}
+            scale_enabled = cfg.get("exit_params_scale_by_leverage", True)
+            reference_leverage = cfg.get("exit_params_reference_leverage")
+        if reference_leverage is None and self.scalping_config:
+            reference_leverage = getattr(self.scalping_config, "leverage", None)
+        try:
+            reference_leverage = float(reference_leverage)
+        except (TypeError, ValueError):
+            reference_leverage = 1.0
+        if not scale_enabled or reference_leverage <= 0:
+            return 1.0
+        leverage = self._get_effective_leverage(position, metadata)
+        return leverage / reference_leverage
 
     async def _get_tp_percent(
         self,
@@ -871,6 +952,8 @@ class ExitAnalyzer:
         current_price: Optional[float] = None,
         market_data: Optional[Any] = None,
         current_pnl: Optional[float] = None,
+        position: Optional[Any] = None,
+        metadata: Optional[Any] = None,
     ) -> float:
         """
         Получение TP% из конфига по символу и режиму.
@@ -1068,6 +1151,19 @@ class ExitAnalyzer:
 
         # ✅ ИСПРАВЛЕНО (26.12.2025): Всегда адаптируем TP к волатильности через ATR (если доступен)
         # ATR-based TP обеспечивает адаптацию к волатильности рынка
+        leverage = self._get_effective_leverage(position, metadata)
+        tp_scale = self._get_exit_leverage_scale(position, metadata)
+        if tp_scale != 1.0:
+            tp_percent *= tp_scale
+            tp_min_percent *= tp_scale
+            tp_max_percent *= tp_scale
+
+        leverage = self._get_effective_leverage(position, metadata)
+        sl_scale = self._get_exit_leverage_scale(position, metadata)
+        if sl_scale != 1.0:
+            sl_percent *= sl_scale
+            sl_min_percent *= sl_scale
+
         if current_price and current_price > 0:
             try:
                 # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Используем ATRProvider БЕЗ fallback
@@ -1091,6 +1187,8 @@ class ExitAnalyzer:
                     # ✅ ГРОК ФИКС: ATR-based TP: max(1.5%, 2.5*ATR_1m) для ranging с per-symbol adjustment
                     atr_pct = (atr_1m / current_price) * 100
                     atr_tp_percent = atr_pct * tp_atr_multiplier
+                    # ATR% считается от цены, переводим в % от маржи через leverage
+                    atr_tp_percent = atr_tp_percent * leverage
 
                     # ✅ ГРОК ФИКС: Per-symbol multipliers для адаптации под волатильность символа
                     # В волатильных символах (SOL, DOGE) делаем TP чуть tighter (меньше), в стабильных (BTC) - стандарт
@@ -1153,6 +1251,8 @@ class ExitAnalyzer:
         regime: str,
         current_price: Optional[float] = None,
         market_data: Optional[Any] = None,
+        position: Optional[Any] = None,
+        metadata: Optional[Any] = None,
     ) -> float:
         """
         Получение SL% из конфига по символу и режиму.
@@ -1171,6 +1271,7 @@ class ExitAnalyzer:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): Обновлены fallback значения с 1.0→2.0 и 0.6→0.9
         sl_atr_multiplier = 2.0  # Было 1.0 - слишком маленький множитель!
         sl_min_percent = 0.9  # Было 0.6 - слишком тесный SL!
+        leverage = self._get_effective_leverage(position, metadata)
 
         # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения параметров
         # ✅ НОВОЕ (05.01.2026): Передаем контекст для адаптивных параметров
@@ -1360,14 +1461,14 @@ class ExitAnalyzer:
                     logger.error(
                         f"❌ [ATR_SL] {symbol}: ATRProvider недоступен - ПРОПУСКАЕМ расчет SL"
                     )
-                    return None
+                    return sl_percent
                 else:
                     atr_1m = self.atr_provider.get_atr(symbol)  # БЕЗ FALLBACK
                     if atr_1m is None:
                         logger.error(
                             f"❌ [ATR_SL] {symbol}: ATR не найден через ATRProvider - ПРОПУСКАЕМ расчет SL"
                         )
-                        return None
+                        return sl_percent
                     else:
                         logger.debug(
                             f"✅ [ATR_SL] {symbol}: ATR получен через ATRProvider: {atr_1m:.6f}"
@@ -1384,6 +1485,8 @@ class ExitAnalyzer:
                     # ATR-based SL: max(min_percent, ATR% * multiplier)
                     atr_pct = (atr_1m / current_price) * 100
                     atr_sl_percent = atr_pct * sl_atr_multiplier
+                    # ATR% считается от цены, переводим в % от маржи через leverage
+                    atr_sl_percent = atr_sl_percent * leverage
                     sl_percent = max(sl_min_percent, atr_sl_percent)
 
                     # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование расчета SL для каждой пары
@@ -2577,7 +2680,12 @@ class ExitAnalyzer:
                                     f"Используем Smart Close для комплексного анализа..."
                                 )
                                 smart_close_sl_percent = self._get_sl_percent(
-                                    symbol, "trending", current_price, market_data
+                                    symbol,
+                                    "trending",
+                                    current_price,
+                                    market_data,
+                                    position=position,
+                                    metadata=metadata,
                                 )
                                 logger.info(
                                     f"🔍 ExitAnalyzer TRENDING: Запуск Smart Close анализа для {symbol} {position_side.upper()} | "
@@ -2714,7 +2822,13 @@ class ExitAnalyzer:
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для адаптивного TP
             # ✅ НОВОЕ (05.01.2026): Передаем current_pnl для адаптивного расширения TP
             tp_percent = await self._get_tp_percent(
-                symbol, "trending", current_price, market_data, current_pnl=pnl_percent
+                symbol,
+                "trending",
+                current_price,
+                market_data,
+                current_pnl=pnl_percent,
+                position=position,
+                metadata=metadata,
             )
             try:
                 tp_percent = float(tp_percent) if tp_percent is not None else 2.4
@@ -2870,7 +2984,12 @@ class ExitAnalyzer:
             # 6. Проверка SL (Stop Loss) - должна быть ДО Smart Close
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для ATR-based SL
             sl_percent = self._get_sl_percent(
-                symbol, "trending", current_price, market_data
+                symbol,
+                "trending",
+                current_price,
+                market_data,
+                position=position,
+                metadata=metadata,
             )
             sl_percent = self._to_float(sl_percent, "sl_percent", 2.0)
             spread_buffer = self._get_spread_buffer(symbol, current_price)
@@ -3033,7 +3152,12 @@ class ExitAnalyzer:
             # Проверяем Smart Close только если убыток >= 1.5 * SL и прошло min_holding_minutes
             if gross_pnl_percent < 0:
                 smart_close_sl_percent = self._get_sl_percent(
-                    symbol, "trending", current_price, market_data
+                    symbol,
+                    "trending",
+                    current_price,
+                    market_data,
+                    position=position,
+                    metadata=metadata,
                 )
                 smart_close_spread_buffer = self._get_spread_buffer(
                     symbol, current_price
@@ -3378,6 +3502,7 @@ class ExitAnalyzer:
         Returns:
             Решение {action: str, reason: str, ...} или None
         """
+        sl_percent = 0.0
         try:
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ (25.12.2025): Начало анализа для режима RANGING
             logger.debug(
@@ -3468,6 +3593,8 @@ class ExitAnalyzer:
             # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличены пороги для уменьшения частоты emergency close
             # RANGING: более низкий порог (-2.5%), так как в ranging режиме позиции должны закрываться быстрее
             emergency_loss_threshold = -2.5  # Для ranging режима (было -1.5)
+            # Временное ослабление emergency-выхода в ranging
+            emergency_loss_threshold *= 1.5
 
             # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
             emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
@@ -3536,7 +3663,12 @@ class ExitAnalyzer:
                                 )
                                 # Используем Smart Close для более умного решения
                                 smart_close_sl_percent = self._get_sl_percent(
-                                    symbol, "ranging", current_price, market_data
+                                    symbol,
+                                    "ranging",
+                                    current_price,
+                                    market_data,
+                                    position=position,
+                                    metadata=metadata,
                                 )
                                 logger.info(
                                     f"🔍 ExitAnalyzer RANGING: Запуск Smart Close анализа для {symbol} {position_side.upper()} | "
@@ -3728,7 +3860,12 @@ class ExitAnalyzer:
             # 2.5. ✅ НОВОЕ: Проверка SL (Stop Loss) - должна быть ДО проверки TP
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для ATR-based SL
             sl_percent = self._get_sl_percent(
-                symbol, "ranging", current_price, market_data
+                symbol,
+                "ranging",
+                current_price,
+                market_data,
+                position=position,
+                metadata=metadata,
             )
             # ✅ ИСПРАВЛЕНО: Используем helper функцию для безопасной конвертации
             sl_percent = self._to_float(sl_percent, "sl_percent", 2.0)
@@ -3744,7 +3881,7 @@ class ExitAnalyzer:
                 sl_percent = sl_percent * 1.5  # 1.2% * 1.5 = 1.8%
                 logger.debug(
                     f"🛡️ ExitAnalyzer RANGING: После partial TP для {symbol} используем более мягкий SL: "
-                    f"{sl_percent:.2f}% (вместо стандартного {self._get_sl_percent(symbol, 'ranging', current_price, market_data):.2f}%)"
+                    f"{sl_percent:.2f}% (вместо стандартного {self._get_sl_percent(symbol, 'ranging', current_price, market_data, position=position, metadata=metadata):.2f}%)"
                 )
 
             spread_buffer = self._get_spread_buffer(symbol, current_price)
@@ -3949,7 +4086,12 @@ class ExitAnalyzer:
             # ✅ ИСПРАВЛЕНО: Учитываем спред для предотвращения дергания
             if gross_pnl_percent < 0:
                 smart_close_sl_percent = self._get_sl_percent(
-                    symbol, "ranging", current_price, market_data
+                    symbol,
+                    "ranging",
+                    current_price,
+                    market_data,
+                    position=position,
+                    metadata=metadata,
                 )
                 smart_close_spread_buffer = self._get_spread_buffer(
                     symbol, current_price
@@ -4054,6 +4196,8 @@ class ExitAnalyzer:
                 current_price,
                 market_data,
                 current_pnl=net_pnl_percent,
+                position=position,
+                metadata=metadata,
             )
             # ✅ ИСПРАВЛЕНО: Используем helper функцию для безопасной конвертации
             tp_percent = self._to_float(tp_percent, "tp_percent", 2.4)
@@ -4456,6 +4600,61 @@ class ExitAnalyzer:
                     if net_pnl_percent < 0:
                         # Если убыток >= timeout_loss_percent - закрываем жестко
                         if abs(net_pnl_percent) >= timeout_loss_percent:
+                            sl_active = False
+                            tsl_active = False
+                            try:
+                                sl_pct_tmp = self._get_sl_percent(
+                                    symbol,
+                                    "ranging",
+                                    current_price,
+                                    market_data,
+                                    position=position,
+                                    metadata=metadata,
+                                )
+                                sl_pct_tmp = self._to_float(
+                                    sl_pct_tmp, "sl_percent", 2.0
+                                )
+                                sl_threshold_tmp = (
+                                    -sl_pct_tmp
+                                    - self._get_spread_buffer(symbol, current_price)
+                                )
+                                sl_active = gross_pnl_percent <= sl_threshold_tmp
+                            except Exception:
+                                sl_active = False
+                            try:
+                                if self.orchestrator and hasattr(
+                                    self.orchestrator, "trailing_sl_coordinator"
+                                ):
+                                    tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(
+                                        symbol
+                                    )
+                                    if tsl:
+                                        stop_loss = tsl.get_stop_loss()
+                                        if stop_loss:
+                                            if position_side == "long":
+                                                tsl_active = current_price <= stop_loss
+                                            else:
+                                                tsl_active = current_price >= stop_loss
+                            except Exception:
+                                tsl_active = False
+
+                            if not (sl_active or tsl_active):
+                                logger.info(
+                                    f"⏰ ExitAnalyzer RANGING: ЖЕСТКИЙ СТОП смягчен для {symbol} - "
+                                    f"убыток {net_pnl_percent:.2f}%, но SL/TSL не активны, удерживаем"
+                                )
+                                return {
+                                    "action": "hold",
+                                    "reason": "max_holding_hard_stop_loss_soft_hold",
+                                    "pnl_pct": net_pnl_percent,
+                                    "gross_pnl_pct": gross_pnl_percent,
+                                    "minutes_in_position": minutes_in_position,
+                                    "max_holding_minutes": actual_max_holding,
+                                    "timeout_loss_percent": timeout_loss_percent,
+                                    "regime": regime,
+                                    "sl_active": sl_active,
+                                    "tsl_active": tsl_active,
+                                }
                             logger.warning(
                                 f"⏰ ExitAnalyzer RANGING: ЖЕСТКИЙ СТОП по max_holding для {symbol} - "
                                 f"время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
@@ -4491,14 +4690,20 @@ class ExitAnalyzer:
                             }
                     else:
                         # Позиция в прибыли - закрываем по max_holding
+                        reason = (
+                            "max_holding_hard_stop_loss"
+                            if net_pnl_percent < 0
+                            else "max_holding_hard_stop_profit"
+                        )
                         logger.info(
                             f"⏰ ExitAnalyzer RANGING: ЖЕСТКИЙ СТОП по max_holding для {symbol} - "
                             f"время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин, "
-                            f"Net прибыль {net_pnl_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%)"
+                            f"Net PnL {net_pnl_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%), "
+                            f"reason={reason}"
                         )
                         return {
                             "action": "close",
-                            "reason": "max_holding_hard_stop_profit",
+                            "reason": reason,
                             "pnl_pct": net_pnl_percent,  # Net PnL для логирования
                             "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                             "minutes_in_position": minutes_in_position,
@@ -4905,7 +5110,12 @@ class ExitAnalyzer:
                                     f"Используем Smart Close для комплексного анализа..."
                                 )
                                 smart_close_sl_percent = self._get_sl_percent(
-                                    symbol, "choppy", current_price, market_data
+                                    symbol,
+                                    "choppy",
+                                    current_price,
+                                    market_data,
+                                    position=position,
+                                    metadata=metadata,
                                 )
                                 smart_close = (
                                     await self._should_force_close_by_smart_analysis(
@@ -5074,7 +5284,13 @@ class ExitAnalyzer:
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для адаптивного TP
             # ✅ НОВОЕ (05.01.2026): Передаем current_pnl для адаптивного расширения TP
             tp_percent = await self._get_tp_percent(
-                symbol, "choppy", current_price, market_data, current_pnl=pnl_percent
+                symbol,
+                "choppy",
+                current_price,
+                market_data,
+                current_pnl=pnl_percent,
+                position=position,
+                metadata=metadata,
             )
             try:
                 tp_percent = float(tp_percent) if tp_percent is not None else 2.4
@@ -5106,7 +5322,12 @@ class ExitAnalyzer:
             # 4. Проверка SL (Stop Loss) - должна быть ДО Smart Close
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для ATR-based SL
             sl_percent = self._get_sl_percent(
-                symbol, "choppy", current_price, market_data
+                symbol,
+                "choppy",
+                current_price,
+                market_data,
+                position=position,
+                metadata=metadata,
             )
             sl_percent = self._to_float(sl_percent, "sl_percent", 2.0)
             spread_buffer = self._get_spread_buffer(symbol, current_price)
@@ -5188,7 +5409,12 @@ class ExitAnalyzer:
             # Проверяем Smart Close только если убыток >= 1.5 * SL и прошло min_holding_minutes
             if gross_pnl_percent < 0:
                 smart_close_sl_percent = self._get_sl_percent(
-                    symbol, "choppy", current_price, market_data
+                    symbol,
+                    "choppy",
+                    current_price,
+                    market_data,
+                    position=position,
+                    metadata=metadata,
                 )
                 smart_close_spread_buffer = self._get_spread_buffer(
                     symbol, current_price
@@ -5969,15 +6195,13 @@ class ExitAnalyzer:
         try:
             # Проверяем минимальную прибыль
             if current_pnl_pct < min_profit_pct:
-                reason = f"PnL {current_pnl_pct:.2f}% < min_profit {min_profit_pct:.2f}%"
+                reason = (
+                    f"PnL {current_pnl_pct:.2f}% < min_profit {min_profit_pct:.2f}%"
+                )
                 return False, reason
 
             # Проверяем время удержания
-            if (
-                max_holding_time_sec
-                and open_time
-                and current_time is None
-            ):
+            if max_holding_time_sec and open_time and current_time is None:
                 import time
 
                 current_time = time.time()
@@ -6107,4 +6331,3 @@ class ExitAnalyzer:
                 f"❌ Error analyzing exit conditions for {symbol}: {e}", exc_info=True
             )
             return False, f"Analysis error: {str(e)}"
-

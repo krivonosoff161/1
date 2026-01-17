@@ -256,6 +256,23 @@ class PositionScalingManager:
                                 current_pnl_percent = (upl / margin) * 100.0
                         except (ValueError, TypeError):
                             pass
+                        # Fallback: расчёт PnL по цене, если upl/margin пустые
+                        if current_pnl_percent is None:
+                            try:
+                                mark_px = float(pos.get("markPx", 0) or 0)
+                                avg_px = float(pos.get("avgPx", 0) or 0)
+                                pos_side = (pos.get("posSide", "") or "").lower()
+                                if mark_px > 0 and avg_px > 0:
+                                    if pos_side == "short":
+                                        current_pnl_percent = (
+                                            (avg_px - mark_px) / avg_px
+                                        ) * 100.0
+                                    else:
+                                        current_pnl_percent = (
+                                            (mark_px - avg_px) / avg_px
+                                        ) * 100.0
+                            except (ValueError, TypeError):
+                                pass
                         break
             except Exception as e:
                 logger.warning(
@@ -263,14 +280,12 @@ class PositionScalingManager:
                 )
                 current_pnl_percent = None
 
-            # 🔴 BUG #15 FIX: Проверяем что PnL получен (не None) перед использованием
             if current_pnl_percent is None:
-                return {
-                    "can_add": False,
-                    "reason": "Не удалось получить актуальный PnL с биржи",
-                    "addition_count": addition_count,
-                    "current_pnl_percent": None,
-                }
+                logger.warning(
+                    f"⚠️ [POSITION_SCALING] {symbol}: PnL не получен, "
+                    f"разрешаем доливку только при отсутствии явного убытка"
+                )
+                current_pnl_percent = 0.0
 
             # 5. Проверка убытка
             max_loss_for_addition = scaling_config["max_loss_for_addition"]

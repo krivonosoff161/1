@@ -195,12 +195,14 @@ class FuturesScalpingOrchestrator:
                 "Добавьте в config_futures.yaml: scalping.leverage (например, 5)"
             )
 
+        margin_mode = getattr(self.scalping_config, "margin_mode", "isolated")
         self.client = OKXFuturesClient(
             api_key=okx_config.api_key,
             secret_key=okx_config.api_secret,
             passphrase=okx_config.passphrase,
             sandbox=okx_config.sandbox,
             leverage=leverage,  # ✅ АДАПТИВНО: Из конфига
+            margin_mode=margin_mode,
         )
 
         # Модули безопасности - берем параметры из futures_modules или defaults
@@ -698,8 +700,8 @@ class FuturesScalpingOrchestrator:
         # Private WebSocket: используем wspap.okx.com (в private_websocket_manager.py)
         # OKX Public WebSocket: wss://ws.okx.com:8443/ws/v5/public (работает везде)
         if okx_config.sandbox:
-            ws_url = "wss://ws.okx.com:8443/ws/v5/public"  # Sandbox Public WebSocket
-            logger.info("📡 Используется SANDBOX Public WebSocket (ws.okx.com:8443)")
+            ws_url = "wss://wspap.okx.com:8443/ws/v5/public"  # Sandbox Public WebSocket
+            logger.info("📡 Используется SANDBOX Public WebSocket (wspap.okx.com:8443)")
         else:
             ws_url = "wss://ws.okx.com:8443/ws/v5/public"  # Production Public WebSocket (одинаков для обоих)
             logger.info("📡 Используется PRODUCTION Public WebSocket (ws.okx.com:8443)")
@@ -2638,6 +2640,36 @@ class FuturesScalpingOrchestrator:
                     # ✅ ИСПРАВЛЕНО (26.12.2025): Убран локальный импорт datetime - используем глобальный из строки 18
                     # from datetime import datetime, timezone  # ❌ УБРАНО - конфликт с глобальным импортом
 
+                    active_orders = []
+                    positions_snapshot = []
+                    tsl_snapshot = None
+                    try:
+                        if self.client:
+                            active_orders = await self.client.get_active_orders(symbol)
+                            positions_snapshot = await self.client.get_positions(symbol)
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Exchange-side closure: failed to fetch orders/positions for {symbol}: {e}"
+                        )
+                    try:
+                        if self.trailing_sl_coordinator:
+                            tsl = self.trailing_sl_coordinator.get_tsl(symbol)
+                            if tsl:
+                                tsl_snapshot = {
+                                    "entry_price": getattr(tsl, "entry_price", None),
+                                    "current_trail": getattr(
+                                        tsl, "current_trail", None
+                                    ),
+                                    "entry_timestamp": getattr(
+                                        tsl, "entry_timestamp", None
+                                    ),
+                                    "mode": getattr(tsl, "mode", None),
+                                }
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Exchange-side closure: failed to fetch TSL for {symbol}: {e}"
+                        )
+
                     closure_data = {
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "event": "exchange_side_closure",
@@ -2653,6 +2685,10 @@ class FuturesScalpingOrchestrator:
                         "duration_sec": duration_sec,
                         "reason": "exchange_side",
                         "possible_causes": ["TSL", "Liquidation", "ADL", "Manual"],
+                        "active_orders_count": len(active_orders),
+                        "active_orders": active_orders[:5],
+                        "positions_snapshot": positions_snapshot,
+                        "tsl_snapshot": tsl_snapshot,
                     }
 
                     closures_file = f"logs/futures/structured/position_closures_{datetime.now().strftime('%Y-%m-%d')}.jsonl"
@@ -2662,6 +2698,20 @@ class FuturesScalpingOrchestrator:
                     logger.debug(
                         f"✅ Exchange-side closure залогировано в JSON: {closures_file}"
                     )
+                    if self.structured_logger:
+                        try:
+                            self.structured_logger.log_exit_diagnosis(
+                                symbol=symbol,
+                                cause="exchange_side",
+                                rule="exchange_side",
+                                pnl_pct=None,
+                                tsl_state=tsl_snapshot,
+                                sl_tp_targets=None,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"⚠️ Ошибка structured exit diagnosis (exchange_side) для {symbol}: {e}"
+                            )
                 except Exception as e:
                     logger.error(
                         f"❌ Ошибка JSON-логирования exchange-side closure: {e}"
@@ -3704,8 +3754,26 @@ class FuturesScalpingOrchestrator:
             Использованная маржа в USD (сумма маржи всех открытых позиций)
         """
         try:
+
+            async def _retry_call(op_name, coro, max_attempts=3, base_delay=0.2):
+                # Exponential backoff, keeps <10 rps per key
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        return await coro()
+                    except Exception as exc:
+                        if attempt == max_attempts:
+                            raise
+                        delay = min(base_delay * (2 ** (attempt - 1)), 1.0)
+                        logger.warning(
+                            f"⚠️ Orchestrator: {op_name} failed (attempt {attempt}/{max_attempts}): {exc}. "
+                            f"Retrying in {delay:.2f}s"
+                        )
+                        await asyncio.sleep(delay)
+
             # Получаем все позиции с биржи
-            exchange_positions = await self.client.get_positions()
+            exchange_positions = await _retry_call(
+                "get_positions", self.client.get_positions
+            )
             if not exchange_positions:
                 return 0.0
 
@@ -3745,7 +3813,10 @@ class FuturesScalpingOrchestrator:
                         # Получаем ctVal для корректного перевода контрактов в монеты
                         ct_val = 0.01
                         try:
-                            details = await self.client.get_instrument_details(symbol)
+                            details = await _retry_call(
+                                f"get_instrument_details[{symbol}]",
+                                lambda: self.client.get_instrument_details(symbol),
+                            )
                             if details:
                                 ct_val = float(details.get("ctVal", ct_val)) or ct_val
                         except Exception as e:
@@ -5193,6 +5264,8 @@ class FuturesScalpingOrchestrator:
                                 f"trades_{yesterday_str}*.jsonl",
                                 f"signals_{yesterday_str}*.jsonl",
                                 f"candles_*.jsonl",
+                                f"position_exit_diagnosis_{yesterday_str}*.jsonl",
+                                f"position_closures_{yesterday_str}*.jsonl",
                             ]
                             for pattern in structured_patterns:
                                 log_files.extend(sorted(structured_dir.glob(pattern)))

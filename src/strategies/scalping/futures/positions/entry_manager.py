@@ -173,6 +173,7 @@ class EntryManager:
                 entry_price=position_data.get("entry_price"),
                 position_side=position_data.get("position_side"),  # "long" или "short"
                 order_id=order_result.get("order_id"),
+                order_type=(order_result.get("order_type") or signal.get("type")),
                 tp_percent=signal.get("tp_percent"),
                 sl_percent=signal.get("sl_percent"),
                 leverage=signal.get("leverage"),

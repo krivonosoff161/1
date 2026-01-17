@@ -378,8 +378,18 @@ class ConfigManager:
                                 regime_exit, "sl_percent", None
                             )
                             if max_holding or tp_percent or sl_percent:
+                                tp_display = (
+                                    f"{tp_percent}%"
+                                    if tp_percent is not None
+                                    else "dynamic"
+                                )
+                                sl_display = (
+                                    f"{sl_percent}%"
+                                    if sl_percent is not None
+                                    else "dynamic"
+                                )
                                 regimes_found.append(
-                                    f"{regime_name.upper()}: max_holding={max_holding}min, TP={tp_percent}%, SL={sl_percent}%"
+                                    f"{regime_name.upper()}: max_holding={max_holding}min, TP={tp_display}, SL={sl_display}"
                                 )
 
                     if regimes_found:

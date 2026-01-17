@@ -117,11 +117,27 @@ class LiquidationGuard:
     async def _check_margin_health(self, client, callback: Optional[callable]):
         """Проверка здоровья маржи"""
         try:
+
+            async def _retry_call(op_name, coro, max_attempts=3, base_delay=0.2):
+                # Exponential backoff, keeps <10 rps per key
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        return await coro()
+                    except Exception as exc:
+                        if attempt == max_attempts:
+                            raise
+                        delay = min(base_delay * (2 ** (attempt - 1)), 1.0)
+                        logger.warning(
+                            f"⚠️ LiquidationGuard: {op_name} failed (attempt {attempt}/{max_attempts}): {exc}. "
+                            f"Retrying in {delay:.2f}s"
+                        )
+                        await asyncio.sleep(delay)
+
             # Получаем баланс
-            equity = await client.get_balance()
+            equity = await _retry_call("get_balance", client.get_balance)
 
             # Получаем позиции
-            positions = await client.get_positions()
+            positions = await _retry_call("get_positions", client.get_positions)
 
             if not positions:
                 return  # Нет позиций
@@ -168,7 +184,21 @@ class LiquidationGuard:
             # Теперь: используем общий USDT баланс → margin_ratio будет правильным (>1.80)
             try:
                 # ВСЕГДА берём общий баланс счёта для расчёта margin_ratio
-                equity = await client.get_balance()
+                # Retry balance fetch with exponential backoff
+                equity = None
+                for attempt in range(1, 4):
+                    try:
+                        equity = await client.get_balance()
+                        break
+                    except Exception as exc:
+                        if attempt == 3:
+                            raise
+                        delay = min(0.2 * (2 ** (attempt - 1)), 1.0)
+                        logger.warning(
+                            f"⚠️ LiquidationGuard: get_balance failed (attempt {attempt}/3): {exc}. "
+                            f"Retrying in {delay:.2f}s"
+                        )
+                        await asyncio.sleep(delay)
                 logger.debug(
                     f"💰 [LIQUIDATION_GUARD] Используем общий баланс для margin_ratio проверки {symbol}: ${equity:.2f}"
                 )
@@ -403,41 +433,69 @@ class LiquidationGuard:
     async def get_margin_status(self, client) -> Dict[str, Any]:
         """Получение статуса маржи"""
         try:
+
+            async def _retry_call(op_name, coro, max_attempts=3, base_delay=0.2):
+                # Exponential backoff, keeps <10 rps per key
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        return await coro()
+                    except Exception as exc:
+                        if attempt == max_attempts:
+                            raise
+                        delay = min(base_delay * (2 ** (attempt - 1)), 1.0)
+                        logger.warning(
+                            f"⚠️ LiquidationGuard: {op_name} failed (attempt {attempt}/{max_attempts}): {exc}. "
+                            f"Retrying in {delay:.2f}s"
+                        )
+                        await asyncio.sleep(delay)
+
             try:
-                equity = await client.get_balance()
+                equity = await _retry_call("get_balance", client.get_balance)
             except Exception as e:
                 error_str = str(e).lower()
                 # ✅ ИСПРАВЛЕНО: Пробрасываем SSL ошибки чтобы circuit breaker в client сработал
-                if "ssl" in error_str or "application_data_after_close_notify" in error_str:
+                if (
+                    "ssl" in error_str
+                    or "application_data_after_close_notify" in error_str
+                ):
                     logger.error(f"❌ SSL/Network ошибка получения баланса: {e}")
                     raise  # Пробрасываем дальше чтобы circuit breaker сработал
-                
+
                 logger.error(f"❌ Ошибка получения баланса: {e}")
                 # ✅ ИСПРАВЛЕНО: health_status теперь правильный dict, а не string
                 return {
                     "equity": 0.0,
                     "total_margin_used": 0.0,
                     "positions": [],
-                    "health_status": {"status": "error", "reason": "balance_fetch_failed"},
+                    "health_status": {
+                        "status": "error",
+                        "reason": "balance_fetch_failed",
+                    },
                     "error": str(e),
                 }
 
             try:
-                positions = await client.get_positions()
+                positions = await _retry_call("get_positions", client.get_positions)
             except Exception as e:
                 error_str = str(e).lower()
                 # ✅ ИСПРАВЛЕНО: Пробрасываем SSL ошибки чтобы circuit breaker в client сработал
-                if "ssl" in error_str or "application_data_after_close_notify" in error_str:
+                if (
+                    "ssl" in error_str
+                    or "application_data_after_close_notify" in error_str
+                ):
                     logger.error(f"❌ SSL/Network ошибка получения позиций: {e}")
                     raise  # Пробрасываем дальше чтобы circuit breaker сработал
-                
+
                 logger.error(f"❌ Ошибка получения позиций: {e}")
                 # ✅ ИСПРАВЛЕНО: health_status теперь правильный dict, а не string
                 return {
                     "equity": equity,
                     "total_margin_used": 0.0,
                     "positions": [],
-                    "health_status": {"status": "error", "reason": "positions_fetch_failed"},
+                    "health_status": {
+                        "status": "error",
+                        "reason": "positions_fetch_failed",
+                    },
                     "error": f"Failed to get positions: {e}",
                 }
 
@@ -452,7 +510,7 @@ class LiquidationGuard:
                         f"⚠️ LiquidationGuard: Пропуск некорректной позиции (type={type(position).__name__}): {position}"
                     )
                     continue
-                
+
                 try:
                     size = float(position.get("pos", "0"))
                 except (ValueError, TypeError):
@@ -460,7 +518,7 @@ class LiquidationGuard:
                         f"⚠️ LiquidationGuard: Ошибка парсинга размера позиции: {position.get('pos')}"
                     )
                     continue
-                
+
                 if size == 0:
                     continue
 

@@ -30,6 +30,9 @@ adaptive_exit_params:
     tightening_factor: 0.1     # Коэффициент ужесточения
 
 # ✅ НОВОЕ (07.01.2026): Централизованные параметры выхода по режимам
+exit_params_reference_leverage: 5.0
+exit_params_scale_by_leverage: true
+
 exit_params:
   trending:
     max_holding_minutes: 15.0
@@ -194,6 +197,7 @@ scalping:
   base_risk_percentage: 0.01  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Снижено с 3% до 1% (используется только как fallback)
   min_position_size: 0.001  # Минимальный размер позиции
   leverage: 5  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 3x до 5x для лучшего использования баланса (безопасно для фьючерсов)
+  margin_mode: "cross"  # режим маржи для фьючерсов (portfolio margin -> cross)
   signal_cooldown_seconds: 30.0  # ✅ АГРЕССИВНО: Уменьшено с 60 до 30 сек (-50%) - больше возможностей для входа
   # Порог быстрого выхода по крупной чистой прибыли (net, после комиссий)
   big_profit_exit_percent_majors: 2.5   # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Увеличено с 1.5% до 2.5% (ближе к TP, было 62% от TP 2.4%)
@@ -369,12 +373,19 @@ scalping:
   adaptive_regime:
     enabled: true
     detection:
-      trending_adx_threshold: 15.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Снижено с 18.0 до 15.0 для большего количества TRENDING режимов
-      ranging_adx_threshold: 18.0   # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Снижено с 20.0 до 18.0 для более точного определения RANGING
+      trending_adx_threshold: 16.0  # Диагностика: расширяем разрыв с RANGING
+      ranging_adx_threshold: 20.0   # Диагностика: расширяем разрыв с TRENDING
       high_volatility_threshold: 0.02  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Снижено с 0.025 до 0.02 (2.0%) для большего количества CHOPPY режимов
       trend_strength_percent: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Снижено с 1.5% до 1.0% для большего количества TRENDING режимов
       lookback_candles: 50  # Меньше свечей для Futures (быстрее)
       adx_period: 9  # Быстрый ADX для Futures
+      min_regime_duration_minutes: 6  # Диагностика: быстрее подтверждаем смену режима
+      score_log_symbols:
+        - ETH-USDT
+        - SOL-USDT
+        - XRP-USDT
+        - BTC-USDT
+        - DOGE-USDT
     
     # Trending режим (тренд) - ✅ ОПТИМИЗИРОВАНО ДЛЯ КАЧЕСТВЕННЫХ СДЕЛОК
     trending:
@@ -1510,7 +1521,7 @@ risk:
       min_time_between_orders_seconds: 40  # Медленнее для очень большого баланса (40 секунд вместо 30)
 
 # ✅ ПРАВКА #2: Адаптивные параметры выхода по режимам
-exit_params:
+exit_params_legacy:
   ranging:
     max_holding_minutes: 25.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильное значение для ranging режима
     sl_percent: 0.8  # ✅ ПРАВКА #11: Адаптивный SL для ranging
@@ -1538,11 +1549,13 @@ exit_params:
       choppy: 0.90    # ✅ CHOPPY: Максимально строгий порог (0.90) - только при очень сильном тренде против - оставляем как есть
 
 # ✅ НОВОЕ (05.01.2026): Адаптивные параметры выхода (TP/SL)
-adaptive_exit_params:
+adaptive_exit_params_legacy:
   enabled: true  # Включить/выключить адаптацию
   
   # Адаптация по балансу
   balance_adaptation:
+    small_threshold: 1500
+    large_threshold: 3500
     small:  # balance < $1,500
       tp_multiplier: 0.9  # Консервативный TP (90% от базового)
       sl_multiplier: 0.9  # Ужесточенный SL (90% от базового)
@@ -1556,13 +1569,13 @@ adaptive_exit_params:
   # Адаптация по P&L (расширение TP при сильном P&L)
   pnl_adaptation:
     enabled: true
-    extension_threshold: 0.8  # Расширять TP если P&L > 80% от базового TP
+    extension_threshold: 5.0  # Расширять TP если P&L > 80% от базового TP
     max_extension: 0.5  # Максимальное расширение TP (в ATR множителях)
     extension_factor: 0.3  # Коэффициент расширения (30% от избыточного P&L)
   
   # Адаптация по просадке (ужесточение SL при большой просадке) - ФАЗА 2
   drawdown_adaptation:
-    enabled: false  # Фаза 2 - будет включено позже
+    enabled: true  # Фаза 2 - будет включено позже
     tightening_threshold: 5.0  # Ужесточать SL если просадка > 5%
     max_tightening: 0.3  # Максимальное ужесточение SL (в ATR множителях)
     tightening_factor: 0.1  # Коэффициент ужесточения (10% от избыточной просадки)

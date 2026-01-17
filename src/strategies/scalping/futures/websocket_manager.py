@@ -16,39 +16,30 @@ from loguru import logger
 
 
 class FuturesWebSocketManager:
-        async def ensure_fresh_connection(self):
-            """Проверяет свежесть соединения и heartbeat, авто-reconnect если требуется"""
-            time_since_heartbeat = time.time() - self.last_heartbeat
-            if not self.connected or time_since_heartbeat > self.heartbeat_interval * 2:
-                logger.warning(f"⚠️ WebSocket stale/отключен ({time_since_heartbeat:.1f}s), авто-reconnect...")
-                await self._handle_disconnect()
-                return False
-            return True
-
-        async def auto_reconnect(self):
-            """Автоматически переподключает WebSocket если соединение неактуально"""
-            if not await self.ensure_fresh_connection():
-                logger.info("🔄 WebSocket auto-reconnect выполнен")
-                return True
-            return False
     """
     Менеджер WebSocket с авто-реконнектом для Futures.
 
     Автоматически переподключается при обрыве связи,
     восстанавливает подписки и мониторит здоровье соединения.
-
-    Attributes:
-        ws_url: URL WebSocket для Futures
-        ws: WebSocket соединение
-        connected: Статус подключения
-        subscribed_channels: Подписанные каналы
-        reconnect_attempts: Количество попыток переподключения
-        max_reconnect_attempts: Максимум попыток
-        reconnect_delay: Задержка между попытками
-        heartbeat_interval: Интервал heartbeat
-        last_heartbeat: Время последнего heartbeat
-        callbacks: Callbacks для обработки данных
     """
+
+    async def ensure_fresh_connection(self):
+        """Проверяет свежесть соединения и heartbeat, авто-reconnect если требуется"""
+        time_since_heartbeat = time.time() - self.last_heartbeat
+        if not self.connected or time_since_heartbeat > self.heartbeat_interval * 2:
+            logger.warning(
+                f"⚠️ WebSocket stale/отключен ({time_since_heartbeat:.1f}s), авто-reconnect..."
+            )
+            await self._handle_disconnect()
+            return False
+        return True
+
+    async def auto_reconnect(self):
+        """Автоматически переподключает WebSocket если соединение неактуально"""
+        if not await self.ensure_fresh_connection():
+            logger.info("🔄 WebSocket auto-reconnect выполнен")
+            return True
+        return False
 
     def __init__(
         self,

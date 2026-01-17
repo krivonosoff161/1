@@ -24,6 +24,7 @@ from ..spot.position_manager import TradeResult
 from .calculations.margin_calculator import MarginCalculator
 from .core.data_registry import DataRegistry
 from .core.position_registry import PositionRegistry
+
 # ✅ РЕФАКТОРИНГ: Импортируем новые модули
 from .positions.entry_manager import EntryManager
 from .positions.exit_analyzer import ExitAnalyzer
@@ -731,6 +732,30 @@ class FuturesPositionManager:
                         exc_info=True,
                     )
                     exit_decision = None
+            if exit_decision:
+                action = exit_decision.get("action")
+                reason = exit_decision.get("reason", "exit_decision")
+                if action == "close":
+                    logger.info(
+                        f"¢?: Exit Decision: -øó‘?‘<?øç? {symbol} (reason={reason})"
+                    )
+                    await self._close_position_by_reason(position, reason)
+                    return
+                elif action == "partial_close":
+                    fraction = exit_decision.get("fraction", 0.5)
+                    logger.info(
+                        f"à?"? Exit Decision: ø‘?‘'ñ‘Ø??ç úøó‘?‘<‘'ñç {symbol} ({fraction*100:.0f}%, reason={reason})"
+                    )
+                    if hasattr(self, "close_partial_position"):
+                        try:
+                            await self.close_partial_position(
+                                symbol=symbol, fraction=fraction, reason=reason
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"¢?? ?‘?ñ+óø õ‘?ñ ‘Øø‘?‘'ñ‘Ø??? úøó‘?‘<‘'ññ {symbol} ‘Øç‘?çú Exit Decision: {e}",
+                                exc_info=True,
+                            )
             elif self.exit_analyzer:
                 # Fallback: используем ExitAnalyzer напрямую
                 try:
@@ -4654,6 +4679,87 @@ class FuturesPositionManager:
             except Exception:
                 pass
 
+            # ✅ Structured exit diagnosis log
+            try:
+                metadata = None
+                if (
+                    hasattr(self, "position_registry")
+                    and self.position_registry is not None
+                ):
+                    metadata = await self.position_registry.get_metadata(symbol)
+                tp_percent = getattr(metadata, "tp_percent", None) if metadata else None
+                sl_percent = getattr(metadata, "sl_percent", None) if metadata else None
+                sl_tp_targets = {}
+                if entry_price and entry_price > 0:
+                    if tp_percent is not None:
+                        tp_price = (
+                            entry_price * (1 + tp_percent / 100)
+                            if side.lower() == "long"
+                            else entry_price * (1 - tp_percent / 100)
+                        )
+                        sl_tp_targets.update(
+                            {"tp_percent": tp_percent, "tp_price": tp_price}
+                        )
+                    if sl_percent is not None:
+                        sl_price = (
+                            entry_price * (1 - sl_percent / 100)
+                            if side.lower() == "long"
+                            else entry_price * (1 + sl_percent / 100)
+                        )
+                        sl_tp_targets.update(
+                            {"sl_percent": sl_percent, "sl_price": sl_price}
+                        )
+                tsl_state = {"active": False}
+                if hasattr(self, "orchestrator") and self.orchestrator:
+                    tsl_coord = getattr(self.orchestrator, "trailing_sl_coordinator", None)
+                    if tsl_coord:
+                        tsl = tsl_coord.get_tsl(symbol)
+                        if tsl:
+                            stop_loss = None
+                            try:
+                                stop_loss = tsl.get_stop_loss()
+                            except Exception:
+                                stop_loss = None
+                            tsl_state = {
+                                "active": True,
+                                "current_trail": getattr(tsl, "current_trail", None),
+                                "stop_loss": stop_loss,
+                                "entry_price": getattr(tsl, "entry_price", None),
+                                "entry_timestamp": getattr(tsl, "entry_timestamp", None),
+                            }
+
+                rule = "manual_or_other"
+                reason_lower = str(reason).lower()
+                if "trailing" in reason_lower:
+                    rule = "trailing_sl"
+                elif "tp" in reason_lower:
+                    rule = "take_profit"
+                elif "sl" in reason_lower:
+                    rule = "stop_loss"
+                elif "emergency" in reason_lower:
+                    rule = "emergency_loss_protection"
+                elif "max_holding" in reason_lower:
+                    rule = "max_holding"
+
+                if (
+                    hasattr(self, "orchestrator")
+                    and self.orchestrator
+                    and hasattr(self.orchestrator, "structured_logger")
+                    and self.orchestrator.structured_logger
+                ):
+                    self.orchestrator.structured_logger.log_exit_diagnosis(
+                        symbol=symbol,
+                        cause=str(reason),
+                        rule=rule,
+                        pnl_pct=net_pnl_pct,
+                        tsl_state=tsl_state,
+                        sl_tp_targets=sl_tp_targets or None,
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Ошибка structured exit diagnosis для {symbol}: {e}"
+                )
+
             # Определение стороны закрытия
             close_side = "sell" if side.lower() == "long" else "buy"
 
@@ -4686,7 +4792,19 @@ class FuturesPositionManager:
                         # Продолжаем как успешное закрытие, т.к. позиция уже закрыта
                         result = {"code": "0", "msg": "Position already closed"}
 
-            if result.get("code") == "0":
+                if not isinstance(result, dict):
+                    logger.error(
+                        f"❌ Ошибка ручного закрытия позиции: пустой ответ API для {symbol}"
+                    )
+                    return {
+                        "success": False,
+                        "error": "close_position_manually: empty api response",
+                    }
+                if result.get("code") != "0":
+                    return {
+                        "success": False,
+                        "error": result.get("msg") or "close_position_manually failed",
+                    }
                 # ✅ ИСПРАВЛЕНО: funding_fee уже получен выше и учтен в net_pnl
                 # Проверяем, что funding_fee был правильно получен
                 if funding_fee == 0.0:

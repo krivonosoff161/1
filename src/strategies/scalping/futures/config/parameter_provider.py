@@ -353,6 +353,13 @@ class ParameterProvider:
                 max(adaptive_params["sl_atr_multiplier"], 0.5), 3.0
             )
 
+            if balance is None:
+                balance = 0.0
+            if current_pnl is None:
+                current_pnl = 0.0
+            if drawdown is None:
+                drawdown = 0.0
+
             # �ۦ-����T��-�-�-�-���� ��T¦-���-�-T�T� �-�+�-��T¦��-�-T�T� ���-T��-�-��T�T��-�-
             logger.info(
                 f"���� [ADAPTIVE] {symbol} ({regime}): �䦬�-�-��Ț-T˦� ���-T��-�-��T�T�T� ��� "

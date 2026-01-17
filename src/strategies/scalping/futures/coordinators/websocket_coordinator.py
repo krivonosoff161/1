@@ -148,6 +148,18 @@ class WebSocketCoordinator:
         self._last_throttle_state: Dict[str, str] = {}
         # Последний момент вывода health-логов по символу
         self._last_health_log_ts: Dict[str, float] = {}
+        # Use real OHLCV from kline stream instead of ticker-derived candles.
+        self._use_kline_candles = True
+        # Throttle kline diagnostics to avoid log spam
+        self._last_kline_log_ts: Dict[str, float] = {}
+        # REST candle polling fallback (when kline WS is unavailable)
+        self._rest_candle_task: Optional[asyncio.Task] = None
+        self._rest_candle_poll_interval = 60.0
+        self._rest_candle_rate_delay = 0.12  # <= ~8.3 req/s
+
+        # Sandbox WS often does not support candle channels; use REST fallback.
+        if self.client and getattr(self.client, "sandbox", False):
+            self._use_kline_candles = False
         logger.info(
             f"✅ WebSocketCoordinator initialized (ticker throttle: 1/{self._ticker_throttle})"
         )
@@ -173,6 +185,13 @@ class WebSocketCoordinator:
                         if symbol:
                             await self.handle_ticker_data(symbol, data)
 
+                async def kline_callback(data):
+                    if "data" in data and len(data["data"]) > 0:
+                        inst_id = data.get("arg", {}).get("instId", "")
+                        symbol = inst_id.replace("-SWAP", "")
+                        if symbol:
+                            await self.handle_candle_data(symbol, data)
+
                 # Подписка на тикеры для всех символов
                 for symbol in self.scalping_config.symbols:
                     inst_id = f"{symbol}-SWAP"
@@ -181,10 +200,23 @@ class WebSocketCoordinator:
                         inst_id=inst_id,
                         callback=ticker_callback,  # Один callback для всех
                     )
+                    if self._use_kline_candles:
+                        await self.ws_manager.subscribe(
+                            channel="candle1m",
+                            inst_id=inst_id,
+                            callback=kline_callback,
+                        )
+                        await self.ws_manager.subscribe(
+                            channel="candle5m",
+                            inst_id=inst_id,
+                            callback=kline_callback,
+                        )
 
                 logger.info(
                     f"📊 Подписка на тикеры для {len(self.scalping_config.symbols)} пар"
                 )
+                if not self._use_kline_candles:
+                    self._ensure_rest_candle_polling()
             else:
                 logger.warning("⚠️ Не удалось подключиться к WebSocket")
 
@@ -330,7 +362,7 @@ class WebSocketCoordinator:
                     # Была проблема: if price == self.last_prices.get(symbol): return
                     # Это блокировала обновления when price unchanged
                     # Но даже при одной цене нужно обновлять updated_at и проверки!
-                    
+
                     self.last_prices[symbol] = price
 
                     # ✅ АТОМАРНО: Обновляем свечи, market_data и индикаторы под одним lock
@@ -338,14 +370,15 @@ class WebSocketCoordinator:
                         start_ts = time.perf_counter()
                         async with self._update_lock:
                             # 1) Обновление свечей
-                            try:
-                                await self._update_candle_from_ticker(
-                                    symbol, price, ticker
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    f"⚠️ Ошибка обновления свечей для {symbol}: {e}"
-                                )
+                            if not self._use_kline_candles:
+                                try:
+                                    await self._update_candle_from_ticker(
+                                        symbol, price, ticker
+                                    )
+                                except Exception as e:
+                                    logger.warning(
+                                        f"⚠️ Ошибка обновления свечей для {symbol}: {e}"
+                                    )
 
                             # 2) Обновление market data
                             try:
@@ -401,8 +434,9 @@ class WebSocketCoordinator:
                             try:
                                 if self._fast_adx_template:
                                     if symbol not in self._fast_adx_by_symbol:
-                                        from src.strategies.scalping.futures.indicators.fast_adx import \
-                                            FastADX
+                                        from src.strategies.scalping.futures.indicators.fast_adx import (
+                                            FastADX,
+                                        )
 
                                         period = getattr(
                                             self._fast_adx_template, "period", 9
@@ -560,6 +594,147 @@ class WebSocketCoordinator:
         except Exception as e:
             logger.error(f"❌ Ошибка обработки данных тикера: {e}")
 
+    async def handle_candle_data(self, symbol: str, data: dict):
+        """
+        Обработка kline (OHLCV) данных от OKX.
+        """
+        try:
+            arg = data.get("arg", {})
+            channel = arg.get("channel", "")
+            if not channel.startswith("candle"):
+                return
+
+            timeframe = channel.replace("candle", "")
+            rows = data.get("data", [])
+            if not rows:
+                return
+
+            # OKX kline format: [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm]
+            row = rows[0]
+            if len(row) < 6:
+                return
+
+            ts_ms = int(float(row[0]))
+            candle_ts = int(ts_ms / 1000)
+            open_price = float(row[1])
+            high_price = float(row[2])
+            low_price = float(row[3])
+            close_price = float(row[4])
+            volume = float(row[5])
+            confirm = str(row[8]) if len(row) > 8 else "0"
+
+            last_ts = self._last_candle_timestamps.get(f"{symbol}_{timeframe}")
+            if last_ts == candle_ts:
+                await self.data_registry.update_last_candle(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    high=high_price,
+                    low=low_price,
+                    close=close_price,
+                    volume=volume,
+                )
+            else:
+                new_candle = OHLCV(
+                    timestamp=candle_ts,
+                    symbol=symbol,
+                    open=open_price,
+                    high=high_price,
+                    low=low_price,
+                    close=close_price,
+                    volume=volume,
+                    timeframe=timeframe,
+                )
+                await self.data_registry.add_candle(symbol, timeframe, new_candle)
+                self._last_candle_timestamps[f"{symbol}_{timeframe}"] = candle_ts
+
+            if (
+                hasattr(self, "structured_logger")
+                and self.structured_logger
+                and timeframe in ["1m", "5m"]
+            ):
+                self.structured_logger.log_candle_new(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    timestamp=candle_ts,
+                    price=close_price,
+                    open_price=open_price,
+                    high=high_price,
+                    low=low_price,
+                    close=close_price,
+                    volume=volume,
+                )
+
+            if confirm == "1":
+                key = f"{symbol}_{timeframe}"
+                now_ts = time.time()
+                last_log_ts = self._last_kline_log_ts.get(key, 0.0)
+                if now_ts - last_log_ts >= 60.0:
+                    self._last_kline_log_ts[key] = now_ts
+                    logger.info(
+                        f"KLINE OK {symbol} {timeframe}: ts={candle_ts} "
+                        f"O={open_price:.4f} H={high_price:.4f} "
+                        f"L={low_price:.4f} C={close_price:.4f} V={volume:.4f}"
+                    )
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка обработки kline для {symbol}: {e}")
+
+    def _ensure_rest_candle_polling(self):
+        if self._rest_candle_task or not self.client:
+            return
+        self._rest_candle_task = asyncio.create_task(self._rest_candle_poll_loop())
+        logger.info("📡 REST candle polling включен (fallback)")
+
+    async def _rest_candle_poll_loop(self):
+        while True:
+            try:
+                await self._poll_rest_candles()
+            except Exception as e:
+                logger.warning(f"⚠️ REST candle polling error: {e}")
+            await asyncio.sleep(self._rest_candle_poll_interval)
+
+    async def _poll_rest_candles(self):
+        if not self.client:
+            return
+        timeframes = ["1m", "5m"]
+        for symbol in self.scalping_config.symbols:
+            for timeframe in timeframes:
+                candles = await self.client.get_candles(symbol, timeframe, limit=2)
+                if candles:
+                    candle = candles[-1]
+                    last_ts = self._last_candle_timestamps.get(f"{symbol}_{timeframe}")
+                    if last_ts == candle.timestamp:
+                        await self.data_registry.update_last_candle(
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            high=candle.high,
+                            low=candle.low,
+                            close=candle.close,
+                            volume=candle.volume,
+                        )
+                    else:
+                        await self.data_registry.add_candle(symbol, timeframe, candle)
+                        self._last_candle_timestamps[
+                            f"{symbol}_{timeframe}"
+                        ] = candle.timestamp
+
+                    if (
+                        hasattr(self, "structured_logger")
+                        and self.structured_logger
+                        and timeframe in ["1m", "5m"]
+                    ):
+                        self.structured_logger.log_candle_new(
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            timestamp=candle.timestamp,
+                            price=candle.close,
+                            open_price=candle.open,
+                            high=candle.high,
+                            low=candle.low,
+                            close=candle.close,
+                            volume=candle.volume,
+                        )
+                await asyncio.sleep(self._rest_candle_rate_delay)
+
     async def _update_candle_from_ticker(
         self, symbol: str, price: float, ticker: Dict[str, Any]
     ) -> None:
@@ -625,6 +800,10 @@ class WebSocketCoordinator:
             volume: Объем (для накопления)
         """
         try:
+            if timeframe in ["1m", "5m"] and (
+                self._use_kline_candles or self._rest_candle_task
+            ):
+                return
             # Определяем интервал таймфрейма в секундах
             timeframe_intervals = {
                 "1m": 60,

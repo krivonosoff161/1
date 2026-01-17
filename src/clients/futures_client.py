@@ -13,6 +13,7 @@ from loguru import logger
 
 # ✅ НОВОЕ (09.01.2026): Автоопределение VPN и адаптация соединения
 from src.connection_quality_monitor import ConnectionQualityMonitor
+from src.models import OHLCV
 
 
 def round_to_step(value: float, step: float) -> float:
@@ -62,9 +63,55 @@ class OKXFuturesClient:
                     "vol": float(ticker.get("vol24h", 0)),
                     "ts": int(ticker.get("ts", 0)),
                 }
+            else:
+                code = result.get("code")
+                msg = result.get("msg")
+                data_len = len(result.get("data", []) or [])
+                logger.warning(
+                    f"⚠️ get_ticker: unexpected response for {symbol}: "
+                    f"code={code}, msg={msg}, instId={symbol}-SWAP, data_len={data_len}"
+                )
         except Exception as e:
             logger.warning(f"⚠️ get_ticker: Ошибка получения тикера для {symbol}: {e}")
         return {}
+
+    async def get_candles(
+        self, symbol: str, timeframe: str = "1m", limit: int = 100
+    ) -> list[OHLCV]:
+        """
+        Получить OHLCV свечи через REST API.
+        """
+        try:
+            result = await self._make_request(
+                "GET",
+                "/api/v5/market/candles",
+                params={
+                    "instId": f"{symbol}-SWAP",
+                    "bar": timeframe,
+                    "limit": str(limit),
+                },
+            )
+            if result.get("code") == "0" and result.get("data"):
+                candles = []
+                for candle in result["data"]:
+                    if len(candle) >= 6:
+                        ts_sec = int(candle[0]) // 1000
+                        candles.append(
+                            OHLCV(
+                                timestamp=ts_sec,
+                                symbol=symbol,
+                                open=float(candle[1]),
+                                high=float(candle[2]),
+                                low=float(candle[3]),
+                                close=float(candle[4]),
+                                volume=float(candle[5]),
+                                timeframe=timeframe,
+                            )
+                        )
+                return list(reversed(candles))
+        except Exception as e:
+            logger.warning(f"⚠️ get_candles: Ошибка получения свечей для {symbol}: {e}")
+        return []
 
     """
     OKX Futures API Client (USDT-Margined Perpetual Swaps)
@@ -81,6 +128,7 @@ class OKXFuturesClient:
         passphrase: str,
         sandbox: bool = True,
         leverage: int = 3,
+        margin_mode: str = "isolated",
     ):
         self.base_url = "https://www.okx.com" if not sandbox else "https://www.okx.com"
         self.api_key = api_key
@@ -88,6 +136,9 @@ class OKXFuturesClient:
         self.passphrase = passphrase
         self.sandbox = sandbox
         self.leverage = leverage
+        self.margin_mode = (
+            margin_mode if margin_mode in ("isolated", "cross") else "isolated"
+        )
         self.session = None
         self._lot_sizes_cache: dict = {}  # Кэш для lot sizes
         self._instrument_details_cache: dict = (
@@ -259,6 +310,30 @@ class OKXFuturesClient:
 
         for attempt in range(max_retries):
             try:
+                if not self.session or self.session.closed:
+                    if not self._monitor_started:
+                        await self.connection_monitor.start()
+                        self._monitor_started = True
+                        logger.info("🌐 ConnectionQualityMonitor запущен")
+                    connector_params = self.connection_monitor.get_connector_params()
+                    self._session_max_age = (
+                        self.connection_monitor.get_session_max_age()
+                    )
+                    connector = aiohttp.TCPConnector(**connector_params)
+                    self.session = aiohttp.ClientSession(connector=connector)
+                    self._session_created_at = time.time()
+                    profile = self.connection_monitor.get_current_profile()
+                    if profile:
+                        logger.info(
+                            f"♻️ Переинициализирована aiohttp сессия (retry) с профилем '{profile.profile_name}': "
+                            f"force_close={profile.force_close}, timeout={profile.total_timeout}s, "
+                            f"session_max_age={profile.session_max_age}s"
+                        )
+                    else:
+                        logger.debug(
+                            "♻️ Переинициализирована aiohttp сессия (retry, профиль не определен)"
+                        )
+
                 # ✅ НОВОЕ (09.01.2026): Динамический timeout из ConnectionQualityMonitor
                 timeout = self.connection_monitor.get_timeout_params()
                 async with self.session.request(
@@ -1372,7 +1447,7 @@ class OKXFuturesClient:
 
         payload = {
             "instId": f"{symbol}-SWAP",
-            "tdMode": "isolated",
+            "tdMode": self.margin_mode,
             "side": side,
             "sz": formatted_size,
             "ordType": order_type,
@@ -1424,7 +1499,20 @@ class OKXFuturesClient:
         if cl_ord_id:
             payload["clOrdId"] = cl_ord_id[:32]  # Ограничиваем до 32 символов
 
-        return await self._make_request("POST", "/api/v5/trade/order", data=payload)
+        try:
+            return await self._make_request("POST", "/api/v5/trade/order", data=payload)
+        except RuntimeError as e:
+            error_text = str(e).lower()
+            if "posside" in error_text and "posSide" in payload:
+                payload_no_pos = dict(payload)
+                payload_no_pos.pop("posSide", None)
+                logger.warning(
+                    f"⚠️ place_order: posSide rejected by OKX for {symbol}, retry without posSide"
+                )
+                return await self._make_request(
+                    "POST", "/api/v5/trade/order", data=payload_no_pos
+                )
+            raise
 
     async def place_oco_order(
         self, symbol: str, side: str, size: float, tp_price: float, sl_price: float
@@ -1455,7 +1543,7 @@ class OKXFuturesClient:
 
         payload = {
             "instId": f"{symbol}-SWAP",
-            "tdMode": "isolated",
+            "tdMode": self.margin_mode,
             "side": side,
             "sz": str(rounded_size),
             "ordType": "oco",
@@ -1489,9 +1577,21 @@ class OKXFuturesClient:
         params = {"instType": "SWAP"}
         if symbol:
             params["instId"] = f"{symbol}-SWAP"
-        data = await self._make_request(
-            "GET", "/api/v5/trade/orders-pending", params=params
-        )
+        try:
+            data = await self._make_request(
+                "GET", "/api/v5/trade/orders-pending", params=params
+            )
+            return data.get("data", [])
+        except Exception as e:
+            error_str = str(e).lower()
+            if "orders-pending" in error_str or "timeout" in error_str:
+                raise TimeoutError(f"orders-pending timeout: {e}")
+            raise
+
+    async def get_order_by_clordid(self, symbol: str, cl_ord_id: str) -> list:
+        """Получение ордера по client order id (clOrdId)"""
+        params = {"instId": f"{symbol}-SWAP", "clOrdId": cl_ord_id}
+        data = await self._make_request("GET", "/api/v5/trade/order", params=params)
         return data.get("data", [])
 
     async def get_funding_payment_history(

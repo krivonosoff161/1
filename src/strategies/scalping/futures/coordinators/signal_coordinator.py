@@ -145,6 +145,7 @@ class SignalCoordinator:
             "margin_unsafe": 0,
             "other": 0,
         }
+        self._orders_pending_block_cycles: Dict[str, int] = {}
         # ✅ ФИНАЛЬНОЕ ДОПОЛНЕНИЕ (Grok): Время последнего reset статистики
         self._block_stats_reset_time = time.time()
 
@@ -876,6 +877,14 @@ class SignalCoordinator:
             # 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем активные ордера перед размещением
             try:
                 inst_id = f"{symbol}-SWAP"
+                block_cycles = self._orders_pending_block_cycles.get(symbol, 0)
+                if block_cycles > 0:
+                    self._orders_pending_block_cycles[symbol] = block_cycles - 1
+                    logger.warning(
+                        f"🚫 [VALIDATION] {symbol}: временная блокировка входов из-за timeout orders-pending "
+                        f"(осталось циклов: {block_cycles - 1})"
+                    )
+                    return
                 active_orders = await self.client.get_active_orders(symbol)
                 open_position_orders = [
                     o
@@ -891,6 +900,16 @@ class SignalCoordinator:
                     )
                     return
             except Exception as e:
+                if (
+                    isinstance(e, TimeoutError)
+                    or "orders-pending timeout" in str(e).lower()
+                ):
+                    self._orders_pending_block_cycles[symbol] = 2
+                    logger.warning(
+                        f"⚠️ Ошибка orders-pending для {symbol}: {e}. "
+                        f"Временная блокировка входов на 2 цикла."
+                    )
+                    return
                 logger.warning(f"⚠️ Ошибка проверки активных ордеров: {e}")
                 return
 
@@ -1796,39 +1815,53 @@ class SignalCoordinator:
                                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 8.1.2026: РЕАЛЬНЫЕ причины вместо "возможные"
                                     # Анализируем ФАКТИЧЕСКИЕ условия вместо пустых предположений
                                     actual_reasons = []
-                                    
+
                                     # Проверяем RSI
                                     if rsi is not None:
                                         if rsi < 30:
-                                            actual_reasons.append(f"RSI={rsi:.1f} < 30 (перепродано, нет SHORT)")
+                                            actual_reasons.append(
+                                                f"RSI={rsi:.1f} < 30 (перепродано, нет SHORT)"
+                                            )
                                         elif rsi > 70:
-                                            actual_reasons.append(f"RSI={rsi:.1f} > 70 (перекупленность, нет LONG)")
+                                            actual_reasons.append(
+                                                f"RSI={rsi:.1f} > 70 (перекупленность, нет LONG)"
+                                            )
                                         # Если 30-70 - RSI в норме, сигнал возможен
                                     else:
                                         actual_reasons.append("RSI не рассчитан")
-                                    
+
                                     # Проверяем MACD
                                     if macd_hist is not None:
-                                        if abs(macd_hist) < 0.001:  # Очень близко к нулю = нет четкого crossover
-                                            actual_reasons.append(f"MACD histogram={macd_hist:.6f} ≈ 0 (нет четкого crossover)")
+                                        if (
+                                            abs(macd_hist) < 0.001
+                                        ):  # Очень близко к нулю = нет четкого crossover
+                                            actual_reasons.append(
+                                                f"MACD histogram={macd_hist:.6f} ≈ 0 (нет четкого crossover)"
+                                            )
                                     else:
                                         actual_reasons.append("MACD не рассчитан")
-                                    
+
                                     # Проверяем ADX
                                     if adx_value is not None and adx_value > 0:
                                         if adx_value < 20:
-                                            actual_reasons.append(f"ADX={adx_value:.1f} < 20 (слабый тренд)")
+                                            actual_reasons.append(
+                                                f"ADX={adx_value:.1f} < 20 (слабый тренд)"
+                                            )
                                     else:
                                         actual_reasons.append("ADX не рассчитан")
-                                    
+
                                     # Проверяем фильтры
                                     if "BLOCKED" in filter_status_str:
-                                        actual_reasons.append(f"Фильтры заблокировали: {filter_status_str}")
-                                    
+                                        actual_reasons.append(
+                                            f"Фильтры заблокировали: {filter_status_str}"
+                                        )
+
                                     # Если нет специфичных причин - используем общее
                                     if not actual_reasons:
-                                        actual_reasons = ["Индикаторы не дали сигнала (условия не выполнены)"]
-                                    
+                                        actual_reasons = [
+                                            "Индикаторы не дали сигнала (условия не выполнены)"
+                                        ]
+
                                     actual_reasons_str = " | ".join(actual_reasons)
 
                                     # Форматируем значения БЕЗ fallback

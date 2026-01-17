@@ -52,8 +52,12 @@ class FilterManager:
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Кэш фильтров для снижения времени signals на 50-60%
         # Кэш: {symbol: {'adx': val, 'mtf': val, 'pivot': val, 'volume_profile': val, 'liquidity': val, 'order_flow': val, 'ts': now}}
         self.filter_cache: Dict[str, Dict[str, Any]] = {}
-        self.filter_cache_ttl_fast: float = 10.0  # ✅ СНИЖЕНО (11.01.2026): TTL 10 секунд (было 20, для более свежих данных)
-        self.filter_cache_ttl_slow: float = 30.0  # ✅ СНИЖЕНО (11.01.2026): TTL 30 секунд (было 60, для более свежих данных от API)
+        self.filter_cache_ttl_fast: float = (
+            5.0  # Diagnostic: TTL 5s for fresher filters
+        )
+        self.filter_cache_ttl_slow: float = (
+            5.0  # Diagnostic: TTL 5s for fresher filters
+        )
 
         logger.info(
             f"✅ FilterManager инициализирован с кэшированием: "
