@@ -744,7 +744,7 @@ class FuturesPositionManager:
                 elif action == "partial_close":
                     fraction = exit_decision.get("fraction", 0.5)
                     logger.info(
-                        f"à?"? Exit Decision: ø‘?‘'ñ‘Ø??ç úøó‘?‘<‘'ñç {symbol} ({fraction*100:.0f}%, reason={reason})"
+                        f"Exit Decision: partial close {symbol} ({fraction*100:.0f}%, reason={reason})"
                     )
                     if hasattr(self, "close_partial_position"):
                         try:
@@ -1417,10 +1417,14 @@ class FuturesPositionManager:
                 try:
                     current_price = await self._get_current_price_with_fallback(symbol)
                     if current_price == 0:
-                        logger.warning(f"⚠️ BUG #14: Не удалось получить цену для SL проверки {symbol}, пропускаем")
+                        logger.warning(
+                            f"⚠️ BUG #14: Не удалось получить цену для SL проверки {symbol}, пропускаем"
+                        )
                         return False
                 except Exception as e:
-                    logger.warning(f"⚠️ BUG #14: Ошибка fallback для {symbol}: {e}, пропускаем SL")
+                    logger.warning(
+                        f"⚠️ BUG #14: Ошибка fallback для {symbol}: {e}, пропускаем SL"
+                    )
                     return False
 
             if size == 0 or entry_price == 0:
@@ -1883,7 +1887,9 @@ class FuturesPositionManager:
                 )  # Default to market/taker rate
                 if commission_rate is None:
                     # Fallback к конфигу если API не доступен
-                    commission_config = getattr(self.scalping_config, "commission", None)
+                    commission_config = getattr(
+                        self.scalping_config, "commission", None
+                    )
                     if commission_config is None:
                         commission_config = getattr(self.config, "commission", {})
                     if not commission_config:
@@ -4711,7 +4717,9 @@ class FuturesPositionManager:
                         )
                 tsl_state = {"active": False}
                 if hasattr(self, "orchestrator") and self.orchestrator:
-                    tsl_coord = getattr(self.orchestrator, "trailing_sl_coordinator", None)
+                    tsl_coord = getattr(
+                        self.orchestrator, "trailing_sl_coordinator", None
+                    )
                     if tsl_coord:
                         tsl = tsl_coord.get_tsl(symbol)
                         if tsl:
@@ -4725,7 +4733,9 @@ class FuturesPositionManager:
                                 "current_trail": getattr(tsl, "current_trail", None),
                                 "stop_loss": stop_loss,
                                 "entry_price": getattr(tsl, "entry_price", None),
-                                "entry_timestamp": getattr(tsl, "entry_timestamp", None),
+                                "entry_timestamp": getattr(
+                                    tsl, "entry_timestamp", None
+                                ),
                             }
 
                 rule = "manual_or_other"
@@ -4756,9 +4766,7 @@ class FuturesPositionManager:
                         sl_tp_targets=sl_tp_targets or None,
                     )
             except Exception as e:
-                logger.warning(
-                    f"⚠️ Ошибка structured exit diagnosis для {symbol}: {e}"
-                )
+                logger.warning(f"⚠️ Ошибка structured exit diagnosis для {symbol}: {e}")
 
             # Определение стороны закрытия
             close_side = "sell" if side.lower() == "long" else "buy"
@@ -5096,13 +5104,17 @@ class FuturesPositionManager:
             # 🔴 BUG #13 FIX: При timeout REST call не удаляем позицию - подождем следующей синхронизации
             logger.error(f"⏰ [BUG #13] Timeout при закрытии {symbol} ({reason}): {e}")
             logger.info(f"   → Не удаляем позицию из реестра (подождем PositionSync)")
-            logger.info(f"   → Позиция остается в active_positions для переповторной попытки")
+            logger.info(
+                f"   → Позиция остается в active_positions для переповторной попытки"
+            )
             return None
         except Exception as e:
             # 🔴 BUG #13 FIX: При других ошибках REST тоже не удаляем автоматически
             logger.error(f"❌ Ошибка закрытия позиции: {e}")
             logger.debug(f"   → Exception type: {type(e).__name__}")
-            logger.info(f"   → Позиция {symbol} остается в реестре (подождем PositionSync очередного цикла)")
+            logger.info(
+                f"   → Позиция {symbol} остается в реестре (подождем PositionSync очередного цикла)"
+            )
             symbol = position.get("instId", "").replace("-SWAP", "")
             logger.critical(f"🚨 ЭКСТРЕННОЕ ЗАКРЫТИЕ ПОЗИЦИИ: {symbol}")
 
@@ -6381,23 +6393,34 @@ class FuturesPositionManager:
                     if hasattr(self, "slippage_guard") and self.slippage_guard:
                         try:
                             # Получаем текущую цену для проверки slippage
-                            current_prices = await self.slippage_guard._get_current_prices(
-                                self.client, symbol
+                            current_prices = (
+                                await self.slippage_guard._get_current_prices(
+                                    self.client, symbol
+                                )
                             )
                             if current_prices:
                                 bid_price = current_prices.get("bid", 0)
                                 ask_price = current_prices.get("ask", 0)
-                                mid_price = (bid_price + ask_price) / 2 if (bid_price > 0 and ask_price > 0) else 0
-                                
+                                mid_price = (
+                                    (bid_price + ask_price) / 2
+                                    if (bid_price > 0 and ask_price > 0)
+                                    else 0
+                                )
+
                                 if mid_price > 0:
                                     spread = abs(ask_price - bid_price)
                                     spread_percent = (spread / mid_price) * 100
-                                    
+
                                     # Для SHORT позиции закрываем через BUY (ask), для LONG через SELL (bid)
-                                    expected_close_price = ask_price if close_side == "buy" else bid_price
-                                    
+                                    expected_close_price = (
+                                        ask_price if close_side == "buy" else bid_price
+                                    )
+
                                     # Проверяем спред - если слишком большой, откладываем закрытие
-                                    if spread_percent > self.slippage_guard.max_spread_percent:
+                                    if (
+                                        spread_percent
+                                        > self.slippage_guard.max_spread_percent
+                                    ):
                                         logger.warning(
                                             f"⚠️ [SLIPPAGE_PROTECTION] {symbol}: Закрытие ОТЛОЖЕНО - спред слишком большой "
                                             f"({spread_percent:.3f}% > {self.slippage_guard.max_spread_percent:.3f}%). "
@@ -6410,9 +6433,9 @@ class FuturesPositionManager:
                                             "symbol": symbol,
                                             "spread_percent": spread_percent,
                                             "max_spread_percent": self.slippage_guard.max_spread_percent,
-                                            "message": f"Закрытие отложено из-за большого спреда ({spread_percent:.3f}%)"
+                                            "message": f"Закрытие отложено из-за большого спреда ({spread_percent:.3f}%)",
                                         }
-                                    
+
                                     logger.debug(
                                         f"✅ [SLIPPAGE_PROTECTION] {symbol}: Спред приемлемый "
                                         f"({spread_percent:.3f}% <= {self.slippage_guard.max_spread_percent:.3f}%), "
@@ -7553,7 +7576,7 @@ class FuturesPositionManager:
     async def close_all_positions(self) -> Dict[str, Any]:
         """
         🔴 BUG #11 FIX: Закрытие всех позиций с защитой от каскадного отказа (11.01.2026)
-        
+
         Каждая позиция закрывается отдельно с try/except, чтобы один отказ не помешал
         закрытию остальных позиций (предотвращение cascade failures).
         """
@@ -7563,53 +7586,68 @@ class FuturesPositionManager:
             partial_success = False
 
             symbols_to_close = list(self.active_positions.keys())
-            
+
             if not symbols_to_close:
                 logger.info("ℹ️ [CASCADE_PROTECTION] Нет открытых позиций для закрытия")
                 return {"success": True, "closed_count": 0, "errors": []}
 
-            logger.info(f"🔄 [CASCADE_PROTECTION] Начинаем закрытие {len(symbols_to_close)} позиций с protection от каскада")
+            logger.info(
+                f"🔄 [CASCADE_PROTECTION] Начинаем закрытие {len(symbols_to_close)} позиций с protection от каскада"
+            )
 
             # 🔴 BUG #11 FIX: Закрываем каждую позицию отдельно с try/except
             for symbol in symbols_to_close:
                 try:
-                    logger.debug(f"   ➜ [CASCADE_PROTECTION] Попытка закрыть {symbol}...")
-                    
+                    logger.debug(
+                        f"   ➜ [CASCADE_PROTECTION] Попытка закрыть {symbol}..."
+                    )
+
                     # Вызываем close_position_manually с таймаутом
                     result = await asyncio.wait_for(
-                        self.close_position_manually(symbol), 
-                        timeout=30.0  # 30 сек на одну позицию
+                        self.close_position_manually(symbol),
+                        timeout=30.0,  # 30 сек на одну позицию
                     )
-                    
+
                     if result is not None:
                         # Успешное закрытие (для TradeResult нет .get(), используем __dict__)
                         if isinstance(result, dict) and result.get("success"):
                             closed_count += 1
                             partial_success = True
-                            logger.info(f"✅ [CASCADE_PROTECTION] {symbol} успешно закрыта | PnL={result.get('net_pnl', 'N/A')}")
+                            logger.info(
+                                f"✅ [CASCADE_PROTECTION] {symbol} успешно закрыта | PnL={result.get('net_pnl', 'N/A')}"
+                            )
                         else:
                             # TradeResult объект - проверяем основные атрибуты
                             closed_count += 1
                             partial_success = True
-                            logger.info(f"✅ [CASCADE_PROTECTION] {symbol} успешно закрыта (TradeResult)")
+                            logger.info(
+                                f"✅ [CASCADE_PROTECTION] {symbol} успешно закрыта (TradeResult)"
+                            )
                     else:
-                        logger.warning(f"⚠️ [CASCADE_PROTECTION] {symbol}: close_position_manually вернула None")
+                        logger.warning(
+                            f"⚠️ [CASCADE_PROTECTION] {symbol}: close_position_manually вернула None"
+                        )
                         errors.append(f"{symbol}: returned None")
-                        
+
                 except asyncio.TimeoutError as e:
                     # Timeout при закрытии - продолжаем со следующей позиции
                     error_msg = f"{symbol}: timeout (30s)"
                     logger.error(f"⏰ [CASCADE_PROTECTION] {error_msg}")
                     errors.append(error_msg)
                     # НЕ ПРЕРЫВАЕМ - продолжаем закрывать остальные позиции
-                    
+
                 except Exception as e:
                     # Любая другая ошибка - логируем и продолжаем
                     error_msg = f"{symbol}: {str(e)[:100]}"
-                    logger.error(f"❌ [CASCADE_PROTECTION] Ошибка закрытия {error_msg} | Exception: {type(e).__name__}", exc_info=False)
+                    logger.error(
+                        f"❌ [CASCADE_PROTECTION] Ошибка закрытия {error_msg} | Exception: {type(e).__name__}",
+                        exc_info=False,
+                    )
                     errors.append(error_msg)
                     # НЕ ПРЕРЫВАЕМ - продолжаем закрывать остальные позиции
-                    logger.debug(f"   ➜ [CASCADE_PROTECTION] Пропускаем {symbol}, переходим к следующей...")
+                    logger.debug(
+                        f"   ➜ [CASCADE_PROTECTION] Пропускаем {symbol}, переходим к следующей..."
+                    )
 
             # Итоговое логирование
             logger.info(f"=" * 80)
@@ -7633,7 +7671,10 @@ class FuturesPositionManager:
 
         except Exception as e:
             # Критическая ошибка перед циклом
-            logger.error(f"❌ [CASCADE_PROTECTION] Критическая ошибка при подготовке закрытия: {e}", exc_info=True)
+            logger.error(
+                f"❌ [CASCADE_PROTECTION] Критическая ошибка при подготовке закрытия: {e}",
+                exc_info=True,
+            )
             return {"success": False, "error": str(e), "closed_count": 0}
 
     async def get_position_summary(self) -> Dict[str, Any]:

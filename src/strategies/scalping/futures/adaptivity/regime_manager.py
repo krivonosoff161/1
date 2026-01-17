@@ -398,7 +398,8 @@ class AdaptiveRegimeManager:
         # Обновляем FastADX с историческими данными
         # 🔴 BUG #2 FIX: Reset состояния перед update() чтобы избежать накопления
         self.fast_adx.reset()
-        for candle in candles[-self.fast_adx.period :]:
+        adx_window = max(self.fast_adx.period * 3, 30)
+        for candle in candles[-adx_window:]:
             self.fast_adx.update(high=candle.high, low=candle.low, close=candle.close)
 
         # Получаем настоящий ADX и +DI/-DI

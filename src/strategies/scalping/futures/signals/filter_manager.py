@@ -250,6 +250,9 @@ class FilterManager:
                             if plus_di is not None and minus_di is not None
                             else ""
                         )
+                        signal[
+                            "filter_reason"
+                        ] = f"ADX Filter (cached): blocked | {adx_str}{di_str}, regime={regime or 'unknown'}"
                         logger.info(
                             f"📊 [FILTER] {symbol} ({signal_type_str} {signal_side_str}): ADX Filter - BLOCKED (из кэша) | "
                             f"{adx_str}{di_str}, Режим: {regime or 'unknown'} | "
