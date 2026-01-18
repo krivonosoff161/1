@@ -176,6 +176,45 @@ class StructuredLogger:
                 exc_info=True,
             )
 
+    def log_filter_reject(
+        self,
+        symbol: str,
+        side: str,
+        price: Optional[float],
+        strength: float,
+        regime: Optional[str],
+        reason: str,
+        filters_passed: Optional[list] = None,
+    ) -> None:
+        """Log a structured record for rejected signals (filters or thresholds)."""
+        try:
+            log_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "type": "signal_rejected",
+                "symbol": symbol,
+                "side": side,
+                "price": price,
+                "strength": strength,
+                "regime": regime,
+                "reason": reason,
+                "filters_passed": filters_passed or [],
+            }
+
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            filepath = self.log_dir / f"signals_rejected_{date_str}.jsonl"
+
+            with open(filepath, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+
+            logger.debug(
+                f"¢?: StructuredLogger: Rejected signal {symbol} saved to {filepath}"
+            )
+        except Exception as e:
+            logger.error(
+                f"¢?? StructuredLogger: Failed to log rejected signal for {symbol}: {e}",
+                exc_info=True,
+            )
+
     def log_candle_init(
         self,
         symbol: str,

@@ -6,6 +6,13 @@ title Trading Bot Launcher
 REM Go to project root directory (where this bat file is located)
 cd /d "%~dp0"
 
+REM Clear proxy env vars for this process (prevents REST API blocking)
+set HTTP_PROXY=
+set HTTPS_PROXY=
+set ALL_PROXY=
+set GIT_HTTP_PROXY=
+set GIT_HTTPS_PROXY=
+
 echo.
 echo ================================================================
 echo              TRADING BOT LAUNCHER

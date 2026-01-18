@@ -76,6 +76,7 @@ class FuturesWebSocketManager:
         self.reconnect_task: Optional[asyncio.Task] = None
         self.heartbeat_task: Optional[asyncio.Task] = None
         self.listener_task: Optional[asyncio.Task] = None
+        self._receive_lock = asyncio.Lock()
 
         logger.info(
             f"FuturesWebSocketManager инициализирован: "
@@ -90,6 +91,10 @@ class FuturesWebSocketManager:
             True если подключение успешно
         """
         try:
+            if self.connected and self.ws and not self.ws.closed:
+                logger.debug("WebSocket уже подключен")
+                return True
+
             # ✅ Сохраняем сессию для корректного закрытия
             self.session = aiohttp.ClientSession()
             self.ws = await self.session.ws_connect(self.ws_url)
@@ -98,7 +103,11 @@ class FuturesWebSocketManager:
             self.last_heartbeat = time.time()
 
             # Запускаем задачи
+            if self.listener_task and not self.listener_task.done():
+                self.listener_task.cancel()
             self.listener_task = asyncio.create_task(self._listen_for_data())
+            if self.heartbeat_task and not self.heartbeat_task.done():
+                self.heartbeat_task.cancel()
             self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
             logger.info("✅ WebSocket подключен")
@@ -183,20 +192,22 @@ class FuturesWebSocketManager:
         """Слушаем данные от WebSocket."""
         while self.should_reconnect and self.connected and self.ws:
             try:
-                async for msg in self.ws:
-                    if msg.type == aiohttp.WSMsgType.TEXT:
-                        data = json.loads(msg.data)
-                        await self._handle_data(data)
+                async with self._receive_lock:
+                    msg = await self.ws.receive()
 
-                    elif msg.type == aiohttp.WSMsgType.ERROR:
-                        logger.error(f"WebSocket error: {self.ws.exception()}")
-                        await self._handle_disconnect()
-                        break
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    data = json.loads(msg.data)
+                    await self._handle_data(data)
 
-                    elif msg.type == aiohttp.WSMsgType.CLOSE:
-                        logger.warning("WebSocket закрыт сервером")
-                        await self._handle_disconnect()
-                        break
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    logger.error(f"WebSocket error: {self.ws.exception()}")
+                    await self._handle_disconnect()
+                    break
+
+                elif msg.type == aiohttp.WSMsgType.CLOSE:
+                    logger.warning("WebSocket закрыт сервером")
+                    await self._handle_disconnect()
+                    break
 
             except Exception as e:
                 logger.error(f"Ошибка в WebSocket listener: {e}")
@@ -236,6 +247,11 @@ class FuturesWebSocketManager:
         """Обработка отключения."""
         logger.warning("🔌 WebSocket отключен")
         self.connected = False
+
+        current_task = asyncio.current_task()
+        if self.listener_task and self.listener_task is not current_task:
+            if not self.listener_task.done():
+                self.listener_task.cancel()
 
         if self.should_reconnect:
             await self._reconnect()

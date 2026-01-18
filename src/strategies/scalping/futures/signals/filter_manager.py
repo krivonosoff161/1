@@ -223,7 +223,8 @@ class FilterManager:
 
                 # Пытаемся получить из кэша
                 cached_adx_result = self._get_cached_filter_result(symbol, "adx")
-                if cached_adx_result is not None:
+                use_cache = cached_adx_result is not None
+                if use_cache:
                     # ✅ УЛУЧШЕНИЕ (10.01.2026): Получаем фактические значения ADX для логирования
                     adx_value = None
                     plus_di = None
@@ -241,6 +242,14 @@ class FilterManager:
                     except Exception as exc:
                         logger.debug("Ignored error in optional block: %s", exc)
 
+                    adx_has_data = adx_value is not None
+                    if cached_adx_result is False and not adx_has_data:
+                        logger.debug(
+                            f"🔍 ADX cache bypass for {symbol}: cached=False but ADX missing"
+                        )
+                        use_cache = False
+
+                if use_cache:
                     # Используем кэш - ADX меняется медленно
                     if not cached_adx_result:
                         # ✅ УЛУЧШЕНО: Логируем значения даже из кэша
@@ -282,15 +291,21 @@ class FilterManager:
                         symbol, signal, market_data, regime=regime
                     )
                     if signal is None:
-                        # Сохраняем в кэш: False = отфильтрован
-                        self._set_cached_filter_result(symbol, "adx", False)
+                        # Сохраняем в кэш только при валидном ADX
+                        if await self._is_adx_data_available(symbol, market_data):
+                            self._set_cached_filter_result(symbol, "adx", False)
+                        else:
+                            logger.debug(f"🔍 ADX cache skip for {symbol}: no ADX data")
                         # ✅ НОВОЕ: Причина фильтрации уже сохранена в signal["filter_reason"] в _apply_adx_filter
                         # Детальное логирование происходит в _apply_adx_filter
                         logger.debug(f"🔍 Сигнал {symbol} отфильтрован: ADX Filter")
                         return None
                     else:
-                        # Сохраняем в кэш: True = прошел
-                        self._set_cached_filter_result(symbol, "adx", True)
+                        # Сохраняем в кэш только при валидном ADX
+                        if await self._is_adx_data_available(symbol, market_data):
+                            self._set_cached_filter_result(symbol, "adx", True)
+                        else:
+                            logger.debug(f"🔍 ADX cache skip for {symbol}: no ADX data")
                         if "filters_passed" not in signal:
                             signal["filters_passed"] = []
                         signal["filters_passed"].append("ADX")
@@ -736,6 +751,28 @@ class FilterManager:
         """
         if not self.data_registry:
             return None
+
+    async def _is_adx_data_available(self, symbol: str, market_data: Any) -> bool:
+        adx_value = None
+        try:
+            if market_data and hasattr(market_data, "indicators"):
+                indicators = market_data.indicators
+                if isinstance(indicators, dict):
+                    adx_value = indicators.get("adx") or indicators.get("ADX")
+        except Exception as exc:
+            logger.debug("Ignored error in optional block: %s", exc)
+
+        if adx_value is not None:
+            return True
+
+        if self.data_registry:
+            try:
+                adx_value = await self.data_registry.get_indicator(symbol, "ADX")
+                return adx_value is not None
+            except Exception as exc:
+                logger.debug("Ignored error in optional block: %s", exc)
+
+        return False
 
         try:
             indicators = await self.data_registry.get_indicators(symbol)

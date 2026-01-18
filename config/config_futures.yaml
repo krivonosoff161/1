@@ -882,7 +882,7 @@ scalping:
           position:
             base_position_usd: 32.0
             min_position_usd: 20.0
-            max_position_usd: 48.0
+            max_position_usd: 60.0
           filters:
             liquidity:
               min_best_bid_volume_usd: 45  # ✅ PHASE 1: Снижено с 64 до 45 (-30%)

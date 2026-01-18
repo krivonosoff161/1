@@ -2566,6 +2566,7 @@ class ExitAnalyzer:
         Returns:
             Решение {action: str, reason: str, ...} или None
         """
+        sl_percent = 0.0
         try:
             # 1. Получаем данные позиции (✅ ИСПОЛЬЗУЕМ ОБЩИЙ МЕТОД)
             entry_price, position_side = await self._get_entry_price_and_side(
@@ -2624,7 +2625,7 @@ class ExitAnalyzer:
             # Проверяется ПЕРВОЙ, перед всеми другими проверками (соответствует приоритету 1 в ExitDecisionCoordinator)
             # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
             # TRENDING: более высокий порог (-4.0%), так как тренды могут иметь большие просадки
-            emergency_loss_threshold = -4.0  # Для trending режима (было -2.5)
+            emergency_loss_threshold = -5.0  # Для trending режима (было -2.5)
 
             # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
             emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
@@ -3592,7 +3593,7 @@ class ExitAnalyzer:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Пороги emergency_loss_protection адаптируются по режимам
             # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличены пороги для уменьшения частоты emergency close
             # RANGING: более низкий порог (-2.5%), так как в ranging режиме позиции должны закрываться быстрее
-            emergency_loss_threshold = -2.5  # Для ranging режима (было -1.5)
+            emergency_loss_threshold = -3.5  # Для ranging режима (было -1.5)
             # Временное ослабление emergency-выхода в ranging
             emergency_loss_threshold *= 1.5
 
@@ -4690,6 +4691,22 @@ class ExitAnalyzer:
                             }
                     else:
                         # Позиция в прибыли - закрываем по max_holding
+                        min_profit_for_time_close = 0.05
+                        if net_pnl_percent < min_profit_for_time_close:
+                            logger.info(
+                                f"ExitAnalyzer RANGING: max_holding hold {symbol} - "
+                                f"Net PnL {net_pnl_percent:.2f}% < {min_profit_for_time_close:.2f}% (Gross PnL {gross_pnl_percent:.2f}%)"
+                            )
+                            return {
+                                "action": "hold",
+                                "reason": "max_holding_time_hold_not_profitable",
+                                "pnl_pct": net_pnl_percent,
+                                "gross_pnl_pct": gross_pnl_percent,
+                                "minutes_in_position": minutes_in_position,
+                                "max_holding_minutes": actual_max_holding,
+                                "min_profit_for_time_close": min_profit_for_time_close,
+                                "regime": regime,
+                            }
                         reason = (
                             "max_holding_hard_stop_loss"
                             if net_pnl_percent < 0
@@ -4996,6 +5013,7 @@ class ExitAnalyzer:
         Returns:
             Решение {action: str, reason: str, ...} или None
         """
+        sl_percent = 0.0
         try:
             # 1. Получаем данные позиции (✅ ИСПОЛЬЗУЕМ ОБЩИЙ МЕТОД)
             entry_price, position_side = await self._get_entry_price_and_side(
@@ -5054,7 +5072,7 @@ class ExitAnalyzer:
             # Проверяется ПЕРВОЙ, перед всеми другими проверками (соответствует приоритету 1 в ExitDecisionCoordinator)
             # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
             # CHOPPY: средний порог (-2.0%), так как в choppy режиме высокая волатильность
-            emergency_loss_threshold = -2.0  # Для choppy режима (было -1.5)
+            emergency_loss_threshold = -3.0  # Для choppy режима (было -1.5)
 
             # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
             emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)

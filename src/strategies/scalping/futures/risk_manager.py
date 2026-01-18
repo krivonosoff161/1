@@ -836,12 +836,12 @@ class FuturesRiskManager:
                     )
 
                 if max_usd_size < min_usd_size:
-                    logger.error(
-                        f"❌ ОШИБКА КОНФИГУРАЦИИ: max_position_usd (${max_usd_size:.2f}) < min_position_usd (${min_usd_size:.2f}) для {symbol}"
+                    logger.warning(
+                        f"⚠️ Конфликт лимитов: max_position_usd (${max_usd_size:.2f}) < "
+                        f"min_position_usd (${min_usd_size:.2f}) для {symbol}. "
+                        f"Используем max_position_usd = min_position_usd (${min_usd_size:.2f})."
                     )
-                    raise ValueError(
-                        f"max_position_usd (${max_usd_size:.2f}) < min_position_usd (${min_usd_size:.2f}) для {symbol}"
-                    )
+                    max_usd_size = min_usd_size
 
             if position_overrides.get("max_position_percent") is not None:
                 balance_profile["max_position_percent"] = float(

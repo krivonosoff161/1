@@ -61,6 +61,25 @@ class FuturesSignalGenerator:
         self.data_registry = None  # ✅ НОВОЕ: DataRegistry для сохранения индикаторов (будет установлен позже)
         self.performance_tracker = None  # Будет установлен из orchestrator
 
+        self._diagnostic_symbols = set()
+        try:
+            adaptive_regime = getattr(self.scalping_config, "adaptive_regime", None)
+            detection = None
+            if isinstance(adaptive_regime, dict):
+                detection = adaptive_regime.get("detection", {})
+            elif adaptive_regime and hasattr(adaptive_regime, "detection"):
+                detection = getattr(adaptive_regime, "detection", None)
+
+            symbols = []
+            if isinstance(detection, dict):
+                symbols = detection.get("score_log_symbols", []) or []
+            elif detection and hasattr(detection, "score_log_symbols"):
+                symbols = getattr(detection, "score_log_symbols", []) or []
+
+            self._diagnostic_symbols = {str(s).upper() for s in symbols if s}
+        except Exception as exc:
+            logger.debug("Ignored error in optional block: %s", exc)
+
         # Менеджер индикаторов
         # ✅ ГРОК ОПТИМИЗАЦИЯ: Используем TA-Lib обертки для ускорения на 70-85%
         from src.indicators import TALIB_AVAILABLE
@@ -326,6 +345,13 @@ class FuturesSignalGenerator:
         # ✅ НОВОЕ: Передаем StructuredLogger в фильтры, если они уже инициализированы
         if hasattr(self, "mtf_filter") and self.mtf_filter:
             self.mtf_filter.structured_logger = structured_logger
+
+    def _is_diagnostic_symbol(self, symbol: Optional[str]) -> bool:
+        if not symbol:
+            return False
+        if not self._diagnostic_symbols:
+            return False
+        return symbol.upper() in self._diagnostic_symbols
 
     def set_performance_tracker(self, performance_tracker):
         """Установить PerformanceTracker для CSV логирования"""
@@ -5039,9 +5065,12 @@ class FuturesSignalGenerator:
             rsi_oversold_max = min(40, 35 + (volatility_factor * 5))  # 35-40
             rsi_overbought_min = max(60, 65 - (volatility_factor * 5))  # 60-65
             rsi_overbought_max = min(85, 80 + (volatility_factor * 5))  # 80-85
+            if adx < 15:
+                rsi_oversold_max = min(45, rsi_oversold_max + 5)
+                rsi_overbought_min = max(55, rsi_overbought_min - 5)
 
             # Порог касания BB (1.5% от границы)
-            touch_threshold = 0.015
+            touch_threshold = min(0.03, 0.015 * max(1.0, volatility_factor))
 
             # Проверка LONG условий (касание lower + RSI oversold)
             distance_to_lower = (
@@ -6881,6 +6910,34 @@ class FuturesSignalGenerator:
                     filter_reason = signal.get("filter_reason", "неизвестно")
                     signal["filter_reason"] = filter_reason
 
+                    if (
+                        self._is_diagnostic_symbol(symbol)
+                        and hasattr(self, "structured_logger")
+                        and self.structured_logger
+                    ):
+                        try:
+                            fallback_price = None
+                            try:
+                                fallback_price = (
+                                    signal.get("price")
+                                    or getattr(market_data, "price", None)
+                                    or getattr(market_data, "last_price", None)
+                                )
+                            except Exception:
+                                fallback_price = signal.get("price")
+
+                            self.structured_logger.log_filter_reject(
+                                symbol=symbol,
+                                side=signal.get("side", "unknown"),
+                                price=fallback_price,
+                                strength=signal.get("strength", 0.0),
+                                regime=current_regime_name or "unknown",
+                                reason=filter_reason,
+                                filters_passed=signal.get("filters_passed", []),
+                            )
+                        except Exception as e:
+                            logger.debug(f"Ignored error in optional block: {e}")
+
             return filtered_signals
 
         except Exception as e:
@@ -7482,65 +7539,103 @@ class FuturesSignalGenerator:
                     if not thresholds_config_min:
                         thresholds_config_min = thresholds_obj  # Fallback на базовые
 
-            # ✅ ИСПРАВЛЕНО (27.12.2025): Используем параметры из конфига для каждого режима
-            # Приоритет: thresholds -> scalping_config -> режим-специфичные -> fallback
-            min_strength = (
-                thresholds_config_min.get("min_signal_strength", None)
-                if isinstance(thresholds_config_min, dict)
-                else getattr(thresholds_config_min, "min_signal_strength", None)
-            )
-
-            # Если нет в thresholds, пробуем режим-специфичные параметры из scalping_config
-            if min_strength is None and regime_name_min_strength:
-                if regime_name_min_strength == "ranging":
-                    min_strength = getattr(
-                        self.scalping_config, "min_signal_strength_ranging", None
-                    )
-                elif regime_name_min_strength == "trending":
-                    min_strength = getattr(
-                        self.scalping_config, "min_signal_strength_trending", None
-                    )
-                elif regime_name_min_strength == "choppy":
-                    min_strength = getattr(
-                        self.scalping_config, "min_signal_strength_choppy", None
-                    )
-
-            # Если все еще нет, используем базовый min_signal_strength из scalping_config
-            if min_strength is None:
-                min_strength = getattr(self.scalping_config, "min_signal_strength", 0.3)
-
-            # Преобразуем в float
-            min_strength = float(min_strength) if min_strength is not None else 0.3
-
-            # ✅ НОВОЕ (03.01.2026): Детальное логирование источников min_signal_strength
-            # ✅ ИСПРАВЛЕНО: Получаем symbol из первого сигнала для логирования
-            first_symbol = signals[0].get("symbol", "UNKNOWN") if signals else "UNKNOWN"
-            source_info = "unknown"
-            if thresholds_config_min and thresholds_config_min.get(
-                "min_signal_strength"
-            ):
-                source_info = "thresholds_config"
-            elif (
-                hasattr(self.scalping_config, "by_symbol") and first_symbol != "UNKNOWN"
-            ):
-                by_symbol = getattr(self.scalping_config, "by_symbol", {})
-                if isinstance(by_symbol, dict) and first_symbol in by_symbol:
-                    source_info = f"by_symbol[{first_symbol}]"
-            elif regime_name_min_strength:
-                source_info = f"min_signal_strength_{regime_name_min_strength}"
-            else:
-                source_info = "scalping_config.min_signal_strength"
-
-            if signals:  # Логируем только если есть сигналы
-                logger.info(
-                    f"📊 [PARAMS] {first_symbol} ({regime_name_min_strength or 'default'}): "
-                    f"min_signal_strength={min_strength:.2f} | "
-                    f"Источник: {source_info}"
+            def _resolve_min_strength(symbol_val: str) -> tuple[float, str]:
+                min_strength_val = (
+                    thresholds_config_min.get("min_signal_strength", None)
+                    if isinstance(thresholds_config_min, dict)
+                    else getattr(thresholds_config_min, "min_signal_strength", None)
                 )
+                source = "unknown"
+                if min_strength_val is not None:
+                    source = "thresholds_config"
+                else:
+                    by_symbol = (
+                        getattr(self.scalping_config, "by_symbol", {})
+                        if hasattr(self.scalping_config, "by_symbol")
+                        else {}
+                    )
+                    if isinstance(by_symbol, dict) and symbol_val in by_symbol:
+                        symbol_cfg = by_symbol.get(symbol_val, {})
+                        if (
+                            isinstance(symbol_cfg, dict)
+                            and symbol_cfg.get("min_signal_strength") is not None
+                        ):
+                            min_strength_val = symbol_cfg.get("min_signal_strength")
+                            source = f"by_symbol[{symbol_val}]"
 
-            filtered_signals = [
-                s for s in signals if s.get("strength", 0) >= min_strength
-            ]
+                if min_strength_val is None and regime_name_min_strength:
+                    if regime_name_min_strength == "ranging":
+                        min_strength_val = getattr(
+                            self.scalping_config, "min_signal_strength_ranging", None
+                        )
+                    elif regime_name_min_strength == "trending":
+                        min_strength_val = getattr(
+                            self.scalping_config, "min_signal_strength_trending", None
+                        )
+                    elif regime_name_min_strength == "choppy":
+                        min_strength_val = getattr(
+                            self.scalping_config, "min_signal_strength_choppy", None
+                        )
+                    if min_strength_val is not None:
+                        source = f"min_signal_strength_{regime_name_min_strength}"
+
+                if min_strength_val is None:
+                    min_strength_val = getattr(
+                        self.scalping_config, "min_signal_strength", 0.3
+                    )
+                    source = "scalping_config.min_signal_strength"
+
+                return float(min_strength_val), source
+
+            min_strength_by_symbol: Dict[str, float] = {}
+            source_info_by_symbol: Dict[str, str] = {}
+            for s in signals:
+                symbol_val = s.get("symbol", "UNKNOWN")
+                if symbol_val not in min_strength_by_symbol:
+                    min_val, source_info = _resolve_min_strength(symbol_val)
+                    min_strength_by_symbol[symbol_val] = min_val
+                    source_info_by_symbol[symbol_val] = source_info
+                    logger.info(
+                        f"📊 [PARAMS] {symbol_val} ({regime_name_min_strength or 'default'}): "
+                        f"min_signal_strength={min_val:.2f} | "
+                        f"Источник: {source_info}"
+                    )
+
+            filtered_signals = []
+            for s in signals:
+                symbol_val = s.get("symbol", "UNKNOWN")
+                min_strength = min_strength_by_symbol.get(symbol_val, 0.3)
+                if s.get("strength", 0) >= min_strength:
+                    filtered_signals.append(s)
+
+            if self._diagnostic_symbols:
+                for s in signals:
+                    strength_val = s.get("strength", 0)
+                    symbol_val = s.get("symbol")
+                    min_strength = min_strength_by_symbol.get(symbol_val, 0.3)
+                    source_info = source_info_by_symbol.get(symbol_val, "unknown")
+                    if strength_val < min_strength and self._is_diagnostic_symbol(
+                        symbol_val
+                    ):
+                        try:
+                            if (
+                                hasattr(self, "structured_logger")
+                                and self.structured_logger
+                            ):
+                                self.structured_logger.log_filter_reject(
+                                    symbol=symbol_val,
+                                    side=s.get("side", "unknown"),
+                                    price=s.get("price"),
+                                    strength=strength_val,
+                                    regime=regime_name_min_strength or "unknown",
+                                    reason=(
+                                        f"min_signal_strength: strength={strength_val:.2f} < {min_strength:.2f} "
+                                        f"(source={source_info})"
+                                    ),
+                                    filters_passed=s.get("filters_passed", []),
+                                )
+                        except Exception as e:
+                            logger.debug("Ignored error in optional block: %s", e)
 
             # Ранжирование по силе и уверенности
             ranked_signals = sorted(
