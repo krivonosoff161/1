@@ -13,10 +13,11 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 import websockets
-from websockets.exceptions import ConnectionClosed, WebSocketException
 
 # 🔴 BUG #33 FIX: Bridge logging to loguru
 from loguru import logger as loguru_logger
+from websockets.exceptions import ConnectionClosed, WebSocketException
+
 logging.basicConfig(handlers=[InterceptHandler()], level=logging.DEBUG)
 
 class InterceptHandler(logging.Handler):
@@ -67,6 +68,19 @@ class OrderUpdate:
 
 
 class WebSocketPriceManager:
+        self.last_update = {}  # symbol -> timestamp последнего обновления
+        self._stale_check_task = None
+        async def _check_stale_prices(self):
+            """Периодически проверяет свежесть данных по каждому symbol и делает reconnect при задержке >1.0s"""
+            while self.is_running:
+                now = time.time()
+                for symbol, ts in list(self.last_update.items()):
+                    age = now - ts
+                    if age > 1.0:
+                        logger.error(f"❌ WebSocket: price for {symbol} устарела на {age:.2f}s — авто-reconnect!")
+                        await self._handle_reconnect()
+                        break  # После reconnect — выходим из цикла проверки
+                await asyncio.sleep(0.5)
     """Менеджер WebSocket для получения цен в реальном времени"""
 
     def __init__(self, config: WebSocketConfig):
@@ -173,6 +187,10 @@ class WebSocketPriceManager:
         self.is_running = True
         logger.info("🎧 Starting WebSocket listener...")
 
+        # Запуск фоновой проверки свежести цен
+        if self._stale_check_task is None or self._stale_check_task.done():
+            self._stale_check_task = asyncio.create_task(self._check_stale_prices())
+
         try:
             async for message in self.websocket:
                 if not self.is_running:
@@ -229,6 +247,9 @@ class WebSocketPriceManager:
                 ask=float(ticker.get("askPx", 0)),
             )
 
+            # Обновляем время последнего обновления для symbol
+            self.last_update[symbol] = time.time()
+
             # Вызов callbacks
             for callback in self.price_callbacks:
                 try:
@@ -281,6 +302,9 @@ class WebSocketPriceManager:
             if self.subscriptions:
                 await self.subscribe_ticker(list(self.subscriptions))
             await self.start_listening()
+
+        # Сбросить last_update для всех символов
+        self.last_update = {}
 
     def get_latency(self) -> float:
         """Получение текущей латентности"""

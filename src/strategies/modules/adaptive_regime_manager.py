@@ -206,6 +206,45 @@ class AdaptiveRegimeManager:
             RegimeType.CHOPPY: timedelta(0),
         }
 
+        # === СТРОГАЯ ВАЛИДАЦИЯ ПАРАМЕТРОВ ===
+        def _validate_regime_params(params, regime_name):
+            required_fields = [
+                "min_score_threshold",
+                "max_trades_per_hour",
+                "position_size_multiplier",
+                "tp_atr_multiplier",
+                "sl_atr_multiplier",
+                "max_holding_minutes",
+                "cooldown_after_loss_minutes",
+                "pivot_bonus_multiplier",
+                "volume_profile_bonus_multiplier",
+                "indicators",
+                "modules",
+            ]
+            for field in required_fields:
+                if not hasattr(params, field) or getattr(params, field) is None:
+                    logger.error(
+                        f"❌ [ARM] Отсутствует обязательный параметр '{field}' для режима '{regime_name}'!"
+                    )
+                    raise ValueError(
+                        f"[ARM] Missing required parameter '{field}' for regime '{regime_name}'"
+                    )
+            # Проверка на типы (например, числа)
+            if not isinstance(params.tp_atr_multiplier, (int, float)) or not isinstance(
+                params.sl_atr_multiplier, (int, float)
+            ):
+                logger.error(
+                    f"❌ [ARM] tp_atr_multiplier/sl_atr_multiplier должны быть числами для режима '{regime_name}'!"
+                )
+                raise TypeError(
+                    f"[ARM] tp_atr_multiplier/sl_atr_multiplier must be numeric for regime '{regime_name}'"
+                )
+            # Можно добавить дополнительные проверки по необходимости
+
+        _validate_regime_params(config.trending_params, "trending")
+        _validate_regime_params(config.ranging_params, "ranging")
+        _validate_regime_params(config.choppy_params, "choppy")
+
         # ✅ FastADX для настоящего расчета ADX вместо ADX Proxy
         adx_period = getattr(config, "adx_period", 9)
         self.fast_adx = FastADX(

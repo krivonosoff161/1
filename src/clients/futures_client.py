@@ -1311,7 +1311,8 @@ class OKXFuturesClient:
         data = {
             "instId": f"{symbol}-SWAP",
             "lever": str(leverage),
-            "mgnMode": "isolated",
+            # Use configured margin mode to avoid OKX rejecting leverage updates in cross/portfolio.
+            "mgnMode": self.margin_mode,
         }
 
         # ✅ НОВОЕ: Пробуем установить leverage с posSide, если указан
@@ -1325,11 +1326,16 @@ class OKXFuturesClient:
 
         for attempt in range(max_retries):
             try:
-                return await self._make_request(
+                response = await self._make_request(
                     "POST",
                     "/api/v5/account/set-leverage",
                     data=data,
                 )
+                logger.debug(
+                    f"[LEVERAGE_SET] {symbol}: mgnMode={self.margin_mode}, "
+                    f"posSide={pos_side or 'N/A'}, lever={leverage}x, response={response}"
+                )
+                return response
             except RuntimeError as e:
                 # ✅ ИСПРАВЛЕНО: Обрабатываем rate limit (429) и timeout (50004)
                 error_str = str(e)

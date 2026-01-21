@@ -1724,6 +1724,9 @@ class FuturesSignalGenerator:
             if not market_data:
                 market_data = await self._get_market_data(symbol)
             if not market_data:
+                logger.error(
+                    f"❌ SignalGenerator: Нет свежих рыночных данных для {symbol} (market_data is None, сигналы не генерируются)"
+                )
                 return []
 
             # Генерация базовых сигналов
@@ -2012,9 +2015,10 @@ class FuturesSignalGenerator:
             current_regime = regime  # Используем переданный режим или None
 
             # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Проверяем валидность market_data и свечей ПЕРЕД расчетом индикаторов (БЕЗ FALLBACK)
+
             if not market_data or not market_data.ohlcv_data:
                 logger.error(
-                    f"❌ [ATR] {symbol}: market_data или свечи отсутствуют - ПРОПУСКАЕМ генерацию сигналов"
+                    f"❌ [SIGNAL BLOCKED] {symbol}: market_data или свечи отсутствуют — блокировка генерации сигналов до прогрева данных"
                 )
                 return []
 
@@ -2022,8 +2026,7 @@ class FuturesSignalGenerator:
             min_candles_required = 15  # period=14 + 1 для ATR
             if len(candles) < min_candles_required:
                 logger.error(
-                    f"❌ [ATR] {symbol}: Недостаточно свечей для расчета ATR "
-                    f"({len(candles)} < {min_candles_required}) - ПРОПУСКАЕМ генерацию сигналов"
+                    f"❌ [SIGNAL BLOCKED] {symbol}: Недостаточно свечей для расчёта индикаторов (есть {len(candles)}, нужно {min_candles_required}) — блокировка генерации сигналов до прогрева данных"
                 )
                 return []
 
@@ -2035,8 +2038,7 @@ class FuturesSignalGenerator:
             ]
             if invalid_candles:
                 logger.error(
-                    f"❌ [ATR] {symbol}: Найдены невалидные свечи (индексы: {invalid_candles[:5]}) - "
-                    f"ПРОПУСКАЕМ генерацию сигналов"
+                    f"❌ [SIGNAL BLOCKED] {symbol}: Найдены невалидные свечи (индексы: {invalid_candles[:5]}) — блокировка генерации сигналов до прогрева данных"
                 )
                 return []
 
@@ -7475,8 +7477,20 @@ class FuturesSignalGenerator:
     ) -> List[Dict[str, Any]]:
         """Фильтрация и ранжирование сигналов"""
         try:
-            # ✅ ПРАВКА #14: Ограничение частоты сигналов (минимум 60 сек между сигналами)
+            # ✅ ПРАВКА: Ограничение частоты сигналов по параметру из конфига
             import time
+
+            # Получаем задержку между сигналами из конфига (по умолчанию 3.0)
+            cooldown = 3.0
+            try:
+                if hasattr(self.scalping_config, "signal_cooldown_seconds"):
+                    cooldown = float(
+                        getattr(self.scalping_config, "signal_cooldown_seconds", 3.0)
+                    )
+            except Exception as exc:
+                logger.warning(
+                    f"⚠️ Не удалось получить signal_cooldown_seconds из конфига: {exc}, используется 3.0"
+                )
 
             current_time = time.time()
             filtered_by_time = []
@@ -7484,12 +7498,10 @@ class FuturesSignalGenerator:
                 symbol = signal.get("symbol", "")
                 if symbol:
                     last_signal_time = self.signal_cache.get(symbol, 0)
-                    if (
-                        current_time - last_signal_time < 20
-                    ):  # ✅ ИСПРАВЛЕНО: 20 секунд вместо 60 (скальпинг требует частой торговли)
+                    if current_time - last_signal_time < cooldown:
                         logger.debug(
                             f"🔍 Сигнал для {symbol} отфильтрован по времени: "
-                            f"прошло {current_time - last_signal_time:.1f}с < 20с"
+                            f"прошло {current_time - last_signal_time:.1f}с < {cooldown}с"
                         )
                         continue
                     # Обновляем кэш
@@ -7605,7 +7617,11 @@ class FuturesSignalGenerator:
             for s in signals:
                 symbol_val = s.get("symbol", "UNKNOWN")
                 min_strength = min_strength_by_symbol.get(symbol_val, 0.3)
-                if s.get("strength", 0) >= min_strength:
+                strength_val = s.get("strength", 0)
+                logger.info(
+                    f"[SIGNAL STRENGTH] {symbol_val}: strength={strength_val:.2f}, min_signal_strength={min_strength:.2f}"
+                )
+                if strength_val >= min_strength:
                     filtered_signals.append(s)
 
             if self._diagnostic_symbols:

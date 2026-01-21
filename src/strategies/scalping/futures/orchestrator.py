@@ -780,6 +780,7 @@ class FuturesScalpingOrchestrator:
             scalping_config=self.scalping_config,
             signal_generator=self.signal_generator,
             last_orders_cache_ref=self.last_orders_cache,
+            structured_logger=self.structured_logger,
         )
 
         # Время последнего сигнала по символу: {symbol: timestamp}
@@ -2670,6 +2671,23 @@ class FuturesScalpingOrchestrator:
                             f"⚠️ Exchange-side closure: failed to fetch TSL for {symbol}: {e}"
                         )
 
+                    def _first_non_empty(field_name):
+                        for pos in positions_snapshot:
+                            if not isinstance(pos, dict):
+                                continue
+                            value = pos.get(field_name)
+                            if value not in (None, ""):
+                                return value
+                        return None
+
+                    diagnostic_context = {
+                        "active_orders_count": len(active_orders),
+                        "positions_snapshot_len": len(positions_snapshot),
+                        "pos_lever": _first_non_empty("lever"),
+                        "pos_adl": _first_non_empty("adl"),
+                        "pos_mgnMode": _first_non_empty("mgnMode"),
+                    }
+
                     closure_data = {
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "event": "exchange_side_closure",
@@ -2706,7 +2724,7 @@ class FuturesScalpingOrchestrator:
                                 rule="exchange_side",
                                 pnl_pct=None,
                                 tsl_state=tsl_snapshot,
-                                sl_tp_targets=None,
+                                sl_tp_targets=diagnostic_context,
                             )
                         except Exception as e:
                             logger.warning(

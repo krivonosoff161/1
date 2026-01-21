@@ -129,6 +129,52 @@ class StructuredLogger:
                 exc_info=True,
             )
 
+    def log_order_cancel(
+        self,
+        symbol: str,
+        order_id: str,
+        side: Optional[str],
+        reason: str,
+        order_price: Optional[float],
+        current_price: Optional[float],
+        best_bid: Optional[float],
+        best_ask: Optional[float],
+        wait_time_sec: Optional[float],
+        drift_pct: Optional[float],
+        post_only: Optional[bool],
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Логировать отмену лимитного ордера с контекстом цены/причины."""
+        try:
+            log_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "type": "order_cancel",
+                "symbol": symbol,
+                "order_id": order_id,
+                "side": side,
+                "reason": reason,
+                "order_price": order_price,
+                "current_price": current_price,
+                "best_bid": best_bid,
+                "best_ask": best_ask,
+                "wait_time_sec": wait_time_sec,
+                "drift_pct": drift_pct,
+                "post_only": post_only,
+                "extra": extra or {},
+            }
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            filepath = self.log_dir / f"order_cancels_{date_str}.jsonl"
+            with open(filepath, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+            logger.debug(
+                f"✅ StructuredLogger: Отмена ордера {symbol} сохранена в {filepath}"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ StructuredLogger: Ошибка логирования отмены ордера для {symbol}: {e}",
+                exc_info=True,
+            )
+
     def log_signal(
         self,
         symbol: str,

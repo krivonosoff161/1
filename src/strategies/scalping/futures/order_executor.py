@@ -259,17 +259,14 @@ class FuturesOrderExecutor:
             # Расчет цены для лимитных ордеров
             price = None
             if order_type == "limit":
-                # ✅ НОВОЕ: Получаем режим из сигнала для адаптивного offset
                 regime = signal.get("regime", None)
-                # ✅ ОПТИМИЗАЦИЯ: Передаем signal для использования signal["price"] если актуальна
                 price = await self._calculate_limit_price(
                     symbol, side, regime=regime, signal=signal
                 )
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если не удалось рассчитать цену - используем рыночный ордер
+                # Если не удалось рассчитать цену или цена устарела — fallback на market
                 if price is None or price <= 0:
-                    logger.warning(
-                        f"⚠️ Не удалось рассчитать цену для лимитного ордера {symbol}, "
-                        f"используем рыночный ордер как fallback"
+                    logger.error(
+                        f"❌ Лимитный ордер для {symbol} не размещён: нет свежей цены или ошибка расчёта. Fallback на market."
                     )
                     order_type = "market"
                     price = None
@@ -388,9 +385,10 @@ class FuturesOrderExecutor:
                         if md_ts:
                             md_age_sec = time.time() - md_ts
                             if md_age_sec is not None and md_age_sec > 1.0:
-                                logger.warning(
-                                    f"⚠️ DataRegistry price for {symbol} устарела на {md_age_sec:.3f}s (>1.0s)  🔴 BUG #5 FIX"
+                                logger.error(
+                                    f"❌ DataRegistry price for {symbol} устарела на {md_age_sec:.3f}s (>1.0s) — лимитный ордер не будет размещён, fallback на market"
                                 )
+                                return None  # Не размещаем лимитку по устаревшей цене
                 except Exception as e:
                     logger.debug(
                         f"⚠️ Не удалось проверить свежесть DataRegistry для {symbol}: {e}"
@@ -709,9 +707,81 @@ class FuturesOrderExecutor:
             if offset_percent > 1.0:
                 logger.error(
                     f"❌ КРИТИЧЕСКАЯ ОШИБКА: offset_percent={offset_percent}% слишком большой для {symbol}! "
-                    f"Используем безопасный fallback 0.05%"
+                    f"Лимитный ордер не будет размещён, fallback на market"
                 )
-                offset_percent = 0.05  # Безопасный fallback
+                return None
+
+            # === ДИНАМИЧЕСКАЯ АДАПТАЦИЯ OFFSET НА ОСНОВЕ ВОЛАТИЛЬНОСТИ ===
+            # Если волатильность доступна — корректируем offset_percent
+            try:
+                volatility = None
+                if self.data_registry:
+                    try:
+                        atr = await self.data_registry.get_indicator(symbol, "atr")
+                        # Берём текущую цену из DataRegistry, если доступна
+                        current_price = None
+                        if hasattr(self, "data_registry"):
+                            md = await self.data_registry.get_market_data(symbol)
+                            if md:
+                                if isinstance(md, dict):
+                                    current_price = md.get("current_price")
+                                else:
+                                    current_price = getattr(md, "current_price", None)
+                        if atr and current_price:
+                            volatility = (atr / current_price) * 100.0
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Не удалось получить ATR для расчёта волатильности: {e}"
+                        )
+                # Альтернатива: regime_manager
+                if volatility is None and self.signal_generator:
+                    try:
+                        regime_manager = (
+                            self.signal_generator.regime_managers.get(symbol)
+                            if hasattr(self.signal_generator, "regime_managers")
+                            and self.signal_generator.regime_managers
+                            else None
+                        ) or getattr(self.signal_generator, "regime_manager", None)
+                        if regime_manager and hasattr(
+                            regime_manager, "last_volatility"
+                        ):
+                            volatility = regime_manager.last_volatility
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Не удалось получить волатильность из regime_manager: {e}"
+                        )
+                # === Адаптация offset ===
+                if volatility is not None and volatility > 0:
+                    orig_offset = offset_percent
+                    # Пороговые значения можно вынести в конфиг при необходимости
+                    if volatility < 0.1:
+                        # Сверхнизкая волатильность — offset минимальный (0.005%)
+                        offset_percent = min(offset_percent, 0.005)
+                        logger.info(
+                            f"💡 Волатильность {volatility:.3f}% < 0.1% — offset снижен до {offset_percent:.4f}% для агрессивного входа"
+                        )
+                    elif volatility < 0.3:
+                        # Низкая волатильность — offset чуть ниже обычного
+                        offset_percent = min(offset_percent, 0.01)
+                        logger.info(
+                            f"💡 Волатильность {volatility:.3f}% < 0.3% — offset снижен до {offset_percent:.4f}% для агрессивного входа"
+                        )
+                    elif volatility > 0.7:
+                        # Высокая волатильность — offset увеличиваем для гарантии исполнения
+                        offset_percent = max(offset_percent, 0.03)
+                        logger.info(
+                            f"💡 Волатильность {volatility:.3f}% > 0.7% — offset увеличен до {offset_percent:.4f}% для гарантии исполнения"
+                        )
+                    else:
+                        # Средняя волатильность — offset по конфигу
+                        logger.info(
+                            f"💡 Волатильность {volatility:.3f}% — offset по конфигу: {offset_percent:.4f}%"
+                        )
+                    logger.debug(
+                        f"[DYNAMIC_OFFSET] {symbol}: volatility={volatility:.4f}%, orig_offset={orig_offset}, final_offset={offset_percent}"
+                    )
+            except Exception as e:
+                logger.error(f"Ошибка динамической адаптации offset_percent: {e}")
 
             # ✅ КРИТИЧНО (09.01.2026): Получаем цены из DataRegistry WebSocket вместо REST API!
             price_limits = None
@@ -1400,6 +1470,12 @@ class FuturesOrderExecutor:
                         logger.debug(
                             f"📏 Slippage {symbol} {side}: {slippage_bps:.2f} bps (ref={ref:.4f}, fill={fill_px:.4f})"
                         )
+                        # Явное логирование проскальзывания при market-замене лимитного ордера
+                        if getattr(self, "_is_market_replace", False):
+                            logger.warning(
+                                f"MARKET_REPLACE_SLIPPAGE {symbol} {side}: slippage={slippage_bps:.2f}bps (ref={ref:.4f}, fill={fill_px:.4f}), latency={latency_ms}ms, size={size:.6f}"
+                            )
+                            self._is_market_replace = False
                         # ✅ FIX: FILL log с latency и slippage
                         logger.info(
                             f"FILL {symbol} latency={latency_ms}ms slippage={slippage_bps:.2f}bps"

@@ -132,7 +132,7 @@ class WebSocketCoordinator:
         # Это снижает CPU с 100% до 40-50% без потери live данных
         self._ticker_counter: Dict[str, int] = {}  # symbol -> counter
         self._ticker_throttle: int = (
-            5  # Обрабатывать каждый 5-й тикер (1/5 = 20% от исходной частоты)
+            1  # Обрабатывать каждый тикер (1/1 = 100% от исходной частоты)
         )
         # ✅ Новый lock для атомарного обновления свечей/market_data/индикаторов
         self._update_lock = asyncio.Lock()
@@ -249,6 +249,10 @@ class WebSocketCoordinator:
                 )
 
     async def handle_ticker_data(self, symbol: str, data: dict):
+        logger.info(f"handle_ticker_data: {symbol}, data={str(data)[:500]}")
+        # Преобразуем символ из формата OKX (например, BTC-USDT-SWAP) к внутреннему (BTC-USDT)
+        if symbol.endswith("-SWAP"):
+            symbol = symbol.replace("-SWAP", "")
         """
         Обработка данных тикера.
 
@@ -595,6 +599,20 @@ class WebSocketCoordinator:
             logger.error(f"❌ Ошибка обработки данных тикера: {e}")
 
     async def handle_candle_data(self, symbol: str, data: dict):
+        logger.info(f"handle_candle_data вызван для {symbol}, data={str(data)[:200]}")
+        # Обновляем updated_at для market_data при каждом поступлении свечи
+        if self.data_registry:
+            async with self.data_registry._lock:
+                if symbol in self.data_registry._market_data:
+                    self.data_registry._market_data[symbol][
+                        "updated_at"
+                    ] = datetime.now()
+                    logger.info(
+                        f"updated_at установлен для {symbol}: {self.data_registry._market_data[symbol]['updated_at']}"
+                    )
+                    logger.debug(
+                        f"✅ DataRegistry: updated_at обновлен по свечам для {symbol}"
+                    )
         """
         Обработка kline (OHLCV) данных от OKX.
         """

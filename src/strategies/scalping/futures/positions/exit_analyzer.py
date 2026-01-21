@@ -503,89 +503,45 @@ class ExitAnalyzer:
 
             # Получаем рыночные данные
             market_data = await self.data_registry.get_market_data(symbol)
+            if market_data is None:
+                logger.error(
+                    f"❌ ExitAnalyzer: Нет свежих рыночных данных для {symbol} (market_data is None, позиция не анализируется)"
+                )
+                analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
+                return None
 
-            # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Используем DataRegistry (WebSocket) вместо REST API
-            # Иерархия источников цены (приоритет):
-            # 1. WebSocket real-time (current_tick) - <100ms
-            # 2. Последняя свеча (ohlcv_data) - fallback если WebSocket отстал
-            # 3. Сохраненная цена (last_known_price) - emergency
+            # Только WebSocket real-time (current_tick) — без fallback
             current_price = None
-
-            # Приоритет 1: WebSocket real-time из market_data
+            price_source = None
             if (
                 market_data
                 and hasattr(market_data, "current_tick")
                 and market_data.current_tick
+                and hasattr(market_data.current_tick, "price")
+                and market_data.current_tick.price > 0
             ):
-                if (
-                    hasattr(market_data.current_tick, "price")
-                    and market_data.current_tick.price > 0
-                ):
-                    current_price = market_data.current_tick.price
-                    logger.debug(
-                        f"✅ ExitAnalyzer: WebSocket real-time price for {symbol}: {current_price:.8f}"
-                    )
-
-            # Приоритет 2: Fallback на последнюю свечу (если WebSocket недоступен)
-            if current_price is None or current_price <= 0:
-                if (
-                    market_data
-                    and hasattr(market_data, "ohlcv_data")
-                    and market_data.ohlcv_data
-                ):
-                    current_price = market_data.ohlcv_data[-1].close
-                    logger.debug(
-                        f"⚠️ ExitAnalyzer: Using last candle for {symbol}: {current_price:.8f}"
-                    )
-
-            # Приоритет 3: Fallback на сохраненную цену (если совсем беда)
-            if current_price is None or current_price <= 0:
-                if (
-                    market_data
-                    and hasattr(market_data, "last_known_price")
-                    and market_data.last_known_price
-                ):
-                    current_price = market_data.last_known_price
-                    logger.warning(
-                        f"🔴 ExitAnalyzer: Emergency fallback (last_known_price) for {symbol}: {current_price:.8f}"
-                    )
-
-            # ✅ ИСПРАВЛЕНО: Проверка current_price на None и <= 0
-            if current_price is None or current_price <= 0:
+                current_price = market_data.current_tick.price
+                price_source = "websocket"
+                logger.debug(
+                    f"✅ ExitAnalyzer: WebSocket real-time price for {symbol}: {current_price:.8f}"
+                )
+            else:
+                logger.error(
+                    f"❌ ExitAnalyzer: current_price is None/0 для {symbol} — нет актуальной цены из WebSocket! price_source=None"
+                )
                 analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
-
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): 4-й уровень fallback - REST API
-                # Если DataRegistry пуст, пытаемся получить цену через REST API перед тем как вернуть None
-                if self.client:
-                    try:
-                        logger.warning(
-                            f"⚠️ ExitAnalyzer: current_price is None/0 для {symbol}, "
-                            f"пытаемся получить через REST API (за {analysis_time:.2f}ms)"
-                        )
-                        rest_price = await self._fetch_price_via_rest(symbol)
-                        if rest_price and rest_price > 0:
-                            logger.warning(
-                                f"✅ ExitAnalyzer: REST API fallback успешен для {symbol}: {rest_price:.8f}"
-                            )
-                            current_price = rest_price
-                        else:
-                            logger.error(
-                                f"❌ ExitAnalyzer: REST API fallback вернул None/0 для {symbol}"
-                            )
-                            return None
-                    except Exception as e:
-                        logger.error(
-                            f"❌ ExitAnalyzer: REST API fallback ошибка для {symbol}: {e}"
-                        )
-                        return None
-                else:
-                    logger.error(
-                        f"❌ ExitAnalyzer: current_price is None/0 для {symbol} и нет REST API клиента"
-                    )
-                    return None
+                return None
 
             # Анализируем в зависимости от режима
             decision = None
+            logger.info(
+                f"[ExitAnalyzer] Итоговый источник цены для {symbol}: {current_price} (source={price_source})"
+            )
+            if current_price is None or current_price <= 0:
+                logger.error(
+                    f"❌ ExitAnalyzer: Блокировка анализа для {symbol} — current_price невалиден (source={price_source})"
+                )
+                return None
             if regime == "trending":
                 decision = await self._generate_exit_for_trending(
                     symbol, position, metadata, market_data, current_price, regime
@@ -833,6 +789,9 @@ class ExitAnalyzer:
         else:  # short
             gross_profit_pct = (entry_price - current_price) / entry_price * 100
 
+        leverage = self._get_effective_leverage(position, metadata)
+        gross_profit_pct = gross_profit_pct * leverage
+
         # Учитываем комиссию если нужно
         if include_fees:
             seconds_since_open = 0.0
@@ -912,7 +871,7 @@ class ExitAnalyzer:
                 leverage = None
         if leverage is None and position and isinstance(position, dict):
             try:
-                leverage_val = position.get("leverage")
+                leverage_val = position.get("leverage") or position.get("lever")
                 leverage = float(leverage_val) if leverage_val else None
             except (TypeError, ValueError):
                 leverage = None
@@ -944,6 +903,54 @@ class ExitAnalyzer:
             return 1.0
         leverage = self._get_effective_leverage(position, metadata)
         return leverage / reference_leverage
+
+    def _get_emergency_threshold(
+        self,
+        base_threshold: float,
+        position: Optional[Any] = None,
+        metadata: Optional[Any] = None,
+    ) -> float:
+        reference_leverage = None
+        if self.config_manager and hasattr(self.config_manager, "_raw_config_dict"):
+            cfg = self.config_manager._raw_config_dict or {}
+            reference_leverage = cfg.get("exit_params_reference_leverage")
+        if reference_leverage is None and self.scalping_config:
+            reference_leverage = getattr(self.scalping_config, "leverage", None)
+        try:
+            reference_leverage = float(reference_leverage)
+        except (TypeError, ValueError):
+            reference_leverage = 1.0
+        if reference_leverage <= 0:
+            reference_leverage = 1.0
+
+        leverage = self._get_effective_leverage(position, metadata)
+        scale = max(1.0, min(2.5, leverage / reference_leverage))
+        return base_threshold * scale
+
+    def _check_tsl_hit(
+        self,
+        symbol: str,
+        position_side: str,
+        current_price: float,
+    ) -> tuple[bool, Optional[float]]:
+        try:
+            if not self.orchestrator or not hasattr(
+                self.orchestrator, "trailing_sl_coordinator"
+            ):
+                return False, None
+            tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
+            if not tsl or not hasattr(tsl, "get_stop_loss"):
+                return False, None
+            stop_loss = tsl.get_stop_loss()
+            if stop_loss is None:
+                return False, None
+            side = position_side.lower()
+            if side == "long":
+                return current_price <= stop_loss, stop_loss
+            return current_price >= stop_loss, stop_loss
+        except Exception as e:
+            logger.debug(f"ExitAnalyzer: TSL check failed for {symbol}: {e}")
+            return False, None
 
     async def _get_tp_percent(
         self,
@@ -1158,6 +1165,9 @@ class ExitAnalyzer:
             tp_min_percent *= tp_scale
             tp_max_percent *= tp_scale
 
+        # === ГАРАНТИРОВАННАЯ ИНИЦИАЛИЗАЦИЯ sl_percent ===
+        sl_percent = 2.0
+        sl_min_percent = 1.0
         leverage = self._get_effective_leverage(position, metadata)
         sl_scale = self._get_exit_leverage_scale(position, metadata)
         if sl_scale != 1.0:
@@ -1244,6 +1254,35 @@ class ExitAnalyzer:
         # ✅ ИСПРАВЛЕНО (07.01.2026): Убедитесь что tp_percent всегда float перед возвратом
         tp_percent = self._to_float(tp_percent, "tp_percent_final", 2.4)
         return tp_percent
+
+    def _safe_sl_percent(
+        self,
+        symbol: str,
+        regime: str,
+        current_price: Optional[float] = None,
+        market_data: Optional[Any] = None,
+        position: Optional[Any] = None,
+        metadata: Optional[Any] = None,
+    ) -> float:
+        """
+        Надежный вызов _get_sl_percent с логом и резервом, чтобы ошибки
+        не приводили к UnboundLocalError внутри генераторов выходов.
+        """
+        try:
+            return self._get_sl_percent(
+                symbol,
+                regime,
+                current_price=current_price,
+                market_data=market_data,
+                position=position,
+                metadata=metadata,
+            )
+        except Exception as exc:
+            logger.error(
+                f"⚠️ ExitAnalyzer: не удалось получить sl_percent для {symbol} ({regime}): {exc}",
+                exc_info=True,
+            )
+            return 2.0
 
     def _get_sl_percent(
         self,
@@ -2566,8 +2605,26 @@ class ExitAnalyzer:
         Returns:
             Решение {action: str, reason: str, ...} или None
         """
-        sl_percent = 0.0
+        sl_percent = 2.0  # Гарантированная инициализация для UnboundLocalError
         try:
+            # Базовый SL заранее, чтобы исключить UnboundLocalError при любых ветках логики
+            try:
+                sl_percent = self._safe_sl_percent(
+                    symbol,
+                    "trending",
+                    current_price,
+                    market_data,
+                    position=position,
+                    metadata=metadata,
+                )
+            except Exception:
+                logger.error(
+                    f"⚠️ ExitAnalyzer TRENDING: не удалось рассчитать SL для {symbol}, fallback 2.0%",
+                    exc_info=True,
+                )
+                sl_percent = 2.0
+            sl_percent = self._to_float(sl_percent, "sl_percent", 2.0)
+
             # 1. Получаем данные позиции (✅ ИСПОЛЬЗУЕМ ОБЩИЙ МЕТОД)
             entry_price, position_side = await self._get_entry_price_and_side(
                 symbol, position, metadata
@@ -2621,11 +2678,32 @@ class ExitAnalyzer:
                 gross_pnl_percent, "gross_pnl_percent", 0.0
             )
 
+            tsl_hit, tsl_stop = self._check_tsl_hit(
+                symbol, position_side, current_price
+            )
+            if tsl_hit:
+                self._record_metrics_on_close(
+                    symbol=symbol,
+                    reason="tsl_hit",
+                    pnl_percent=pnl_percent,
+                    entry_time=entry_time,
+                )
+                return {
+                    "action": "close",
+                    "reason": "tsl_hit",
+                    "pnl_pct": pnl_percent,
+                    "regime": regime,
+                    "tsl_stop": tsl_stop,
+                }
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Emergency Loss Protection - ПЕРВАЯ ЗАЩИТА
             # Проверяется ПЕРВОЙ, перед всеми другими проверками (соответствует приоритету 1 в ExitDecisionCoordinator)
             # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
             # TRENDING: более высокий порог (-4.0%), так как тренды могут иметь большие просадки
-            emergency_loss_threshold = -5.0  # Для trending режима (было -2.5)
+            base_emergency_threshold = -8.0
+            emergency_loss_threshold = self._get_emergency_threshold(
+                base_emergency_threshold, position, metadata
+            )
 
             # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
             emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
@@ -2680,7 +2758,7 @@ class ExitAnalyzer:
                                     f"но убыток критический ({pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
                                     f"Используем Smart Close для комплексного анализа..."
                                 )
-                                smart_close_sl_percent = self._get_sl_percent(
+                                smart_close_sl_percent = self._safe_sl_percent(
                                     symbol,
                                     "trending",
                                     current_price,
@@ -2984,7 +3062,7 @@ class ExitAnalyzer:
 
             # 6. Проверка SL (Stop Loss) - должна быть ДО Smart Close
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для ATR-based SL
-            sl_percent = self._get_sl_percent(
+            sl_percent = self._safe_sl_percent(
                 symbol,
                 "trending",
                 current_price,
@@ -3152,7 +3230,7 @@ class ExitAnalyzer:
             # 6.1. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Smart Close проверяется ПЕРЕД max_holding
             # Проверяем Smart Close только если убыток >= 1.5 * SL и прошло min_holding_minutes
             if gross_pnl_percent < 0:
-                smart_close_sl_percent = self._get_sl_percent(
+                smart_close_sl_percent = self._safe_sl_percent(
                     symbol,
                     "trending",
                     current_price,
@@ -3469,9 +3547,9 @@ class ExitAnalyzer:
             return None
 
         except Exception as e:
-            logger.error(
-                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме TRENDING: {e}",
-                exc_info=True,
+            logger.exception(
+                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме TRENDING: {e}\n"
+                f"symbol={symbol}, position={position}, metadata={metadata}, current_price={current_price}, regime={regime}"
             )
             return None
 
@@ -3503,8 +3581,26 @@ class ExitAnalyzer:
         Returns:
             Решение {action: str, reason: str, ...} или None
         """
-        sl_percent = 0.0
+        sl_percent = 2.0  # Гарантированная инициализация для UnboundLocalError
         try:
+            # Базовый SL заранее, чтобы исключить UnboundLocalError при любых ветках логики
+            try:
+                sl_percent = self._safe_sl_percent(
+                    symbol,
+                    "ranging",
+                    current_price,
+                    market_data,
+                    position=position,
+                    metadata=metadata,
+                )
+            except Exception:
+                logger.error(
+                    f"⚠️ ExitAnalyzer RANGING: не удалось рассчитать SL для {symbol}, fallback 2.0%",
+                    exc_info=True,
+                )
+                sl_percent = 2.0
+            sl_percent = self._to_float(sl_percent, "sl_percent", 2.0)
+
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ (25.12.2025): Начало анализа для режима RANGING
             logger.debug(
                 f"🔍 [RANGING_ANALYSIS_START] {symbol}: Начало анализа позиции | "
@@ -3568,6 +3664,24 @@ class ExitAnalyzer:
             )
             net_pnl_percent = self._to_float(net_pnl_percent, "net_pnl_percent", 0.0)
 
+            tsl_hit, tsl_stop = self._check_tsl_hit(
+                symbol, position_side, current_price
+            )
+            if tsl_hit:
+                self._record_metrics_on_close(
+                    symbol=symbol,
+                    reason="tsl_hit",
+                    pnl_percent=net_pnl_percent,
+                    entry_time=entry_time,
+                )
+                return {
+                    "action": "close",
+                    "reason": "tsl_hit",
+                    "pnl_pct": net_pnl_percent,
+                    "regime": regime,
+                    "tsl_stop": tsl_stop,
+                }
+
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ для диагностики
             # Показываем больше знаков для маленьких значений
             gross_format = (
@@ -3593,9 +3707,10 @@ class ExitAnalyzer:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Пороги emergency_loss_protection адаптируются по режимам
             # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличены пороги для уменьшения частоты emergency close
             # RANGING: более низкий порог (-2.5%), так как в ranging режиме позиции должны закрываться быстрее
-            emergency_loss_threshold = -3.5  # Для ranging режима (было -1.5)
-            # Временное ослабление emergency-выхода в ranging
-            emergency_loss_threshold *= 1.5
+            base_emergency_threshold = -7.0
+            emergency_loss_threshold = self._get_emergency_threshold(
+                base_emergency_threshold, position, metadata
+            )
 
             # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
             emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
@@ -3663,7 +3778,7 @@ class ExitAnalyzer:
                                     f"Используем Smart Close для комплексного анализа..."
                                 )
                                 # Используем Smart Close для более умного решения
-                                smart_close_sl_percent = self._get_sl_percent(
+                                smart_close_sl_percent = self._safe_sl_percent(
                                     symbol,
                                     "ranging",
                                     current_price,
@@ -3860,14 +3975,22 @@ class ExitAnalyzer:
 
             # 2.5. ✅ НОВОЕ: Проверка SL (Stop Loss) - должна быть ДО проверки TP
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для ATR-based SL
-            sl_percent = self._get_sl_percent(
-                symbol,
-                "ranging",
-                current_price,
-                market_data,
-                position=position,
-                metadata=metadata,
-            )
+            try:
+                sl_percent = self._safe_sl_percent(
+                    symbol,
+                    "ranging",
+                    current_price,
+                    market_data,
+                    position=position,
+                    metadata=metadata,
+                )
+            except Exception as sl_exc:
+                logger.error(
+                    f"⚠️ ExitAnalyzer RANGING: не удалось рассчитать SL для {symbol}; "
+                    f"fallback к 2.0% (regime={regime})",
+                    exc_info=True,
+                )
+                sl_percent = 2.0
             # ✅ ИСПРАВЛЕНО: Используем helper функцию для безопасной конвертации
             sl_percent = self._to_float(sl_percent, "sl_percent", 2.0)
 
@@ -3882,7 +4005,7 @@ class ExitAnalyzer:
                 sl_percent = sl_percent * 1.5  # 1.2% * 1.5 = 1.8%
                 logger.debug(
                     f"🛡️ ExitAnalyzer RANGING: После partial TP для {symbol} используем более мягкий SL: "
-                    f"{sl_percent:.2f}% (вместо стандартного {self._get_sl_percent(symbol, 'ranging', current_price, market_data, position=position, metadata=metadata):.2f}%)"
+                    f"{sl_percent:.2f}% (вместо стандартного {self._safe_sl_percent(symbol, 'ranging', current_price, market_data, position=position, metadata=metadata):.2f}%)"
                 )
 
             spread_buffer = self._get_spread_buffer(symbol, current_price)
@@ -4086,7 +4209,7 @@ class ExitAnalyzer:
             # Вызывается только если gross_pnl_percent < 0 и |убыток| >= 1.5 * SL
             # ✅ ИСПРАВЛЕНО: Учитываем спред для предотвращения дергания
             if gross_pnl_percent < 0:
-                smart_close_sl_percent = self._get_sl_percent(
+                smart_close_sl_percent = self._safe_sl_percent(
                     symbol,
                     "ranging",
                     current_price,
@@ -4597,6 +4720,59 @@ class ExitAnalyzer:
                 # ✅ ГРОК: Жесткий стоп по max_holding (если включен в конфиге)
                 # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки (реальная прибыль/убыток после комиссий)
                 if max_holding_hard_stop:
+                    if net_pnl_percent < 0:
+                        sl_active = False
+                        tsl_active = False
+                        try:
+                            sl_pct_tmp = self._safe_sl_percent(
+                                symbol,
+                                "ranging",
+                                current_price,
+                                market_data,
+                                position=position,
+                                metadata=metadata,
+                            )
+                            sl_pct_tmp = self._to_float(sl_pct_tmp, "sl_percent", 2.0)
+                            sl_threshold_tmp = -sl_pct_tmp - self._get_spread_buffer(
+                                symbol, current_price
+                            )
+                            sl_active = gross_pnl_percent <= sl_threshold_tmp
+                        except Exception:
+                            sl_active = False
+                        try:
+                            if self.orchestrator and hasattr(
+                                self.orchestrator, "trailing_sl_coordinator"
+                            ):
+                                tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(
+                                    symbol
+                                )
+                                if tsl:
+                                    stop_loss = tsl.get_stop_loss()
+                                    if stop_loss:
+                                        if position_side == "long":
+                                            tsl_active = current_price <= stop_loss
+                                        else:
+                                            tsl_active = current_price >= stop_loss
+                        except Exception:
+                            tsl_active = False
+
+                        logger.info(
+                            f"⏰ ExitAnalyzer RANGING: max_holding soft hold для {symbol} - "
+                            f"Net PnL {net_pnl_percent:.2f}% (Gross {gross_pnl_percent:.2f}%), "
+                            f"SL active={sl_active}, TSL active={tsl_active}"
+                        )
+                        return {
+                            "action": "hold",
+                            "reason": "max_holding_loss_soft_hold",
+                            "pnl_pct": net_pnl_percent,
+                            "gross_pnl_pct": gross_pnl_percent,
+                            "minutes_in_position": minutes_in_position,
+                            "max_holding_minutes": actual_max_holding,
+                            "timeout_loss_percent": timeout_loss_percent,
+                            "regime": regime,
+                            "sl_active": sl_active,
+                            "tsl_active": tsl_active,
+                        }
                     # Жесткий стоп: закрываем независимо от PnL, кроме случаев когда убыток < timeout_loss_percent
                     if net_pnl_percent < 0:
                         # Если убыток >= timeout_loss_percent - закрываем жестко
@@ -4604,7 +4780,7 @@ class ExitAnalyzer:
                             sl_active = False
                             tsl_active = False
                             try:
-                                sl_pct_tmp = self._get_sl_percent(
+                                sl_pct_tmp = self._safe_sl_percent(
                                     symbol,
                                     "ranging",
                                     current_price,
@@ -4979,9 +5155,9 @@ class ExitAnalyzer:
             return None
 
         except Exception as e:
-            logger.error(
-                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме RANGING: {e}",
-                exc_info=True,
+            logger.exception(
+                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме RANGING: {e}\n"
+                f"symbol={symbol}, position={position}, metadata={metadata}, current_price={current_price}, regime={regime}"
             )
             return None
 
@@ -5013,8 +5189,26 @@ class ExitAnalyzer:
         Returns:
             Решение {action: str, reason: str, ...} или None
         """
-        sl_percent = 0.0
+        sl_percent = 2.0  # Гарантированная инициализация для UnboundLocalError
         try:
+            # Базовый SL заранее, чтобы исключить UnboundLocalError при любых ветках логики
+            try:
+                sl_percent = self._safe_sl_percent(
+                    symbol,
+                    "choppy",
+                    current_price,
+                    market_data,
+                    position=position,
+                    metadata=metadata,
+                )
+            except Exception:
+                logger.error(
+                    f"⚠️ ExitAnalyzer CHOPPY: не удалось рассчитать SL для {symbol}, fallback 2.0%",
+                    exc_info=True,
+                )
+                sl_percent = 2.0
+            sl_percent = self._to_float(sl_percent, "sl_percent", 2.0)
+
             # 1. Получаем данные позиции (✅ ИСПОЛЬЗУЕМ ОБЩИЙ МЕТОД)
             entry_price, position_side = await self._get_entry_price_and_side(
                 symbol, position, metadata
@@ -5068,11 +5262,32 @@ class ExitAnalyzer:
                 gross_pnl_percent, "gross_pnl_percent", 0.0
             )
 
+            tsl_hit, tsl_stop = self._check_tsl_hit(
+                symbol, position_side, current_price
+            )
+            if tsl_hit:
+                self._record_metrics_on_close(
+                    symbol=symbol,
+                    reason="tsl_hit",
+                    pnl_percent=pnl_percent,
+                    entry_time=entry_time,
+                )
+                return {
+                    "action": "close",
+                    "reason": "tsl_hit",
+                    "pnl_pct": pnl_percent,
+                    "regime": regime,
+                    "tsl_stop": tsl_stop,
+                }
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Emergency Loss Protection - ПЕРВАЯ ЗАЩИТА
             # Проверяется ПЕРВОЙ, перед всеми другими проверками (соответствует приоритету 1 в ExitDecisionCoordinator)
             # ✅ ПРАВКА #13: Защита от больших убытков - АДАПТИВНО ПО РЕЖИМАМ
             # CHOPPY: средний порог (-2.0%), так как в choppy режиме высокая волатильность
-            emergency_loss_threshold = -3.0  # Для choppy режима (было -1.5)
+            base_emergency_threshold = -6.5
+            emergency_loss_threshold = self._get_emergency_threshold(
+                base_emergency_threshold, position, metadata
+            )
 
             # ✅ НОВОЕ (26.12.2025): Учитываем spread_buffer и commission_buffer
             emergency_spread_buffer = self._get_spread_buffer(symbol, current_price)
@@ -5127,7 +5342,7 @@ class ExitAnalyzer:
                                     f"но убыток критический ({pnl_percent:.2f}% < {adjusted_emergency_threshold:.2f}%). "
                                     f"Используем Smart Close для комплексного анализа..."
                                 )
-                                smart_close_sl_percent = self._get_sl_percent(
+                                smart_close_sl_percent = self._safe_sl_percent(
                                     symbol,
                                     "choppy",
                                     current_price,
@@ -5339,7 +5554,7 @@ class ExitAnalyzer:
 
             # 4. Проверка SL (Stop Loss) - должна быть ДО Smart Close
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для ATR-based SL
-            sl_percent = self._get_sl_percent(
+            sl_percent = self._safe_sl_percent(
                 symbol,
                 "choppy",
                 current_price,
@@ -5426,7 +5641,7 @@ class ExitAnalyzer:
             # 4.1. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Smart Close проверяется ПЕРЕД big_profit_exit
             # Проверяем Smart Close только если убыток >= 1.5 * SL и прошло min_holding_minutes
             if gross_pnl_percent < 0:
-                smart_close_sl_percent = self._get_sl_percent(
+                smart_close_sl_percent = self._safe_sl_percent(
                     symbol,
                     "choppy",
                     current_price,
@@ -5700,9 +5915,9 @@ class ExitAnalyzer:
             return None
 
         except Exception as e:
-            logger.error(
-                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме CHOPPY: {e}",
-                exc_info=True,
+            logger.exception(
+                f"❌ ExitAnalyzer: Ошибка анализа для {symbol} в режиме CHOPPY: {e}\n"
+                f"symbol={symbol}, position={position}, metadata={metadata}, current_price={current_price}, regime={regime}"
             )
             return None
 

@@ -21,6 +21,24 @@ from .candle_buffer import CandleBuffer
 
 
 class DataRegistry:
+    async def _check_market_data_fresh(self, symbol: str, max_age: float = 1.0) -> bool:
+        """Проверяет, что рыночные данные свежие (не старше max_age секунд)"""
+        async with self._lock:
+            md = self._market_data.get(symbol, {})
+            updated_at = md.get("updated_at")
+            if not updated_at or not isinstance(updated_at, datetime):
+                logger.error(
+                    f"❌ DataRegistry: Нет актуальных данных для {symbol} (нет updated_at)"
+                )
+                return False
+            age = (datetime.now() - updated_at).total_seconds()
+            if age > max_age:
+                logger.error(
+                    f"❌ DataRegistry: Данные для {symbol} устарели на {age:.2f}s (> {max_age}s)"
+                )
+                return False
+            return True
+
     """
     Единый реестр всех данных.
 
@@ -111,6 +129,8 @@ class DataRegistry:
         Returns:
             Рыночные данные или None
         """
+        if not await self._check_market_data_fresh(symbol, max_age=1.0):
+            return None
         async with self._lock:
             return (
                 self._market_data.get(symbol, {}).copy()
@@ -128,6 +148,8 @@ class DataRegistry:
         Returns:
             Цена или None
         """
+        if not await self._check_market_data_fresh(symbol, max_age=1.0):
+            return None
         async with self._lock:
             market_data = self._market_data.get(symbol, {})
             return market_data.get("price") or market_data.get("last_price")
@@ -145,14 +167,13 @@ class DataRegistry:
         Returns:
             MarkPx или None (fallback на обычную цену)
         """
+        if not await self._check_market_data_fresh(symbol, max_age=1.0):
+            return None
         async with self._lock:
             market_data = self._market_data.get(symbol, {})
-            # Пробуем получить markPx из market_data (приходит из WebSocket)
             mark_px = market_data.get("markPx") or market_data.get("mark_px")
             if mark_px and isinstance(mark_px, (int, float)) and mark_px > 0:
                 return float(mark_px)
-
-            # Fallback на обычную цену
             return market_data.get("price") or market_data.get("last_price")
 
     # ==================== INDICATORS ====================
