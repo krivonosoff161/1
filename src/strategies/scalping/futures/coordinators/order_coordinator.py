@@ -293,14 +293,30 @@ class OrderCoordinator:
                                         post_only_str == "true" or post_only_str == "1"
                                     )
 
-                                    # ✅ ИСПРАВЛЕНИЕ #4 (04.01.2026): Timeout имеет приоритет над price proximity
-                                    # ✅ ИСПРАВЛЕНИЕ #3 (04.01.2026): POST_ONLY ордера заменяются на market при timeout
-                                    # Сначала проверяем timeout - он имеет приоритет
+                                    # ✅ FIX (22.01.2026): УМНАЯ ПЕРЕОЦЕНКА вместо тупой отмены по таймауту
+                                    # Идея: Если ордер висит > max_wait, НЕ отменяем автоматически
+                                    # Вместо этого ПЕРЕОЦЕНИВАЕМ сигнал:
+                                    # - Фильтры всё ещё PASSED? → ОСТАВИТЬ ордер
+                                    # - Рынок развернулся? → ОТМЕНИТЬ
                                     if wait_time > max_wait:
-                                        # ✅ КРИТИЧЕСКОЕ: Timeout имеет приоритет - отменяем ВСЕГДА
+                                        # Проверяем актуальность сигнала ПЕРЕД отменой
+                                        signal_still_valid = (
+                                            await self._revalidate_signal(
+                                                symbol, side, order_price
+                                            )
+                                        )
+
+                                        if signal_still_valid:
+                                            logger.info(
+                                                f"✅ Лимитный ордер {order_id} для {symbol} висит {wait_time:.0f} сек, "
+                                                f"НО сигнал всё ещё актуален → ОСТАВЛЯЕМ ордер"
+                                            )
+                                            continue  # НЕ отменяем, оставляем висеть!
+
+                                        # Сигнал устарел или развернулся - отменяем
                                         logger.warning(
                                             f"⚠️ Лимитный ордер {order_id} для {symbol} висит {wait_time:.0f} сек "
-                                            f"(лимит: {max_wait} сек), отменяем ВСЕГДА (даже если цена близка к исполнению)"
+                                            f"(лимит: {max_wait} сек), сигнал УСТАРЕЛ → отменяем"
                                         )
 
                                         # --- Логгирование rate limit отмен/замен ---
@@ -748,14 +764,27 @@ class OrderCoordinator:
                                                 )
                                         continue  # Пропускаем дальнейшую обработку этого ордера
 
-                                    # ✅ ИСПРАВЛЕНИЕ #4 (04.01.2026): Timeout имеет приоритет над price proximity
-                                    # ✅ ИСПРАВЛЕНИЕ #3 (04.01.2026): POST_ONLY ордера заменяются на market при timeout
-                                    # Проверяем timeout ПЕРВЫМ - он имеет приоритет над price proximity
+                                    # ✅ FIX (22.01.2026): УМНАЯ ПЕРЕОЦЕНКА вместо тупой отмены по таймауту
+                                    # Проверяем актуальность сигнала ПЕРЕД отменой
                                     if wait_time > max_wait:
-                                        # Таймаут превышен - отменяем ордер
+                                        # Проверяем актуальность сигнала ПЕРЕД отменой
+                                        signal_still_valid = (
+                                            await self._revalidate_signal(
+                                                symbol, side, order_price
+                                            )
+                                        )
+
+                                        if signal_still_valid:
+                                            logger.info(
+                                                f"✅ Лимитный ордер {order_id} для {symbol} висит {wait_time:.0f} сек, "
+                                                f"НО сигнал всё ещё актуален → ОСТАВЛЯЕМ ордер"
+                                            )
+                                            continue  # НЕ отменяем, оставляем висеть!
+
+                                        # Сигнал устарел - отменяем
                                         logger.warning(
                                             f"⚠️ Лимитный ордер {order_id} для {symbol} висит {wait_time:.0f} сек "
-                                            f"(лимит: {max_wait} сек), отменяем ВСЕГДА (даже если цена близка к исполнению)"
+                                            f"(лимит: {max_wait} сек), сигнал УСТАРЕЛ → отменяем"
                                         )
                                         if auto_cancel:
                                             cancel_result = (
@@ -1090,3 +1119,109 @@ class OrderCoordinator:
         """
         if normalized_symbol in self.last_orders_cache:
             self.last_orders_cache[normalized_symbol]["status"] = "closed"
+
+    async def _revalidate_signal(
+        self, symbol: str, side: str, order_price: float
+    ) -> bool:
+        """
+        ✅ FIX (22.01.2026): УМНАЯ ПЕРЕОЦЕНКА сигнала перед отменой ордера.
+
+        Вместо тупой отмены по таймауту проверяем:
+        1. Есть ли сигнал в нужном направлении (buy/sell)
+        2. Фильтры всё ещё PASSED
+        3. Цена движется в нужную сторону (или стоит)
+
+        Args:
+            symbol: Символ (BTC-USDT)
+            side: Направление ордера (buy/sell)
+            order_price: Цена ордера
+
+        Returns:
+            True если сигнал всё ещё актуален (НЕ отменять ордер)
+            False если сигнал устарел (ОТМЕНИТЬ ордер)
+        """
+        try:
+            # 1. Генерируем сигналы заново
+            if not self.signal_generator:
+                logger.warning(
+                    f"⚠️ SignalGenerator недоступен для {symbol}, не можем переоценить сигнал → отменяем"
+                )
+                return False
+
+            signals = await self.signal_generator.generate_signals()
+            if not signals:
+                logger.debug(f"⚠️ Нет сигналов для {symbol} → сигнал устарел")
+                return False
+
+            # 2. Ищем сигнал в нужном направлении для символа
+            matching_signals = [
+                s
+                for s in signals
+                if s.get("symbol") == symbol and s.get("side") == side
+            ]
+
+            if not matching_signals:
+                logger.info(
+                    f"⚠️ Нет {side} сигнала для {symbol} → сигнал развернулся, отменяем ордер"
+                )
+                return False
+
+            # 3. Берём лучший сигнал (первый, они отсортированы по strength)
+            best_signal = matching_signals[0]
+            signal_strength = best_signal.get("strength", 0)
+            filters_passed = best_signal.get("filters_passed", [])
+
+            logger.info(
+                f"✅ Сигнал {side} для {symbol} всё ещё актуален! "
+                f"strength={signal_strength:.2f}, filters={len(filters_passed)}"
+            )
+
+            # 4. Проверяем что фильтры PASSED (хотя бы 3 фильтра)
+            if len(filters_passed) < 3:
+                logger.warning(
+                    f"⚠️ Сигнал для {symbol} слабый (filters={len(filters_passed)} < 3) → отменяем"
+                )
+                return False
+
+            # 5. Проверяем strength (хотя бы 0.5)
+            if signal_strength < 0.5:
+                logger.warning(
+                    f"⚠️ Сигнал для {symbol} слабый (strength={signal_strength} < 0.5) → отменяем"
+                )
+                return False
+
+            # 6. Опционально: проверяем направление движения цены
+            # Если рынок развернулся ПРОТИВ ордера - отменяем
+            try:
+                signal_price = best_signal.get("price", 0)
+                if signal_price > 0 and order_price > 0:
+                    if side == "sell":
+                        # Для SELL: если цена ушла ВВЕРХ > 0.5% от ордера → рынок развернулся
+                        if signal_price > order_price * 1.005:
+                            logger.warning(
+                                f"⚠️ Рынок развернулся ВВЕРХ для {symbol} SELL "
+                                f"(signal={signal_price:.2f} > order={order_price:.2f}) → отменяем"
+                            )
+                            return False
+                    else:  # buy
+                        # Для BUY: если цена ушла ВНИЗ > 0.5% от ордера → рынок развернулся
+                        if signal_price < order_price * 0.995:
+                            logger.warning(
+                                f"⚠️ Рынок развернулся ВНИЗ для {symbol} BUY "
+                                f"(signal={signal_price:.2f} < order={order_price:.2f}) → отменяем"
+                            )
+                            return False
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось проверить направление цены: {e}")
+
+            # ✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ - сигнал актуален!
+            logger.info(
+                f"✅ Сигнал для {symbol} {side} @ {order_price:.2f} АКТУАЛЕН "
+                f"(strength={signal_strength:.2f}, filters={filters_passed}) → ОСТАВЛЯЕМ ордер"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка переоценки сигнала для {symbol}: {e}")
+            # При ошибке безопаснее отменить
+            return False

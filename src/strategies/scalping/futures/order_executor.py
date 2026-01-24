@@ -129,6 +129,13 @@ class FuturesOrderExecutor:
                 f"🎯 Исполнение сигнала: {symbol} {side} размер={position_size:.6f}"
             )
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): Сохраняем цену сигнала для проверки в _place_market_order
+            if not hasattr(self, "_last_signal_price"):
+                self._last_signal_price = {}
+            signal_price = signal.get("price") or signal.get("entry_price")
+            if signal_price:
+                self._last_signal_price[symbol] = float(signal_price)
+
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Логируем информацию о сигнале
             logger.debug(
                 f"🔍 [EXECUTE_SIGNAL] {symbol} {side}: "
@@ -265,6 +272,44 @@ class FuturesOrderExecutor:
                 )
                 # Если не удалось рассчитать цену или цена устарела — fallback на market
                 if price is None or price <= 0:
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): Проверка возраста сигнала
+                    # Если данные устарели, проверяем возраст сигнала перед fallback на market
+                    signal_timestamp = signal.get("timestamp")
+                    if signal_timestamp:
+                        try:
+                            from datetime import datetime, timezone
+
+                            if isinstance(signal_timestamp, str):
+                                signal_dt = datetime.fromisoformat(
+                                    signal_timestamp.replace("Z", "+00:00")
+                                )
+                            elif isinstance(signal_timestamp, datetime):
+                                signal_dt = signal_timestamp
+                            else:
+                                signal_dt = datetime.fromtimestamp(
+                                    float(signal_timestamp), tz=timezone.utc
+                                )
+
+                            signal_age_sec = (
+                                datetime.now(timezone.utc)
+                                - signal_dt.astimezone(timezone.utc)
+                            ).total_seconds()
+
+                            if signal_age_sec > 10.0:  # Сигнал старше 10 секунд
+                                logger.error(
+                                    f"❌ ЗАЩИТА: {symbol} сигнал устарел на {signal_age_sec:.1f}s (>10s), "
+                                    f"лимитная цена не рассчитана - ОТМЕНЯЕМ ордер полностью!"
+                                )
+                                return {
+                                    "success": False,
+                                    "error": f"Signal too old: {signal_age_sec:.1f}s",
+                                    "code": "STALE_SIGNAL",
+                                }
+                        except Exception as e:
+                            logger.debug(
+                                f"⚠️ Не удалось проверить возраст сигнала для {symbol}: {e}"
+                            )
+
                     logger.error(
                         f"❌ Лимитный ордер для {symbol} не размещён: нет свежей цены или ошибка расчёта. Fallback на market."
                     )
@@ -385,11 +430,58 @@ class FuturesOrderExecutor:
                         if md_ts:
                             md_age_sec = time.time() - md_ts
                             if md_age_sec is not None and md_age_sec > 1.0:
-                                logger.error(
-                                    f"❌ DataRegistry price for {symbol} устарела на {md_age_sec:.3f}s (>1.0s) — лимитный ордер не будет размещён, fallback на market"
+                                logger.warning(
+                                    f"⚠️ DataRegistry price for {symbol} устарела на {md_age_sec:.3f}s (>1.0s), "
+                                    f"пытаемся получить свежую цену через REST API..."
                                 )
-                                return None  # Не размещаем лимитку по устаревшей цене
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): REST fallback вместо отказа
+                                try:
+                                    fresh_price = await self.data_registry.get_fresh_price_for_orders(
+                                        symbol, client=self.client
+                                    )
+                                    if fresh_price and fresh_price > 0:
+                                        logger.info(
+                                            f"✅ OrderExecutor: Получена свежая цена для {symbol}: ${fresh_price:.4f}, "
+                                            f"продолжаем расчет лимитной цены"
+                                        )
+                                        # Обновляем md_age_sec на 0 т.к. получили свежие данные
+                                        md_age_sec = 0.0
+                                    else:
+                                        logger.error(
+                                            f"❌ OrderExecutor: REST fallback failed для {symbol}, "
+                                            f"fallback на market order"
+                                        )
+                                        return None  # Fallback на market
+                                except Exception as e:
+                                    logger.error(
+                                        f"❌ OrderExecutor: Ошибка REST fallback для {symbol}: {e}, "
+                                        f"fallback на market order"
+                                    )
+                                    return None  # Fallback на market
+                        else:
+                            # ✅ FIX (22.01.2026): Если нет timestamp, данные могут быть устаревшими
+                            logger.warning(
+                                f"⚠️ Нет timestamp для DataRegistry {symbol}, возможно данные устаревшие. Fallback на market."
+                            )
+                            return None
+                    else:
+                        # ✅ FIX (22.01.2026): Если нет market_data, не размещаем лимитку
+                        logger.warning(
+                            f"⚠️ Нет market_data для {symbol}, fallback на market."
+                        )
+                        return None
                 except Exception as e:
+                    # ✅ FIX (22.01.2026): Если ошибка связана с устаревшими данными, возвращаем None
+                    error_msg = str(e).lower()
+                    if (
+                        "stale" in error_msg
+                        or "устар" in error_msg
+                        or "нет актуальных" in error_msg
+                    ):
+                        logger.error(
+                            f"❌ DataRegistry для {symbol} вернул ошибку о устаревших данных: {e} — fallback на market"
+                        )
+                        return None
                     logger.debug(
                         f"⚠️ Не удалось проверить свежесть DataRegistry для {symbol}: {e}"
                     )
@@ -753,29 +845,35 @@ class FuturesOrderExecutor:
                 # === Адаптация offset ===
                 if volatility is not None and volatility > 0:
                     orig_offset = offset_percent
+                    # ✅ FIX (22.01.2026): Исправлена логика offset - теперь ГАРАНТИРУЕМ минимум, а не снижаем
                     # Пороговые значения можно вынести в конфиг при необходимости
                     if volatility < 0.1:
-                        # Сверхнизкая волатильность — offset минимальный (0.005%)
-                        offset_percent = min(offset_percent, 0.005)
+                        # Сверхнизкая волатильность — offset минимум 0.02% (было 0.005%)
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: используем max вместо min!
+                        offset_percent = max(offset_percent, 0.02)
                         logger.info(
-                            f"💡 Волатильность {volatility:.3f}% < 0.1% — offset снижен до {offset_percent:.4f}% для агрессивного входа"
+                            f"💡 Волатильность {volatility:.3f}% < 0.1% — offset установлен минимум {offset_percent:.4f}% для гарантии исполнения"
                         )
                     elif volatility < 0.3:
-                        # Низкая волатильность — offset чуть ниже обычного
-                        offset_percent = min(offset_percent, 0.01)
+                        # Низкая волатильность — offset минимум 0.03% (было 0.01%)
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: используем max вместо min!
+                        offset_percent = max(offset_percent, 0.03)
                         logger.info(
-                            f"💡 Волатильность {volatility:.3f}% < 0.3% — offset снижен до {offset_percent:.4f}% для агрессивного входа"
+                            f"💡 Волатильность {volatility:.3f}% < 0.3% — offset установлен минимум {offset_percent:.4f}% для гарантии исполнения"
                         )
                     elif volatility > 0.7:
                         # Высокая волатильность — offset увеличиваем для гарантии исполнения
-                        offset_percent = max(offset_percent, 0.03)
+                        offset_percent = max(
+                            offset_percent, 0.05
+                        )  # Было 0.03%, стало 0.05%
                         logger.info(
                             f"💡 Волатильность {volatility:.3f}% > 0.7% — offset увеличен до {offset_percent:.4f}% для гарантии исполнения"
                         )
                     else:
-                        # Средняя волатильность — offset по конфигу
+                        # Средняя волатильность (0.3-0.7%) — offset минимум 0.04%
+                        offset_percent = max(offset_percent, 0.04)
                         logger.info(
-                            f"💡 Волатильность {volatility:.3f}% — offset по конфигу: {offset_percent:.4f}%"
+                            f"💡 Волатильность {volatility:.3f}% — offset установлен минимум {offset_percent:.4f}%"
                         )
                     logger.debug(
                         f"[DYNAMIC_OFFSET] {symbol}: volatility={volatility:.4f}%, orig_offset={orig_offset}, final_offset={offset_percent}"
@@ -817,28 +915,74 @@ class FuturesOrderExecutor:
                             hasattr(market_data.current_tick, "price")
                             and market_data.current_tick.price > 0
                         ):
-                            current_price = market_data.current_tick.price
-                            best_bid = getattr(
-                                market_data.current_tick, "bid", current_price
-                            )
-                            best_ask = getattr(
-                                market_data.current_tick, "ask", current_price
-                            )
+                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Проверяем TTL перед использованием
                             tick_ts = (
                                 getattr(market_data.current_tick, "timestamp", None)
                                 or time.time()
                             )
-                            ws_price, ws_bid, ws_ask = current_price, best_bid, best_ask
-                            price_limits_source = "ws"
-                            logger.debug(
-                                f"✅ OrderExecutor: WebSocket price for limit calc: {current_price:.2f} (bid={best_bid:.2f}, ask={best_ask:.2f})"
-                            )
-                            price_limits = {
-                                "current_price": current_price,
-                                "best_bid": best_bid,
-                                "best_ask": best_ask,
-                                "timestamp": tick_ts,
-                            }
+                            tick_age = time.time() - tick_ts
+
+                            if tick_age > 1.0:
+                                logger.warning(
+                                    f"⚠️ WebSocket price for {symbol} устарела на {tick_age:.1f}s (>1.0s), "
+                                    f"пытаемся получить свежую цену через REST..."
+                                )
+                                # Пытаемся получить свежую цену через REST
+                                fresh_price = (
+                                    await self.data_registry.get_fresh_price_for_orders(
+                                        symbol, client=self.client
+                                    )
+                                )
+                                if fresh_price and fresh_price > 0:
+                                    current_price = fresh_price
+                                    best_bid = (
+                                        fresh_price  # Используем price как bid/ask
+                                    )
+                                    best_ask = fresh_price
+                                    ws_price, ws_bid, ws_ask = (
+                                        current_price,
+                                        best_bid,
+                                        best_ask,
+                                    )
+                                    price_limits_source = "rest_fresh"
+                                    logger.info(
+                                        f"✅ OrderExecutor: Получена СВЕЖАЯ цена через REST для {symbol}: ${current_price:.4f}"
+                                    )
+                                    price_limits = {
+                                        "current_price": current_price,
+                                        "best_bid": best_bid,
+                                        "best_ask": best_ask,
+                                        "timestamp": time.time(),
+                                    }
+                                else:
+                                    # REST fallback failed, пропускаем к Tier 2 (candle)
+                                    logger.warning(
+                                        f"⚠️ REST fallback failed для {symbol}, пробуем candle fallback"
+                                    )
+                            else:
+                                # WebSocket цена свежая, используем ее
+                                current_price = market_data.current_tick.price
+                                best_bid = getattr(
+                                    market_data.current_tick, "bid", current_price
+                                )
+                                best_ask = getattr(
+                                    market_data.current_tick, "ask", current_price
+                                )
+                                ws_price, ws_bid, ws_ask = (
+                                    current_price,
+                                    best_bid,
+                                    best_ask,
+                                )
+                                price_limits_source = "ws"
+                                logger.debug(
+                                    f"✅ OrderExecutor: WebSocket price for limit calc: {current_price:.2f} (bid={best_bid:.2f}, ask={best_ask:.2f})"
+                                )
+                                price_limits = {
+                                    "current_price": current_price,
+                                    "best_bid": best_bid,
+                                    "best_ask": best_ask,
+                                    "timestamp": tick_ts,
+                                }
                     # Tier 2: Fallback на свечу если WebSocket недоступен
                     elif (
                         market_data
@@ -1153,16 +1297,20 @@ class FuturesOrderExecutor:
                 # Это критично для предотвращения ошибки 51006 (Order price is not within the price limit)
                 if max_buy_price > 0:
                     if limit_price > max_buy_price:
+                        # ✅ FIX (22.01.2026): Убрана слишком консервативная корректировка -0.1%
+                        # Проблема: max_buy_price * 0.999 делает ордер НИЖЕ рынка при росте
+                        # Решение: Используем max_buy_price - минимальный tick (0.0001% или 1 тик)
+                        # Это гарантирует исполнение при движении вверх
+                        safety_margin = max_buy_price * 0.00001  # 0.001% вместо 0.1%
+                        corrected_price = max_buy_price - safety_margin
                         logger.warning(
                             f"⚠️ Лимитная цена для {symbol} BUY ({limit_price:.2f}) превышает лимит биржи ({max_buy_price:.2f}), "
-                            f"корректируем до {max_buy_price * 0.999:.2f} (0.1% ниже лимита для безопасности)"
+                            f"корректируем до {corrected_price:.2f} (-0.001% вместо старого -0.1% для более агрессивного входа)"
                         )
-                        limit_price = (
-                            max_buy_price * 0.999
-                        )  # 0.1% ниже лимита для безопасности
+                        limit_price = corrected_price
                         logger.info(
                             f"✅ Лимитная цена для {symbol} BUY скорректирована: {limit_price:.2f} "
-                            f"(было {limit_price:.2f}, max_buy_price={max_buy_price:.2f})"
+                            f"(было выше max_buy, max_buy_price={max_buy_price:.2f}, margin=-0.001%)"
                         )
                 else:
                     logger.warning(
@@ -1284,16 +1432,20 @@ class FuturesOrderExecutor:
                 # Это критично для предотвращения ошибки 51006 (Order price is not within the price limit)
                 if min_sell_price > 0:
                     if limit_price < min_sell_price:
+                        # ✅ FIX (22.01.2026): Убрана слишком консервативная корректировка +0.1%
+                        # Проблема: min_sell_price * 1.001 делает ордер ВЫШЕ рынка при падении
+                        # Решение: Используем min_sell_price + минимальный tick (0.0001% или 1 тик)
+                        # Это гарантирует исполнение при движении вниз
+                        safety_margin = min_sell_price * 0.00001  # 0.001% вместо 0.1%
+                        corrected_price = min_sell_price + safety_margin
                         logger.warning(
                             f"⚠️ Лимитная цена для {symbol} SELL ({limit_price:.2f}) ниже лимита биржи ({min_sell_price:.2f}), "
-                            f"корректируем до {min_sell_price * 1.001:.2f} (0.1% выше лимита для безопасности)"
+                            f"корректируем до {corrected_price:.2f} (+0.001% вместо старого +0.1% для более агрессивного входа)"
                         )
-                        limit_price = (
-                            min_sell_price * 1.001
-                        )  # 0.1% выше лимита для безопасности
+                        limit_price = corrected_price
                         logger.info(
                             f"✅ Лимитная цена для {symbol} SELL скорректирована: {limit_price:.2f} "
-                            f"(было {limit_price:.2f}, min_sell_price={min_sell_price:.2f})"
+                            f"(было ниже min_sell, min_sell_price={min_sell_price:.2f}, margin=+0.001%)"
                         )
                 else:
                     logger.warning(
@@ -1409,8 +1561,9 @@ class FuturesOrderExecutor:
 
             logger.info(f"📈 Размещение рыночного ордера: {symbol} {side} {size:.6f}")
 
-            # Для метрик: зафиксируем лучшие цены до отправки
-            best_bid = best_ask = None
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): Проверка свежести цены перед market ордером
+            # Запрашиваем текущую цену и сравниваем с ценой сигнала
+            best_bid = best_ask = current_price = None
             try:
                 limits = await self.client.get_price_limits(symbol)
                 best_bid = (
@@ -1423,6 +1576,35 @@ class FuturesOrderExecutor:
                     if limits and limits.get("best_ask")
                     else None
                 )
+                current_price = (
+                    float(limits.get("current"))
+                    if limits and limits.get("current")
+                    else None
+                )
+
+                # ✅ ЗАЩИТА: Если цена изменилась > 1.5% от сигнала - ОТМЕНЯЕМ ордер
+                if current_price and hasattr(self, "_last_signal_price"):
+                    signal_price = getattr(self, "_last_signal_price", {}).get(
+                        symbol, current_price
+                    )
+                    price_divergence = (
+                        abs(current_price - signal_price) / signal_price
+                        if signal_price > 0
+                        else 0
+                    )
+
+                    if price_divergence > 0.015:  # 1.5%
+                        logger.error(
+                            f"❌ ЗАЩИТА ОТ ПРОСКАЛЬЗЫВАНИЯ: {symbol} цена сигнала {signal_price:.4f} "
+                            f"расходится с текущей {current_price:.4f} на {price_divergence*100:.2f}% (>1.5%) - "
+                            f"ОТМЕНЯЕМ market ордер!"
+                        )
+                        return {
+                            "success": False,
+                            "error": f"Price divergence {price_divergence*100:.2f}% > 1.5%",
+                            "code": "STALE_PRICE",
+                        }
+
             except Exception as e:
                 logger.debug(
                     f"⚠️ Не удалось получить лучшие цены перед market-ордером {symbol}: {e}"

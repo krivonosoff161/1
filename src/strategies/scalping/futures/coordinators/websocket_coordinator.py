@@ -156,6 +156,12 @@ class WebSocketCoordinator:
         self._rest_candle_task: Optional[asyncio.Task] = None
         self._rest_candle_poll_interval = 60.0
         self._rest_candle_rate_delay = 0.12  # <= ~8.3 req/s
+        # Последний обработанный тикер и логи форсированных обходов, чтобы избежать устаревших цен
+        self._last_ticker_processed_ts: Dict[str, float] = {}
+        self._last_throttle_force_log_ts: Dict[str, float] = {}
+        self._ticker_force_process_threshold: float = (
+            45.0  # seconds before we force processing to keep DataRegistry fresh
+        )
 
         # Sandbox WS often does not support candle channels; use REST fallback.
         if self.client and getattr(self.client, "sandbox", False):
@@ -250,6 +256,7 @@ class WebSocketCoordinator:
 
     async def handle_ticker_data(self, symbol: str, data: dict):
         logger.info(f"handle_ticker_data: {symbol}, data={str(data)[:500]}")
+        now = time.time()
         # Преобразуем символ из формата OKX (например, BTC-USDT-SWAP) к внутреннему (BTC-USDT)
         if symbol.endswith("-SWAP"):
             symbol = symbol.replace("-SWAP", "")
@@ -261,30 +268,80 @@ class WebSocketCoordinator:
             data: Данные тикера из WebSocket
         """
         try:
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Проверяем готовность signal_generator перед обработкой
-            # Это защита от race condition - если WebSocket подключился до завершения инициализации модулей
+            # ✅ FIX (22.01.2026): ПРИОРИТЕТ #1 - Обновление market data (price, updated_at)
+            # Это должно происходить ВСЕГДА, даже если модули не готовы или тикер дросселирован
+            # Иначе price застревает на REST-значении минутами!
+            if "data" in data and len(data["data"]) > 0:
+                ticker = data["data"][0]
+                if "last" in ticker and self.data_registry:
+                    try:
+                        price = float(ticker["last"])
+                        volume_24h = float(ticker.get("vol24h", 0))
+                        volume_ccy_24h = float(ticker.get("volCcy24h", 0))
+                        high_24h = float(ticker.get("high24h", price))
+                        low_24h = float(ticker.get("low24h", price))
+                        open_24h = float(ticker.get("open24h", price))
+                        bid_price = float(ticker.get("bidPx", price))
+                        ask_price = float(ticker.get("askPx", price))
+
+                        # Создаем объект current_tick для real-time цены
+                        class CurrentTick:
+                            def __init__(self, price, bid, ask, timestamp):
+                                self.price = price
+                                self.bid = bid
+                                self.ask = ask
+                                self.timestamp = timestamp
+
+                        current_tick = CurrentTick(
+                            price=price,
+                            bid=bid_price,
+                            ask=ask_price,
+                            timestamp=time.time(),
+                        )
+
+                        # ✅ ОБНОВЛЯЕМ MARKET DATA БЕЗ ЗАДЕРЖЕК
+                        await self.data_registry.update_market_data(
+                            symbol,
+                            {
+                                "price": price,
+                                "last_price": price,
+                                "current_tick": current_tick,
+                                "volume": volume_24h,
+                                "volume_ccy": volume_ccy_24h,
+                                "high_24h": high_24h,
+                                "low_24h": low_24h,
+                                "open_24h": open_24h,
+                                "ticker": ticker,
+                                "updated_at": datetime.now(),
+                                "source": "WEBSOCKET",
+                            },
+                        )
+                        self._last_ticker_processed_ts[symbol] = time.time()
+                        logger.debug(f"✅ WS→DataRegistry: {symbol} price=${price:.2f}")
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ Ошибка обновления market data для {symbol}: {e}"
+                        )
+
+            # ✅ ПРОВЕРКА ГОТОВНОСТИ МОДУЛЕЙ: Блокируем только свечи/индикаторы, НЕ market data!
+            modules_ready = True
+
             if self.signal_generator and hasattr(
                 self.signal_generator, "is_initialized"
             ):
                 if not self.signal_generator.is_initialized:
                     logger.debug(
-                        f"⚠️ SignalGenerator еще не инициализирован, пропускаем обработку тикера для {symbol}"
+                        f"⚠️ SignalGenerator еще не инициализирован, пропускаем свечи/индикаторы для {symbol}"
                     )
-                    return
+                    modules_ready = False
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Блокировка торговли до готовности всех модулей
-            # Проверяем флаг готовности orchestrator перед обработкой тикера
             if self.orchestrator and hasattr(self.orchestrator, "all_modules_ready"):
                 if not self.orchestrator.all_modules_ready:
-                    # Извлекаем цену для логирования
-                    price = None
-                    if "data" in data and len(data["data"]) > 0:
-                        ticker = data["data"][0]
-                        if "last" in ticker:
-                            price = float(ticker["last"])
-                    # ✅ ИСПРАВЛЕНИЕ: Правильное форматирование цены в f-string
-                    # DEBUG логирование отключено - слишком много вывода на инициализации
-                    return
+                    modules_ready = False
+
+            # Если модули не готовы - market data уже обновлено, остальное пропускаем
+            if not modules_ready:
+                return
 
             # ✅ Адаптивное дросселирование: полная обработка при открытой позиции
             if symbol not in self._ticker_counter:
@@ -292,11 +349,30 @@ class WebSocketCoordinator:
 
             self._ticker_counter[symbol] += 1
 
-            # Если по символу есть открытая позиция — не дросселируем
+            # ✅ FIX (22.01.2026): Проверяем не только позиции, но и pending ордера
+            # Если по символу есть открытая позиция ИЛИ pending ордер — не дросселируем
             has_open_position = symbol in self.active_positions_ref
+            has_pending_order = False
+
+            # Проверяем pending orders через order_coordinator
+            if hasattr(self, "order_coordinator") and self.order_coordinator:
+                try:
+                    # Проверяем активные лимитные ордера
+                    if hasattr(self.order_coordinator, "active_limit_orders"):
+                        has_pending_order = any(
+                            order_info.get("symbol") == symbol
+                            for order_info in self.order_coordinator.active_limit_orders.values()
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Не удалось проверить pending orders для {symbol}: {e}"
+                    )
+
+            # Если есть позиция ИЛИ pending ордер - bypass throttle
+            has_open_position_or_pending = has_open_position or has_pending_order
 
             effective_throttle = self._ticker_throttle
-            if not has_open_position:
+            if not has_open_position_or_pending:
                 # Оценка волатильности по последним ценам
                 try:
                     if (
@@ -330,7 +406,7 @@ class WebSocketCoordinator:
             try:
                 state = (
                     "bypass"
-                    if has_open_position
+                    if has_open_position_or_pending
                     else (
                         "high"
                         if effective_throttle == 1
@@ -340,20 +416,29 @@ class WebSocketCoordinator:
                 if self._last_throttle_state.get(symbol) != state:
                     self._last_throttle_state[symbol] = state
                     logger.info(
-                        f"THROTTLE_STATE {symbol}: {state} (open_position={has_open_position}, eff={effective_throttle})"
+                        f"THROTTLE_STATE {symbol}: {state} (open_position={has_open_position}, pending_order={has_pending_order}, eff={effective_throttle})"
                     )
             except Exception:
                 pass
 
-            if not has_open_position and (
+            if not has_open_position_or_pending and (
                 self._ticker_counter[symbol] % effective_throttle != 0
             ):
-                # Пропускаем обработку, но логируем редко
-                if self._ticker_counter[symbol] % (effective_throttle * 10) == 0:
-                    logger.debug(
-                        f"⏭️ Тикер пропущен (адаптивное дросселирование {symbol} 1/{effective_throttle})"
+                time_since_last = now - self._last_ticker_processed_ts.get(symbol, 0)
+                if time_since_last <= self._ticker_force_process_threshold:
+                    # Пропускаем обработку, но логируем редко
+                    if self._ticker_counter[symbol] % (effective_throttle * 10) == 0:
+                        logger.debug(
+                            f"⏭️ Тикер пропущен (адаптивное дросселирование {symbol} 1/{effective_throttle})"
+                        )
+                    return
+                force_log_time = self._last_throttle_force_log_ts.get(symbol, 0)
+                if now - force_log_time > self._ticker_force_process_threshold:
+                    self._last_throttle_force_log_ts[symbol] = now
+                    logger.warning(
+                        f"⚠️ Forced ticker processing for {symbol}: "
+                        f"{time_since_last:.1f}s since last processed tick (throttle 1/{effective_throttle})"
                     )
-                return
 
             # Извлекаем данные из ответа WebSocket
             if "data" in data and len(data["data"]) > 0:
@@ -384,57 +469,7 @@ class WebSocketCoordinator:
                                         f"⚠️ Ошибка обновления свечей для {symbol}: {e}"
                                     )
 
-                            # 2) Обновление market data
-                            try:
-                                volume_24h = float(ticker.get("vol24h", 0))
-                                volume_ccy_24h = float(ticker.get("volCcy24h", 0))
-                                high_24h = float(ticker.get("high24h", price))
-                                low_24h = float(ticker.get("low24h", price))
-                                open_24h = float(ticker.get("open24h", price))
-
-                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): Добавляем current_tick для real-time цены
-                                # Создаем объект tick с real-time ценой из WebSocket
-                                class CurrentTick:
-                                    def __init__(self, price, bid, ask, timestamp):
-                                        self.price = price
-                                        self.bid = bid
-                                        self.ask = ask
-                                        self.timestamp = timestamp
-
-                                bid_price = float(ticker.get("bidPx", price))
-                                ask_price = float(ticker.get("askPx", price))
-
-                                current_tick = CurrentTick(
-                                    price=price,
-                                    bid=bid_price,
-                                    ask=ask_price,
-                                    timestamp=time.time(),
-                                )
-
-                                await self.data_registry.update_market_data(
-                                    symbol,
-                                    {
-                                        "price": price,
-                                        "last_price": price,
-                                        "current_tick": current_tick,  # ✅ WebSocket real-time цена
-                                        "volume": volume_24h,
-                                        "volume_ccy": volume_ccy_24h,
-                                        "high_24h": high_24h,
-                                        "low_24h": low_24h,
-                                        "open_24h": open_24h,
-                                        "ticker": ticker,
-                                        "updated_at": datetime.now(),
-                                    },
-                                )
-                                logger.debug(
-                                    f"✅ DataRegistry: Обновлены market data для {symbol} (price=${price:.2f}, current_tick.price=${current_tick.price:.8f})"
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    f"⚠️ Ошибка обновления DataRegistry для {symbol}: {e}"
-                                )
-
-                            # 3) Обновление FastADX per-symbol
+                            # 2) Обновление FastADX per-symbol (market data уже обновлено в начале функции)
                             try:
                                 if self._fast_adx_template:
                                     if symbol not in self._fast_adx_by_symbol:
@@ -711,47 +746,75 @@ class WebSocketCoordinator:
             await asyncio.sleep(self._rest_candle_poll_interval)
 
     async def _poll_rest_candles(self):
+        """Опрос REST API для получения свечей (fallback для Sandbox)"""
         if not self.client:
+            logger.warning("⚠️ REST candle polling: client is None, skipping")
             return
+
+        logger.debug("🔄 REST candle polling: starting poll cycle")
         timeframes = ["1m", "5m"]
+        updated_count = 0
+
         for symbol in self.scalping_config.symbols:
             for timeframe in timeframes:
-                candles = await self.client.get_candles(symbol, timeframe, limit=2)
-                if candles:
-                    candle = candles[-1]
-                    last_ts = self._last_candle_timestamps.get(f"{symbol}_{timeframe}")
-                    if last_ts == candle.timestamp:
-                        await self.data_registry.update_last_candle(
-                            symbol=symbol,
-                            timeframe=timeframe,
-                            high=candle.high,
-                            low=candle.low,
-                            close=candle.close,
-                            volume=candle.volume,
-                        )
-                    else:
-                        await self.data_registry.add_candle(symbol, timeframe, candle)
-                        self._last_candle_timestamps[
+                try:
+                    candles = await self.client.get_candles(symbol, timeframe, limit=2)
+                    if candles and len(candles) > 0:
+                        candle = candles[-1]
+                        last_ts = self._last_candle_timestamps.get(
                             f"{symbol}_{timeframe}"
-                        ] = candle.timestamp
-
-                    if (
-                        hasattr(self, "structured_logger")
-                        and self.structured_logger
-                        and timeframe in ["1m", "5m"]
-                    ):
-                        self.structured_logger.log_candle_new(
-                            symbol=symbol,
-                            timeframe=timeframe,
-                            timestamp=candle.timestamp,
-                            price=candle.close,
-                            open_price=candle.open,
-                            high=candle.high,
-                            low=candle.low,
-                            close=candle.close,
-                            volume=candle.volume,
                         )
+                        if last_ts == candle.timestamp:
+                            await self.data_registry.update_last_candle(
+                                symbol=symbol,
+                                timeframe=timeframe,
+                                high=candle.high,
+                                low=candle.low,
+                                close=candle.close,
+                                volume=candle.volume,
+                            )
+                            logger.debug(
+                                f"✅ REST: Обновлена свеча {symbol} {timeframe}"
+                            )
+                        else:
+                            await self.data_registry.add_candle(
+                                symbol, timeframe, candle
+                            )
+                            self._last_candle_timestamps[
+                                f"{symbol}_{timeframe}"
+                            ] = candle.timestamp
+                            logger.debug(
+                                f"✅ REST: Добавлена новая свеча {symbol} {timeframe} (ts={candle.timestamp})"
+                            )
+
+                        updated_count += 1
+
+                        if (
+                            hasattr(self, "structured_logger")
+                            and self.structured_logger
+                            and timeframe in ["1m", "5m"]
+                        ):
+                            self.structured_logger.log_candle_new(
+                                symbol=symbol,
+                                timeframe=timeframe,
+                                timestamp=candle.timestamp,
+                                price=candle.close,
+                                open_price=candle.open,
+                                high=candle.high,
+                                low=candle.low,
+                                close=candle.close,
+                                volume=candle.volume,
+                            )
+                    else:
+                        logger.warning(f"⚠️ REST: Нет свечей для {symbol} {timeframe}")
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ REST: Ошибка получения свечей {symbol} {timeframe}: {e}"
+                    )
+
                 await asyncio.sleep(self._rest_candle_rate_delay)
+
+        logger.info(f"✅ REST candle polling: обновлено {updated_count} свечей")
 
     async def _update_candle_from_ticker(
         self, symbol: str, price: float, ticker: Dict[str, Any]
@@ -818,10 +881,12 @@ class WebSocketCoordinator:
             volume: Объем (для накопления)
         """
         try:
-            if timeframe in ["1m", "5m"] and (
-                self._use_kline_candles or self._rest_candle_task
-            ):
-                return
+            # ✅ FIX (21.01.2026): Убрана блокировка ticker-based свечей
+            # Предыдущая логика создавала deadlock:
+            # - Если REST polling включен → ticker свечи отключались
+            # - Но REST polling мог не работать → свечи вообще не обновлялись
+            # Теперь ticker-based свечи работают всегда как fallback
+
             # Определяем интервал таймфрейма в секундах
             timeframe_intervals = {
                 "1m": 60,

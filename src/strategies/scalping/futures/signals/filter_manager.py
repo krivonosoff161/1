@@ -58,6 +58,9 @@ class FilterManager:
         self.filter_cache_ttl_slow: float = (
             5.0  # Diagnostic: TTL 5s for fresher filters
         )
+        # Метрики конфликтов между направлением цены и блокировкой ADX
+        self.price_direction_conflicts: Dict[str, Dict[str, Any]] = {}
+        self._conflict_log_ts: Dict[str, float] = {}
 
         logger.info(
             f"✅ FilterManager инициализирован с кэшированием: "
@@ -156,6 +159,59 @@ class FilterManager:
 
         self.filter_cache[symbol][filter_name] = result
         self.filter_cache[symbol]["ts"] = time.time()  # Обновляем timestamp
+
+    def _record_price_direction_conflict(
+        self,
+        symbol: str,
+        price_direction: Optional[str],
+        adx_result: Any,
+        signal_side: str,
+        regime: Optional[str],
+    ) -> None:
+        """
+        Запоминаем ситуации, когда цена движется в сторону сигнала, но ADX блокирует вход.
+        """
+        expected_direction = "up" if signal_side == "buy" else "down"
+        if (
+            price_direction not in {"up", "down"}
+            or price_direction != expected_direction
+        ):
+            return
+
+        conflict = self.price_direction_conflicts.setdefault(
+            symbol, {"up": 0, "down": 0, "samples": []}
+        )
+        conflict[price_direction] += 1
+        samples = conflict["samples"]
+        adx_value = getattr(adx_result, "adx_value", None)
+        plus_di = getattr(adx_result, "plus_di", None)
+        minus_di = getattr(adx_result, "minus_di", None)
+        samples.append(
+            {
+                "ts": time.time(),
+                "signal_side": signal_side,
+                "regime": regime or "unknown",
+                "price_direction": price_direction,
+                "adx": adx_value,
+                "+DI": plus_di,
+                "-DI": minus_di,
+            }
+        )
+        if len(samples) > 5:
+            samples.pop(0)
+
+        now = time.time()
+        last_log = self._conflict_log_ts.get(symbol, 0)
+        if now - last_log > 60:
+            self._conflict_log_ts[symbol] = now
+            adx_str = f"ADX={adx_value:.1f}" if adx_value is not None else "ADX=N/A"
+            plus_str = f"+DI={plus_di:.1f}" if plus_di is not None else "+DI=N/A"
+            minus_str = f"-DI={minus_di:.1f}" if minus_di is not None else "-DI=N/A"
+            logger.warning(
+                f"⚡ Price-direction conflict {symbol}: price_direction={price_direction}, "
+                f"{adx_str}, {plus_str}, {minus_str}, regime={regime or 'unknown'} "
+                f"(signal_side={signal_side}); total {price_direction} conflicts={conflict[price_direction]}"
+            )
 
     async def apply_all_filters(
         self,
@@ -334,6 +390,14 @@ class FilterManager:
                         f"DI-={di_minus:.1f} > DI+={di_plus:.1f} | "
                         f"Источник: MarketData.indicators (дополнительная проверка направления тренда)"
                     )
+                    price_direction = signal.get("price_direction")
+                    self._record_price_direction_conflict(
+                        symbol,
+                        price_direction,
+                        adx_result,
+                        signal_side_str,
+                        regime,
+                    )
                     return None
                 elif (
                     signal_side == "sell"
@@ -347,6 +411,14 @@ class FilterManager:
                         f"Сильный восходящий тренд против SHORT сигнала: ADX={adx_value:.1f} > 20.0, "
                         f"DI+={di_plus:.1f} > DI-={di_minus:.1f} | "
                         f"Источник: MarketData.indicators (дополнительная проверка направления тренда)"
+                    )
+                    price_direction = signal.get("price_direction")
+                    self._record_price_direction_conflict(
+                        symbol,
+                        price_direction,
+                        adx_result,
+                        signal_side_str,
+                        regime,
                     )
                     return None
         except Exception as e:

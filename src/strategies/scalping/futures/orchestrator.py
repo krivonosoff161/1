@@ -2736,8 +2736,16 @@ class FuturesScalpingOrchestrator:
                     )
 
                 logger.info(
-                    f"♻️ Позиция {symbol} отсутствует на бирже, очищаем локальное состояние"
+                    f"♻️ Позиция {symbol} отсутствует на бирже, помечаем как закрытую"
                 )
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): НЕ удаляем сразу, а помечаем
+                # Это предотвращает race condition с PositionMonitor
+                if symbol in self.active_positions:
+                    self.active_positions[symbol]["exchange_closed"] = True
+                    logger.debug(
+                        f"✅ Позиция {symbol} помечена как exchange_closed=True"
+                    )
 
                 # ✅ ИСПРАВЛЕНО: Используем PositionRegistry для удаления позиции
                 try:
@@ -2747,7 +2755,8 @@ class FuturesScalpingOrchestrator:
                         f"⚠️ Ошибка удаления позиции {symbol} из PositionRegistry: {e}"
                     )
 
-                self.active_positions.pop(symbol, None)
+                # ❌ НЕ удаляем сразу из active_positions - пусть _close_position это сделает
+                # self.active_positions.pop(symbol, None)
                 # ✅ РЕФАКТОРИНГ: Используем trailing_sl_coordinator для удаления TSL
                 tsl = self.trailing_sl_coordinator.remove_tsl(symbol)
                 if tsl:
@@ -4602,12 +4611,34 @@ class FuturesScalpingOrchestrator:
             self._closing_positions_cache[symbol] = True
 
             try:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Проверяем наличие позиции
+                # Если позиция уже удалена sync кодом, значит она уже закрыта - пропускаем
                 position = self.active_positions.get(symbol, {})
 
                 if not position:
                     logger.debug(
-                        f"⚠️ Позиция {symbol} уже закрыта или не найдена (reason={reason})"
+                        f"⚠️ Позиция {symbol} уже закрыта или не найдена (reason={reason}), пропускаем"
                     )
+                    return
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Проверяем флаг exchange_closed
+                # Если позиция уже закрыта на бирже (sync обнаружил), пропускаем закрытие
+                if position.get("exchange_closed"):
+                    logger.info(
+                        f"⚠️ Позиция {symbol} уже закрыта на бирже (exchange_closed=True, reason={reason}), "
+                        f"пропускаем повторное закрытие"
+                    )
+                    # Очищаем локальное состояние
+                    self.active_positions.pop(symbol, None)
+                    # ✅ РЕФАКТОРИНГ: Используем trailing_sl_coordinator для удаления TSL
+                    tsl = self.trailing_sl_coordinator.remove_tsl(symbol)
+                    if tsl:
+                        tsl.reset()
+                    if symbol in self.max_size_limiter.position_sizes:
+                        self.max_size_limiter.remove_position(symbol)
+                    normalized_symbol = self.config_manager.normalize_symbol(symbol)
+                    if normalized_symbol in self.last_orders_cache:
+                        self.last_orders_cache[normalized_symbol]["status"] = "closed"
                     return
 
                 # ✅ ЛОГИРОВАНИЕ: Логируем причину закрытия и детали позиции
@@ -5501,6 +5532,10 @@ class FuturesScalpingOrchestrator:
             raise ValueError("❌ КРИТИЧЕСКАЯ ОШИБКА: PositionManager не доступен")
         logger.info("✅ PositionManager: готов")
 
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (22.01.2026): Ожидание первого ticker для всех символов
+        # Бот НЕ ДОЛЖЕН начинать торговать пока market_data не инициализирован для ВСЕХ символов
+        await self._wait_for_market_data_ready()
+
         logger.info("=" * 80)
         logger.info("✅ ВСЕ МОДУЛИ ГОТОВЫ, ТОРГОВЛЯ МОЖЕТ НАЧАТЬСЯ")
         logger.info("=" * 80)
@@ -5555,3 +5590,115 @@ class FuturesScalpingOrchestrator:
             )
 
         logger.info(f"✅ Все свечи загружены для {len(symbols)} символов")
+
+    async def _wait_for_market_data_ready(self) -> None:
+        """
+        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (22.01.2026): Ожидает первого ticker для всех символов перед началом торговли.
+
+        Проблема: Бот начинал торговать когда только 1 символ получил ticker, остальные 4 символа
+        имели пустой market_data → ошибки "Нет актуальных данных (нет updated_at)".
+
+        Решение:
+        1. Пассивное ожидание WebSocket ticker (первые 5 сек)
+        2. Активная инициализация через REST API если WebSocket медленный (после 5 сек)
+        3. Timeout 30 сек с WARNING
+        """
+        logger.info("🔍 Ожидание инициализации market_data для всех символов...")
+
+        symbols = self.scalping_config.symbols
+        max_wait_seconds = 30
+        rest_fallback_after = 5.0  # Запросить через REST если WebSocket медленный
+        check_interval = 0.5
+        elapsed = 0
+        rest_initialized = set()  # Символы инициализированные через REST
+
+        while elapsed < max_wait_seconds:
+            symbols_ready = []
+            symbols_not_ready = []
+
+            for symbol in symbols:
+                try:
+                    # Проверяем наличие market_data с updated_at
+                    market_data = self.data_registry._market_data.get(symbol, {})
+                    updated_at = market_data.get("updated_at")
+
+                    if updated_at and isinstance(updated_at, datetime):
+                        age = (datetime.now() - updated_at).total_seconds()
+                        if age < 5.0:  # Свежие данные (< 5 сек)
+                            symbols_ready.append(symbol)
+                        else:
+                            symbols_not_ready.append(f"{symbol} (age={age:.1f}s)")
+                    else:
+                        symbols_not_ready.append(f"{symbol} (no updated_at)")
+
+                except Exception as e:
+                    symbols_not_ready.append(f"{symbol} (error: {e})")
+
+            # Все символы готовы?
+            if len(symbols_ready) == len(symbols):
+                logger.info(
+                    f"✅ Все {len(symbols)} символов получили market_data: {', '.join(symbols_ready)}"
+                )
+                if rest_initialized:
+                    logger.info(
+                        f"📊 Инициализировано через REST API: {', '.join(rest_initialized)} "
+                        f"(WebSocket был медленный)"
+                    )
+                return
+
+            # ✅ НОВОЕ (22.01.2026): REST API fallback для медленных символов
+            # Если прошло > 5 сек и символ еще не получил данные → запросить через REST
+            if elapsed >= rest_fallback_after:
+                for symbol in symbols:
+                    if symbol not in symbols_ready and symbol not in rest_initialized:
+                        try:
+                            # Получаем текущую цену через REST API напрямую через client
+                            logger.info(
+                                f"⏩ {symbol}: WebSocket медленный, запрашиваю через REST API..."
+                            )
+
+                            # Получаем ticker через REST API
+                            ticker_data = await self.client.get_ticker(symbol)
+
+                            if ticker_data and "last" in ticker_data:
+                                price = float(ticker_data["last"])
+
+                                if price > 0:
+                                    # Инициализируем market_data вручную
+                                    await self.data_registry.update_market_data(
+                                        symbol,
+                                        {
+                                            "price": price,
+                                            "last": price,
+                                            "volume_24h": float(
+                                                ticker_data.get("vol24h", 0)
+                                            ),
+                                            "source": "REST_FALLBACK",
+                                        },
+                                    )
+                                    rest_initialized.add(symbol)
+                                    logger.info(
+                                        f"✅ {symbol}: Инициализирован через REST API (price=${price:.6f})"
+                                    )
+                        except Exception as e:
+                            logger.warning(
+                                f"⚠️ {symbol}: Не удалось инициализировать через REST: {e}"
+                            )
+
+            # Логируем прогресс каждые 5 секунд
+            if int(elapsed) % 5 == 0 and elapsed > 0:
+                logger.info(
+                    f"⏳ Ожидание market_data: готовы {len(symbols_ready)}/{len(symbols)} символов "
+                    f"(не готовы: {', '.join(symbols_not_ready)})"
+                )
+
+            await asyncio.sleep(check_interval)
+            elapsed += check_interval
+
+        # Timeout - логируем WARNING но продолжаем (данные придут позже через WebSocket)
+        logger.warning(
+            f"⚠️ Timeout {max_wait_seconds}s: не все символы получили market_data. "
+            f"Готовы: {len(symbols_ready)}/{len(symbols)}. "
+            f"Не готовы: {', '.join(symbols_not_ready)}. "
+            f"Бот продолжит работу, данные придут через WebSocket."
+        )

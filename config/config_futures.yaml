@@ -36,7 +36,7 @@ exit_params_scale_by_leverage: true
 exit_params:
   trending:
     max_holding_minutes: 15.0
-    min_holding_minutes: 0.5
+    min_holding_minutes: 2.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.5→2.0 мин для защиты от преждевременного закрытия (TSL выключен)
     tp_atr_multiplier: 1.0
     sl_atr_multiplier: 2.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): 2.0→2.5 для снижения преждевременных SL
     tp_min_percent: 1.5
@@ -45,7 +45,7 @@ exit_params:
     extension_percent: 100.0
   ranging:
     max_holding_minutes: 25.0
-    min_holding_minutes: 0.5
+    min_holding_minutes: 2.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.5→2.0 мин для защиты от преждевременного закрытия (TSL выключен)
     tp_atr_multiplier: 1.0  # ✅ базовое значение, переопределяется по символам
     sl_atr_multiplier: 2.0  # ✅ базовое значение, переопределяется по символам
     tp_min_percent: 1.5
@@ -54,7 +54,7 @@ exit_params:
     extension_percent: 100.0
   choppy:
     max_holding_minutes: 10.0
-    min_holding_minutes: 3.0
+    min_holding_minutes: 3.0  # ✅ Уже 3.0 мин - оставлено
     tp_atr_multiplier: 0.8
     sl_atr_multiplier: 2.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): 2.0→2.5 для снижения преждевременных SL
     tp_min_percent: 1.0
@@ -107,14 +107,14 @@ scalping:
   check_interval: 1.0  # ✅ ОПТИМИЗИРОВАНО: 1.0 сек для быстрого анализа позиций (было 5.0 по умолчанию)
   
   # Параметры скальпинга (адаптированы для Futures)
-  min_signal_strength: 0.65  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 0.60 до 0.65 для улучшения Win Rate (отсеет слабые сигналы)
-  min_signal_strength_ranging: 0.65  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 0.60 до 0.65 для улучшения Win Rate
-  min_adx: 20.0  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 16.0 до 20.0 для фильтрации слабых трендов
+  min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 0.65→0.35 - реальная сила сигналов 0.00-0.75
+  min_signal_strength_ranging: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 0.65→0.35
+  min_adx: 15.0  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 20.0→15.0 для большей чувствительности
   
   # ✅ НОВОЕ (28.12.2025): Adaptive по паре (ETH volatile — looser)
   by_symbol:
     ETH-USDT:
-      min_signal_strength: 0.55  # ✅ Looser для ETH (volatile)
+      min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.55→0.35 (реальная сила 0.00)
       sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Увеличено с 3.0 до 3.5 ATR для предотвращения ложных SL (Grok рекомендация)
       tp_atr_multiplier: 4.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol tp_atr_multiplier для ETH
       max_holding_minutes: 30.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol max_holding_minutes для ETH
@@ -132,18 +132,18 @@ scalping:
         macd_slow: 22  # ✅ Более быстрый MACD для ETH
         bb_std_multiplier: 2.1  # ✅ Шире полосы для волатильности ETH
     SOL-USDT:
-      min_adx: 20.0  # ✅ Looser для trending
-      min_signal_strength: 0.58  # ✅ Looser для SOL
+      min_adx: 15.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 20.0→15.0
+      min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.58→0.35
       min_position_usd: 40.0  # ✅ ИСПРАВЛЕНО (08.01.2026): Снижено с 50.0
-      max_position_usd: 60.0  # ✅ ИСПРАВЛЕНО (08.01.2026): Увеличено с 48.0 (было min > max!)
+      max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 250→900 для целевой маржи $90 при leverage 10x
       sl_atr_multiplier: 3.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Wider SL для SOL (Grok рекомендация)
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Per-symbol Smart Close параметры для SOL
         reversal_score_threshold:
           ranging: 5  # ✅ SOL более волатильный - требуется еще больше подтверждений разворота (5 вместо 4)
     XRP-USDT:
       # ✅ НОВОЕ (06.01.2026): Специальные параметры для низковолатильной пары
-      min_adx: 12.0  # ✅ Снижен порог - слабый тренд тоже допустим (волатильность низкая)
-      min_signal_strength: 0.55  # ✅ Снижен порог для большего количества сигналов
+      min_adx: 10.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 12.0→10.0
+      min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.55→0.35
       sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Wider SL для XRP (Grok рекомендация)
       tp_atr_multiplier: 4.0  # ✅ НОВОЕ (06.01.2026): Адаптивный TP для компенсации низкой волатильности
       indicators:  # ✅ НОВОЕ (06.01.2026): Настройка индикаторов для микроволатильности
@@ -162,8 +162,8 @@ scalping:
           ranging: 5  # ✅ XRP часто показывает ложные развороты в ranging - требуется больше подтверждений (5 вместо 4)
     DOGE-USDT:
       # ✅ НОВОЕ (06.01.2026): Специальные параметры для ультра-низковолатильной пары
-      min_adx: 10.0  # ✅ Минимальный порог - DOGE имеет очень слабые тренды
-      min_signal_strength: 0.50  # ✅ Минимальный порог для максимальной чувствительности
+      min_adx: 8.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 10.0→8.0
+      min_signal_strength: 0.30  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.50→0.30 (реальная сила 0.00-0.11)
       sl_atr_multiplier: 4.0  # ✅ Широкий SL для компенсации шумов
       tp_atr_multiplier: 5.0  # ✅ Увеличенный TP - компенсация микроволатильности
       max_holding_minutes: 20.0  # ✅ Короче холдинг - быстрое закрытие на микродвижениях
@@ -182,7 +182,7 @@ scalping:
         reversal_score_threshold:
           ranging: 6  # ✅ DOGE экстремально чувствительна к ложным разворотам - максимум подтверждений
     BTC-USDT:
-      min_signal_strength: 0.62  # ✅ Чуть looser для BTC
+      min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.62→0.35 (реальная сила 0.08-0.10)
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Per-symbol Smart Close параметры для BTC
         reversal_score_threshold:
           ranging: 4  # ✅ BTC более стабильный - используем стандартный порог 4 (как общий для ranging)
@@ -337,36 +337,36 @@ scalping:
     small:  # $500 - $1500
       threshold: 1500.0
       min_balance: 500.0
-      size_at_min: 100.0  # ✅ ИСПРАВЛЕНО: Увеличено с 50.0 до 100.0 для баланса 500 USDT (безопасно: 4% маржа, 0.05% риск)
-      size_at_max: 200.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 150 до 200 (+33%) для активного использования баланса
-      base_position_usd: 100.0  # Для обратной совместимости
+      size_at_min: 500.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 900→500 (balance × 1.0 для min)
+      size_at_max: 1500.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 900→1500 (balance × 1.0 для max)
+      base_position_usd: 900.0  # ✅ Для баланса $900 (середина диапазона)
       min_position_usd: 50.0
-      max_position_usd: 250.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 200 до 250 (+25%) для активного использования баланса
-      max_open_positions: 8  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличено с 6 до 8 для улучшения конверсии
-      max_position_percent: 25.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 18 до 25 (+39%) для активного использования баланса
+      max_position_usd: 1800.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 900→1800
+      max_open_positions: 5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 8→5 (требование: 5 позиций = 50% баланса)
+      max_position_percent: 10.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 25→10 (10% × 5 = 50%)
       progressive: true  # ✅ ВАРИАНТ B: Прогрессивная адаптация
     medium:  # $1500 - $3000
       threshold: 3000.0
       min_balance: 1500.0
-      size_at_min: 150.0
-      size_at_max: 200.0
-      base_position_usd: 175.0  # Для обратной совместимости
-      min_position_usd: 150.0
-      max_position_usd: 250.0
-      max_open_positions: 7  # ✅ ГРОК: Увеличено с 5 до 7 для большей конверсии сигналов
-      max_position_percent: 12.0
+      size_at_min: 1500.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 900→1500 (balance × 1.0 для min)
+      size_at_max: 3000.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 900→3000 (balance × 1.0 для max)
+      base_position_usd: 2000.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 900→2000 (баланс $2K)
+      min_position_usd: 1000.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 150→1000
+      max_position_usd: 3500.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 900→3500
+      max_open_positions: 5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 7→5 (требование: 5 позиций = 50% баланса)
+      max_position_percent: 10.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 12→10 (10% × 5 = 50%)
       progressive: true  # ✅ ВАРИАНТ B: Прогрессивная адаптация
     large:  # $3000+
       threshold: 999999.0
       min_balance: 3000.0
-      max_balance: 10000.0
-      size_at_min: 200.0
-      size_at_max: 300.0
-      base_position_usd: 250.0  # Для обратной совместимости
-      min_position_usd: 200.0
-      max_position_usd: 400.0
-      max_open_positions: 8  # ✅ ГРОК: Увеличено с 5 до 8 для большей конверсии сигналов
-      max_position_percent: 10.0
+      max_balance: 30000.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 10000→30000 для больших балансов
+      size_at_min: 3000.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 200→3000 (balance × 1.0 для min)
+      size_at_max: 30000.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 300→30000 (balance × 1.0 для max)
+      base_position_usd: 15000.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 250→15000 для баланса $15K
+      min_position_usd: 2000.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 200→2000
+      max_position_usd: 35000.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 400→35000
+      max_open_positions: 5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): 8→5 (требование: 5 позиций = 50% баланса)
+      max_position_percent: 10.0  # ✅ 10% баланса на позицию = 5 позиций × 10% = 50% баланса
       progressive: true  # ✅ ВАРИАНТ B: Прогрессивная адаптация
   
   # Adaptive Regime Manager - адаптация под режим рынка
@@ -638,7 +638,7 @@ scalping:
           position:
             base_position_usd: 42.0
             min_position_usd: 28.0
-            max_position_usd: 65.0
+            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 65→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 140  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 160 до 140 (-12%) - больше возможностей
@@ -680,7 +680,7 @@ scalping:
           position:
             base_position_usd: 38.0
             min_position_usd: 24.0
-            max_position_usd: 58.0
+            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 58→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 110  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 128 до 110 (-14%) - больше возможностей
@@ -713,7 +713,7 @@ scalping:
               order_flow: 0.60
             trailing:
               max_trail: 0.022
-          choppy:
+        choppy:
           tp_percent: 4.55  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 4.0% до 4.55% для компенсации комиссий (0.2%) и slippage (0.15%) → net TP ≈ 4.2%
           sl_percent: 1.5  # ✅ НОВОЕ: Адаптивный SL для BTC в choppy (быстрое закрытие убытков)
           big_profit_exit_percent: 1.5  # ✅ НОВОЕ: 1.5% для BTC в choppy (быстрее фиксировать в хаосе)
@@ -725,7 +725,7 @@ scalping:
           position:
             base_position_usd: 35.0
             min_position_usd: 20.0
-            max_position_usd: 50.0
+            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 50→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 90  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 104 до 90 (-13%) - больше возможностей
@@ -765,7 +765,7 @@ scalping:
           position:
             base_position_usd: 38.0
             min_position_usd: 24.0
-            max_position_usd: 58.0
+            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 58→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 90  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 104 до 90 (-13%) - больше возможностей
@@ -807,7 +807,7 @@ scalping:
           position:
             base_position_usd: 34.0
             min_position_usd: 22.0
-            max_position_usd: 52.0
+            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 52→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 80  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 88 до 80 (-9%) - больше возможностей
@@ -834,7 +834,7 @@ scalping:
               fail_open_enabled: true
               fail_open_blocks: 2
               fail_open_cooldown_seconds: 45
-          choppy:
+        choppy:
           tp_percent: 4.55  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 4.0% до 4.55% для компенсации комиссий (0.2%) и slippage (0.15%) → net TP ≈ 4.2%
           sl_percent: 1.2  # ✅ НОВОЕ: Адаптивный SL для ETH в choppy (быстрое закрытие убытков)
           big_profit_exit_percent: 1.5  # ✅ НОВОЕ: 1.5% для ETH в choppy (быстрее фиксировать в хаосе)
@@ -883,7 +883,7 @@ scalping:
           position:
             base_position_usd: 32.0
             min_position_usd: 20.0
-            max_position_usd: 60.0
+            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 60→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 45  # ✅ PHASE 1: Снижено с 64 до 45 (-30%)
@@ -943,7 +943,7 @@ scalping:
               fail_open_enabled: true
               fail_open_blocks: 2
               fail_open_cooldown_seconds: 45
-          choppy:
+        choppy:
           tp_percent: 4.55  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 4.0% до 4.55% для компенсации комиссий (0.2%) и slippage (0.15%) → net TP ≈ 4.2%
           sl_percent: 1.5  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Добавлено для SOL в choppy
           big_profit_exit_percent: 2.0  # ✅ НОВОЕ: 2.0% для SOL в choppy (альты = стандартный порог)
@@ -1031,7 +1031,7 @@ scalping:
           position:
             base_position_usd: 24.0
             min_position_usd: 16.0
-            max_position_usd: 50.0  # ✅ ИСПРАВЛЕНО: Увеличено с 36.0 до 50.0 (было меньше min_position_usd из balance_profile)
+            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 50→250, ✅ ИСПРАВЛЕНО: Увеличено с 36.0 до 50.0 (было меньше min_position_usd из balance_profile)
           filters:
             liquidity:
               min_best_bid_volume_usd: 12  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 10 до 12 (+20%) - качественнее условия
@@ -1125,10 +1125,31 @@ scalping:
               di_difference: 1.2   # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 1.0 до 1.2 (+20%) - более четкое направление
             multi_timeframe:
               block_neutral: false  # ✅ ОПТИМИЗИРОВАНО ДЛЯ XRP: Не блокировать при нейтральном тренде
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Добавлена секция choppy для XRP
+        # КОРНЕВАЯ ПРОБЛЕМА: TP=8.80% слишком высоко → убытки в 4.4 раза больше прибылей!
+        choppy:
+          tp_percent: 3.0  # ✅ Уменьшено с 8.80% до 3.0% для scalping (было из fallback)
+          sl_percent: 2.0  # ✅ Увеличено с 1.5% до 2.0% для баланса
+          tp_atr_multiplier: 1.5  # ✅ Уменьшено с 2.50 до 1.5 (choppy должен быть консервативнее)
+          sl_atr_multiplier: 3.5  # ✅ Оставлено 3.5 (из by_symbol настроек)
+          tp_min_percent: 1.5  # ✅ Минимальный TP для choppy (вместо 6.00% из-за leverage adjustment!)
+          tp_max_percent: 4.0  # ✅ Максимальный TP для choppy (вместо 8.80%!)
+          sl_min_percent: 1.5  # ✅ Минимальный SL
+          sl_max_percent: 2.5  # ✅ Максимальный SL
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Добавлена секция ranging для XRP
+        ranging:
+          tp_percent: 3.5  # ✅ Для ranging чуть выше чем choppy
+          sl_percent: 2.0  # ✅ Балансировано
+          tp_atr_multiplier: 2.0  # ✅ Для ranging можно чуть агрессивнее
+          sl_atr_multiplier: 3.5  # ✅ Из by_symbol
+          tp_min_percent: 1.5  # ✅ Минимальный TP
+          tp_max_percent: 4.5  # ✅ Максимальный TP
+          sl_min_percent: 1.5  # ✅ Минимальный SL
+          sl_max_percent: 2.5  # ✅ Максимальный SL
           position:
             base_position_usd: 24.0
             min_position_usd: 16.0
-            max_position_usd: 50.0  # ✅ ИСПРАВЛЕНО: Увеличено с 36.0 до 50.0 (было меньше min_position_usd из balance_profile)
+            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 50→250, ✅ ИСПРАВЛЕНО: Увеличено с 36.0 до 50.0 (было меньше min_position_usd из balance_profile)
           filters:
             liquidity:
               min_best_bid_volume_usd: 10   # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 8 до 10 (+25%) - качественнее условия

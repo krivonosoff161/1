@@ -1510,7 +1510,12 @@ class FuturesSignalGenerator:
             ) -> List[Dict[str, Any]]:
                 """Внутренняя функция для генерации сигналов одного символа"""
                 try:
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Проверяем наличие свечей перед генерацией сигналов
+                    # ✅ DEBUG: Вход в функцию
+                    logger.info(
+                        f"🔍 [TASK_START] {symbol}: Начало _generate_symbol_signals_task()"
+                    )
+
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Проверяем наличие свечей перед генерацию сигналов
                     # 🔴 BUG #4 FIX (09.01.2026): Снижена граница с 30 до 15 свечей для ранней генерации сигналов
                     # Это предотвращает генерацию сигналов до загрузки свечей, но не блокирует их 30-45 минут
                     if self.data_registry:
@@ -1641,7 +1646,13 @@ class FuturesSignalGenerator:
                         current_positions=current_positions,
                         regime=current_regime,
                     )
-                    return symbol_signals if isinstance(symbol_signals, list) else []
+
+                    # ✅ DEBUG: Результат генерации
+                    result = symbol_signals if isinstance(symbol_signals, list) else []
+                    logger.info(
+                        f"🔍 [TASK_END] {symbol}: _generate_symbol_signals_task() возвращает {len(result)} сигналов"
+                    )
+                    return result
                 except Exception as e:
                     logger.error(f"❌ Ошибка генерации сигналов для {symbol}: {e}")
                     return []
@@ -1660,13 +1671,28 @@ class FuturesSignalGenerator:
                     )
                 elif isinstance(result, list):
                     signals.extend(result)
+                    if len(result) > 0:
+                        logger.info(
+                            f"✅ [SIGNAL_COLLECTION] {symbols[i]}: Добавлено {len(result)} сигналов в общий список"
+                        )
                 else:
                     logger.warning(
                         f"⚠️ Неожиданный тип результата для {symbols[i]}: {type(result)}"
                     )
 
+            # ✅ DEBUG: Логирование количества сигналов ПЕРЕД финальной фильтрацией
+            logger.info(
+                f"📊 [BEFORE_FINAL_FILTER] Всего собрано {len(signals)} сигналов из {len(symbols)} символов перед _filter_and_rank_signals()"
+            )
+
             # Фильтрация и ранжирование сигналов
             filtered_signals = await self._filter_and_rank_signals(signals)
+
+            # ✅ DEBUG: Логирование количества сигналов ПОСЛЕ финальной фильтрации
+            logger.info(
+                f"📊 [AFTER_FINAL_FILTER] Осталось {len(filtered_signals)} сигналов после _filter_and_rank_signals() "
+                f"(было {len(signals)}, отфильтровано {len(signals) - len(filtered_signals)})"
+            )
 
             # Обновление истории сигналов
             self._update_signal_history(filtered_signals)
@@ -1789,20 +1815,26 @@ class FuturesSignalGenerator:
         Returns:
             Текущая цена (float) - всегда возвращает float, никогда None
         """
-        # ✅ ПРИОРИТЕТ 1: Цена из DataRegistry (обновляется через WebSocket, БЕЗ API запросов)
+        # ✅ ПРИОРИТЕТ 1: СВЕЖАЯ цена из DataRegistry (TTL 3s + REST fallback)
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Используем get_fresh_price_for_signals вместо get_price
         try:
             if self.data_registry:
-                price = await self.data_registry.get_price(symbol)
+                price = await self.data_registry.get_fresh_price_for_signals(
+                    symbol, client=self.client
+                )
                 # ✅ ВАЖНО: Проверяем что price это float и > 0
                 if (
                     price is not None
                     and isinstance(price, (int, float))
                     and float(price) > 0
                 ):
+                    logger.debug(
+                        f"✅ SignalGenerator: Используем СВЕЖУЮ цену для {symbol}: ${price:.4f}"
+                    )
                     return float(price)
         except Exception as e:
             logger.debug(
-                f"⚠️ Не удалось получить цену из DataRegistry для {symbol}: {e}"
+                f"⚠️ SignalGenerator: Не удалось получить СВЕЖУЮ цену для {symbol}: {e}"
             )
 
         # ✅ ПРИОРИТЕТ 2: Цена из свечи (fallback_price) - быстро, но может быть устаревшей
@@ -7477,6 +7509,15 @@ class FuturesSignalGenerator:
     ) -> List[Dict[str, Any]]:
         """Фильтрация и ранжирование сигналов"""
         try:
+            # ✅ DEBUG: Логирование входящих сигналов
+            logger.info(
+                f"📊 [FILTER_AND_RANK_INPUT] Получено {len(signals)} сигналов на вход"
+            )
+            for sig in signals[:5]:  # Логируем первые 5
+                logger.info(
+                    f"   Сигнал: {sig.get('symbol')} {sig.get('side')} @ {sig.get('price'):.2f} (strength={sig.get('strength', 0):.2f})"
+                )
+
             # ✅ ПРАВКА: Ограничение частоты сигналов по параметру из конфига
             import time
 

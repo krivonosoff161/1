@@ -367,6 +367,49 @@ class EntryManager:
                                     f"❌ EntryManager: entry_price=0.0 для {symbol}, но DataRegistry не доступен"
                                 )
 
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Fallback расчет маржи
+                        # OKX API может не возвращать "margin" сразу после открытия позиции
+                        margin_from_api = (
+                            float(pos.get("margin", "0")) if pos.get("margin") else 0.0
+                        )
+
+                        # Если margin=0, рассчитываем вручную: margin = (size * price) / leverage
+                        if margin_from_api == 0.0 and entry_price > 0:
+                            leverage_from_api = float(pos.get("lever", "1") or "1")
+                            if leverage_from_api > 0:
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Конвертируем контракты → монеты
+                                # OKX возвращает pos_size в КОНТРАКТАХ, а не в монетах!
+                                # Нужно умножить на ctVal чтобы получить размер в монетах
+                                try:
+                                    inst_details = (
+                                        await self.client.get_instrument_details(symbol)
+                                    )
+                                    ct_val = (
+                                        float(inst_details.get("ctVal", 1.0))
+                                        if inst_details
+                                        else 1.0
+                                    )
+                                except Exception as e:
+                                    logger.warning(
+                                        f"⚠️ Не удалось получить ctVal для {symbol}: {e}, используем 1.0"
+                                    )
+                                    ct_val = 1.0
+
+                                # Конвертируем контракты → монеты
+                                pos_size_in_coins = pos_size * ct_val
+
+                                # Теперь рассчитываем маржу на основе размера в монетах
+                                calculated_margin = (
+                                    pos_size_in_coins * entry_price
+                                ) / leverage_from_api
+                                logger.debug(
+                                    f"📊 Рассчитана маржа для {symbol}: "
+                                    f"size={pos_size:.6f} контрактов * ctVal={ct_val} = {pos_size_in_coins:.6f} монет, "
+                                    f"{pos_size_in_coins:.6f} * price={entry_price:.2f} / leverage={leverage_from_api:.0f}x = "
+                                    f"${calculated_margin:.2f}"
+                                )
+                                margin_from_api = calculated_margin
+
                         position_data = {
                             "symbol": symbol,
                             "instId": pos.get("instId", ""),
@@ -377,9 +420,7 @@ class EntryManager:
                             "size": pos_size,
                             "entry_price": entry_price,  # ✅ Используем entry_price с fallback
                             "position_side": position_side,
-                            "margin_used": float(pos.get("margin", "0"))
-                            if pos.get("margin")
-                            else 0.0,
+                            "margin_used": margin_from_api,
                             "entry_time": entry_time_from_api,  # ✅ Сохраняем entry_time из API, если доступно
                         }
                         break
@@ -443,6 +484,52 @@ class EntryManager:
                                         except (ValueError, TypeError):
                                             pass
 
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Fallback расчет маржи в retry
+                                    margin_from_api = (
+                                        float(pos.get("margin", "0"))
+                                        if pos.get("margin")
+                                        else 0.0
+                                    )
+                                    if margin_from_api == 0.0 and real_entry_price > 0:
+                                        leverage_from_api = float(
+                                            pos.get("lever", "1") or "1"
+                                        )
+                                        if leverage_from_api > 0:
+                                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Конвертируем контракты → монеты
+                                            # OKX возвращает pos_size в КОНТРАКТАХ, а не в монетах!
+                                            # Нужно умножить на ctVal чтобы получить размер в монетах
+                                            try:
+                                                inst_details = await self.client.get_instrument_details(
+                                                    symbol
+                                                )
+                                                ct_val = (
+                                                    float(
+                                                        inst_details.get("ctVal", 1.0)
+                                                    )
+                                                    if inst_details
+                                                    else 1.0
+                                                )
+                                            except Exception as e:
+                                                logger.warning(
+                                                    f"⚠️ [Retry] Не удалось получить ctVal для {symbol}: {e}, используем 1.0"
+                                                )
+                                                ct_val = 1.0
+
+                                            # Конвертируем контракты → монеты
+                                            pos_size_in_coins = pos_size * ct_val
+
+                                            # Теперь рассчитываем маржу на основе размера в монетах
+                                            calculated_margin = (
+                                                pos_size_in_coins * real_entry_price
+                                            ) / leverage_from_api
+                                            logger.debug(
+                                                f"📊 [Retry] Рассчитана маржа для {symbol}: "
+                                                f"size={pos_size:.6f} контрактов * ctVal={ct_val} = {pos_size_in_coins:.6f} монет, "
+                                                f"{pos_size_in_coins:.6f} * price={real_entry_price:.2f} / leverage={leverage_from_api:.0f}x = "
+                                                f"${calculated_margin:.2f}"
+                                            )
+                                            margin_from_api = calculated_margin
+
                                     position_data = {
                                         "symbol": symbol,
                                         "instId": pos.get("instId", ""),
@@ -455,9 +542,7 @@ class EntryManager:
                                         "size": pos_size,
                                         "entry_price": real_entry_price,
                                         "position_side": position_side,
-                                        "margin_used": float(pos.get("margin", "0"))
-                                        if pos.get("margin")
-                                        else 0.0,
+                                        "margin_used": margin_from_api,
                                         "entry_time": entry_time_from_api,
                                     }
                                     break

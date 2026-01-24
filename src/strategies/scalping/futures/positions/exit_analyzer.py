@@ -501,36 +501,42 @@ class ExitAnalyzer:
                 f"position.regime={position.get('regime') if isinstance(position, dict) else None}"
             )
 
-            # Получаем рыночные данные
-            market_data = await self.data_registry.get_market_data(symbol)
-            if market_data is None:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): Используем СТРОГИЙ TTL для ExitAnalyzer
+            # Проблема: DataRegistry.get_price() терпит устаревание до 60s, что приводит к:
+            # - TP срабатывает на убыточных позициях (ложная прибыль от устаревшей цены)
+            # - Адаптивные параметры настраиваются на ложных данных
+            # Решение: get_fresh_price_for_exit_analyzer() с TTL=2s + REST fallback
+
+            # Получаем client для REST fallback
+            client = None
+            if self.orchestrator and hasattr(self.orchestrator, "position_manager"):
+                client = getattr(self.orchestrator.position_manager, "client", None)
+
+            current_price = await self.data_registry.get_fresh_price_for_exit_analyzer(
+                symbol, client=client
+            )
+            price_source = "data_registry_fresh"
+
+            if current_price is None or current_price <= 0:
                 logger.error(
-                    f"❌ ExitAnalyzer: Нет свежих рыночных данных для {symbol} (market_data is None, позиция не анализируется)"
+                    f"❌ ExitAnalyzer: Нет СВЕЖЕЙ цены для {symbol} (WebSocket устарел >2s, REST fallback failed), "
+                    f"позиция не анализируется - НЕ ПРИНИМАЕМ РЕШЕНИЕ о закрытии!"
                 )
                 analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
                 return None
 
-            # Только WebSocket real-time (current_tick) — без fallback
-            current_price = None
-            price_source = None
-            if (
-                market_data
-                and hasattr(market_data, "current_tick")
-                and market_data.current_tick
-                and hasattr(market_data.current_tick, "price")
-                and market_data.current_tick.price > 0
-            ):
-                current_price = market_data.current_tick.price
-                price_source = "websocket"
-                logger.debug(
-                    f"✅ ExitAnalyzer: WebSocket real-time price for {symbol}: {current_price:.8f}"
+            logger.debug(
+                f"✅ ExitAnalyzer: Получена СВЕЖАЯ цена для {symbol}: ${current_price:.8f} (source={price_source}, TTL<=2s)"
+            )
+
+            # Получаем рыночные данные для анализа
+            market_data = await self.data_registry.get_market_data(symbol)
+            if market_data is None:
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Нет market_data для {symbol}, но цена получена (${current_price:.8f}), продолжаем анализ"
                 )
-            else:
-                logger.error(
-                    f"❌ ExitAnalyzer: current_price is None/0 для {symbol} — нет актуальной цены из WebSocket! price_source=None"
-                )
-                analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
-                return None
+                # Создаем минимальный market_data для анализа
+                market_data = {"price": current_price, "last_price": current_price}
 
             # Анализируем в зависимости от режима
             decision = None
@@ -1315,6 +1321,13 @@ class ExitAnalyzer:
         # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения параметров
         # ✅ НОВОЕ (05.01.2026): Передаем контекст для адаптивных параметров
         # ⚠️ ФИКС (06.01.2026): balance не получаем здесь (метод не async), передаётся извне
+        # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (23.01.2026): Отслеживаем откуда берутся параметры SL
+        logger.debug(
+            f"🔍 [SL_SOURCE_TRACE] {symbol} ({regime}): Начало поиска параметров SL | "
+            f"parameter_provider={'present' if self.parameter_provider else 'MISSING'}, "
+            f"config_manager={'present' if self.config_manager else 'MISSING'}"
+        )
+
         if self.parameter_provider:
             try:
                 # Получаем контекст для адаптации
@@ -1324,7 +1337,21 @@ class ExitAnalyzer:
                 exit_params = self.parameter_provider.get_exit_params(
                     symbol, regime, balance=balance, drawdown=drawdown
                 )
+                logger.debug(
+                    f"🔍 [SL_SOURCE_TRACE] {symbol} ({regime}): ParameterProvider вернул exit_params={'present' if exit_params else 'NONE'} | "
+                    f"keys={list(exit_params.keys()) if exit_params else 'N/A'}"
+                )
+
                 if exit_params:
+                    raw_sl_atr = exit_params.get("sl_atr_multiplier")
+                    raw_sl_min = exit_params.get("sl_min_percent")
+
+                    logger.debug(
+                        f"🔍 [SL_SOURCE_TRACE] {symbol} ({regime}): RAW значения из exit_params | "
+                        f"sl_atr_multiplier={raw_sl_atr} (type={type(raw_sl_atr).__name__}), "
+                        f"sl_min_percent={raw_sl_min} (type={type(raw_sl_min).__name__})"
+                    )
+
                     if "sl_percent" in exit_params:
                         sl_percent = self._to_float(
                             exit_params["sl_percent"], "sl_percent", 2.0
@@ -1335,11 +1362,19 @@ class ExitAnalyzer:
                             "sl_atr_multiplier",
                             2.0,  # ✅ FIX: 1.0→2.0
                         )
+                        logger.debug(
+                            f"🔍 [SL_SOURCE_TRACE] {symbol} ({regime}): sl_atr_multiplier ПОСЛЕ _to_float | "
+                            f"raw={raw_sl_atr} → converted={sl_atr_multiplier}"
+                        )
                     if "sl_min_percent" in exit_params:
                         sl_min_percent = self._to_float(
                             exit_params["sl_min_percent"],
                             "sl_min_percent",
                             0.9,  # ✅ FIX: 0.6→0.9
+                        )
+                        logger.debug(
+                            f"🔍 [SL_SOURCE_TRACE] {symbol} ({regime}): sl_min_percent ПОСЛЕ _to_float | "
+                            f"raw={raw_sl_min} → converted={sl_min_percent}"
                         )
                     # ✅ НОВОЕ (03.01.2026): Детальное логирование источников SL параметров
                     logger.info(
@@ -1349,12 +1384,22 @@ class ExitAnalyzer:
                         f"Источник: ParameterProvider.get_exit_params()"
                     )
             except Exception as e:
-                logger.debug(
+                import traceback
+
+                logger.warning(
                     f"⚠️ ExitAnalyzer: Ошибка получения SL параметров через ParameterProvider: {e}, "
-                    f"используем fallback к config_manager"
+                    f"используем fallback к config_manager\n{traceback.format_exc()}"
                 )
 
         # Fallback на config_manager для обратной совместимости
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Сохраняем значения из ParameterProvider
+        param_provider_sl_min = (
+            sl_min_percent  # Сохраняем значение из ParameterProvider
+        )
+        param_provider_sl_atr_mult = (
+            sl_atr_multiplier  # Сохраняем значение из ParameterProvider
+        )
+
         if self.config_manager and sl_percent == 2.0:
             try:
                 # Пробуем получить SL из symbol_profiles
@@ -1371,16 +1416,23 @@ class ExitAnalyzer:
                             try:
                                 sl_percent = float(regime_config["sl_percent"])
                                 sl_atr_based = regime_config.get("sl_atr_based", False)
-                                sl_atr_multiplier = float(
-                                    regime_config.get(
-                                        "sl_atr_multiplier", 2.0
-                                    )  # ✅ FIX: 1.0→2.0
-                                )
-                                sl_min_percent = float(
-                                    regime_config.get(
-                                        "sl_min_percent", 0.9
-                                    )  # ✅ FIX: 0.6→0.9
-                                )
+                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): НЕ перезаписываем если уже установлено из ParameterProvider
+                                if (
+                                    param_provider_sl_atr_mult == 2.0
+                                ):  # Только если было fallback значение
+                                    sl_atr_multiplier = float(
+                                        regime_config.get(
+                                            "sl_atr_multiplier", 2.0
+                                        )  # ✅ FIX: 1.0→2.0
+                                    )
+                                if (
+                                    param_provider_sl_min == 0.9
+                                ):  # Только если было fallback значение
+                                    sl_min_percent = float(
+                                        regime_config.get(
+                                            "sl_min_percent", 0.9
+                                        )  # ✅ FIX: 0.6→0.9
+                                    )
                             except (TypeError, ValueError) as e:
                                 logger.warning(
                                     f"⚠️ ExitAnalyzer: Не удалось преобразовать sl_percent={regime_config.get('sl_percent')} "
@@ -1408,16 +1460,23 @@ class ExitAnalyzer:
                                     sl_atr_based = regime_config.get(
                                         "sl_atr_based", False
                                     )
-                                    sl_atr_multiplier = float(
-                                        regime_config.get(
-                                            "sl_atr_multiplier", 2.0
-                                        )  # ✅ FIX: 1.0→2.0
-                                    )
-                                    sl_min_percent = float(
-                                        regime_config.get(
-                                            "sl_min_percent", 0.9
-                                        )  # ✅ FIX: 0.6→0.9
-                                    )
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): НЕ перезаписываем если уже установлено из ParameterProvider
+                                    if (
+                                        param_provider_sl_atr_mult == 2.0
+                                    ):  # Только если было fallback значение
+                                        sl_atr_multiplier = float(
+                                            regime_config.get(
+                                                "sl_atr_multiplier", 2.0
+                                            )  # ✅ FIX: 1.0→2.0
+                                        )
+                                    if (
+                                        param_provider_sl_min == 0.9
+                                    ):  # Только если было fallback значение
+                                        sl_min_percent = float(
+                                            regime_config.get(
+                                                "sl_min_percent", 0.9
+                                            )  # ✅ FIX: 0.6→0.9
+                                        )
                                     # ✅ НОВОЕ (03.01.2026): Логирование источника SL параметров при использовании fallback
                                     logger.info(
                                         f"📊 [PARAMS] {symbol} ({regime}): SL параметры "
@@ -1449,16 +1508,23 @@ class ExitAnalyzer:
                                     sl_atr_based = regime_config.get(
                                         "sl_atr_based", False
                                     )
-                                    sl_atr_multiplier = float(
-                                        regime_config.get(
-                                            "sl_atr_multiplier", 2.0
-                                        )  # ✅ FIX: 1.0→2.0
-                                    )
-                                    sl_min_percent = float(
-                                        regime_config.get(
-                                            "sl_min_percent", 0.9
-                                        )  # ✅ FIX: 0.6→0.9
-                                    )
+                                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): НЕ перезаписываем если уже установлено из ParameterProvider
+                                    if (
+                                        param_provider_sl_atr_mult == 2.0
+                                    ):  # Только если было fallback значение
+                                        sl_atr_multiplier = float(
+                                            regime_config.get(
+                                                "sl_atr_multiplier", 2.0
+                                            )  # ✅ FIX: 1.0→2.0
+                                        )
+                                    if (
+                                        param_provider_sl_min == 0.9
+                                    ):  # Только если было fallback значение
+                                        sl_min_percent = float(
+                                            regime_config.get(
+                                                "sl_min_percent", 0.9
+                                            )  # ✅ FIX: 0.6→0.9
+                                        )
                                     # ✅ НОВОЕ (03.01.2026): Логирование источника SL параметров при использовании fallback
                                     logger.info(
                                         f"📊 [PARAMS] {symbol} ({regime}): SL параметры "
@@ -1521,6 +1587,14 @@ class ExitAnalyzer:
 
                 # ✅ ИСПРАВЛЕНО: Используем ATR для расчета SL если доступен
                 if atr_1m and atr_1m > 0:
+                    # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (23.01.2026): Проверяем значения ПЕРЕД расчетом
+                    logger.debug(
+                        f"🔍 [SL_SOURCE_TRACE] {symbol} ({regime}): ATR-based расчет НАЧАЛО | "
+                        f"sl_atr_multiplier={sl_atr_multiplier:.2f}, "
+                        f"sl_min_percent={sl_min_percent:.2f}%, "
+                        f"leverage={leverage}x, ATR_1m={atr_1m:.6f}"
+                    )
+
                     # ATR-based SL: max(min_percent, ATR% * multiplier)
                     atr_pct = (atr_1m / current_price) * 100
                     atr_sl_percent = atr_pct * sl_atr_multiplier
@@ -1536,6 +1610,13 @@ class ExitAnalyzer:
                         f"atr_sl={atr_sl_percent:.4f}%, min={sl_min_percent:.2f}%, "
                         f"FINAL SL={sl_percent:.2f}% | "
                         f"Источник: ATR-based расчет"
+                    )
+
+                    # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (23.01.2026): Проверяем значения ПОСЛЕ расчета
+                    logger.debug(
+                        f"🔍 [SL_SOURCE_TRACE] {symbol} ({regime}): ATR-based расчет ФИНАЛ | "
+                        f"atr_pct={atr_pct:.4f}% → atr_sl_percent={atr_sl_percent:.4f}% "
+                        f"→ max({sl_min_percent:.2f}%, {atr_sl_percent:.4f}%) = {sl_percent:.2f}%"
                     )
                     logger.debug(
                         f"✅ [ATR_SL] {symbol}: ATR-based SL | "
@@ -2738,6 +2819,23 @@ class ExitAnalyzer:
                             datetime.now(timezone.utc) - entry_time_dt
                         ).total_seconds()
 
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): При КРИТИЧЕСКИХ убытках > -20% НЕ проверяем min_hold_time
+                        # XRP-USDT упал на -49% за 136 секунд, но emergency close блокировался min_hold_time=120s
+                        critical_loss_threshold = -20.0  # Очень критический убыток
+
+                        if pnl_percent < critical_loss_threshold:
+                            # КРИТИЧЕСКИЙ убыток - закрываем НЕМЕДЛЕННО, игнорируя min_hold_time
+                            logger.warning(
+                                f"🚨 ExitAnalyzer TRENDING: КРИТИЧЕСКИЙ убыток {pnl_percent:.2f}% < {critical_loss_threshold:.1f}% "
+                                f"для {symbol} - генерируем НЕМЕДЛЕННОЕ закрытие (игнорируем min_hold_time={min_holding_seconds:.1f}s, "
+                                f"текущее время удержания={holding_seconds:.1f}s)"
+                            )
+                            return {
+                                "action": "close",
+                                "reason": "emergency_loss_protection",
+                                "details": f"Критический убыток {pnl_percent:.2f}%, немедленное закрытие без проверки min_hold_time",
+                            }
+
                         if holding_seconds < min_holding_seconds:
                             logger.debug(
                                 f"⏳ ExitAnalyzer TRENDING: Emergency close заблокирован для {symbol} - "
@@ -2917,6 +3015,23 @@ class ExitAnalyzer:
                 )
                 tp_percent = 2.4
             if pnl_percent >= tp_percent:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Защита от TP на убыточных позициях
+                # Проверяем реальный PnL от entry_price к current_price
+                real_price_pnl_pct = (
+                    ((current_price - entry_price) / entry_price * 100)
+                    if position_side == "long"
+                    else ((entry_price - current_price) / entry_price * 100)
+                )
+
+                if real_price_pnl_pct < 0:
+                    logger.warning(
+                        f"⚠️ TP ЗАЩИТА: {symbol} TP хочет сработать (pnl_percent={pnl_percent:.2f}%), "
+                        f"но РЕАЛЬНЫЙ PnL от цены = {real_price_pnl_pct:.2f}% (УБЫТОК)! "
+                        f"entry={entry_price:.6f}, current={current_price:.6f}, side={position_side}. "
+                        f"БЛОКИРУЕМ закрытие - возможно неправильная передача current_pnl из адаптивных параметров."
+                    )
+                    return {"action": "hold", "reason": "tp_rejected_negative_real_pnl"}
+
                 # Проверяем силу тренда перед закрытием по TP
                 trend_data = await self._analyze_trend_strength(symbol)
                 if trend_data and trend_data.get("trend_strength", 0) >= 0.7:
@@ -3189,10 +3304,33 @@ class ExitAnalyzer:
                             "reversal_detected": True,
                         }
 
+                # ✅ КРИТИЧЕСКАЯ ЗАЩИТА (23.01.2026): Минимальная задержка 90 сек для SL
+                # Защита от преждевременного закрытия из-за спреда/комиссии (аналогично TrailingStopLoss.loss_cut)
+                seconds_in_position = minutes_in_position * 60.0
+                min_sl_hold_seconds = 90.0  # Минимум 90 секунд перед SL
+
+                if seconds_in_position < min_sl_hold_seconds:
+                    logger.info(
+                        f"⏱️ SL ЗАЩИТА: {symbol} SL достигнут (PnL={pnl_percent:.2f}%), "
+                        f"но позиция держится {seconds_in_position:.1f}с < {min_sl_hold_seconds:.1f}с | "
+                        f"БЛОКИРУЕМ закрытие (защита от спреда/комиссии) | "
+                        f"current={current_price:.2f}, SL={sl_price:.2f}"
+                    )
+                    return {
+                        "action": "hold",
+                        "reason": "sl_grace_period",
+                        "pnl_pct": gross_pnl_percent,
+                        "net_pnl_pct": pnl_percent,
+                        "sl_percent": sl_percent,
+                        "seconds_in_position": seconds_in_position,
+                        "min_seconds_required": min_sl_hold_seconds,
+                        "regime": regime,
+                    }
+
                 logger.info(
                     f"🛑 SL reached for {symbol}: current={current_price:.2f} <= SL={sl_price:.2f}, "
                     f"PnL={gross_pnl_percent:.2f}% (gross), {pnl_percent:.2f}% (net), "
-                    f"time={minutes_in_position:.1f} min, regime={regime}, нет признаков разворота"
+                    f"time={minutes_in_position:.1f} min ({seconds_in_position:.1f}с), regime={regime}, нет признаков разворота"
                 )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): ПРОВЕРЯЕМ GRACE PERIOD ПЕРЕД SL
@@ -3747,6 +3885,31 @@ class ExitAnalyzer:
                             datetime.now(timezone.utc) - entry_time_dt
                         ).total_seconds()
 
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): При КРИТИЧЕСКИХ убытках > -20% НЕ проверяем min_hold_time
+                        # XRP-USDT упал на -49% за 136 секунд, но emergency close блокировался min_hold_time=60s
+                        critical_loss_threshold = -20.0  # Очень критический убыток
+
+                        if net_pnl_percent < critical_loss_threshold:
+                            # КРИТИЧЕСКИЙ убыток - закрываем НЕМЕДЛЕННО, игнорируя min_hold_time
+                            logger.warning(
+                                f"🚨 ExitAnalyzer RANGING: КРИТИЧЕСКИЙ убыток {net_pnl_percent:.2f}% < {critical_loss_threshold:.1f}% "
+                                f"для {symbol} - генерируем НЕМЕДЛЕННОЕ закрытие (игнорируем min_hold_time={min_holding_seconds:.1f}s, "
+                                f"текущее время удержания={holding_seconds:.1f}s)"
+                            )
+                            self._record_metrics_on_close(
+                                symbol=symbol,
+                                reason="emergency_loss_protection",
+                                pnl_percent=net_pnl_percent,
+                                entry_time=entry_time,
+                            )
+                            return {
+                                "action": "close",
+                                "reason": "emergency_loss_protection",
+                                "pnl_pct": net_pnl_percent,
+                                "regime": regime,
+                                "details": f"Критический убыток {net_pnl_percent:.2f}%, немедленное закрытие без проверки min_hold_time",
+                            }
+
                         if holding_seconds < min_holding_seconds:
                             logger.debug(
                                 f"⏳ ExitAnalyzer RANGING: Emergency close заблокирован для {symbol} - "
@@ -4160,11 +4323,34 @@ class ExitAnalyzer:
                             "reversal_detected": True,
                         }
 
+                # ✅ КРИТИЧЕСКАЯ ЗАЩИТА (23.01.2026): Минимальная задержка 90 сек для SL (ranging режим)
+                # Защита от преждевременного закрытия из-за спреда/комиссии (аналогично TrailingStopLoss.loss_cut)
+                seconds_in_position = minutes_in_position * 60.0
+                min_sl_hold_seconds = 90.0  # Минимум 90 секунд перед SL
+
+                if seconds_in_position < min_sl_hold_seconds:
+                    logger.info(
+                        f"⏱️ SL ЗАЩИТА (ranging): {symbol} SL достигнут (PnL={net_pnl_percent:.2f}%), "
+                        f"но позиция держится {seconds_in_position:.1f}с < {min_sl_hold_seconds:.1f}с | "
+                        f"БЛОКИРУЕМ закрытие (защита от спреда/комиссии) | "
+                        f"current={current_price:.2f}, SL={sl_price:.2f}, effective_SL={effective_sl:.2f}"
+                    )
+                    return {
+                        "action": "hold",
+                        "reason": "sl_grace_period",
+                        "pnl_pct": gross_pnl_percent,
+                        "net_pnl_pct": net_pnl_percent,
+                        "sl_percent": sl_percent,
+                        "seconds_in_position": seconds_in_position,
+                        "min_seconds_required": min_sl_hold_seconds,
+                        "regime": regime,
+                    }
+
                 logger.info(
                     f"🛑 SL reached for {symbol}: current={current_price:.2f} <= SL={sl_price:.2f} "
                     f"(effective_SL={effective_sl:.2f} с учетом slippage {slippage_pct}%), "
                     f"PnL={gross_pnl_percent:.2f}% (gross), {net_pnl_percent:.2f}% (net), "
-                    f"time={minutes_in_position:.1f} min, regime={regime}, нет признаков разворота"
+                    f"time={minutes_in_position:.1f} min ({seconds_in_position:.1f}с), regime={regime}, нет признаков разворота"
                 )
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): ПРОВЕРЯЕМ GRACE PERIOD ПЕРЕД SL (RANGING РЕЖИМ)
@@ -4335,6 +4521,23 @@ class ExitAnalyzer:
                 f"Net PnL%={net_format_tp}% (с комиссией), достигнут={net_pnl_percent >= tp_percent}"
             )
             if net_pnl_percent >= tp_percent:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Защита от TP на убыточных позициях
+                # Проверяем реальный PnL от entry_price к current_price
+                real_price_pnl_pct = (
+                    ((current_price - entry_price) / entry_price * 100)
+                    if position_side == "long"
+                    else ((entry_price - current_price) / entry_price * 100)
+                )
+
+                if real_price_pnl_pct < 0:
+                    logger.warning(
+                        f"⚠️ TP ЗАЩИТА: {symbol} TP хочет сработать (net_pnl={net_pnl_percent:.2f}%), "
+                        f"но РЕАЛЬНЫЙ PnL от цены = {real_price_pnl_pct:.2f}% (УБЫТОК)! "
+                        f"entry={entry_price:.6f}, current={current_price:.6f}, side={position_side}. "
+                        f"БЛОКИРУЕМ закрытие - возможно неправильная передача current_pnl из адаптивных параметров."
+                    )
+                    return {"action": "hold", "reason": "tp_rejected_negative_real_pnl"}
+
                 logger.info(
                     f"🎯 ExitAnalyzer RANGING: TP достигнут для {symbol}: "
                     f"Net PnL {net_pnl_percent:.2f}% >= {tp_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%), режим={regime}"
@@ -5533,6 +5736,23 @@ class ExitAnalyzer:
                 )
                 tp_percent = 2.4
             if pnl_percent >= tp_percent:
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Защита от TP на убыточных позициях
+                # Проверяем реальный PnL от entry_price к current_price
+                real_price_pnl_pct = (
+                    ((current_price - entry_price) / entry_price * 100)
+                    if position_side == "long"
+                    else ((entry_price - current_price) / entry_price * 100)
+                )
+
+                if real_price_pnl_pct < 0:
+                    logger.warning(
+                        f"⚠️ TP ЗАЩИТА: {symbol} TP хочет сработать (pnl_percent={pnl_percent:.2f}%), "
+                        f"но РЕАЛЬНЫЙ PnL от цены = {real_price_pnl_pct:.2f}% (УБЫТОК)! "
+                        f"entry={entry_price:.6f}, current={current_price:.6f}, side={position_side}. "
+                        f"БЛОКИРУЕМ закрытие - возможно неправильная передача current_pnl из адаптивных параметров."
+                    )
+                    return {"action": "hold", "reason": "tp_rejected_negative_real_pnl"}
+
                 logger.info(
                     f"🎯 ExitAnalyzer CHOPPY: TP достигнут для {symbol}: "
                     f"{pnl_percent:.2f}% >= {tp_percent:.2f}%"

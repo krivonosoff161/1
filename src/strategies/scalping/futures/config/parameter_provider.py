@@ -216,6 +216,16 @@ class ParameterProvider:
             # ��� �ߦ�ئަ�ئ�զ� 1 (29.12.2025): ��T��-�-��T����- by_symbol �+��T� per-symbol ���-T��-�-��T�T��-�-
             # ��� �ݦަҦަ� (03.01.2026): �ۦ-����T��-�-�-�-���� ��T�T¦-TǦ-�����-�- ���-T��-�-��T�T��-�- �+��T� ���-�-���-�-�-��T� T��-�-�-T�T� �-�-T¦-
             sources_log = []
+
+            # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (23.01.2026): Проверяем exit_params ПОСЛЕ базовых _to_float
+            if exit_params:
+                logger.debug(
+                    f"🔍 [PARAM_PROVIDER_TRACE] {symbol} ({regime}): ПОСЛЕ базовых _to_float | "
+                    f"sl_atr={exit_params.get('sl_atr_multiplier')}, "
+                    f"sl_min={exit_params.get('sl_min_percent')}, "
+                    f"min_hold={exit_params.get('min_holding_minutes')}"
+                )
+
             if symbol and hasattr(self.config_manager, "_raw_config_dict"):
                 config_dict = self.config_manager._raw_config_dict
                 by_symbol = config_dict.get("by_symbol", {})
