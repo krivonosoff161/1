@@ -10,6 +10,7 @@ RegimeCalculator - Расчеты TP/SL для режимов.
 from typing import Any, Dict, Optional
 
 from loguru import logger
+from ..config.config_view import get_scalping_view
 
 
 class RegimeCalculator:
@@ -30,7 +31,7 @@ class RegimeCalculator:
         self.symbol_profiles = None
 
         if config and hasattr(config, "scalping"):
-            scalping_config = config.scalping
+            scalping_config = get_scalping_view(config)
             if hasattr(scalping_config, "symbol_profiles"):
                 self.symbol_profiles = scalping_config.symbol_profiles
 
@@ -109,7 +110,8 @@ class RegimeCalculator:
         if tp_percent is None:
             # ✅ FIX: Сначала пробуем режимный TP из adaptive_regime
             if self.config and hasattr(self.config, "scalping"):
-                adaptive_regime = getattr(self.config.scalping, "adaptive_regime", {})
+                scalping_config = get_scalping_view(self.config)
+                adaptive_regime = getattr(scalping_config, "adaptive_regime", {})
                 if isinstance(adaptive_regime, dict) and regime:
                     regime_config = adaptive_regime.get(regime.lower(), {})
                     if isinstance(regime_config, dict):
@@ -117,7 +119,7 @@ class RegimeCalculator:
 
                 # Fallback на глобальный tp_percent
                 if tp_percent is None:
-                    tp_percent = getattr(self.config.scalping, "tp_percent", 0.5)
+                    tp_percent = getattr(scalping_config, "tp_percent", 0.5)
             else:
                 tp_percent = 0.5  # Ultimate fallback
 
@@ -204,7 +206,8 @@ class RegimeCalculator:
         if sl_percent is None:
             # ✅ FIX: Сначала пробуем режимный SL из adaptive_regime
             if self.config and hasattr(self.config, "scalping"):
-                adaptive_regime = getattr(self.config.scalping, "adaptive_regime", {})
+                scalping_config = get_scalping_view(self.config)
+                adaptive_regime = getattr(scalping_config, "adaptive_regime", {})
                 if isinstance(adaptive_regime, dict) and regime:
                     regime_config = adaptive_regime.get(regime.lower(), {})
                     if isinstance(regime_config, dict):
@@ -212,7 +215,7 @@ class RegimeCalculator:
 
                 # Fallback на глобальный sl_percent
                 if sl_percent is None:
-                    sl_percent = getattr(self.config.scalping, "sl_percent", 0.3)
+                    sl_percent = getattr(scalping_config, "sl_percent", 0.3)
             else:
                 sl_percent = 0.3  # Ultimate fallback
 

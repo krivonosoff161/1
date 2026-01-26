@@ -252,7 +252,10 @@ class AdaptiveRegimeManager:
         logger.debug(f"✅ RegimeManager: DataRegistry установлен (symbol={self.symbol})")
 
     def detect_regime(
-        self, candles: List[OHLCV], current_price: float
+        self,
+        candles: List[OHLCV],
+        current_price: float,
+        indicator_overrides: Optional[Dict[str, float]] = None,
     ) -> RegimeDetectionResult:
         """
         Определяет текущий режим рынка на основе технических индикаторов.
@@ -274,6 +277,10 @@ class AdaptiveRegimeManager:
 
         # Рассчитываем индикаторы для детекции
         indicators = self._calculate_regime_indicators(candles, current_price)
+        if indicator_overrides:
+            for key, value in indicator_overrides.items():
+                if value is not None:
+                    indicators[key] = value
 
         # Определяем режим на основе индикаторов
         regime, confidence, reason = self._classify_regime(indicators)
@@ -664,7 +671,54 @@ class AdaptiveRegimeManager:
                     return None
 
         # Определяем новый режим
-        detection = self.detect_regime(candles, current_price)
+        indicator_overrides = None
+        used_registry_adx = False
+        if self.data_registry and self.symbol:
+            try:
+                registry_indicators = await self.data_registry.get_indicators(
+                    self.symbol, check_freshness=True
+                )
+                if registry_indicators:
+                    adx_value = registry_indicators.get("adx")
+                    di_plus = registry_indicators.get("adx_plus_di") or registry_indicators.get(
+                        "di_plus"
+                    )
+                    di_minus = registry_indicators.get("adx_minus_di") or registry_indicators.get(
+                        "di_minus"
+                    )
+                    trend_direction = registry_indicators.get("trend_direction")
+                    if adx_value is not None:
+                        indicator_overrides = {
+                            "adx": adx_value,
+                            "adx_proxy": adx_value,
+                            "di_plus": di_plus,
+                            "di_minus": di_minus,
+                            "trend_direction": trend_direction,
+                        }
+                        used_registry_adx = True
+            except Exception as e:
+                logger.debug(f"RegimeManager: failed to get ADX from DataRegistry: {e}")
+
+        detection = self.detect_regime(
+            candles, current_price, indicator_overrides=indicator_overrides
+        )
+
+        if not used_registry_adx and self.data_registry and self.symbol:
+            try:
+                adx_value = detection.indicators.get("adx")
+                if adx_value is not None:
+                    await self.data_registry.update_indicators(
+                        self.symbol,
+                        {
+                            "adx": adx_value,
+                            "adx_proxy": detection.indicators.get("adx_proxy", adx_value),
+                            "adx_plus_di": detection.indicators.get("di_plus"),
+                            "adx_minus_di": detection.indicators.get("di_minus"),
+                            "trend_direction": detection.indicators.get("trend_direction"),
+                        },
+                    )
+            except Exception as e:
+                logger.debug(f"RegimeManager: failed to update ADX to DataRegistry: {e}")
 
         # ✅ ПРАВКА #18: Сохраняем в кэш
         self._regime_cache[cache_key] = (detection.regime, datetime.utcnow())

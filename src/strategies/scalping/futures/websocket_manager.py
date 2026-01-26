@@ -41,6 +41,16 @@ class FuturesWebSocketManager:
             return True
         return False
 
+    async def force_reconnect(self, reason: str = "") -> bool:
+        """Принудительный reconnect даже если heartbeat жив."""
+        if not self.should_reconnect:
+            self.should_reconnect = True
+        self.reconnect_attempts = 0
+        msg = f"Force WebSocket reconnect: {reason}" if reason else "Force WebSocket reconnect"
+        logger.warning(msg)
+        await self._handle_disconnect()
+        return True
+
     def __init__(
         self,
         ws_url: str = "wss://ws.okx.com:8443/ws/v5/public",
@@ -96,6 +106,12 @@ class FuturesWebSocketManager:
                 return True
 
             # ✅ Сохраняем сессию для корректного закрытия
+            if self.session and not self.session.closed:
+                try:
+                    await self.session.close()
+                    await asyncio.sleep(0.05)
+                except Exception:
+                    pass
             self.session = aiohttp.ClientSession()
             self.ws = await self.session.ws_connect(self.ws_url)
             self.connected = True
@@ -196,6 +212,17 @@ class FuturesWebSocketManager:
                     msg = await self.ws.receive()
 
                 if msg.type == aiohttp.WSMsgType.TEXT:
+                    # OKX может присылать ping/pong как plain text
+                    if msg.data == "pong":
+                        self.last_heartbeat = time.time()
+                        continue
+                    if msg.data == "ping":
+                        try:
+                            await self.ws.send_str("pong")
+                        except Exception:
+                            pass
+                        self.last_heartbeat = time.time()
+                        continue
                     data = json.loads(msg.data)
                     await self._handle_data(data)
 
@@ -213,7 +240,7 @@ class FuturesWebSocketManager:
                 logger.error(f"Ошибка в WebSocket listener: {e}")
                 await self._handle_disconnect()
 
-            await asyncio.sleep(1)
+            await asyncio.sleep(0)
 
     async def _handle_data(self, data: dict):
         """Обработка данных от WebSocket."""
@@ -253,8 +280,29 @@ class FuturesWebSocketManager:
             if not self.listener_task.done():
                 self.listener_task.cancel()
 
+        # Закрываем текущие соединения, чтобы избежать утечек ClientSession
+        await self._close_ws_session()
+
         if self.should_reconnect:
             await self._reconnect()
+
+    async def _close_ws_session(self):
+        """Закрывает текущие ws/session без отключения авто-reconnect."""
+        if self.ws and not self.ws.closed:
+            try:
+                await self.ws.close()
+                await asyncio.sleep(0.05)
+            except Exception:
+                pass
+        self.ws = None
+
+        if self.session and not self.session.closed:
+            try:
+                await self.session.close()
+                await asyncio.sleep(0.05)
+            except Exception:
+                pass
+        self.session = None
 
     async def _reconnect(self):
         """Автоматическое переподключение."""

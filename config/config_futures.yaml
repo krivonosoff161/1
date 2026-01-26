@@ -107,14 +107,14 @@ scalping:
   check_interval: 1.0  # ✅ ОПТИМИЗИРОВАНО: 1.0 сек для быстрого анализа позиций (было 5.0 по умолчанию)
   
   # Параметры скальпинга (адаптированы для Futures)
-  min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 0.65→0.35 - реальная сила сигналов 0.00-0.75
-  min_signal_strength_ranging: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 0.65→0.35
+  min_signal_strength: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 0.65→0.35 - реальная сила сигналов 0.00-0.75
+  min_signal_strength_ranging: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 0.65→0.35
   min_adx: 15.0  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 20.0→15.0 для большей чувствительности
   
   # ✅ НОВОЕ (28.12.2025): Adaptive по паре (ETH volatile — looser)
   by_symbol:
     ETH-USDT:
-      min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.55→0.35 (реальная сила 0.00)
+      min_signal_strength: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.55→0.35 (реальная сила 0.00)
       sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Увеличено с 3.0 до 3.5 ATR для предотвращения ложных SL (Grok рекомендация)
       tp_atr_multiplier: 4.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol tp_atr_multiplier для ETH
       max_holding_minutes: 30.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol max_holding_minutes для ETH
@@ -133,7 +133,7 @@ scalping:
         bb_std_multiplier: 2.1  # ✅ Шире полосы для волатильности ETH
     SOL-USDT:
       min_adx: 15.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 20.0→15.0
-      min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.58→0.35
+      min_signal_strength: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.58→0.35
       min_position_usd: 40.0  # ✅ ИСПРАВЛЕНО (08.01.2026): Снижено с 50.0
       max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 250→900 для целевой маржи $90 при leverage 10x
       sl_atr_multiplier: 3.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Wider SL для SOL (Grok рекомендация)
@@ -143,7 +143,7 @@ scalping:
     XRP-USDT:
       # ✅ НОВОЕ (06.01.2026): Специальные параметры для низковолатильной пары
       min_adx: 10.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 12.0→10.0
-      min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.55→0.35
+      min_signal_strength: 0.10  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.55→0.35
       sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Wider SL для XRP (Grok рекомендация)
       tp_atr_multiplier: 4.0  # ✅ НОВОЕ (06.01.2026): Адаптивный TP для компенсации низкой волатильности
       indicators:  # ✅ НОВОЕ (06.01.2026): Настройка индикаторов для микроволатильности
@@ -163,7 +163,7 @@ scalping:
     DOGE-USDT:
       # ✅ НОВОЕ (06.01.2026): Специальные параметры для ультра-низковолатильной пары
       min_adx: 8.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 10.0→8.0
-      min_signal_strength: 0.30  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.50→0.30 (реальная сила 0.00-0.11)
+      min_signal_strength: 0.08  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.50→0.30 (реальная сила 0.00-0.11)
       sl_atr_multiplier: 4.0  # ✅ Широкий SL для компенсации шумов
       tp_atr_multiplier: 5.0  # ✅ Увеличенный TP - компенсация микроволатильности
       max_holding_minutes: 20.0  # ✅ Короче холдинг - быстрое закрытие на микродвижениях
@@ -182,7 +182,7 @@ scalping:
         reversal_score_threshold:
           ranging: 6  # ✅ DOGE экстремально чувствительна к ложным разворотам - максимум подтверждений
     BTC-USDT:
-      min_signal_strength: 0.35  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.62→0.35 (реальная сила 0.08-0.10)
+      min_signal_strength: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.62→0.35 (реальная сила 0.08-0.10)
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Per-symbol Smart Close параметры для BTC
         reversal_score_threshold:
           ranging: 4  # ✅ BTC более стабильный - используем стандартный порог 4 (как общий для ranging)
@@ -1300,6 +1300,8 @@ scalping:
       macd_check: true
       bollinger_check: true
   order_executor:
+    require_ws_fresh_for_entries: true
+    ws_fresh_max_age: 1.5
     limit_order:
       # ✅ СНИЖЕНО (14.01.2026): offset до 0.01% для максимальной исполнимости
       limit_offset_percent: 0.01  # Снижен до 0.01% для всех режимов
@@ -2105,6 +2107,13 @@ futures_modules:
     strength_multiplier: 2000.0  # Множитель для strength (histogram / 200.0)
     strength_reduction_neutral: 0.9  # Снижение strength для neutral направления
     base_signal_strength: 0.001  # Базовый размер сигнала
+    ws_fresh_max_age: 5.0
+    ws_watchdog_consecutive_stale: 3
+    ws_signal_grace_period: 10.0
+    allow_rest_for_ws: true
+    adx_blocking:
+      allow_countertrend_on_price_action: true
+      min_confidence_to_block: 0.65
     
     # Confidence значения по режимам
     confidence:
@@ -2136,7 +2145,7 @@ futures_modules:
       pivot_tolerance: 0.003  # Толерантность pivot points (0.3%)
       volume_profile_va_percent: 70.0  # Процент Value Area
       volume_profile_poc_tolerance: 0.005  # Толерантность POC (0.5%)
-      min_signal_strength: 0.3  # Минимальная сила сигнала
+      min_signal_strength: 0.12  # Минимальная сила сигнала
       
       # Адаптивные пороги по режимам
       by_regime:
@@ -2145,19 +2154,19 @@ futures_modules:
           pivot_tolerance: 0.002
           volume_profile_va_percent: 75.0
           volume_profile_poc_tolerance: 0.004
-          min_signal_strength: 0.8  # ✅ ГРОК: Поднято с 0.4 до 0.8 для trending
+          min_signal_strength: 0.12  # ✅ ГРОК: Поднято с 0.4 до 0.8 для trending
         ranging:
           correlation_threshold: 0.7  # Стандартные значения
           pivot_tolerance: 0.003
           volume_profile_va_percent: 70.0
           volume_profile_poc_tolerance: 0.005
-          min_signal_strength: 0.7  # ✅ ГРОК: Поднято с 0.3 до 0.7 для ranging
+          min_signal_strength: 0.10  # ✅ ГРОК: Поднято с 0.3 до 0.7 для ranging
         choppy:
           correlation_threshold: 0.6  # Менее строго в хаосе
           pivot_tolerance: 0.004
           volume_profile_va_percent: 65.0
           volume_profile_poc_tolerance: 0.006
-          min_signal_strength: 0.6  # ✅ ГРОК: Поднято с 0.25 до 0.6 для choppy
+          min_signal_strength: 0.08  # ✅ ГРОК: Поднято с 0.25 до 0.6 для choppy
 
   # ✅ НОВОЕ: FastADX - параметры быстрого ADX
   fast_adx:

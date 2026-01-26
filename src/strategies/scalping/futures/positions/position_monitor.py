@@ -166,14 +166,21 @@ class PositionMonitor:
                 metadata = await self.position_registry.get_metadata(symbol)
                 market_data = await self.data_registry.get_market_data(symbol)
                 if market_data is None:
-                    logger.error(
-                        f"❌ PositionMonitor: Нет свежих рыночных данных для {symbol} (market_data is None, позиция не анализируется)"
+                    logger.warning(
+                        f"⚠️ PositionMonitor: Нет свежих рыночных данных для {symbol} (market_data is None), "
+                        f"продолжаем с fallback ценой"
                     )
-                    return None
+                    market_data = {}
                 # 🔴 BUG #10 FIX: 4-уровневый fallback для current_price
-                current_price = self._get_current_price_with_fallback(
+                current_price = await self._get_current_price_with_fallback(
                     symbol=symbol, market_data=market_data, position=position
                 )
+                if not isinstance(current_price, (int, float)) or current_price <= 0:
+                    logger.error(
+                        f"❌ PositionMonitor: Некорректная цена для {symbol} (current_price={current_price}), "
+                        f"пропускаем анализ позиции"
+                    )
+                    return None
                 regime = "ranging"
                 if hasattr(self.data_registry, "get_regime_name_sync"):
                     regime = (

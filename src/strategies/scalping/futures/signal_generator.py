@@ -9,6 +9,7 @@ Futures Signal Generator для скальпинг стратегии.
 """
 
 import copy
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +19,7 @@ from loguru import logger
 from src.config import BotConfig, ScalpingConfig
 from src.indicators import IndicatorManager
 from src.models import OHLCV, MarketData
+from .config.config_view import get_scalping_view
 
 from .adaptivity.regime_manager import AdaptiveRegimeManager
 from .filters import (
@@ -56,7 +58,7 @@ class FuturesSignalGenerator:
             client: OKX клиент (опционально, для фильтров)
         """
         self.config = config
-        self.scalping_config = config.scalping
+        self.scalping_config = get_scalping_view(config)
         self.client = client  # ✅ Сохраняем клиент для фильтров
         self.data_registry = None  # ✅ НОВОЕ: DataRegistry для сохранения индикаторов (будет установлен позже)
         self.performance_tracker = None  # Будет установлен из orchestrator
@@ -304,6 +306,16 @@ class FuturesSignalGenerator:
 
         logger.info("FuturesSignalGenerator инициализирован")
 
+        sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+        if isinstance(sg_cfg, dict):
+            self._allow_rest_for_ws = bool(sg_cfg.get("allow_rest_for_ws", False))
+        else:
+            self._allow_rest_for_ws = bool(getattr(sg_cfg, "allow_rest_for_ws", False))
+        self._rest_update_cooldown = float(
+            getattr(sg_cfg, "rest_update_cooldown", 1.0)
+        )
+        self._last_rest_update_ts: Dict[str, float] = {}
+
     def set_data_registry(self, data_registry):
         """
         ✅ НОВОЕ: Установить DataRegistry для сохранения индикаторов.
@@ -398,6 +410,67 @@ class FuturesSignalGenerator:
         # ✅ НОВОЕ: Обновляем AdaptiveFilterParameters если уже инициализирован
         if self.adaptive_filter_params:
             self.adaptive_filter_params.trading_statistics = trading_statistics
+
+    async def _allow_stale_signal(self, symbol: str, grace_period: float) -> bool:
+        if not self.data_registry:
+            return False
+        try:
+            market_data = await self.data_registry.peek_market_data(symbol)
+        except Exception as e:
+            logger.debug(
+                f"⚠️ SignalGenerator: не удалось прочитать market_data для {symbol}: {e}"
+            )
+            return False
+
+        if not market_data:
+            return False
+
+        updated_at = market_data.get("updated_at")
+        price = market_data.get("price") or market_data.get("last_price")
+        if not updated_at or not isinstance(updated_at, datetime) or not price:
+            return False
+
+        age = (datetime.now() - updated_at).total_seconds()
+        if age <= grace_period:
+            logger.debug(
+                f"✅ SignalGenerator: допускаем устаревший сигнал для {symbol} "
+                f"(age={age:.1f}s ≤ grace={grace_period:.1f}s)"
+            )
+            return True
+        return False
+
+    async def _refresh_market_data_from_rest(self, symbol: str) -> bool:
+        if not self.client or not self._allow_rest_for_ws:
+            return False
+        now = time.time()
+        last_ts = self._last_rest_update_ts.get(symbol, 0.0)
+        if now - last_ts < self._rest_update_cooldown:
+            return False
+        self._last_rest_update_ts[symbol] = now
+        try:
+            ticker = await self.client.get_ticker(symbol)
+            if not ticker or not isinstance(ticker, dict):
+                return False
+            raw_price = ticker.get("last") or ticker.get("lastPx")
+            if raw_price is None:
+                return False
+            price = float(raw_price)
+            await self.data_registry.update_market_data(
+                symbol,
+                {
+                    "price": price,
+                    "last_price": price,
+                    "source": "REST",
+                    "updated_at": datetime.now(),
+                },
+            )
+            logger.debug(
+                f"✅ SignalGenerator: REST refresh for {symbol} at ${price:.4f}"
+            )
+            return True
+        except Exception as e:
+            logger.debug(f"⚠️ SignalGenerator REST refresh failed for {symbol}: {e}")
+            return False
 
     @staticmethod
     def _to_dict(raw: Any) -> Dict[str, Any]:
@@ -1519,6 +1592,69 @@ class FuturesSignalGenerator:
                     # 🔴 BUG #4 FIX (09.01.2026): Снижена граница с 30 до 15 свечей для ранней генерации сигналов
                     # Это предотвращает генерацию сигналов до загрузки свечей, но не блокирует их 30-45 минут
                     if self.data_registry:
+                        try:
+                            ws_max_age = 3.0
+                            sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+                            ws_signal_grace = ws_max_age * 2.0
+                            if isinstance(sg_cfg, dict):
+                                ws_max_age = float(
+                                    sg_cfg.get("ws_fresh_max_age", ws_max_age)
+                                )
+                                ws_signal_grace = float(
+                                    sg_cfg.get(
+                                        "ws_signal_grace_period",
+                                        ws_signal_grace,
+                                    )
+                                )
+                            else:
+                                ws_max_age = float(
+                                    getattr(sg_cfg, "ws_fresh_max_age", ws_max_age)
+                                )
+                                ws_signal_grace = float(
+                                    getattr(
+                                        sg_cfg,
+                                        "ws_signal_grace_period",
+                                        ws_signal_grace,
+                                    )
+                                )
+                            if hasattr(self.data_registry, "is_ws_fresh"):
+                                is_fresh = await self.data_registry.is_ws_fresh(
+                                    symbol, max_age=ws_max_age
+                                )
+                                if not is_fresh:
+                                    data_snapshot = await self.data_registry.peek_market_data(
+                                        symbol
+                                    )
+                                    if await self._refresh_market_data_from_rest(symbol):
+                                        is_fresh = await self.data_registry.is_ws_fresh(
+                                            symbol, max_age=ws_max_age
+                                        )
+                                    if not is_fresh:
+                                        allowed = await self._allow_stale_signal(
+                                            symbol, ws_signal_grace
+                                        )
+                                        if not allowed:
+                                            extra = ""
+                                            if data_snapshot:
+                                                age = (
+                                                    (datetime.now() - data_snapshot.get("updated_at")).total_seconds()
+                                                    if data_snapshot.get("updated_at")
+                                                    else None
+                                                )
+                                                age_str = f"{age:.1f}s" if age is not None else "N/A"
+                                                extra = (
+                                                    f" source={data_snapshot.get('source')}"
+                                                    f" age={age_str}"
+                                                )
+                                            logger.warning(
+                                                f"WS_STALE_SIGNAL_BLOCK {symbol}: "
+                                                f"no fresh WS price within {ws_max_age:.1f}s{extra}, skip signals"
+                                            )
+                                            return []
+                        except Exception as e:
+                            logger.debug(
+                                f"SignalGenerator WS freshness check error for {symbol}: {e}"
+                            )
                         candles_1m = await self.data_registry.get_candles(symbol, "1m")
                         if not candles_1m or len(candles_1m) < 15:
                             logger.debug(
@@ -3152,6 +3288,42 @@ class FuturesSignalGenerator:
             total_before_adx_filter = len(signals)
 
             # ✅ НОВОЕ (26.12.2025): Используем DirectionAnalyzer для блокировки сигналов против тренда
+            adx_block_cfg = {}
+            allow_countertrend_on_price_action = True
+            min_confidence_to_block = 0.65
+            try:
+                sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+                if isinstance(sg_cfg, dict):
+                    adx_block_cfg = sg_cfg.get("adx_blocking", {}) or {}
+                else:
+                    adx_block_cfg = getattr(sg_cfg, "adx_blocking", {}) or {}
+                if isinstance(adx_block_cfg, dict):
+                    allow_countertrend_on_price_action = bool(
+                        adx_block_cfg.get("allow_countertrend_on_price_action", True)
+                    )
+                    min_confidence_to_block = float(
+                        adx_block_cfg.get(
+                            "min_confidence_to_block", min_confidence_to_block
+                        )
+                    )
+                else:
+                    allow_countertrend_on_price_action = bool(
+                        getattr(
+                            adx_block_cfg,
+                            "allow_countertrend_on_price_action",
+                            allow_countertrend_on_price_action,
+                        )
+                    )
+                    min_confidence_to_block = float(
+                        getattr(
+                            adx_block_cfg,
+                            "min_confidence_to_block",
+                            min_confidence_to_block,
+                        )
+                    )
+            except Exception:
+                pass
+
             filtered_signals = []
             blocked_by_adx = {"LONG": 0, "SHORT": 0}  # Счетчик заблокированных сигналов
             for signal in signals:
@@ -3190,6 +3362,16 @@ class FuturesSignalGenerator:
                         market_direction = direction_result.get("direction", "neutral")
                         adx_value_from_analyzer = direction_result.get("adx_value", 0)
                         confidence = direction_result.get("confidence", 0.0)
+                        price_action_direction = direction_result.get(
+                            "price_action_direction", "neutral"
+                        )
+                        ema_direction = direction_result.get("ema_direction", "neutral")
+                        sma_direction = direction_result.get("sma_direction", "neutral")
+                        confidence_value = (
+                            float(confidence)
+                            if isinstance(confidence, (int, float))
+                            else 0.0
+                        )
 
                         # ✅ ПРИОРИТЕТ 1 (28.12.2025): Режим-специфичная ADX блокировка
                         # Получаем текущий режим для определения порога блокировки
@@ -3223,6 +3405,35 @@ class FuturesSignalGenerator:
                             )
 
                         # Блокируем сигналы против тренда только если ADX превышает режим-специфичный порог
+                        if (
+                            allow_countertrend_on_price_action
+                            and adx_value_from_analyzer >= adx_blocking_threshold
+                        ):
+                            if (
+                                market_direction == "bullish"
+                                and price_action_direction == "bearish"
+                                and confidence_value < min_confidence_to_block
+                            ):
+                                logger.info(
+                                    f"ADX_COUNTERTREND_ALLOW {signal_symbol} {signal_side}: "
+                                    f"market_direction={market_direction}, price_action={price_action_direction}, "
+                                    f"ema={ema_direction}, sma={sma_direction}, "
+                                    f"confidence={confidence_value:.2f}, adx={adx_value_from_analyzer:.1f}"
+                                )
+                                market_direction = "neutral"
+                            elif (
+                                market_direction == "bearish"
+                                and price_action_direction == "bullish"
+                                and confidence_value < min_confidence_to_block
+                            ):
+                                logger.info(
+                                    f"ADX_COUNTERTREND_ALLOW {signal_symbol} {signal_side}: "
+                                    f"market_direction={market_direction}, price_action={price_action_direction}, "
+                                    f"ema={ema_direction}, sma={sma_direction}, "
+                                    f"confidence={confidence_value:.2f}, adx={adx_value_from_analyzer:.1f}"
+                                )
+                                market_direction = "neutral"
+
                         if adx_value_from_analyzer >= adx_blocking_threshold:
                             if market_direction == "bearish" and signal_side == "LONG":
                                 blocked_by_adx["LONG"] += 1
@@ -6367,9 +6578,9 @@ class FuturesSignalGenerator:
                 # ✅ КОНФИГУРИРУЕМАЯ Блокировка SHORT/LONG сигналов по конфигу (по умолчанию разрешены обе стороны)
                 signal_side = signal.get("side", "").lower()
                 allow_short = getattr(
-                    self.config.scalping, "allow_short_positions", True
+                    self.scalping_config, "allow_short_positions", True
                 )
-                allow_long = getattr(self.config.scalping, "allow_long_positions", True)
+                allow_long = getattr(self.scalping_config, "allow_long_positions", True)
 
                 if signal_side == "sell" and not allow_short:
                     logger.debug(
@@ -6906,9 +7117,9 @@ class FuturesSignalGenerator:
                 # ✅ КОНФИГУРИРУЕМАЯ Блокировка SHORT/LONG сигналов
                 signal_side = signal.get("side", "").lower()
                 allow_short = getattr(
-                    self.config.scalping, "allow_short_positions", True
+                    self.scalping_config, "allow_short_positions", True
                 )
-                allow_long = getattr(self.config.scalping, "allow_long_positions", True)
+                allow_long = getattr(self.scalping_config, "allow_long_positions", True)
 
                 if signal_side == "sell" and not allow_short:
                     logger.debug(
@@ -7006,9 +7217,9 @@ class FuturesSignalGenerator:
                 # ✅ КОНФИГУРИРУЕМАЯ Блокировка SHORT/LONG сигналов по конфигу (по умолчанию разрешены обе стороны)
                 signal_side = signal.get("side", "").lower()
                 allow_short = getattr(
-                    self.config.scalping, "allow_short_positions", True
+                    self.scalping_config, "allow_short_positions", True
                 )
-                allow_long = getattr(self.config.scalping, "allow_long_positions", True)
+                allow_long = getattr(self.scalping_config, "allow_long_positions", True)
 
                 if signal_side == "sell" and not allow_short:
                     logger.debug(
@@ -7663,6 +7874,11 @@ class FuturesSignalGenerator:
                     f"[SIGNAL STRENGTH] {symbol_val}: strength={strength_val:.2f}, min_signal_strength={min_strength:.2f}"
                 )
                 if strength_val >= min_strength:
+                    s["min_strength_applied"] = True
+                    s["min_strength"] = min_strength
+                    s["min_strength_source"] = source_info_by_symbol.get(
+                        symbol_val, "unknown"
+                    )
                     filtered_signals.append(s)
 
             if self._diagnostic_symbols:

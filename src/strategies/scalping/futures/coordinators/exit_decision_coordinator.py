@@ -205,7 +205,40 @@ class ExitDecisionCoordinator:
         Returns:
             Приоритет (меньшее число = выше приоритет)
         """
-        return self.EXIT_PRIORITIES.get(reason, 99)  # По умолчанию низкий приоритет
+        normalized = self._normalize_reason(reason)
+        return self.EXIT_PRIORITIES.get(normalized, 99)  # По умолчанию низкий приоритет
+
+    def _normalize_reason(self, reason: Optional[str]) -> str:
+        """Normalize exit reasons to priority matrix keys."""
+        if not reason:
+            return "unknown"
+        if reason in self.EXIT_PRIORITIES:
+            return reason
+        if reason.startswith("emergency_loss_protection"):
+            return "emergency_loss_protection"
+        if reason.startswith("sl_reached") or reason in {
+            "sl_grace_period",
+            "sl_blocked_by_min_holding",
+            "min_holding_not_reached_before_sl",
+        }:
+            return "sl_reached"
+        if reason.startswith("tp_reached") or reason in {
+            "big_profit_exit",
+            "strong_trend_profit",
+            "tp_rejected_negative_real_pnl",
+        }:
+            return "tp_reached"
+        if reason in {"tsl_hit", "profit_too_low_vs_peak"}:
+            return "trailing_stop"
+        if reason.startswith("max_holding"):
+            return "max_holding_time"
+        if reason in {"reversal_detected"} or reason.startswith("smart_forced_close"):
+            return "smart_exit_reversal"
+        if reason in {"partial_tp_min_holding_wait"}:
+            return "partial_tp"
+        if reason in {"strong_trend_extend_tp"}:
+            return "extend_tp"
+        return reason
 
     async def _check_trailing_stop(
         self,
@@ -238,9 +271,7 @@ class ExitDecisionCoordinator:
 
             # Проверяем, сработал ли trailing stop
             # ✅ ИСПРАВЛЕНО (08.01.2026): Метод должен быть should_close_position, а не should_close
-            should_close, reason = await trailing_stop.should_close_position(
-                current_price
-            )
+            should_close, reason = trailing_stop.should_close_position(current_price)
             if should_close:
                 return {
                     "action": "close",

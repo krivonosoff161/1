@@ -59,6 +59,7 @@ class DirectionAnalyzer:
         candles: List[OHLCV],
         current_price: float,
         indicators: Optional[Dict[str, Any]] = None,
+        regime: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Анализирует направление рынка на основе взвешенной системы индикаторов.

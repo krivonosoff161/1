@@ -156,6 +156,14 @@ class WebSocketCoordinator:
         self._rest_candle_task: Optional[asyncio.Task] = None
         self._rest_candle_poll_interval = 60.0
         self._rest_candle_rate_delay = 0.12  # <= ~8.3 req/s
+        # WebSocket freshness watchdog (per-symbol)
+        self._ws_watchdog_task: Optional[asyncio.Task] = None
+        self._ws_watchdog_interval = 5.0
+        self._ws_watchdog_max_age = 6.0
+        self._ws_watchdog_stale_threshold = 2
+        self._ws_watchdog_cooldown = 30.0
+        self._last_ws_watchdog_trigger: Dict[str, float] = {}
+        self._ws_watchdog_stale_counts: Dict[str, int] = {}
         # Последний обработанный тикер и логи форсированных обходов, чтобы избежать устаревших цен
         self._last_ticker_processed_ts: Dict[str, float] = {}
         self._last_throttle_force_log_ts: Dict[str, float] = {}
@@ -169,6 +177,39 @@ class WebSocketCoordinator:
         logger.info(
             f"✅ WebSocketCoordinator initialized (ticker throttle: 1/{self._ticker_throttle})"
         )
+
+    async def auto_reconnect(self) -> bool:
+        """Delegate auto-reconnect to WebSocketManager."""
+        if not self.ws_manager:
+            return False
+        try:
+            return await self.ws_manager.auto_reconnect()
+        except Exception as e:
+            logger.debug(f"WebSocketCoordinator auto_reconnect failed: {e}")
+            return False
+
+    async def force_reconnect(
+        self,
+        symbol: Optional[str] = None,
+        fallback_count: Optional[int] = None,
+        reason: str = "",
+    ) -> bool:
+        """Принудительный reconnect по сигналу деградации WS."""
+        if not self.ws_manager:
+            return False
+        details = []
+        if symbol:
+            details.append(f"symbol={symbol}")
+        if fallback_count is not None:
+            details.append(f"fallback_count={fallback_count}")
+        if reason:
+            details.append(f"reason={reason}")
+        detail_str = ", ".join(details)
+        try:
+            return await self.ws_manager.force_reconnect(reason=detail_str)
+        except Exception as e:
+            logger.debug(f"WebSocketCoordinator force_reconnect failed: {e}")
+            return False
 
     async def initialize_websocket(self):
         """
@@ -223,6 +264,7 @@ class WebSocketCoordinator:
                 )
                 if not self._use_kline_candles:
                     self._ensure_rest_candle_polling()
+                self._ensure_ws_watchdog()
             else:
                 logger.warning("⚠️ Не удалось подключиться к WebSocket")
 
@@ -316,8 +358,11 @@ class WebSocketCoordinator:
                                 "source": "WEBSOCKET",
                             },
                         )
-                        self._last_ticker_processed_ts[symbol] = time.time()
-                        logger.debug(f"✅ WS→DataRegistry: {symbol} price=${price:.2f}")
+                        now_ts = time.time()
+                        self._last_ticker_processed_ts[symbol] = now_ts
+                        logger.debug(
+                            f"✅ WS→DataRegistry: {symbol} price=${price:.2f} source=WS ts={now_ts:.3f}"
+                        )
                     except Exception as e:
                         logger.warning(
                             f"⚠️ Ошибка обновления market data для {symbol}: {e}"
@@ -730,6 +775,77 @@ class WebSocketCoordinator:
                     )
         except Exception as e:
             logger.warning(f"⚠️ Ошибка обработки kline для {symbol}: {e}")
+
+    def _ensure_ws_watchdog(self) -> None:
+        if self._ws_watchdog_task and not self._ws_watchdog_task.done():
+            return
+        if not self.data_registry:
+            return
+        try:
+            sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+            if isinstance(sg_cfg, dict):
+                if sg_cfg.get("ws_fresh_max_age") is not None:
+                    self._ws_watchdog_max_age = float(sg_cfg.get("ws_fresh_max_age"))
+                if sg_cfg.get("ws_watchdog_consecutive_stale") is not None:
+                    self._ws_watchdog_stale_threshold = max(
+                        1, int(sg_cfg.get("ws_watchdog_consecutive_stale"))
+                    )
+            else:
+                ws_age = getattr(sg_cfg, "ws_fresh_max_age", None)
+                if ws_age is not None:
+                    self._ws_watchdog_max_age = float(ws_age)
+                threshold_val = getattr(
+                    sg_cfg, "ws_watchdog_consecutive_stale", self._ws_watchdog_stale_threshold
+                )
+                self._ws_watchdog_stale_threshold = max(1, int(threshold_val))
+        except Exception:
+            pass
+        self._ws_watchdog_task = asyncio.create_task(self._ws_watchdog_loop())
+        logger.info("WS watchdog started")
+
+    async def _ws_watchdog_loop(self) -> None:
+        while True:
+            try:
+                try:
+                    symbols = list(self.scalping_config.symbols)
+                except Exception:
+                    symbols = []
+
+                for symbol in symbols:
+                    try:
+                        if not self.data_registry:
+                            continue
+                        if self._last_ticker_processed_ts.get(symbol) is None:
+                            continue
+                        is_fresh = await self.data_registry.is_ws_fresh(
+                            symbol, max_age=self._ws_watchdog_max_age
+                        )
+                        if is_fresh:
+                            if symbol in self._ws_watchdog_stale_counts:
+                                self._ws_watchdog_stale_counts.pop(symbol, None)
+                            continue
+                        stale_count = self._ws_watchdog_stale_counts.get(symbol, 0) + 1
+                        self._ws_watchdog_stale_counts[symbol] = stale_count
+                        if stale_count < self._ws_watchdog_stale_threshold:
+                            continue
+                        now = time.time()
+                        last_ts = self._last_ws_watchdog_trigger.get(symbol, 0)
+                        if now - last_ts < self._ws_watchdog_cooldown:
+                            continue
+                        self._last_ws_watchdog_trigger[symbol] = now
+                        self._ws_watchdog_stale_counts[symbol] = 0
+                        logger.warning(
+                            f"WS_STALE_WATCHDOG {symbol}: "
+                            f"{stale_count} consecutive stale checks (max_age={self._ws_watchdog_max_age:.1f}s), forcing reconnect"
+                        )
+                        await self.force_reconnect(
+                            symbol=symbol, reason="ws_stale_watchdog"
+                        )
+                    except Exception as e:
+                        logger.debug(f"WS watchdog error for {symbol}: {e}")
+            except Exception as e:
+                logger.debug(f"WS watchdog loop error: {e}")
+            await asyncio.sleep(self._ws_watchdog_interval)
 
     def _ensure_rest_candle_polling(self):
         if self._rest_candle_task or not self.client:

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(cd:*)",
+      "Bash(wc:*)",
+      "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\logs\\\\futures\\\\archived\\\\staging_2026-01-25_02-59-21\")",
+      "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\logs\\\\futures\\\\archived\\\\staging_2026-01-25_15-36-51\")",
+      "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\src\\\\strategies\\\\scalping\\\\futures\\\\*.py\")",
+      "Read(//c/**)"
+    ]
+  }
+}

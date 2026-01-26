@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 from src.config import BotConfig
+from .config_view import get_scalping_view
 
 
 class ConfigManager:
@@ -40,7 +41,7 @@ class ConfigManager:
             raw_config_dict: Сырой словарь из YAML (для доступа к полям, которых нет в Pydantic модели)
         """
         self.config = config
-        self.scalping_config = config.scalping
+        self.scalping_config = get_scalping_view(config)
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (26.12.2025): Сохраняем raw YAML для доступа к полям вне модели
         # exit_params находится в корне YAML, но не в BotConfig модели, поэтому нужен raw доступ
         self._raw_config_dict = raw_config_dict or {}

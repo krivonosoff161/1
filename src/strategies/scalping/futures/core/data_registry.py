@@ -10,6 +10,7 @@ DataRegistry - Единый реестр всех данных.
 """
 
 import asyncio
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -45,10 +46,10 @@ class DataRegistry:
             # - XRP/DOGE: 30-60 сек (low liquidity pairs)
             # Решение: Увеличили TTL до 60 сек чтобы избежать ложных ошибок
             source = md.get("source", "WEBSOCKET")
-            if source == "REST_FALLBACK":
-                effective_max_age = 60.0  # REST данные: 60 сек
+            if max_age is not None and max_age > 0:
+                effective_max_age = float(max_age)
             else:
-                effective_max_age = 60.0  # WebSocket: 60 сек (OKX медленно присылает низколиквидные пары)
+                effective_max_age = 60.0
 
             age = (datetime.now() - updated_at).total_seconds()
             if age > effective_max_age:
@@ -96,6 +97,40 @@ class DataRegistry:
         self._rest_fallback_counter: Dict[
             str, int
         ] = {}  # Счетчик fallback для каждого символа
+        self._ws_reconnect_callback = None
+        self._last_ws_reconnect_ts: Dict[str, float] = {}
+        self._ws_reconnect_cooldown = 30.0
+        self._require_ws_source_for_fresh = True
+
+    def set_ws_reconnect_callback(self, callback) -> None:
+        """Установить async callback для инициирования WS reconnect."""
+        self._ws_reconnect_callback = callback
+
+    async def _maybe_trigger_ws_reconnect(
+        self, symbol: str, fallback_count: int, reason: str
+    ) -> None:
+        """Try to trigger WS reconnect with cooldown."""
+        if not self._ws_reconnect_callback:
+            return
+        now = time.time()
+        last_ts = self._last_ws_reconnect_ts.get(symbol, 0)
+        if now - last_ts < self._ws_reconnect_cooldown:
+            return
+        self._last_ws_reconnect_ts[symbol] = now
+        try:
+            try:
+                await self._ws_reconnect_callback(
+                    symbol=symbol, fallback_count=fallback_count, reason=reason
+                )
+            except TypeError:
+                await self._ws_reconnect_callback()
+            logger.warning(
+                f"WS reconnect requested for {symbol} (fallback_count={fallback_count}, reason={reason})"
+            )
+        except Exception as e:
+            logger.debug(
+                f"WS reconnect callback failed for {symbol}: {e}"
+            )
 
     async def is_stale(self, symbol: str) -> bool:
         """Проверяет, устарели ли рыночные данные для символа"""
@@ -106,6 +141,31 @@ class DataRegistry:
                 return True
             age = (datetime.now() - updated_at).total_seconds()
             return age > self.market_data_ttl
+
+    async def is_ws_fresh(self, symbol: str, max_age: float = 3.0) -> bool:
+        """Проверяет, что цена пришла из WS и свежая (для торговли)."""
+        async with self._lock:
+            md = self._market_data.get(symbol, {})
+            updated_at = md.get("updated_at")
+            if not updated_at or not isinstance(updated_at, datetime):
+                return False
+            source = md.get("source", "WEBSOCKET")
+            age = (datetime.now() - updated_at).total_seconds()
+            if self._require_ws_source_for_fresh and source != "WEBSOCKET":
+                logger.debug(
+                    f"DataRegistry.is_ws_fresh({symbol}): source={source} not WEBSOCKET"
+                )
+                return False
+            if age > float(max_age):
+                logger.debug(
+                    f"DataRegistry.is_ws_fresh({symbol}): age={age:.2f}s > max={float(max_age):.2f}s, source={source}"
+                )
+                return False
+            return True
+
+    def set_require_ws_source_for_fresh(self, required: bool) -> None:
+        """Настроить, требует ли is_ws_fresh источник WEBSOCKET."""
+        self._require_ws_source_for_fresh = bool(required)
 
     async def auto_reinit(self, symbol: str, fetch_market_data_callback=None):
         """Автоматически реинициализирует данные, если они устарели"""
@@ -146,7 +206,24 @@ class DataRegistry:
             self._market_data[symbol].update(data)
             self._market_data[symbol]["updated_at"] = datetime.now()
 
+            # Сброс счетчика REST fallback при восстановлении WS-потока
+            try:
+                if self._market_data[symbol].get("source") == "WEBSOCKET":
+                    self._rest_fallback_counter[symbol] = 0
+            except Exception:
+                pass
+
             logger.debug(f"✅ DataRegistry: Обновлены market data для {symbol}")
+            try:
+                updated = self._market_data[symbol].get("updated_at")
+                price = self._market_data[symbol].get("price") or self._market_data[symbol].get("last_price")
+                source = self._market_data[symbol].get("source")
+                age = (datetime.now() - updated).total_seconds() if updated else None
+                logger.debug(
+                    f"▶️ market_data {symbol}: price={price} source={source} age={age:.2f if age is not None else 'N/A'}"
+                )
+            except Exception:
+                pass
 
     async def get_market_data(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
@@ -275,7 +352,9 @@ class DataRegistry:
                                     f"REST fallback count={fallback_count}. "
                                     f"ТРЕБУЕТСЯ RECONNECT WebSocket!"
                                 )
-                                # TODO: Добавить auto-reconnect WebSocket через callback
+                                await self._maybe_trigger_ws_reconnect(
+                                    symbol, fallback_count, "exit_analyzer"
+                                )
                             elif fallback_count > 10:
                                 logger.error(
                                     f"❌ WebSocket для {symbol} часто отстает! "
@@ -382,6 +461,9 @@ class DataRegistry:
                                     f"❌❌❌ КРИТИЧЕСКАЯ ПРОБЛЕМА: WebSocket для {symbol} постоянно отстает! "
                                     f"REST fallback count={fallback_count}. "
                                     f"ТРЕБУЕТСЯ RECONNECT WebSocket!"
+                                )
+                                await self._maybe_trigger_ws_reconnect(
+                                    symbol, fallback_count, "orders"
                                 )
                             elif fallback_count > 10:
                                 logger.error(
@@ -490,6 +572,9 @@ class DataRegistry:
                                     f"REST fallback count={fallback_count}. "
                                     f"ТРЕБУЕТСЯ RECONNECT WebSocket!"
                                 )
+                                await self._maybe_trigger_ws_reconnect(
+                                    symbol, fallback_count, "signals"
+                                )
                             elif fallback_count > 10:
                                 logger.error(
                                     f"❌ WebSocket для {symbol} часто отстает! "
@@ -528,6 +613,23 @@ class DataRegistry:
             MarkPx или None (fallback на обычную цену)
         """
         if not await self._check_market_data_fresh(symbol, max_age=1.0):
+            return None
+
+    async def peek_market_data(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Получить данные из internal market_data без проверок TTL.
+        Используется для анализа/допуска чуть устаревших цен.
+        """
+        async with self._lock:
+            data = self._market_data.get(symbol)
+            if data:
+                updated_at = data.get("updated_at")
+                source = data.get("source")
+                price = data.get("price") or data.get("last_price")
+                logger.debug(
+                    f"peek_market_data {symbol}: price={price} source={source} updated_at={updated_at}"
+                )
+                return dict(data)
             return None
         async with self._lock:
             market_data = self._market_data.get(symbol, {})

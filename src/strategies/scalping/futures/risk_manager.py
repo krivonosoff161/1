@@ -17,6 +17,7 @@ from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
 from src.config import BotConfig
+from .config.config_view import get_scalping_view
 
 from .config.config_manager import ConfigManager
 from .risk.liquidation_protector import LiquidationProtector
@@ -55,7 +56,7 @@ class FuturesRiskManager:
             data_registry: DataRegistry для чтения баланса (опционально)
         """
         self.config = config
-        self.scalping_config = config.scalping
+        self.scalping_config = get_scalping_view(config)
         self.risk_config = config.risk
         self.client = client
         self.config_manager = config_manager

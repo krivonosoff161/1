@@ -71,6 +71,7 @@ from .risk.max_size_limiter import MaxSizeLimiter
 from .risk_manager import FuturesRiskManager
 from .signal_generator import FuturesSignalGenerator
 from .websocket_manager import FuturesWebSocketManager
+from .config.config_view import get_scalping_view
 
 
 class FuturesScalpingOrchestrator:
@@ -92,8 +93,12 @@ class FuturesScalpingOrchestrator:
             config: Конфигурация бота
         """
         self.config = config
-        self.scalping_config = config.scalping
+        self.scalping_config = get_scalping_view(config)
         self.risk_config = config.risk
+        try:
+            setattr(self.config, "scalping", self.scalping_config)
+        except Exception:
+            pass
 
         # 🔴 BUG #27 FIX: Валидация что trading.symbols = scalping.symbols
         trading_symbols = set(config.trading.symbols)
@@ -170,6 +175,16 @@ class FuturesScalpingOrchestrator:
         # ✅ РЕФАКТОРИНГ: Инициализация Core модулей
         self.position_registry = PositionRegistry()
         self.data_registry = DataRegistry()
+        sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+        allow_rest_ws = False
+        if isinstance(sg_cfg, dict):
+            allow_rest_ws = bool(sg_cfg.get("allow_rest_for_ws", False))
+        else:
+            allow_rest_ws = bool(getattr(sg_cfg, "allow_rest_for_ws", False))
+        self.data_registry.set_require_ws_source_for_fresh(not allow_rest_ws)
+        logger.info(
+            f"✅ DataRegistry: require_ws_source_for_fresh={self.data_registry._require_ws_source_for_fresh}"
+        )
 
         # 🛡️ Защиты риска
         self.initial_balance = None  # Для drawdown расчета
@@ -661,7 +676,7 @@ class FuturesScalpingOrchestrator:
         from .risk.margin_monitor import MarginMonitor
 
         self.liquidation_protector = LiquidationProtector(
-            config=config.scalping if hasattr(config, "scalping") else None
+            config=get_scalping_view(config) if config else None
         )
         self.margin_monitor = MarginMonitor(
             config=config.risk if hasattr(config, "risk") else None
@@ -975,6 +990,10 @@ class FuturesScalpingOrchestrator:
             signal_generator=self.signal_generator,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Для проверки готовности перед обработкой тикеров
             orchestrator=self,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Передаем orchestrator для проверки готовности
         )
+        if self.data_registry:
+            self.data_registry.set_ws_reconnect_callback(
+                self.websocket_coordinator.force_reconnect
+            )
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Устанавливаем callback для синхронизации позиций
         self.websocket_coordinator.sync_positions_with_exchange = (
             self._sync_positions_with_exchange

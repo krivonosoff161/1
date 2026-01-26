@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
+from ..config.config_view import get_scalping_view
 
 
 class SignalCoordinator:
@@ -296,7 +297,7 @@ class SignalCoordinator:
                         )
                         continue
 
-                if strength < min_strength:
+                if not signal.get("min_strength_applied") and strength < min_strength:
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличиваем счетчик блокировок
                     self._block_stats["low_strength"] += 1
                     # ✅ НОВОЕ (26.12.2025): Детальное логирование блокировки сигналов
@@ -2354,8 +2355,8 @@ class SignalCoordinator:
 
                 # Проверяем конфиг, можно ли переопределить
                 try:
-                    if hasattr(self.config, "scalping") and self.config.scalping:
-                        scalping_config = self.config.scalping
+                    if self.config:
+                        scalping_config = get_scalping_view(self.config)
                         if hasattr(scalping_config, "order_type"):
                             order_type = getattr(
                                 scalping_config, "order_type", "limit"

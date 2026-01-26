@@ -19,6 +19,7 @@ from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
 from src.config import BotConfig, ScalpingConfig
+from .config.config_view import get_scalping_view
 
 from ..spot.position_manager import TradeResult
 from .calculations.margin_calculator import MarginCalculator
@@ -60,7 +61,7 @@ class FuturesPositionManager:
             margin_calculator: Калькулятор маржи
         """
         self.config = config
-        self.scalping_config = config.scalping
+        self.scalping_config = get_scalping_view(config)
         self.client = client
         self.margin_calculator = margin_calculator
         self.symbol_profiles: Dict[
