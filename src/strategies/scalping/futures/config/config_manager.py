@@ -1594,6 +1594,9 @@ class ConfigManager:
             # Параметры по режиму (ПРИОРИТЕТ 1)
             by_regime = self.to_dict(risk_dict.get("by_regime", {}))
             regime_params = self.to_dict(by_regime.get(regime, {}))
+            logger.info(f"regime_params for {regime}: {regime_params}")
+            logger.info(f"by_regime keys: {list(by_regime.keys()) if by_regime else 'None'}")
+            logger.info(f"risk_dict keys: {list(risk_dict.keys()) if risk_dict else 'None'}")
 
             # 4. Объединяем параметры с приоритетом: режим > баланс > базовые
             # Начинаем с базовых параметров

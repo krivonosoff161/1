@@ -10,10 +10,12 @@ Parameter Provider - �զ+���-�-T� T¦-TǦ��- ���-��T�
 ��T����+�-T¦-T��-Tɦ-��T� �+Tæ-����T��-�-�-�-���� ���-�+�- �� �-�-��T�����TǦ��-�-��T� ���-�-T���T�T¦��-T¦-�-T�T�T� ���-T��-�-��T�T��-�-.
 """
 
+from dataclasses import asdict
 from typing import Any, Dict, Optional
 
 from loguru import logger
 
+from ..parameters.parameter_orchestrator import ParameterOrchestrator
 from .config_manager import ConfigManager
 
 
@@ -30,6 +32,8 @@ class ParameterProvider:
         config_manager: ConfigManager,
         regime_manager=None,  # AdaptiveRegimeManager (�-��TƦ��-�-�-��Ț-�-)
         data_registry=None,  # DataRegistry (�-��TƦ��-�-�-��Ț-�-)
+        parameter_orchestrator: Optional[ParameterOrchestrator] = None,
+        strict_mode: bool = False,
     ):
         """
         �ئ-��TƦ��-�������-TƦ�T� Parameter Provider.
@@ -42,6 +46,8 @@ class ParameterProvider:
         self.config_manager = config_manager
         self.regime_manager = regime_manager
         self.data_registry = data_registry
+        self.parameter_orchestrator = parameter_orchestrator
+        self.strict_mode = bool(strict_mode)
 
         # ��T�T� �+��T� TǦ-T�T¦- ��T����-��Ț�Tæ��-T�T� ���-T��-�-��T�T��-�-
         self._cache: Dict[str, Any] = {}
@@ -49,6 +55,47 @@ class ParameterProvider:
         self._cache_ttl_seconds = 300.0  # ��� �ئ�ߦ�ЦҦۦզݦ� (28.12.2025): ��-������TǦ��-�- T� 60 �+�- 300 T�����Tæ-�+ (5 �-���-T�T�) �+��T� T��-�������-��T� �-�-��T�Tæ�����
 
         logger.info("��� ParameterProvider ���-��TƦ��-��������T��-�-�-�-")
+
+    def _resolve_bundle(
+        self,
+        symbol: str,
+        regime: Optional[str] = None,
+        market_data: Optional[Any] = None,
+        balance: Optional[float] = None,
+        include_signal: bool = True,
+        include_exit: bool = True,
+        include_order: bool = True,
+        include_risk: bool = True,
+        include_patterns: bool = True,
+    ):
+        if not self.parameter_orchestrator:
+            return None
+        bundle = self.parameter_orchestrator.resolve_bundle(
+            symbol=symbol,
+            regime=regime,
+            market_data=market_data,
+            balance=balance,
+            include_signal=include_signal,
+            include_exit=include_exit,
+            include_order=include_order,
+            include_risk=include_risk,
+            include_patterns=include_patterns,
+        )
+        if not bundle.status.valid:
+            logger.error(
+                f"PARAM_ORCH invalid for {symbol} ({regime or 'auto'}): {bundle.status.errors}"
+            )
+            return None
+        return bundle
+
+    @staticmethod
+    def _bundle_to_dict(bundle_section):
+        if bundle_section is None:
+            return None
+        try:
+            return asdict(bundle_section)
+        except Exception:
+            return None
 
     def get_regime_params(
         self,
@@ -78,6 +125,56 @@ class ParameterProvider:
             }
         """
         try:
+            if self.parameter_orchestrator:
+                bundle = self._resolve_bundle(
+                    symbol=symbol,
+                    regime=regime,
+                    balance=balance,
+                    include_signal=True,
+                    include_exit=True,
+                    include_order=False,
+                    include_risk=True,
+                    include_patterns=False,
+                )
+                if bundle:
+                    params = {}
+                    if bundle.signal:
+                        params.update(
+                            {
+                                "min_score_threshold": bundle.signal.min_score_threshold,
+                                "max_trades_per_hour": bundle.signal.max_trades_per_hour,
+                                "position_size_multiplier": bundle.signal.position_size_multiplier,
+                                "min_adx": bundle.signal.min_adx,
+                                "min_signal_strength": bundle.signal.min_signal_strength,
+                            }
+                        )
+                    if bundle.exit:
+                        params.update(
+                            {
+                                "tp_atr_multiplier": bundle.exit.tp_atr_multiplier,
+                                "sl_atr_multiplier": bundle.exit.sl_atr_multiplier,
+                                "max_holding_minutes": bundle.exit.max_holding_minutes,
+                                "min_holding_minutes": bundle.exit.min_holding_minutes,
+                                "tp_percent": bundle.exit.tp_percent,
+                                "sl_percent": bundle.exit.sl_percent,
+                                "tp_min_percent": bundle.exit.tp_min_percent,
+                                "sl_min_percent": bundle.exit.sl_min_percent,
+                            }
+                        )
+                    if bundle.risk:
+                        params.update(
+                            {
+                                "leverage": bundle.risk.leverage,
+                                "position_size_usd": bundle.risk.position_size_usd,
+                                "min_position_usd": bundle.risk.min_position_usd,
+                                "max_position_usd": bundle.risk.max_position_usd,
+                                "max_open_positions": bundle.risk.max_open_positions,
+                                "max_position_percent": bundle.risk.max_position_percent,
+                            }
+                        )
+                    return params
+                if self.strict_mode:
+                    return {}
             # �ަ�T����+����TϦ��- T��������- ��T����� �-�� Tæ��-���-�-
             if not regime:
                 regime = self._get_current_regime(symbol)
@@ -138,6 +235,21 @@ class ParameterProvider:
             }
         """
         try:
+            if self.parameter_orchestrator:
+                bundle = self._resolve_bundle(
+                    symbol=symbol,
+                    regime=regime,
+                    balance=balance,
+                    include_signal=False,
+                    include_exit=True,
+                    include_order=False,
+                    include_risk=False,
+                    include_patterns=False,
+                )
+                if bundle and bundle.exit:
+                    return self._bundle_to_dict(bundle.exit)
+                if self.strict_mode:
+                    return {}
             # �ަ�T����+����TϦ��- T��������- ��T����� �-�� Tæ��-���-�-
             if not regime:
                 regime = self._get_current_regime(symbol)
@@ -669,6 +781,21 @@ class ParameterProvider:
             }
         """
         try:
+            if self.parameter_orchestrator:
+                bundle = self._resolve_bundle(
+                    symbol=symbol,
+                    regime=regime,
+                    balance=balance,
+                    include_signal=False,
+                    include_exit=False,
+                    include_order=False,
+                    include_risk=True,
+                    include_patterns=False,
+                )
+                if bundle and bundle.risk:
+                    return self._bundle_to_dict(bundle.risk)
+                if self.strict_mode:
+                    return {}
             # �ަ�T����+����TϦ��- T��������- ��T����� �-�� Tæ��-���-�-
             if not regime:
                 regime = self._get_current_regime(symbol)

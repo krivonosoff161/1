@@ -122,6 +122,9 @@ class WebSocketCoordinator:
         self.sync_positions_with_exchange = None  # Будет установлен из orchestrator
         # ✅ Дедупликация тикеров: кэш последних цен
         self.last_prices: Dict[str, float] = {}  # symbol -> price
+        # Track ticker 24h volume to derive per-tick deltas (for candle volume)
+        self._last_volume_ccy_24h: Dict[str, float] = {}
+        self._last_volume_24h: Dict[str, float] = {}
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Отслеживание последнего timestamp для каждого символа и таймфрейма
         # Формат: "symbol_timeframe" -> timestamp последней обработанной свечи (в секундах)
@@ -795,7 +798,9 @@ class WebSocketCoordinator:
                 if ws_age is not None:
                     self._ws_watchdog_max_age = float(ws_age)
                 threshold_val = getattr(
-                    sg_cfg, "ws_watchdog_consecutive_stale", self._ws_watchdog_stale_threshold
+                    sg_cfg,
+                    "ws_watchdog_consecutive_stale",
+                    self._ws_watchdog_stale_threshold,
                 )
                 self._ws_watchdog_stale_threshold = max(1, int(threshold_val))
         except Exception:
@@ -826,6 +831,11 @@ class WebSocketCoordinator:
                             continue
                         stale_count = self._ws_watchdog_stale_counts.get(symbol, 0) + 1
                         self._ws_watchdog_stale_counts[symbol] = stale_count
+                        if stale_count >= 1:  # Логируем при первом stale
+                            logger.debug(
+                                f"WS_STALE_DETECTED {symbol}: stale_count={stale_count}/{self._ws_watchdog_stale_threshold}, "
+                                f"max_age={self._ws_watchdog_max_age:.1f}s"
+                            )
                         if stale_count < self._ws_watchdog_stale_threshold:
                             continue
                         now = time.time()
@@ -932,6 +942,29 @@ class WebSocketCoordinator:
 
         logger.info(f"✅ REST candle polling: обновлено {updated_count} свечей")
 
+    def _get_ticker_volume_delta(
+        self, symbol: str, volume_ccy_24h: float, volume_24h: float
+    ) -> float:
+        """
+        Estimate per-tick volume using 24h rolling volume from ticker.
+        Returns 0 on first observation or if the counter resets.
+        """
+        if volume_ccy_24h and volume_ccy_24h > 0:
+            last = self._last_volume_ccy_24h.get(symbol)
+            self._last_volume_ccy_24h[symbol] = volume_ccy_24h
+            if last is None or volume_ccy_24h < last:
+                return 0.0
+            return max(0.0, volume_ccy_24h - last)
+
+        if volume_24h and volume_24h > 0:
+            last = self._last_volume_24h.get(symbol)
+            self._last_volume_24h[symbol] = volume_24h
+            if last is None or volume_24h < last:
+                return 0.0
+            return max(0.0, volume_24h - last)
+
+        return 0.0
+
     async def _update_candle_from_ticker(
         self, symbol: str, price: float, ticker: Dict[str, Any]
     ) -> None:
@@ -957,22 +990,25 @@ class WebSocketCoordinator:
             current_time = datetime.now()
             current_timestamp = current_time.timestamp()
 
-            # Определяем объем из тикера (если доступен)
-            volume_ccy_24h = float(ticker.get("volCcy24h", 0))
-            # Используем volume_ccy_24h для более точного расчета объема в USDT
+            # Derive per-tick volume delta from 24h rolling volume (quote or base).
+            volume_ccy_24h = float(ticker.get("volCcy24h", 0) or 0)
+            volume_24h = float(ticker.get("vol24h", 0) or 0)
+            volume_delta = self._get_ticker_volume_delta(
+                symbol, volume_ccy_24h, volume_24h
+            )
 
             # ✅ КРИТИЧЕСКОЕ: Обновляем свечи для всех таймфреймов
             await self._update_candle_for_timeframe(
-                symbol, "1m", price, current_timestamp, volume_ccy_24h
+                symbol, "1m", price, current_timestamp, volume_delta
             )
             await self._update_candle_for_timeframe(
-                symbol, "5m", price, current_timestamp, volume_ccy_24h
+                symbol, "5m", price, current_timestamp, volume_delta
             )
             await self._update_candle_for_timeframe(
-                symbol, "1H", price, current_timestamp, volume_ccy_24h
+                symbol, "1H", price, current_timestamp, volume_delta
             )
             await self._update_candle_for_timeframe(
-                symbol, "1D", price, current_timestamp, volume_ccy_24h
+                symbol, "1D", price, current_timestamp, volume_delta
             )
 
         except Exception as e:
@@ -1046,13 +1082,21 @@ class WebSocketCoordinator:
 
             if last_candle and last_candle_timestamp == current_candle_timestamp:
                 # Та же свеча (еще формируется) → обновляем
+                new_volume = None
+                if volume is not None:
+                    base_volume = (
+                        last_candle.volume
+                        if last_candle and last_candle.volume
+                        else 0.0
+                    )
+                    new_volume = base_volume + max(volume, 0.0)
                 await self.data_registry.update_last_candle(
                     symbol=symbol,
                     timeframe=timeframe,
                     high=max(price, last_candle.high) if last_candle else price,
                     low=min(price, last_candle.low) if last_candle else price,
                     close=price,
-                    # volume будет обновляться накоплением (можно улучшить)
+                    volume=new_volume,
                 )
             else:
                 # Новая свеча → закрываем старую (если была) и создаем новую
@@ -1074,7 +1118,7 @@ class WebSocketCoordinator:
                     high=price,
                     low=price,
                     close=price,
-                    volume=0.0,  # Объем будет накапливаться
+                    volume=max(volume or 0.0, 0.0),
                     timeframe=timeframe,
                 )
 
@@ -1113,6 +1157,7 @@ class WebSocketCoordinator:
                             high=new_candle.high,
                             low=new_candle.low,
                             close=new_candle.close,
+                            volume=new_candle.volume,
                         )
                     except Exception as e:
                         logger.debug(

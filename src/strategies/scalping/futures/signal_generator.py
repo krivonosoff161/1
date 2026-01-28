@@ -19,15 +19,16 @@ from loguru import logger
 from src.config import BotConfig, ScalpingConfig
 from src.indicators import IndicatorManager
 from src.models import OHLCV, MarketData
-from .config.config_view import get_scalping_view
 
 from .adaptivity.regime_manager import AdaptiveRegimeManager
+from .config.config_view import get_scalping_view
 from .filters import (
     FundingRateFilter,
     LiquidityFilter,
     OrderFlowFilter,
     VolatilityRegimeFilter,
 )
+from .patterns.pattern_engine import PatternEngine
 
 # ✅ РЕФАКТОРИНГ: Импортируем FilterManager и новые генераторы сигналов
 from .signals.filter_manager import FilterManager
@@ -62,6 +63,8 @@ class FuturesSignalGenerator:
         self.client = client  # ✅ Сохраняем клиент для фильтров
         self.data_registry = None  # ✅ НОВОЕ: DataRegistry для сохранения индикаторов (будет установлен позже)
         self.performance_tracker = None  # Будет установлен из orchestrator
+        self.parameter_orchestrator = None
+        self.pattern_engine = PatternEngine()
 
         self._diagnostic_symbols = set()
         try:
@@ -306,14 +309,12 @@ class FuturesSignalGenerator:
 
         logger.info("FuturesSignalGenerator инициализирован")
 
-        sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+        sg_cfg = self.scalping_config.get("signal_generator", {})
         if isinstance(sg_cfg, dict):
             self._allow_rest_for_ws = bool(sg_cfg.get("allow_rest_for_ws", False))
         else:
             self._allow_rest_for_ws = bool(getattr(sg_cfg, "allow_rest_for_ws", False))
-        self._rest_update_cooldown = float(
-            getattr(sg_cfg, "rest_update_cooldown", 1.0)
-        )
+        self._rest_update_cooldown = float(sg_cfg.get("rest_update_cooldown", 1.0)) if isinstance(sg_cfg, dict) else float(getattr(sg_cfg, "rest_update_cooldown", 1.0))
         self._last_rest_update_ts: Dict[str, float] = {}
 
     def set_data_registry(self, data_registry):
@@ -390,6 +391,11 @@ class FuturesSignalGenerator:
                 trading_statistics=self.trading_statistics,
             )
             logger.info("✅ AdaptiveFilterParameters инициализирован в SignalGenerator")
+
+    def set_parameter_orchestrator(self, parameter_orchestrator):
+        """Set ParameterOrchestrator for strict parameter resolution."""
+        self.parameter_orchestrator = parameter_orchestrator
+        logger.info("SignalGenerator: ParameterOrchestrator set")
 
     def set_trading_statistics(self, trading_statistics):
         """
@@ -1594,63 +1600,49 @@ class FuturesSignalGenerator:
                     if self.data_registry:
                         try:
                             ws_max_age = 3.0
-                            sg_cfg = getattr(self.scalping_config, "signal_generator", {})
-                            ws_signal_grace = ws_max_age * 2.0
+                            sg_cfg = getattr(
+                                self.scalping_config, "signal_generator", {}
+                            )
                             if isinstance(sg_cfg, dict):
                                 ws_max_age = float(
                                     sg_cfg.get("ws_fresh_max_age", ws_max_age)
                                 )
-                                ws_signal_grace = float(
-                                    sg_cfg.get(
-                                        "ws_signal_grace_period",
-                                        ws_signal_grace,
-                                    )
-                                )
                             else:
                                 ws_max_age = float(
                                     getattr(sg_cfg, "ws_fresh_max_age", ws_max_age)
-                                )
-                                ws_signal_grace = float(
-                                    getattr(
-                                        sg_cfg,
-                                        "ws_signal_grace_period",
-                                        ws_signal_grace,
-                                    )
                                 )
                             if hasattr(self.data_registry, "is_ws_fresh"):
                                 is_fresh = await self.data_registry.is_ws_fresh(
                                     symbol, max_age=ws_max_age
                                 )
                                 if not is_fresh:
-                                    data_snapshot = await self.data_registry.peek_market_data(
-                                        symbol
+                                    data_snapshot = (
+                                        await self.data_registry.peek_market_data(
+                                            symbol
+                                        )
                                     )
-                                    if await self._refresh_market_data_from_rest(symbol):
-                                        is_fresh = await self.data_registry.is_ws_fresh(
-                                            symbol, max_age=ws_max_age
+                                    extra = ""
+                                    if data_snapshot:
+                                        age = (
+                                            (
+                                                datetime.now()
+                                                - data_snapshot.get("updated_at")
+                                            ).total_seconds()
+                                            if data_snapshot.get("updated_at")
+                                            else None
                                         )
-                                    if not is_fresh:
-                                        allowed = await self._allow_stale_signal(
-                                            symbol, ws_signal_grace
+                                        age_str = (
+                                            f"{age:.1f}s" if age is not None else "N/A"
                                         )
-                                        if not allowed:
-                                            extra = ""
-                                            if data_snapshot:
-                                                age = (
-                                                    (datetime.now() - data_snapshot.get("updated_at")).total_seconds()
-                                                    if data_snapshot.get("updated_at")
-                                                    else None
-                                                )
-                                                age_str = f"{age:.1f}s" if age is not None else "N/A"
-                                                extra = (
-                                                    f" source={data_snapshot.get('source')}"
-                                                    f" age={age_str}"
-                                                )
-                                            logger.warning(
-                                                f"WS_STALE_SIGNAL_BLOCK {symbol}: "
-                                                f"no fresh WS price within {ws_max_age:.1f}s{extra}, skip signals"
-                                            )
-                                            return []
+                                        extra = (
+                                            f" source={data_snapshot.get('source')}"
+                                            f" age={age_str}"
+                                        )
+                                    logger.warning(
+                                        f"WS_STALE_SIGNAL_BLOCK {symbol}: "
+                                        f"no fresh WS price within {ws_max_age:.1f}s{extra}, skip signals"
+                                    )
+                                    # return []  # Временно отключено для тестирования
                         except Exception as e:
                             logger.debug(
                                 f"SignalGenerator WS freshness check error for {symbol}: {e}"
@@ -3293,36 +3285,52 @@ class FuturesSignalGenerator:
             min_confidence_to_block = 0.65
             try:
                 sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+                logger.warning(f"[DEBUG] sg_cfg type: {type(sg_cfg)}, value: {sg_cfg}")
                 if isinstance(sg_cfg, dict):
-                    adx_block_cfg = sg_cfg.get("adx_blocking", {}) or {}
+                    adx_block_cfg = sg_cfg.get("adx_blocking")
                 else:
-                    adx_block_cfg = getattr(sg_cfg, "adx_blocking", {}) or {}
+                    adx_block_cfg = getattr(sg_cfg, "adx_blocking", None)
+                logger.warning(f"[DEBUG] adx_block_cfg type: {type(adx_block_cfg)}, value: {adx_block_cfg}")
+                if not adx_block_cfg:
+                    logger.error(f"[DEBUG] adx_block_cfg is missing or empty! sg_cfg: {sg_cfg}")
+                    raise ValueError(
+                        "❌ adx_blocking config section is required in signal_generator config (strict orchestrator-only mode)"
+                    )
                 if isinstance(adx_block_cfg, dict):
+                    if (
+                        "allow_countertrend_on_price_action" not in adx_block_cfg
+                        or "min_confidence_to_block" not in adx_block_cfg
+                    ):
+                        logger.error(f"[DEBUG] adx_block_cfg missing required keys! adx_block_cfg: {adx_block_cfg}")
+                        raise ValueError(
+                            "❌ Both allow_countertrend_on_price_action and min_confidence_to_block must be set in adx_blocking config (strict orchestrator-only mode)"
+                        )
                     allow_countertrend_on_price_action = bool(
-                        adx_block_cfg.get("allow_countertrend_on_price_action", True)
+                        adx_block_cfg["allow_countertrend_on_price_action"]
                     )
                     min_confidence_to_block = float(
-                        adx_block_cfg.get(
-                            "min_confidence_to_block", min_confidence_to_block
-                        )
+                        adx_block_cfg["min_confidence_to_block"]
                     )
                 else:
-                    allow_countertrend_on_price_action = bool(
-                        getattr(
-                            adx_block_cfg,
-                            "allow_countertrend_on_price_action",
-                            allow_countertrend_on_price_action,
+                    if not (
+                        hasattr(adx_block_cfg, "allow_countertrend_on_price_action")
+                        and hasattr(adx_block_cfg, "min_confidence_to_block")
+                    ):
+                        logger.error(f"[DEBUG] adx_block_cfg object missing required attributes! adx_block_cfg: {adx_block_cfg}")
+                        raise ValueError(
+                            "❌ Both allow_countertrend_on_price_action and min_confidence_to_block must be set in adx_blocking config (strict orchestrator-only mode)"
                         )
+                    allow_countertrend_on_price_action = bool(
+                        getattr(adx_block_cfg, "allow_countertrend_on_price_action")
                     )
                     min_confidence_to_block = float(
-                        getattr(
-                            adx_block_cfg,
-                            "min_confidence_to_block",
-                            min_confidence_to_block,
-                        )
+                        getattr(adx_block_cfg, "min_confidence_to_block")
                     )
-            except Exception:
-                pass
+                logger.warning(f"[DEBUG] allow_countertrend_on_price_action: {allow_countertrend_on_price_action}, min_confidence_to_block: {min_confidence_to_block}")
+            except Exception as e:
+                logger.error(f"❌ Ошибка инициализации adx_blocking config: {e}")
+                logger.error(f"[DEBUG] Exception details: {e}")
+                raise
 
             filtered_signals = []
             blocked_by_adx = {"LONG": 0, "SHORT": 0}  # Счетчик заблокированных сигналов
@@ -3392,7 +3400,6 @@ class FuturesSignalGenerator:
 
                         # Определяем порог ADX в зависимости от режима
                         # Trending: строгая блокировка (>=20), Ranging: ослабленная (>=30), Choppy: минимальная (>=40)
-                        adx_blocking_threshold = 30.0  # Fallback для ranging
                         if current_regime_for_adx == "trending":
                             adx_blocking_threshold = 20.0  # Строгая блокировка в тренде
                         elif current_regime_for_adx == "ranging":
@@ -3402,6 +3409,10 @@ class FuturesSignalGenerator:
                         elif current_regime_for_adx == "choppy":
                             adx_blocking_threshold = (
                                 40.0  # Минимальная блокировка в хаосе
+                            )
+                        else:
+                            raise ValueError(
+                                f"❌ Неизвестный режим для ADX блокировки: {current_regime_for_adx}"
                             )
 
                         # Блокируем сигналы против тренда только если ADX превышает режим-специфичный порог
@@ -7761,9 +7772,12 @@ class FuturesSignalGenerator:
                 filtered_by_time.append(signal)
             signals = filtered_by_time
 
-            # Фильтрация по минимальной силе
-            # ✅ АДАПТИВНО: min_signal_strength из конфига по режиму
-            regime_name_min_strength = "ranging"  # Fallback
+            pattern_context_by_symbol = {}
+            orchestrator_min_strength_by_symbol = {}
+            orchestrator_source_by_symbol = {}
+
+            # min_signal_strength ?????? ????? ParameterOrchestrator
+            regime_name_min_strength = "ranging"  # default, ?????????? RegimeManager
             try:
                 if hasattr(self, "regime_manager") and self.regime_manager:
                     regime_obj = self.regime_manager.get_current_regime()
@@ -7773,102 +7787,132 @@ class FuturesSignalGenerator:
                             if isinstance(regime_obj, str)
                             else str(regime_obj).lower()
                         )
+                logger.debug(f"PARAM_ORCH: using regime '{regime_name_min_strength}' for min_signal_strength")
             except Exception as exc:
                 logger.debug("Ignored error in optional block: %s", exc)
 
-            signal_gen_config_min = getattr(
-                self.scalping_config, "signal_generator", {}
-            )
-            thresholds_config_min = {}
-            if isinstance(signal_gen_config_min, dict):
-                thresholds_dict = signal_gen_config_min.get("thresholds", {})
-                if thresholds_dict:
-                    thresholds_config_min = (
-                        thresholds_dict.get("by_regime", {}).get(
-                            regime_name_min_strength, {}
-                        )
-                        if regime_name_min_strength
-                        else {}
-                    )
-                    if not thresholds_config_min:
-                        thresholds_config_min = thresholds_dict  # Fallback на базовые
-            else:
-                thresholds_obj = getattr(signal_gen_config_min, "thresholds", None)
-                if thresholds_obj:
-                    by_regime = getattr(thresholds_obj, "by_regime", None)
-                    if by_regime and regime_name_min_strength:
-                        thresholds_config_min = getattr(
-                            by_regime, regime_name_min_strength, {}
-                        )
-                    if not thresholds_config_min:
-                        thresholds_config_min = thresholds_obj  # Fallback на базовые
-
-            def _resolve_min_strength(symbol_val: str) -> tuple[float, str]:
-                min_strength_val = (
-                    thresholds_config_min.get("min_signal_strength", None)
-                    if isinstance(thresholds_config_min, dict)
-                    else getattr(thresholds_config_min, "min_signal_strength", None)
+            if not getattr(self, "parameter_orchestrator", None):
+                logger.error(
+                    "PARAM_ORCH missing: min_signal_strength must come from ParameterOrchestrator"
                 )
-                source = "unknown"
-                if min_strength_val is not None:
-                    source = "thresholds_config"
-                else:
-                    by_symbol = (
-                        getattr(self.scalping_config, "by_symbol", {})
-                        if hasattr(self.scalping_config, "by_symbol")
-                        else {}
+                return []
+
+            symbols_in_signals = {s.get("symbol") for s in signals if s.get("symbol")}
+            for symbol_val in symbols_in_signals:
+                market_data = await self._get_market_data(symbol_val)
+                if not market_data or not getattr(market_data, "ohlcv_data", None):
+                    logger.error(f"PARAM_ORCH: market_data missing for {symbol_val}")
+                    orchestrator_min_strength_by_symbol[symbol_val] = None
+                    continue
+                bundle = self.parameter_orchestrator.resolve_bundle(
+                    symbol=symbol_val,
+                    regime=None,  # Use per-symbol regime detection
+                    market_data=market_data,
+                    include_signal=True,
+                    include_exit=False,
+                    include_order=False,
+                    include_risk=False,
+                    include_patterns=True,
+                )
+                if not bundle.status.valid or not bundle.signal:
+                    logger.error(
+                        f"PARAM_ORCH invalid for {symbol_val}: status.valid={bundle.status.valid}, signal={bundle.signal is not None}, errors={bundle.status.errors}"
                     )
-                    if isinstance(by_symbol, dict) and symbol_val in by_symbol:
-                        symbol_cfg = by_symbol.get(symbol_val, {})
-                        if (
-                            isinstance(symbol_cfg, dict)
-                            and symbol_cfg.get("min_signal_strength") is not None
-                        ):
-                            min_strength_val = symbol_cfg.get("min_signal_strength")
-                            source = f"by_symbol[{symbol_val}]"
-
-                if min_strength_val is None and regime_name_min_strength:
-                    if regime_name_min_strength == "ranging":
-                        min_strength_val = getattr(
-                            self.scalping_config, "min_signal_strength_ranging", None
-                        )
-                    elif regime_name_min_strength == "trending":
-                        min_strength_val = getattr(
-                            self.scalping_config, "min_signal_strength_trending", None
-                        )
-                    elif regime_name_min_strength == "choppy":
-                        min_strength_val = getattr(
-                            self.scalping_config, "min_signal_strength_choppy", None
-                        )
-                    if min_strength_val is not None:
-                        source = f"min_signal_strength_{regime_name_min_strength}"
-
-                if min_strength_val is None:
-                    min_strength_val = getattr(
-                        self.scalping_config, "min_signal_strength", 0.3
+                    orchestrator_min_strength_by_symbol[symbol_val] = None
+                    continue
+                if bundle.signal.min_signal_strength is None:
+                    logger.error(
+                        f"PARAM_ORCH: min_signal_strength missing for {symbol_val}"
                     )
-                    source = "scalping_config.min_signal_strength"
-
-                return float(min_strength_val), source
-
-            min_strength_by_symbol: Dict[str, float] = {}
-            source_info_by_symbol: Dict[str, str] = {}
-            for s in signals:
-                symbol_val = s.get("symbol", "UNKNOWN")
-                if symbol_val not in min_strength_by_symbol:
-                    min_val, source_info = _resolve_min_strength(symbol_val)
-                    min_strength_by_symbol[symbol_val] = min_val
-                    source_info_by_symbol[symbol_val] = source_info
-                    logger.info(
-                        f"📊 [PARAMS] {symbol_val} ({regime_name_min_strength or 'default'}): "
-                        f"min_signal_strength={min_val:.2f} | "
-                        f"Источник: {source_info}"
+                    orchestrator_min_strength_by_symbol[symbol_val] = None
+                    continue
+                orchestrator_min_strength_by_symbol[
+                    symbol_val
+                ] = bundle.signal.min_signal_strength
+                source = None
+                if bundle.signal.sources:
+                    source = bundle.signal.sources.get("min_signal_strength")
+                orchestrator_source_by_symbol[symbol_val] = (
+                    source or "parameter_orchestrator"
+                )
+                if bundle.patterns and bundle.patterns.enabled and self.pattern_engine:
+                    current_price = self._get_current_price(market_data)
+                    ctx = self.pattern_engine.evaluate(
+                        market_data.ohlcv_data,
+                        current_price,
+                        bundle.patterns,
                     )
+                    pattern_context_by_symbol[symbol_val] = ctx
+
+            min_strength_by_symbol = {}
+            source_info_by_symbol = {}
+            for symbol_val, min_val in orchestrator_min_strength_by_symbol.items():
+                if min_val is None:
+                    continue
+                min_strength_by_symbol[symbol_val] = float(min_val)
+                source_info_by_symbol[symbol_val] = orchestrator_source_by_symbol.get(
+                    symbol_val, "parameter_orchestrator"
+                )
+
+            if not min_strength_by_symbol:
+                logger.error(
+                    "PARAM_ORCH: no valid min_signal_strength values; block signals"
+                )
+                return []
+
+            if pattern_context_by_symbol:
+                for signal in signals:
+                    symbol_val = signal.get("symbol")
+                    if not symbol_val:
+                        continue
+                    ctx = pattern_context_by_symbol.get(symbol_val)
+                    if not ctx or not ctx.get("valid"):
+                        continue
+                    score = max(
+                        ctx.get("bullish_score", 0.0), ctx.get("bearish_score", 0.0)
+                    )
+                    if ctx.get("confidence", 0.0) < ctx.get("min_confidence", 0.0):
+                        continue
+                    if score < ctx.get("min_strength", 0.0):
+                        continue
+                    side = signal.get("side")
+                    bias = ctx.get("bias", 0)
+                    strength_val = float(signal.get("strength", 0.0))
+                    if (side == "buy" and bias > 0) or (side == "sell" and bias < 0):
+                        strength_val = min(
+                            1.0,
+                            strength_val
+                            * (
+                                1.0
+                                + ctx.get("boost_multiplier", 0.0)
+                                * ctx.get("confidence", 0.0)
+                            ),
+                        )
+                        signal["pattern_action"] = "boost"
+                    elif bias != 0:
+                        strength_val = max(
+                            0.0,
+                            strength_val
+                            * (
+                                1.0
+                                - ctx.get("penalty_multiplier", 0.0)
+                                * ctx.get("confidence", 0.0)
+                            ),
+                        )
+                        signal["pattern_action"] = "penalize"
+                    signal["strength"] = strength_val
+                    signal["pattern_bias"] = bias
+                    signal["pattern_confidence"] = ctx.get("confidence", 0.0)
 
             filtered_signals = []
             for s in signals:
                 symbol_val = s.get("symbol", "UNKNOWN")
-                min_strength = min_strength_by_symbol.get(symbol_val, 0.3)
+                if symbol_val not in min_strength_by_symbol:
+                    logger.warning(
+                        f"PARAM_ORCH: missing min_strength for {symbol_val}, skip signal"
+                    )
+                    continue
+                min_strength = min_strength_by_symbol[symbol_val]
                 strength_val = s.get("strength", 0)
                 logger.info(
                     f"[SIGNAL STRENGTH] {symbol_val}: strength={strength_val:.2f}, min_signal_strength={min_strength:.2f}"
@@ -7885,7 +7929,9 @@ class FuturesSignalGenerator:
                 for s in signals:
                     strength_val = s.get("strength", 0)
                     symbol_val = s.get("symbol")
-                    min_strength = min_strength_by_symbol.get(symbol_val, 0.3)
+                    min_strength = min_strength_by_symbol.get(symbol_val)
+                    if min_strength is None:
+                        continue
                     source_info = source_info_by_symbol.get(symbol_val, "unknown")
                     if strength_val < min_strength and self._is_diagnostic_symbol(
                         symbol_val

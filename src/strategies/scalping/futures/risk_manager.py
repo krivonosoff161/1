@@ -845,9 +845,9 @@ class FuturesRiskManager:
                     max_usd_size = min_usd_size
 
             if position_overrides.get("max_position_percent") is not None:
-                balance_profile["max_position_percent"] = float(
-                    position_overrides["max_position_percent"]
-                )
+                max_pct = position_overrides["max_position_percent"]
+                if max_pct is not None:
+                    balance_profile["max_position_percent"] = float(max_pct)
 
             # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
             if min_usd_size is None or min_usd_size <= 0:

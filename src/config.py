@@ -221,6 +221,9 @@ class ScalpingConfig(BaseModel):
     # Balance Profiles - адаптивные параметры по размеру баланса
     balance_profiles: Dict[str, BalanceProfile] = Field(default_factory=dict)
     
+
+    # ✅ КРИТИЧЕСКОЕ: Signal Generator конфигурация (fail-fast)
+    signal_generator: Dict[str, Any] = Field(default_factory=dict)
     # ✅ НОВОЕ: Order Executor конфигурация
     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем Dict без Optional, чтобы Pydantic загружал из YAML
     # Проблема: Pydantic v2 с extra="allow" может не загружать поля с default_factory=dict
@@ -620,8 +623,8 @@ class BotConfig(BaseModel):
 
         config_obj = cls(**raw_config)
         
-        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если order_executor не загрузился через Pydantic,
-        # загружаем его вручную из raw_config
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если order_executor или signal_generator не загрузились через Pydantic,
+        # загружаем их вручную из raw_config
         if hasattr(config_obj, "scalping") and "scalping" in raw_config:
             scalping_raw = raw_config["scalping"]
             if "order_executor" in scalping_raw:
@@ -638,6 +641,17 @@ class BotConfig(BaseModel):
                         # Для Pydantic модели устанавливаем через setattr (более надежно, чем __dict__)
                         setattr(config_obj.scalping, "order_executor", order_executor_raw)
                         logger.debug(f"✅ order_executor установлен через setattr: {type(getattr(config_obj.scalping, 'order_executor', None))}")
+            
+            # Аналогичная обработка для signal_generator
+            if "signal_generator" in scalping_raw:
+                signal_generator_raw = scalping_raw["signal_generator"]
+                # Всегда устанавливаем, даже если пустой
+                logger.debug(f"✅ signal_generator найден в raw_config, keys: {list(signal_generator_raw.keys()) if isinstance(signal_generator_raw, dict) else 'not dict'}")
+                setattr(config_obj.scalping, "signal_generator", signal_generator_raw)
+                logger.debug(f"✅ signal_generator установлен, проверка: {getattr(config_obj.scalping, 'signal_generator', {}).get('ws_fresh_max_age', 'NOT SET')}")
+                logger.debug(f"✅ signal_generator установлен: {type(getattr(config_obj.scalping, 'signal_generator', None))}")
+            else:
+                logger.debug("❌ signal_generator не найден в raw_config")
         
         return config_obj
 

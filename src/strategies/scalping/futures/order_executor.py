@@ -19,8 +19,9 @@ from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
 from src.config import BotConfig, ScalpingConfig
-from .config.config_view import get_scalping_view
 from src.strategies.modules.slippage_guard import SlippageGuard
+
+from .config.config_view import get_scalping_view
 
 
 class FuturesOrderExecutor:
@@ -155,17 +156,9 @@ class FuturesOrderExecutor:
                 else:
                     oe_cfg = getattr(self.scalping_config, "order_executor", {})
                 if isinstance(oe_cfg, dict):
-                    require_ws_fresh = bool(
-                        oe_cfg.get("require_ws_fresh_for_entries", True)
-                    )
                     ws_max_age = float(oe_cfg.get("ws_fresh_max_age", ws_max_age))
                 else:
-                    require_ws_fresh = bool(
-                        getattr(oe_cfg, "require_ws_fresh_for_entries", True)
-                    )
-                    ws_max_age = float(
-                        getattr(oe_cfg, "ws_fresh_max_age", ws_max_age)
-                    )
+                    ws_max_age = float(getattr(oe_cfg, "ws_fresh_max_age", ws_max_age))
             except Exception:
                 pass
             if (

@@ -34,6 +34,7 @@ from ..spot.performance_tracker import PerformanceTracker
 # ✅ РЕФАКТОРИНГ: Импортируем новые модули
 from .calculations.margin_calculator import MarginCalculator
 from .config.config_manager import ConfigManager
+from .config.config_view import get_scalping_view
 from .config.parameter_provider import ParameterProvider
 from .coordinators.exit_decision_coordinator import (
     ExitDecisionCoordinator,  # ✅ НОВОЕ (26.12.2025): Координатор решений о закрытии
@@ -56,6 +57,7 @@ from .indicators.order_flow_indicator import OrderFlowIndicator
 from .logging.logger_factory import LoggerFactory
 from .logging.structured_logger import StructuredLogger
 from .order_executor import FuturesOrderExecutor
+from .parameters.parameter_orchestrator import ParameterOrchestrator
 from .position_manager import FuturesPositionManager
 from .positions.entry_manager import EntryManager
 from .positions.exit_analyzer import (
@@ -71,7 +73,6 @@ from .risk.max_size_limiter import MaxSizeLimiter
 from .risk_manager import FuturesRiskManager
 from .signal_generator import FuturesSignalGenerator
 from .websocket_manager import FuturesWebSocketManager
-from .config.config_view import get_scalping_view
 
 
 class FuturesScalpingOrchestrator:
@@ -94,6 +95,13 @@ class FuturesScalpingOrchestrator:
         """
         self.config = config
         self.scalping_config = get_scalping_view(config)
+        from loguru import logger
+        logger.warning(f"[DEBUG] scalping_config type: {type(self.scalping_config)}")
+        try:
+            import json
+            logger.warning(f"[DEBUG] scalping_config as dict: {self.scalping_config.__dict__ if hasattr(self.scalping_config, '__dict__') else self.scalping_config}")
+        except Exception as e:
+            logger.error(f"[DEBUG] Exception while logging scalping_config: {e}")
         self.risk_config = config.risk
         try:
             setattr(self.config, "scalping", self.scalping_config)
@@ -141,7 +149,8 @@ class FuturesScalpingOrchestrator:
                     logger.debug(f"✅ Raw config загружен из {config_path}")
                     break
         except Exception as e:
-            logger.warning(f"⚠️ Не удалось загрузить raw config для exit_params: {e}")
+            logger.error(f"ERROR loading raw config YAML: {e}")
+            raise
 
         self.config_manager = ConfigManager(config, raw_config_dict=raw_config_dict)
 
@@ -175,12 +184,13 @@ class FuturesScalpingOrchestrator:
         # ✅ РЕФАКТОРИНГ: Инициализация Core модулей
         self.position_registry = PositionRegistry()
         self.data_registry = DataRegistry()
-        sg_cfg = getattr(self.scalping_config, "signal_generator", {})
-        allow_rest_ws = False
-        if isinstance(sg_cfg, dict):
-            allow_rest_ws = bool(sg_cfg.get("allow_rest_for_ws", False))
-        else:
-            allow_rest_ws = bool(getattr(sg_cfg, "allow_rest_for_ws", False))
+
+        # ✅ FAIL-FAST: Проверка наличия signal_generator config
+        sg_cfg = self.scalping_config.get("signal_generator", None)
+        if not sg_cfg or not isinstance(sg_cfg, dict) or len(sg_cfg) == 0:
+            logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: signal_generator config отсутствует или пуст! sg_cfg={sg_cfg}")
+            raise ValueError("❌ КРИТИЧЕСКАЯ ОШИБКА: signal_generator config отсутствует или пуст! Проверьте config_futures.yaml → scalping.signal_generator")
+        allow_rest_ws = bool(sg_cfg.get("allow_rest_for_ws", False))
         self.data_registry.set_require_ws_source_for_fresh(not allow_rest_ws)
         logger.info(
             f"✅ DataRegistry: require_ws_source_for_fresh={self.data_registry._require_ws_source_for_fresh}"
@@ -345,7 +355,9 @@ class FuturesScalpingOrchestrator:
 
         # Торговые модули
         # ✅ Передаем клиент в signal_generator для инициализации фильтров
+        logger.warning(f"[DEBUG] signal_generator config before init: {self.scalping_config.get('signal_generator', None)}")
         self.signal_generator = FuturesSignalGenerator(config, client=self.client)
+        logger.warning(f"[DEBUG] signal_generator after init: {self.signal_generator}")
         # ✅ НОВОЕ: Передаем trading_statistics в signal_generator для ARM
         if hasattr(self.signal_generator, "set_trading_statistics"):
             self.signal_generator.set_trading_statistics(self.trading_statistics)
@@ -374,15 +386,8 @@ class FuturesScalpingOrchestrator:
         # ✅ НОВОЕ (26.12.2025): Передаем метрики в модули (после их создания)
         # Метрики будут переданы после создания entry_manager и exit_analyzer
 
-        # ✅ НОВОЕ (26.12.2025): Инициализация ParameterProvider после signal_generator
-        # Получаем regime_manager из signal_generator (может быть общий или per-symbol)
-        regime_manager = getattr(self.signal_generator, "regime_manager", None)
-        self.parameter_provider = ParameterProvider(
-            config_manager=self.config_manager,
-            regime_manager=regime_manager,
-            data_registry=self.data_registry,
-        )
-        logger.info("✅ ParameterProvider инициализирован в orchestrator")
+        # ✅ ПЕРЕМЕЩЕНО в _start_trading_modules(): Инициализация ParameterProvider после signal_generator
+        # self.parameter_orchestrator и self.parameter_provider создаются после initialize()
 
         self.order_executor = FuturesOrderExecutor(
             config, self.client, self.slippage_guard
@@ -1228,23 +1233,43 @@ class FuturesScalpingOrchestrator:
             # Пробуем установить leverage даже в sandbox mode (может работать с правильными параметрами)
             leverage_config = getattr(self.scalping_config, "leverage", None)
             if leverage_config is None or leverage_config <= 0:
-                logger.warning(
-                    f"⚠️ leverage не указан в конфиге, используем 3 (fallback)"
+                logger.error(
+                    "❌ КРИТИЧЕСКАЯ ОШИБКА: leverage не указан в конфиге или <= 0! Запуск невозможен. "
+                    "Добавьте в config_futures.yaml: scalping.leverage (например, 5)"
                 )
-                leverage_config = 3
+                raise ValueError(
+                    "leverage не указан или <= 0 — требуется строгое задание через конфиг!"
+                )
 
             # ✅ НОВОЕ: Проверяем режим позиций на бирже
             try:
                 account_config = await self.client.get_account_config()
+                logger.warning(f"[DEBUG] RAW account_config from OKX: {account_config}")
                 pos_mode = None
                 if account_config.get("code") == "0" and account_config.get("data"):
                     config = account_config["data"][0]
+                    logger.info(f"[DEBUG] account_config['data'][0]: {config}")
                     pos_mode = config.get("posMode", "")
                     logger.info(f"📊 Режим позиций на бирже: {pos_mode}")
+                if pos_mode != "net_mode":
+                    raise ValueError(
+                        f"posMode must be net_mode for this bot, got: {pos_mode}"
+                    )
             except Exception as e:
-                logger.warning(f"⚠️ Не удалось получить режим позиций: {e}")
+                logger.error(f"❌ Ошибка режима позиций (требуется net_mode): {e}")
+                raise
 
             # ✅ Устанавливаем leverage для каждого символа
+            pre_set_leverage = bool(
+                getattr(self.scalping_config, "pre_set_leverage_on_startup", False)
+            )
+            if not pre_set_leverage:
+                logger.info(
+                    "pre_set_leverage_on_startup=False: плечо будет выставляться только адаптивно при каждом входе (нет фиксированного значения на старте)"
+                )
+                return
+
+            # ? ????????????? leverage ??? ??????? ??????? (???? ???? ????????)
             for symbol in self.scalping_config.symbols:
                 leverage_set = False
 
@@ -1407,6 +1432,27 @@ class FuturesScalpingOrchestrator:
                 and self.signal_generator.is_initialized
             ):
                 logger.info("✅ SignalGenerator: инициализирован и готов к работе")
+
+            # ✅ НОВОЕ: Инициализация ParameterProvider после signal_generator
+            # Получаем regime_manager из signal_generator (теперь он инициализирован)
+            regime_manager = getattr(self.signal_generator, "regime_manager", None)
+            self.parameter_orchestrator = ParameterOrchestrator(
+                config_manager=self.config_manager,
+                data_registry=self.data_registry,
+                regime_manager=regime_manager,
+            )
+            self.parameter_provider = ParameterProvider(
+                config_manager=self.config_manager,
+                regime_manager=regime_manager,
+                data_registry=self.data_registry,
+                parameter_orchestrator=self.parameter_orchestrator,
+                strict_mode=True,
+            )
+            logger.info("✅ ParameterProvider инициализирован в orchestrator")
+            if hasattr(self.signal_generator, "set_parameter_orchestrator"):
+                self.signal_generator.set_parameter_orchestrator(
+                    self.parameter_orchestrator
+                )
 
             logger.info("🔄 Инициализация OrderExecutor...")
             await self.order_executor.initialize()
