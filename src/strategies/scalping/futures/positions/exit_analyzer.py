@@ -910,6 +910,24 @@ class ExitAnalyzer:
         leverage = self._get_effective_leverage(position, metadata)
         return leverage / reference_leverage
 
+    def _should_bypass_min_holding(
+        self, pnl_percent: float, sl_threshold: float
+    ) -> bool:
+        """Позволяет игнорировать min_holding при чрезмерном убытке."""
+        if sl_threshold >= 0:
+            return False
+        bypass_mult = 1.2
+        try:
+            if self.config_manager and hasattr(self.config_manager, "_raw_config_dict"):
+                cfg = self.config_manager._raw_config_dict or {}
+                bypass_mult = float(cfg.get("exit_params_min_hold_bypass_mult", bypass_mult))
+        except Exception:
+            bypass_mult = 1.2
+        try:
+            return pnl_percent <= (sl_threshold * bypass_mult)
+        except Exception:
+            return False
+
     def _get_emergency_threshold(
         self,
         base_threshold: float,
@@ -3277,9 +3295,13 @@ class ExitAnalyzer:
                     minutes_in_position = self._get_time_in_position_minutes(
                         metadata, position
                     )
+                    bypass_min_holding = self._should_bypass_min_holding(
+                        gross_pnl_percent, sl_threshold
+                    )
                     if (
                         minutes_in_position is not None
                         and minutes_in_position < min_holding_minutes
+                        and not bypass_min_holding
                     ):
                         logger.info(
                             f"⏳ ExitAnalyzer TRENDING: SL заблокирован для {symbol} - "
@@ -3297,6 +3319,12 @@ class ExitAnalyzer:
                             "sl_threshold": sl_threshold,
                             "regime": regime,
                         }
+                    if bypass_min_holding and minutes_in_position is not None:
+                        logger.warning(
+                            f"⚠️ ExitAnalyzer TRENDING: bypass min_holding для {symbol} — "
+                            f"убыток {gross_pnl_percent:.2f}% глубже SL ({sl_threshold:.2f}%), "
+                            f"держим {minutes_in_position:.2f} мин (< {min_holding_minutes:.2f} мин)"
+                        )
 
                 # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (29.12.2025): Явный лог "SL достигнут" с деталями
                 minutes_in_position = self._get_time_in_position_minutes(
@@ -4265,9 +4293,13 @@ class ExitAnalyzer:
                     minutes_in_position = self._get_time_in_position_minutes(
                         metadata, position
                     )
+                    bypass_min_holding = self._should_bypass_min_holding(
+                        gross_pnl_percent, sl_threshold
+                    )
                     if (
                         minutes_in_position is not None
                         and minutes_in_position < min_holding_minutes
+                        and not bypass_min_holding
                     ):
                         logger.info(
                             f"⏳ ExitAnalyzer RANGING: SL заблокирован для {symbol} - "
@@ -4286,6 +4318,12 @@ class ExitAnalyzer:
                             "sl_threshold": sl_threshold,
                             "regime": regime,
                         }
+                    if bypass_min_holding and minutes_in_position is not None:
+                        logger.warning(
+                            f"⚠️ ExitAnalyzer RANGING: bypass min_holding для {symbol} — "
+                            f"убыток {gross_pnl_percent:.2f}% глубже SL ({sl_threshold:.2f}%), "
+                            f"держим {minutes_in_position:.2f} мин (< {min_holding_minutes:.2f} мин)"
+                        )
 
                 # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ЛОГИРОВАНИЯ (29.12.2025): Явный лог "SL достигнут" с деталями
                 minutes_in_position = self._get_time_in_position_minutes(
@@ -5869,9 +5907,13 @@ class ExitAnalyzer:
                     minutes_in_position = self._get_time_in_position_minutes(
                         metadata, position
                     )
+                    bypass_min_holding = self._should_bypass_min_holding(
+                        gross_pnl_percent, sl_threshold
+                    )
                     if (
                         minutes_in_position is not None
                         and minutes_in_position < min_holding_minutes
+                        and not bypass_min_holding
                     ):
                         logger.info(
                             f"⏳ ExitAnalyzer CHOPPY: SL заблокирован для {symbol} - "
@@ -5889,6 +5931,12 @@ class ExitAnalyzer:
                             "sl_threshold": sl_threshold,
                             "regime": regime,
                         }
+                    if bypass_min_holding and minutes_in_position is not None:
+                        logger.warning(
+                            f"⚠️ ExitAnalyzer CHOPPY: bypass min_holding для {symbol} — "
+                            f"убыток {gross_pnl_percent:.2f}% глубже SL ({sl_threshold:.2f}%), "
+                            f"держим {minutes_in_position:.2f} мин (< {min_holding_minutes:.2f} мин)"
+                        )
 
                 logger.warning(
                     f"🛑 ExitAnalyzer CHOPPY: SL достигнут для {symbol}: "

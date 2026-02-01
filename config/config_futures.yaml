@@ -90,7 +90,7 @@ scalping:
     allow_rest_for_ws: false
     rest_update_cooldown: 1.0
     # WebSocket watchdog параметры для предотвращения ложных reconnect
-    ws_fresh_max_age: 30.0  # Увеличено с 6.0 до 30.0 сек для низколиквидных пар как XRP
+    ws_fresh_max_age: 3.0  # Ужесточено: сигналы только по свежему WS (скальпинг)
     ws_watchdog_consecutive_stale: 3  # Увеличено с 2 до 3 для большей стабильности
     adx_blocking:
       enabled: true
@@ -134,7 +134,8 @@ scalping:
 
   # ✅ НОВОЕ (07.01.2026): Централизованные параметры выхода по режимам
   exit_params_reference_leverage: 5.0
-  exit_params_scale_by_leverage: true
+  exit_params_scale_by_leverage: false
+  exit_params_min_hold_bypass_mult: 1.2  # Блок min_holding игнорируем при SL глубже 1.2x
   
   # ✅ КРИТИЧЕСКОЕ: Интервал главного цикла (для скальпинга должно быть ≤ 2 сек)
   check_interval: 1.0  # ✅ ОПТИМИЗИРОВАНО: 1.0 сек для быстрого анализа позиций (было 5.0 по умолчанию)
@@ -1532,9 +1533,9 @@ scalping:
       rsi_check: true
       macd_check: true
       bollinger_check: true
-    order_executor:
+  order_executor:
     require_ws_fresh_for_entries: true
-    ws_fresh_max_age: 1.5
+    ws_fresh_max_age: 1.0
     limit_order:
       # ✅ СНИЖЕНО (14.01.2026): offset до 0.01% для максимальной исполнимости
       limit_offset_percent: 0.01  # Снижен до 0.01% для всех режимов
