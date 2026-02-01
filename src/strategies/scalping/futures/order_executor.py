@@ -148,7 +148,7 @@ class FuturesOrderExecutor:
             # Валидация сигнала через Slippage Guard
             # Require fresh WS price before opening new positions
             require_ws_fresh = True
-            ws_max_age = 1.5
+            ws_max_age = None
             oe_cfg = None
             try:
                 if isinstance(self.scalping_config, dict):
@@ -156,9 +156,11 @@ class FuturesOrderExecutor:
                 else:
                     oe_cfg = getattr(self.scalping_config, "order_executor", {})
                 if isinstance(oe_cfg, dict):
-                    ws_max_age = float(oe_cfg.get("ws_fresh_max_age", ws_max_age))
+                    if "ws_fresh_max_age" in oe_cfg:
+                        ws_max_age = float(oe_cfg.get("ws_fresh_max_age"))
                 else:
-                    ws_max_age = float(getattr(oe_cfg, "ws_fresh_max_age", ws_max_age))
+                    if hasattr(oe_cfg, "ws_fresh_max_age"):
+                        ws_max_age = float(getattr(oe_cfg, "ws_fresh_max_age"))
             except Exception:
                 pass
             # Если ws_fresh_max_age не задан, используем TTL из DataRegistry (обычно = signal_generator.ws_fresh_max_age)
@@ -166,11 +168,13 @@ class FuturesOrderExecutor:
                 if (
                     self.data_registry
                     and hasattr(self.data_registry, "market_data_ttl")
-                    and (not oe_cfg or (isinstance(oe_cfg, dict) and "ws_fresh_max_age" not in oe_cfg))
+                    and ws_max_age is None
                 ):
                     ws_max_age = float(self.data_registry.market_data_ttl)
             except Exception:
                 pass
+            if ws_max_age is None:
+                ws_max_age = 1.5
             if (
                 require_ws_fresh
                 and self.data_registry

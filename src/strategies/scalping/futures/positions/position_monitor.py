@@ -27,11 +27,13 @@ class PositionMonitor:
         self,
         position_registry: PositionRegistry,
         data_registry: DataRegistry,
+        client=None,  # ✅ Клиент для REST (опционально)
         exit_analyzer=None,  # ExitAnalyzer (будет создан позже)
         exit_decision_coordinator=None,  # ✅ НОВОЕ (26.12.2025): ExitDecisionCoordinator
         check_interval: float = 5.0,  # Интервал проверки в секундах
         close_position_callback=None,  # ✅ НОВОЕ: Callback для закрытия позиций
         position_manager=None,  # ✅ НОВОЕ: PositionManager для частичного закрытия
+        allow_rest_fallback: bool = True,  # ✅ Разрешить REST fallback для цены
     ):
         """
         Инициализация PositionMonitor.
@@ -44,6 +46,7 @@ class PositionMonitor:
         """
         self.position_registry = position_registry
         self.data_registry = data_registry
+        self.client = client
         self.exit_analyzer = exit_analyzer
         self.exit_decision_coordinator = (
             exit_decision_coordinator  # ✅ НОВОЕ (26.12.2025)
@@ -51,6 +54,7 @@ class PositionMonitor:
         self.check_interval = check_interval
         self.close_position_callback = close_position_callback  # ✅ НОВОЕ
         self.position_manager = position_manager  # ✅ НОВОЕ
+        self.allow_rest_fallback = allow_rest_fallback
 
         self.is_running = False
         self.monitor_task = None
@@ -166,6 +170,12 @@ class PositionMonitor:
                 metadata = await self.position_registry.get_metadata(symbol)
                 market_data = await self.data_registry.get_market_data(symbol)
                 if market_data is None:
+                    if not self.allow_rest_fallback:
+                        logger.warning(
+                            f"⚠️ PositionMonitor: Нет свежих рыночных данных для {symbol} (market_data is None), "
+                            f"fallback запрещен — пропускаем анализ позиции"
+                        )
+                        return None
                     logger.warning(
                         f"⚠️ PositionMonitor: Нет свежих рыночных данных для {symbol} (market_data is None), "
                         f"продолжаем с fallback ценой"
@@ -318,6 +328,9 @@ class PositionMonitor:
                     return float(tick.price)
             elif hasattr(market_data, "price"):
                 return float(market_data.price)
+
+        if not self.allow_rest_fallback:
+            return 0.0
 
         # Level 2 & 3: REST API (mark_price, last_price)
         if self.client:

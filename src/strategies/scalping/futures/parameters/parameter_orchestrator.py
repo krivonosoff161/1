@@ -188,7 +188,10 @@ class ParameterOrchestrator:
             return str(getattr(value, "value")).lower()
         if hasattr(value, "name") and isinstance(getattr(value, "name"), str):
             return str(getattr(value, "name")).lower()
-        return str(value).lower()
+        raw = str(value).lower()
+        if raw.startswith("regimetype."):
+            return raw.split(".", 1)[1]
+        return raw
 
     def _resolve_signal_params(
         self, symbol: str, regime: Optional[str], status: ParameterStatus

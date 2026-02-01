@@ -133,6 +133,20 @@ class FuturesPositionManager:
         self.exit_decision_coordinator = exit_decision_coordinator
         logger.info("✅ ExitDecisionCoordinator установлен в FuturesPositionManager")
 
+    def _resolve_pos_side(self, pos_data: Dict[str, Any]) -> str:
+        """Нормализует направление позиции для net/hedge режимов."""
+        side_raw = str(pos_data.get("posSide", "") or "").lower()
+        try:
+            size_val = float(pos_data.get("pos", 0) or 0)
+        except (TypeError, ValueError):
+            size_val = 0.0
+
+        if side_raw in ("long", "short"):
+            return side_raw
+        if side_raw in ("net", ""):
+            return "long" if size_val > 0 else "short"
+        return "long" if size_val > 0 else "short"
+
     def _init_refactored_managers(self):
         """✅ РЕФАКТОРИНГ: Инициализация новых менеджеров TP/SL/PeakProfit"""
         if not self.orchestrator:
@@ -4033,12 +4047,14 @@ class FuturesPositionManager:
                 return None
 
             size = float(actual_position.get("pos", "0"))
-            side = actual_position.get("posSide", "long")
+            side = self._resolve_pos_side(actual_position)
             entry_price = float(actual_position.get("avgPx", "0"))
 
             # ✅ НОВОЕ: Проверка правильного направления позиции
             # Получаем ожидаемое направление из position (если есть)
-            expected_side = position.get("posSide", side).lower()
+            expected_side = str(position.get("posSide", side) or "").lower()
+            if expected_side in ("", "net"):
+                expected_side = side.lower()
             if side.lower() != expected_side:
                 logger.warning(
                     f"⚠️ Несоответствие направления позиции для {symbol}: "
@@ -4046,7 +4062,7 @@ class FuturesPositionManager:
                     f"Используем направление с биржи (reason={reason})"
                 )
                 # Используем направление с биржи (более актуальное)
-                side = actual_position.get("posSide", "long")
+                side = self._resolve_pos_side(actual_position)
 
             # ✅ НОВОЕ: Проверка размера позиции
             if abs(size) < 1e-8:
@@ -4220,7 +4236,15 @@ class FuturesPositionManager:
                     )
 
                 # Рассчитываем комиссию (вход + выход)
-                position_value = abs(size) * entry_price
+                position_value = float(actual_position.get("notionalUsd", 0) or 0)
+                if position_value <= 0:
+                    try:
+                        details = await self.client.get_instrument_details(symbol)
+                        ct_val = float(details.get("ctVal", 0.01))
+                        size_in_coins = abs(size) * ct_val
+                        position_value = size_in_coins * entry_price
+                    except Exception:
+                        position_value = abs(size) * entry_price
                 total_commission = position_value * commission_rate * 2  # Вход + выход
 
                 # Проверяем: если PnL < комиссия, не закрываем (кроме SL)
@@ -6365,7 +6389,7 @@ class FuturesPositionManager:
 
                         return None
 
-                    side = pos_data.get("posSide", "long")
+                    side = self._resolve_pos_side(pos_data)
 
                     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем финальный PnL перед закрытием
                     final_pnl = 0.0

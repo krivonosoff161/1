@@ -625,14 +625,26 @@ class FuturesScalpingOrchestrator:
 
         # ✅ НОВОЕ: Инициализация PositionMonitor для периодического мониторинга позиций
         # PositionMonitor будет вызывать ExitDecisionCoordinator для всех открытых позиций
+        allow_rest_fallback = True
+        try:
+            sg_cfg = getattr(self.scalping_config, "signal_generator", None)
+            if isinstance(sg_cfg, dict):
+                allow_rest_fallback = bool(sg_cfg.get("allow_rest_for_ws", True))
+            elif sg_cfg is not None:
+                allow_rest_fallback = bool(getattr(sg_cfg, "allow_rest_for_ws", True))
+        except Exception:
+            allow_rest_fallback = True
+
         self.position_monitor = PositionMonitor(
             position_registry=self.position_registry,
             data_registry=self.data_registry,
+            client=self.client,
             exit_analyzer=self.exit_analyzer,  # Fallback
             exit_decision_coordinator=self.exit_decision_coordinator,  # ✅ НОВОЕ (26.12.2025): Используем координатор
             check_interval=5.0,  # Проверка каждые 5 секунд
             close_position_callback=self._close_position,  # ✅ НОВОЕ: Callback для закрытия
             position_manager=self.position_manager,  # ✅ НОВОЕ: PositionManager для частичного закрытия
+            allow_rest_fallback=allow_rest_fallback,
         )
         logger.info("✅ PositionMonitor инициализирован в orchestrator")
 
@@ -1264,6 +1276,13 @@ class FuturesScalpingOrchestrator:
                     logger.info(f"[DEBUG] account_config['data'][0]: {config}")
                     pos_mode = config.get("posMode", "")
                     logger.info(f"📊 Режим позиций на бирже: {pos_mode}")
+                if pos_mode:
+                    try:
+                        self.client.pos_mode = pos_mode
+                    except Exception as e:
+                        logger.debug(
+                            f"⚠️ Не удалось установить client.pos_mode={pos_mode}: {e}"
+                        )
                 if pos_mode != "net_mode":
                     raise ValueError(
                         f"posMode must be net_mode for this bot, got: {pos_mode}"

@@ -129,6 +129,7 @@ class OKXFuturesClient:
         sandbox: bool = True,
         leverage: int = 3,
         margin_mode: str = "isolated",
+        pos_mode: str = "net_mode",
     ):
         self.base_url = "https://www.okx.com" if not sandbox else "https://www.okx.com"
         self.api_key = api_key
@@ -139,6 +140,8 @@ class OKXFuturesClient:
         self.margin_mode = (
             margin_mode if margin_mode in ("isolated", "cross") else "isolated"
         )
+        # ✅ Учитываем режим позиций (net/long_short) для корректного posSide
+        self.pos_mode = pos_mode or "net_mode"
         self.session = None
         self._lot_sizes_cache: dict = {}  # Кэш для lot sizes
         self._instrument_details_cache: dict = (
@@ -1468,22 +1471,26 @@ class OKXFuturesClient:
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем параметр reduce_only
         # Это гарантирует, что ордер закроет существующую позицию, а не откроет новую
-        # ВАЖНО: Для isolated margin OKX требует posSide даже при reduceOnly!
+        # ВАЖНО: posSide нужен только в hedge (long_short_mode). В net_mode posSide НЕ отправляем.
+        pos_mode = getattr(self, "pos_mode", "net_mode") or "net_mode"
+        use_pos_side = str(pos_mode).lower() == "long_short_mode"
         if reduce_only:
             payload["reduceOnly"] = "true"
-            # Определяем posSide на основе стороны закрытия
-            # Если закрываем long - продаем (side="sell"), значит была long
-            # Если закрываем short - покупаем (side="buy"), значит была short
-            if side.lower() == "sell":
-                payload["posSide"] = "long"  # Закрываем long позицию
-            elif side.lower() == "buy":
-                payload["posSide"] = "short"  # Закрываем short позицию
+            if use_pos_side:
+                # Определяем posSide на основе стороны закрытия
+                # Если закрываем long - продаем (side="sell"), значит была long
+                # Если закрываем short - покупаем (side="buy"), значит была short
+                if side.lower() == "sell":
+                    payload["posSide"] = "long"  # Закрываем long позицию
+                elif side.lower() == "buy":
+                    payload["posSide"] = "short"  # Закрываем short позицию
         else:
-            # Для открытия новых позиций добавляем posSide
-            if side.lower() == "buy":
-                payload["posSide"] = "long"
-            elif side.lower() == "sell":
-                payload["posSide"] = "short"
+            # Для открытия новых позиций добавляем posSide только в hedge mode
+            if use_pos_side:
+                if side.lower() == "buy":
+                    payload["posSide"] = "long"
+                elif side.lower() == "sell":
+                    payload["posSide"] = "short"
 
         if price:
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (КИМИ): Округляем цену до tickSize OKX вместо 2 знаков
