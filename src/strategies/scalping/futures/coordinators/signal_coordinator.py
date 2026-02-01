@@ -2253,16 +2253,19 @@ class SignalCoordinator:
                             # Убеждаемся, что оба datetime имеют timezone
                             now_utc = datetime.now(timezone.utc)
                             if signal_timestamp.tzinfo is None:
-                                # Если timestamp без timezone, считаем его UTC
+                                # Если timestamp без timezone, считаем его локальным временем
+                                local_tz = datetime.now().astimezone().tzinfo
                                 signal_timestamp_utc = signal_timestamp.replace(
-                                    tzinfo=timezone.utc
-                                )
+                                    tzinfo=local_tz
+                                ).astimezone(timezone.utc)
                             else:
                                 signal_timestamp_utc = signal_timestamp.astimezone(
                                     timezone.utc
                                 )
 
                             time_diff = (now_utc - signal_timestamp_utc).total_seconds()
+                            if time_diff < 0:
+                                time_diff = 0.0
                             if time_diff > 0.5:  # TTL: 0.5 секунды (учитываем задержки)
                                 should_update_price = True
                                 update_reason = (
@@ -2296,14 +2299,17 @@ class SignalCoordinator:
                         if signal_timestamp and isinstance(signal_timestamp, datetime):
                             now_utc = datetime.now(timezone.utc)
                             if signal_timestamp.tzinfo is None:
+                                local_tz = datetime.now().astimezone().tzinfo
                                 signal_timestamp_utc = signal_timestamp.replace(
-                                    tzinfo=timezone.utc
-                                )
+                                    tzinfo=local_tz
+                                ).astimezone(timezone.utc)
                             else:
                                 signal_timestamp_utc = signal_timestamp.astimezone(
                                     timezone.utc
                                 )
                             time_diff = (now_utc - signal_timestamp_utc).total_seconds()
+                            if time_diff < 0:
+                                time_diff = 0.0
                             time_info = f", signal_age={time_diff:.2f}с"
 
                         logger.warning(

@@ -195,6 +195,19 @@ class FuturesScalpingOrchestrator:
         logger.info(
             f"✅ DataRegistry: require_ws_source_for_fresh={self.data_registry._require_ws_source_for_fresh}"
         )
+        try:
+            ws_fresh_max_age = None
+            if isinstance(sg_cfg, dict):
+                ws_fresh_max_age = sg_cfg.get("ws_fresh_max_age")
+            else:
+                ws_fresh_max_age = getattr(sg_cfg, "ws_fresh_max_age", None)
+            if ws_fresh_max_age is not None:
+                self.data_registry.market_data_ttl = float(ws_fresh_max_age)
+                logger.info(
+                    f"✅ DataRegistry: market_data_ttl set to {self.data_registry.market_data_ttl}s"
+                )
+        except Exception as exc:
+            logger.warning(f"⚠️ DataRegistry: не удалось установить market_data_ttl: {exc}")
 
         # 🛡️ Защиты риска
         self.initial_balance = None  # Для drawdown расчета

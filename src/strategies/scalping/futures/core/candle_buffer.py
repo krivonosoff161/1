@@ -45,12 +45,19 @@ class CandleBuffer:
             candle: Свеча OHLCV
         """
         async with self._lock:
-            # Фильтрация дубликатов по timestamp
-            if self._candles and getattr(
-                self._candles[-1], "timestamp", None
-            ) == getattr(candle, "timestamp", None):
-                # logger.debug(f"⏩ CandleBuffer: Дубликат свечи по timestamp {candle.timestamp} — не добавлен")
-                return
+            last_ts = getattr(self._candles[-1], "timestamp", None) if self._candles else None
+            new_ts = getattr(candle, "timestamp", None)
+
+            # Фильтрация дубликатов и вставок "из прошлого"
+            if last_ts is not None and new_ts is not None:
+                if new_ts == last_ts:
+                    # logger.debug(f"⏩ CandleBuffer: Дубликат свечи по timestamp {new_ts} — не добавлен")
+                    return
+                if new_ts < last_ts:
+                    logger.debug(
+                        f"⏩ CandleBuffer: out-of-order candle ignored (ts={new_ts}, last_ts={last_ts})"
+                    )
+                    return
             self._candles.append(candle)
 
             # Если превышен max_size, удаляем самую старую свечу

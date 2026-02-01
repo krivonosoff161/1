@@ -49,7 +49,8 @@ class DataRegistry:
             if max_age is not None and max_age > 0:
                 effective_max_age = float(max_age)
             else:
-                effective_max_age = 60.0
+                # Если max_age не задан — используем TTL реестра (а не жёсткий 60s)
+                effective_max_age = float(getattr(self, "market_data_ttl", 60.0))
 
             age = (datetime.now() - updated_at).total_seconds()
             if age > effective_max_age:
@@ -235,7 +236,9 @@ class DataRegistry:
         Returns:
             Рыночные данные или None
         """
-        if not await self._check_market_data_fresh(symbol, max_age=1.0):
+        if not await self._check_market_data_fresh(
+            symbol, max_age=self.market_data_ttl
+        ):
             return None
         async with self._lock:
             return (
@@ -254,9 +257,11 @@ class DataRegistry:
         Returns:
             Цена или None
         """
-        # ✅ ИСПРАВЛЕНО (23.01.2026): Увеличен max_age с 1.0→10.0 для ExitAnalyzer
+        # ✅ ИСПРАВЛЕНО (23.01.2026): используем TTL DataRegistry
         # OKX присылает тикеры медленно (4-60s), лучше устаревшая цена чем None
-        if not await self._check_market_data_fresh(symbol, max_age=10.0):
+        if not await self._check_market_data_fresh(
+            symbol, max_age=self.market_data_ttl
+        ):
             return None
         async with self._lock:
             market_data = self._market_data.get(symbol, {})
@@ -488,7 +493,7 @@ class DataRegistry:
         return None
 
     async def get_fresh_price_for_signals(
-        self, symbol: str, client=None
+        self, symbol: str, client=None, max_age: float = 10.0
     ) -> Optional[float]:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Получить СВЕЖУЮ цену для SignalGenerator.
@@ -503,7 +508,7 @@ class DataRegistry:
         Returns:
             СВЕЖАЯ цена (max 3s old) или None
         """
-        # Проверяем WebSocket цену с TTL=3s
+        # Проверяем WebSocket цену с TTL (конфиг через max_age)
         async with self._lock:
             md = self._market_data.get(symbol, {})
             updated_at = md.get("updated_at")
@@ -511,7 +516,7 @@ class DataRegistry:
 
             if updated_at and isinstance(updated_at, datetime) and price:
                 age = (datetime.now() - updated_at).total_seconds()
-                if age <= 10.0:  # ✅ TTL для SignalGenerator (WS может идти с паузами)
+                if age <= max_age:
                     logger.debug(
                         f"✅ SignalGenerator: Используем WebSocket цену для {symbol}: "
                         f"${price:.4f} (age={age:.1f}s)"
@@ -519,7 +524,7 @@ class DataRegistry:
                     return price
                 else:
                     logger.warning(
-                        f"⚠️ SignalGenerator: WebSocket цена для {symbol} устарела на {age:.1f}s (>10.0s), "
+                        f"⚠️ SignalGenerator: WebSocket цена для {symbol} устарела на {age:.1f}s (>{max_age:.1f}s), "
                         f"fallback на REST API"
                     )
 

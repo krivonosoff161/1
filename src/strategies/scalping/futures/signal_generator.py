@@ -1957,8 +1957,19 @@ class FuturesSignalGenerator:
         try:
             if self.data_registry:
                 client_for_fresh = self.client if self._allow_rest_for_ws else None
+                ws_max_age = 10.0
+                try:
+                    sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+                    if isinstance(sg_cfg, dict):
+                        ws_max_age = float(sg_cfg.get("ws_fresh_max_age", ws_max_age))
+                    else:
+                        ws_max_age = float(
+                            getattr(sg_cfg, "ws_fresh_max_age", ws_max_age)
+                        )
+                except Exception:
+                    pass
                 price = await self.data_registry.get_fresh_price_for_signals(
-                    symbol, client=client_for_fresh
+                    symbol, client=client_for_fresh, max_age=ws_max_age
                 )
                 # ✅ ВАЖНО: Проверяем что price это float и > 0
                 if (
@@ -7791,6 +7802,11 @@ class FuturesSignalGenerator:
                     self.signal_cache[symbol] = current_time
                 filtered_by_time.append(signal)
             signals = filtered_by_time
+            if not signals:
+                logger.debug(
+                    "🛑 Все сигналы отфильтрованы по cooldown — пропускаем PARAM_ORCH и ранжирование."
+                )
+                return []
 
             pattern_context_by_symbol = {}
             orchestrator_min_strength_by_symbol = {}

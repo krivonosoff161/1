@@ -120,6 +120,37 @@ class FuturesRiskManager:
             return symbol_dict.get(regime.lower(), {})
         return {}
 
+    def _resolve_sl_percent_for_risk(
+        self, symbol: Optional[str], regime: Optional[str]
+    ) -> float:
+        """Надёжно получить sl_percent для риск-расчётов (в процентах, не доле)."""
+        # 1) Из scalping_config (если задан)
+        sl_percent = getattr(self.scalping_config, "sl_percent", None)
+        if sl_percent is not None:
+            return float(sl_percent)
+
+        # 2) Из exit_params (централизованные параметры выходов)
+        try:
+            raw = getattr(self.config_manager, "_raw_config_dict", {}) or {}
+            exit_params = raw.get("exit_params") or {}
+            regime_key = (regime or "ranging").lower()
+            sl_percent = (exit_params.get(regime_key) or {}).get("sl_min_percent")
+            if sl_percent is not None:
+                return float(sl_percent)
+        except Exception:
+            pass
+
+        # 3) Из symbol_profiles по режиму (если задан)
+        if symbol:
+            regime_profile = self._get_symbol_regime_profile(symbol, regime)
+            sl_percent = regime_profile.get("sl_percent")
+            if sl_percent is not None:
+                return float(sl_percent)
+
+        raise ValueError(
+            "sl_percent отсутствует: проверь config_futures.yaml (scalping.sl_percent или exit_params.<regime>.sl_min_percent)"
+        )
+
     async def _get_used_margin(self) -> float:
         """Получает использованную маржу через orchestrator или напрямую"""
         if self.orchestrator and hasattr(self.orchestrator, "_get_used_margin"):
@@ -1332,7 +1363,9 @@ class FuturesRiskManager:
                     )
 
                     # Получаем sl_percent
-                    sl_percent = getattr(self.scalping_config, "sl_percent", 0.2)
+                    sl_percent = self._resolve_sl_percent_for_risk(
+                        symbol, symbol_regime
+                    )
                     # ✅ ЕДИНЫЙ СТАНДАРТ: sl_percent в конфиге = процентные пункты (0.8 = 0.8%)
                     # В risk-based формуле нужен SL в доле (0.008 = 0.8%)
                     sl_percent_decimal = pct_points_to_fraction(sl_percent)
@@ -1363,7 +1396,7 @@ class FuturesRiskManager:
 
             # 6. 🛡️ ЗАЩИТА: Max Loss per Trade (адаптивный процент из конфига)
             max_loss_usd = balance * max_loss_per_trade_percent
-            sl_percent = getattr(self.scalping_config, "sl_percent", 0.2)
+            sl_percent = self._resolve_sl_percent_for_risk(symbol, symbol_regime)
 
             # ✅ ЕДИНЫЙ СТАНДАРТ: sl_percent в конфиге = процентные пункты (0.8 = 0.8%)
             sl_percent_decimal = pct_points_to_fraction(sl_percent)
