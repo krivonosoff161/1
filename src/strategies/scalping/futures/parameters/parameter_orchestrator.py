@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from enum import Enum
 from typing import Any, Dict, Optional, Tuple
 
 from loguru import logger
@@ -141,7 +142,7 @@ class ParameterOrchestrator:
             logger.debug(
                 f"PARAM_ORCH: _resolve_regime: using provided regime '{regime}'"
             )
-            return str(regime).lower()
+            return self._normalize_regime(regime)
         if self.regime_manager is None:
             status.errors.append("regime_manager is not set")
             logger.debug("PARAM_ORCH: _resolve_regime: regime_manager is None")
@@ -155,9 +156,7 @@ class ParameterOrchestrator:
                     )
                     return None
                 resolved = self.regime_manager.detect_regime(candles, current_price)
-                resolved = (
-                    resolved.regime if hasattr(resolved, "regime") else str(resolved)
-                )
+                resolved = resolved.regime if hasattr(resolved, "regime") else resolved
                 logger.debug(
                     f"PARAM_ORCH: _resolve_regime: detect_regime('{symbol}') returned '{resolved}'"
                 )
@@ -176,9 +175,20 @@ class ParameterOrchestrator:
             status.errors.append("regime is empty")
             logger.debug("PARAM_ORCH: _resolve_regime: regime is empty")
             return None
-        resolved_str = str(resolved).lower()
+        resolved_str = self._normalize_regime(resolved)
         logger.debug(f"PARAM_ORCH: _resolve_regime: resolved to '{resolved_str}'")
         return resolved_str
+
+    def _normalize_regime(self, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, Enum):
+            return str(value.value).lower()
+        if hasattr(value, "value") and isinstance(getattr(value, "value"), str):
+            return str(getattr(value, "value")).lower()
+        if hasattr(value, "name") and isinstance(getattr(value, "name"), str):
+            return str(getattr(value, "name")).lower()
+        return str(value).lower()
 
     def _resolve_signal_params(
         self, symbol: str, regime: Optional[str], status: ParameterStatus
