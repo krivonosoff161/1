@@ -1190,10 +1190,21 @@ class ExitAnalyzer:
         # ATR-based TP обеспечивает адаптацию к волатильности рынка
         # Если tp_percent не задан, используем tp_min_percent как базовый уровень
         if tp_percent is None:
-            tp_percent = tp_min_percent
-            logger.debug(
-                f"✅ ExitAnalyzer: tp_percent отсутствует, используем tp_min_percent={tp_min_percent} как базу"
-            )
+            if tp_min_percent is not None:
+                tp_percent = tp_min_percent
+                logger.debug(
+                    f"✅ ExitAnalyzer: tp_percent отсутствует, используем tp_min_percent={tp_min_percent} как базу"
+                )
+            else:
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: TP параметры не заданы для {symbol} ({regime}) — пропускаем расчёт TP"
+                )
+                return None
+
+        if tp_min_percent is None:
+            tp_min_percent = tp_percent
+        if tp_max_percent is None:
+            tp_max_percent = tp_percent
 
         leverage = self._get_effective_leverage(position, metadata)
         tp_scale = self._get_exit_leverage_scale(position, metadata)
