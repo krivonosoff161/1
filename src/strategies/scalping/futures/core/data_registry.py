@@ -597,11 +597,18 @@ class DataRegistry:
                 )
 
         # Если ни WebSocket ни REST не дали свежую цену → WARNING (не критично для сигналов)
-        logger.warning(
-            f"⚠️ SignalGenerator: НЕТ СВЕЖЕЙ ЦЕНЫ для {symbol}! "
-            f"WebSocket устарел >3s, REST fallback failed. "
-            f"Пропускаем генерацию сигнала."
-        )
+        if client:
+            logger.warning(
+                f"⚠️ SignalGenerator: НЕТ СВЕЖЕЙ ЦЕНЫ для {symbol}! "
+                f"WebSocket устарел >3s, REST fallback failed. "
+                f"Пропускаем генерацию сигнала."
+            )
+        else:
+            logger.warning(
+                f"⚠️ SignalGenerator: НЕТ СВЕЖЕЙ ЦЕНЫ для {symbol}! "
+                f"WebSocket устарел >3s, REST fallback disabled. "
+                f"Пропускаем генерацию сигнала."
+            )
         return None
 
     async def get_mark_price(self, symbol: str) -> Optional[float]:

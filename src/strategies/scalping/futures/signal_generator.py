@@ -1632,12 +1632,23 @@ class FuturesSignalGenerator:
                                         updated_at = data_snapshot.get("updated_at")
                                         if isinstance(updated_at, datetime):
                                             if updated_at.tzinfo is None:
+                                                local_tz = (
+                                                    datetime.now()
+                                                    .astimezone()
+                                                    .tzinfo
+                                                )
                                                 updated_at = updated_at.replace(
-                                                    tzinfo=timezone.utc
+                                                    tzinfo=local_tz
+                                                ).astimezone(timezone.utc)
+                                            else:
+                                                updated_at = updated_at.astimezone(
+                                                    timezone.utc
                                                 )
                                             age = (
                                                 datetime.now(timezone.utc) - updated_at
                                             ).total_seconds()
+                                            if age < 0:
+                                                age = 0.0
                                         else:
                                             age = None
                                         age_str = (
