@@ -11,6 +11,7 @@ Futures Order Executor для скальпинг стратегии.
 import asyncio
 import re
 import time
+import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -422,6 +423,13 @@ class FuturesOrderExecutor:
 
         except Exception as e:
             logger.error(f"Ошибка исполнения ордера: {e}")
+            logger.error(f"[TRACE] _execute_order stack:\n{traceback.format_exc()}")
+            try:
+                logger.error(
+                    f"[TRACE] _execute_order locals keys: {list(locals().keys())}"
+                )
+            except Exception:
+                pass
             return {"success": False, "error": str(e)}
 
     def _determine_order_type(self, signal: Dict[str, Any]) -> str:
