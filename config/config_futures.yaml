@@ -39,7 +39,7 @@ scalping:
       max_position_percent: 25.0
     small:
       threshold: 1500.0
-      base_position_usd: 100.0
+      base_position_usd: 360.0
       min_position_usd: 50.0
       max_position_usd: 1800.0
       max_open_positions: 3
@@ -87,7 +87,7 @@ scalping:
         pinbar_wick_ratio: 0.55
         min_bars: 2
   signal_generator:
-    allow_rest_for_ws: true
+    allow_rest_for_ws: false
     rest_update_cooldown: 1.0
     # WebSocket watchdog параметры для предотвращения ложных reconnect
     ws_fresh_max_age: 30.0  # Увеличено с 6.0 до 30.0 сек для низколиквидных пар как XRP
@@ -182,7 +182,7 @@ scalping:
       min_adx: 15.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 20.0→15.0
       min_signal_strength: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.58→0.35
       min_position_usd: 40.0  # ✅ ИСПРАВЛЕНО (08.01.2026): Снижено с 50.0
-      max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 250→900 для целевой маржи $90 при leverage 10x
+      max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 250→900 для целевой маржи $90 при leverage 10x
       sl_atr_multiplier: 3.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Wider SL для SOL (Grok рекомендация)
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Per-symbol Smart Close параметры для SOL
         reversal_score_threshold:
@@ -871,7 +871,7 @@ scalping:
           position:
             base_position_usd: 42.0
             min_position_usd: 28.0
-            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 65→250
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 65→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 140  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 160 до 140 (-12%) - больше возможностей
@@ -913,7 +913,7 @@ scalping:
           position:
             base_position_usd: 38.0
             min_position_usd: 24.0
-            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 58→250
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 58→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 110  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 128 до 110 (-14%) - больше возможностей
@@ -958,7 +958,7 @@ scalping:
           position:
             base_position_usd: 35.0
             min_position_usd: 20.0
-            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 50→250
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 50→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 90  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 104 до 90 (-13%) - больше возможностей
@@ -998,7 +998,7 @@ scalping:
           position:
             base_position_usd: 38.0
             min_position_usd: 24.0
-            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 58→250
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 58→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 90  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 104 до 90 (-13%) - больше возможностей
@@ -1040,7 +1040,7 @@ scalping:
           position:
             base_position_usd: 34.0
             min_position_usd: 22.0
-            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 52→250
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 52→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 80  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 88 до 80 (-9%) - больше возможностей
@@ -1079,7 +1079,7 @@ scalping:
           position:
             # ✅ ИСПРАВЛЕНО: base_position_usd удален - используем базовый размер из balance_profile ($100 для Small)
             min_position_usd: 18.0
-            max_position_usd: 500.0  # ✅ ИСПРАВЛЕНО: Увеличено с 46.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО: Увеличено с 46.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
           filters:
             liquidity:
               min_best_bid_volume_usd: 70  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Снижено с 80 до 70 (-12%) - больше возможностей
@@ -1116,7 +1116,7 @@ scalping:
           position:
             base_position_usd: 32.0
             min_position_usd: 20.0
-            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 60→250
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 60→250
           filters:
             liquidity:
               min_best_bid_volume_usd: 45  # ✅ PHASE 1: Снижено с 64 до 45 (-30%)
@@ -1149,7 +1149,7 @@ scalping:
           position:
             base_position_usd: 30.0
             min_position_usd: 18.0
-            max_position_usd: 500.0  # ✅ ИСПРАВЛЕНО: Увеличено с 44.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО: Увеличено с 44.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
           filters:
             liquidity:
               min_best_bid_volume_usd: 40  # ✅ PHASE 1: Снижено с 56 до 40 (-29%)
@@ -1188,7 +1188,7 @@ scalping:
           position:
             base_position_usd: 26.0
             min_position_usd: 16.0
-            max_position_usd: 500.0  # ✅ ИСПРАВЛЕНО: Увеличено с 38.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО: Увеличено с 38.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
           filters:
             liquidity:
               min_best_bid_volume_usd: 48  # ✅ СНИЖЕНО на 60% (было 120)
@@ -1225,7 +1225,7 @@ scalping:
           position:
             base_position_usd: 26.0
             min_position_usd: 18.0
-            max_position_usd: 500.0  # ✅ ИСПРАВЛЕНО: Увеличено с 40.0 до 500.0 (как в balance_profile) - должно быть >= min_position_usd из balance_profile ($50)
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО: Увеличено с 40.0 до 500.0 (как в balance_profile) - должно быть >= min_position_usd из balance_profile ($50)
           filters:
             liquidity:
               min_best_bid_volume_usd: 18  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 16 до 18 (+12%) - качественнее условия
@@ -1264,7 +1264,7 @@ scalping:
           position:
             base_position_usd: 24.0
             min_position_usd: 16.0
-            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 50→250, ✅ ИСПРАВЛЕНО: Увеличено с 36.0 до 50.0 (было меньше min_position_usd из balance_profile)
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 50→250, ✅ ИСПРАВЛЕНО: Увеличено с 36.0 до 50.0 (было меньше min_position_usd из balance_profile)
           filters:
             liquidity:
               min_best_bid_volume_usd: 12  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 10 до 12 (+20%) - качественнее условия
@@ -1310,7 +1310,7 @@ scalping:
           position:
             base_position_usd: 20.0
             min_position_usd: 12.0
-            max_position_usd: 500.0  # ✅ ИСПРАВЛЕНО: Увеличено с 30.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО: Увеличено с 30.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
           filters:
             liquidity:
               min_best_bid_volume_usd: 8  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 6 до 8 (+33%) - качественнее условия
@@ -1382,7 +1382,7 @@ scalping:
           position:
             base_position_usd: 24.0
             min_position_usd: 16.0
-            max_position_usd: 900.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 50→250, ✅ ИСПРАВЛЕНО: Увеличено с 36.0 до 50.0 (было меньше min_position_usd из balance_profile)
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 50→250, ✅ ИСПРАВЛЕНО: Увеличено с 36.0 до 50.0 (было меньше min_position_usd из balance_profile)
           filters:
             liquidity:
               min_best_bid_volume_usd: 10   # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 8 до 10 (+25%) - качественнее условия
@@ -1433,7 +1433,7 @@ scalping:
           position:
             base_position_usd: 22.0
             min_position_usd: 14.0
-            max_position_usd: 500.0  # ✅ ИСПРАВЛЕНО: Увеличено с 32.0 до 500.0 (как в balance_profile) - должно быть >= min_position_usd из balance_profile ($50)
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО: Увеличено с 32.0 до 500.0 (как в balance_profile) - должно быть >= min_position_usd из balance_profile ($50)
           filters:
             liquidity:
               min_best_bid_volume_usd: 8   # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 5 до 8 (+60%) - качественнее условия
@@ -1476,7 +1476,7 @@ scalping:
           position:
             base_position_usd: 18.0
             min_position_usd: 12.0
-            max_position_usd: 500.0  # ✅ ИСПРАВЛЕНО: Увеличено с 28.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
+            max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО: Увеличено с 28.0 до 500.0 (должно быть >= min_position_usd из balance_profile $50)
           filters:
             liquidity:
               min_best_bid_volume_usd: 8  # ✅ ОПТИМИЗАЦИЯ (07.12.2025): Повышено с 5 до 8 (+60%) - качественнее условия
@@ -1778,6 +1778,41 @@ risk:
         min_time_between_orders_seconds: 40  # Медленнее для очень большого баланса (40 секунд вместо 30)
 
 # ✅ ПРАВКА #2: Адаптивные параметры выхода по режимам
+exit_params:
+  trending:
+    tp_atr_multiplier: 1.6
+    sl_atr_multiplier: 1.0
+    tp_min_percent: 1.6
+    tp_max_percent: 2.6
+    sl_min_percent: 1.0
+    sl_max_percent: 1.6
+    max_holding_minutes: 20.0
+    min_holding_minutes: 2.0
+    min_profit_for_extension: 0.5
+    extension_percent: 120.0
+  ranging:
+    tp_atr_multiplier: 1.5
+    sl_atr_multiplier: 1.0
+    tp_min_percent: 1.35
+    tp_max_percent: 2.4
+    sl_min_percent: 0.9
+    sl_max_percent: 1.5
+    max_holding_minutes: 25.0
+    min_holding_minutes: 1.0
+    min_profit_for_extension: 0.4
+    extension_percent: 120.0
+  choppy:
+    tp_atr_multiplier: 1.4
+    sl_atr_multiplier: 1.0
+    tp_min_percent: 1.12
+    tp_max_percent: 2.0
+    sl_min_percent: 0.8
+    sl_max_percent: 1.3
+    max_holding_minutes: 10.0
+    min_holding_minutes: 1.0
+    min_profit_for_extension: 0.4
+    extension_percent: 110.0
+
 exit_params_legacy:
     ranging:
     max_holding_minutes: 25.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильное значение для ranging режима
@@ -1815,7 +1850,7 @@ signal_generator:
     ws_fresh_max_age: 5.0
     ws_watchdog_consecutive_stale: 3
     ws_signal_grace_period: 10.0
-    allow_rest_for_ws: true
+    allow_rest_for_ws: false
     adx_blocking:
       allow_countertrend_on_price_action: true
       min_confidence_to_block: 0.65
@@ -2373,7 +2408,7 @@ futures_modules:
 
     ws_watchdog_consecutive_stale: 3
     ws_signal_grace_period: 10.0
-    allow_rest_for_ws: true
+    allow_rest_for_ws: false
     adx_blocking:
       allow_countertrend_on_price_action: true
       min_confidence_to_block: 0.65

@@ -650,7 +650,7 @@ class ExitAnalyzer:
         entry_time: Optional[datetime] = None,
         position: Optional[Any] = None,
         metadata: Optional[Any] = None,
-    ) -> float:
+    ) -> Optional[float]:
         """
         Расчет PnL% с учетом комиссии.
         # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для фьючерсов считаем PnL% от МАРЖИ, а не от цены!
@@ -983,10 +983,11 @@ class ExitAnalyzer:
         Returns:
             TP% для использования (адаптивный если передан контекст)
         """
-        tp_percent = 2.4  # Fallback значение
-        tp_atr_multiplier = 2.5
-        tp_min_percent = 1.5
-        tp_max_percent = 2.2  # ✅ ГРОК ФИКС: Максимальный TP 2.2%
+        tp_percent: Optional[float] = None
+        tp_atr_multiplier: Optional[float] = None
+        tp_min_percent: Optional[float] = None
+        tp_max_percent: Optional[float] = None
+        tp_fallback_enabled = False
 
         # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения параметров
         # ✅ НОВОЕ (05.01.2026): Передаем контекст для адаптивных параметров
@@ -1037,35 +1038,58 @@ class ExitAnalyzer:
                 if exit_params:
                     if "tp_percent" in exit_params:
                         tp_percent = self._to_float(
-                            exit_params["tp_percent"], "tp_percent", 2.4
+                            exit_params["tp_percent"], "tp_percent", None
                         )
                     if "tp_atr_multiplier" in exit_params:
                         tp_atr_multiplier = self._to_float(
-                            exit_params["tp_atr_multiplier"], "tp_atr_multiplier", 2.5
+                            exit_params["tp_atr_multiplier"], "tp_atr_multiplier", None
                         )
                     if "tp_min_percent" in exit_params:
                         tp_min_percent = self._to_float(
-                            exit_params["tp_min_percent"], "tp_min_percent", 1.5
+                            exit_params["tp_min_percent"], "tp_min_percent", None
                         )
                     if "tp_max_percent" in exit_params:
                         tp_max_percent = self._to_float(
-                            exit_params["tp_max_percent"], "tp_max_percent", 2.2
+                            exit_params["tp_max_percent"], "tp_max_percent", None
                         )
                     # ✅ НОВОЕ (03.01.2026): Детальное логирование источников TP параметров
-                    logger.info(
-                        f"📊 [PARAMS] {symbol} ({regime}): TP параметры "
-                        f"tp_percent={tp_percent:.2f}%, tp_atr_multiplier={tp_atr_multiplier:.2f}, "
-                        f"tp_min={tp_min_percent:.2f}%, tp_max={tp_max_percent:.2f}% | "
-                        f"Источник: ParameterProvider.get_exit_params()"
-                    )
+                    if (
+                        tp_percent is not None
+                        and tp_atr_multiplier is not None
+                        and tp_min_percent is not None
+                        and tp_max_percent is not None
+                    ):
+                        logger.info(
+                            f"📊 [PARAMS] {symbol} ({regime}): TP параметры "
+                            f"tp_percent={tp_percent:.2f}%, tp_atr_multiplier={tp_atr_multiplier:.2f}, "
+                            f"tp_min={tp_min_percent:.2f}%, tp_max={tp_max_percent:.2f}% | "
+                            f"Источник: ParameterProvider.get_exit_params()"
+                        )
+                    else:
+                        logger.warning(
+                            f"⚠️ ExitAnalyzer: TP параметры отсутствуют/неполные для {symbol} ({regime}) "
+                            f"(tp_percent={tp_percent}, tp_atr_multiplier={tp_atr_multiplier}, "
+                            f"tp_min={tp_min_percent}, tp_max={tp_max_percent})"
+                        )
             except Exception as e:
                 logger.debug(
                     f"⚠️ ExitAnalyzer: Ошибка получения TP параметров через ParameterProvider: {e}, "
                     f"используем fallback к config_manager"
                 )
 
+        if (
+            tp_atr_multiplier is None
+            or tp_min_percent is None
+            or tp_max_percent is None
+        ):
+            logger.error(
+                f"❌ ExitAnalyzer: TP параметры не валидны для {symbol} ({regime}) "
+                f"(tp_atr_multiplier={tp_atr_multiplier}, tp_min_percent={tp_min_percent}, tp_max_percent={tp_max_percent})"
+            )
+            return None
+
         # Fallback на config_manager для обратной совместимости
-        if self.config_manager and tp_percent == 2.4:
+        if tp_fallback_enabled and self.config_manager and tp_percent is None:
             try:
                 # Пробуем получить TP из symbol_profiles
                 symbol_profiles = getattr(self.config_manager, "symbol_profiles", {})
@@ -1187,6 +1211,8 @@ class ExitAnalyzer:
                     logger.error(
                         f"❌ [ATR] {symbol}: ATRProvider недоступен для расчета TP/SL - ПРОПУСКАЕМ расчет"
                     )
+                    if not tp_fallback_enabled:
+                        return None
                     return 2.4  # Возвращаем fallback значение
 
                 atr_1m = self.atr_provider.get_atr(symbol)  # БЕЗ FALLBACK
@@ -1194,6 +1220,8 @@ class ExitAnalyzer:
                     logger.error(
                         f"❌ [ATR] {symbol}: ATR не найден через ATRProvider для расчета TP/SL - ПРОПУСКАЕМ расчет"
                     )
+                    if not tp_fallback_enabled:
+                        return None
                     return 2.4  # Возвращаем fallback значение
 
                 # ✅ ИСПРАВЛЕНО: ATR найден через ATRProvider, продолжаем расчет TP/SL
@@ -1243,6 +1271,12 @@ class ExitAnalyzer:
                 else:
                     # ✅ КРИТИЧЕСКОЕ: Если ATR не найден, используем фиксированный TP из конфига
                     # НО проверяем, что tp_percent не равен fallback значению 2.4
+                    if tp_percent is None:
+                        logger.warning(
+                            f"⚠️ [ATR_TP] {symbol}: ATR не найден и tp_percent отсутствует - "
+                            f"TP отключен (fallback запрещен)"
+                        )
+                        return None
                     if tp_percent == 2.4:
                         logger.warning(
                             f"⚠️ [ATR_TP] {symbol}: ATR не найден И tp_percent=2.4 (fallback) - "
@@ -1258,7 +1292,9 @@ class ExitAnalyzer:
                 )
 
         # ✅ ИСПРАВЛЕНО (07.01.2026): Убедитесь что tp_percent всегда float перед возвратом
-        tp_percent = self._to_float(tp_percent, "tp_percent_final", 2.4)
+        if tp_percent is None:
+            return None
+        tp_percent = self._to_float(tp_percent, "tp_percent_final", tp_percent)
         return tp_percent
 
     def _safe_sl_percent(
@@ -3008,12 +3044,18 @@ class ExitAnalyzer:
                 metadata=metadata,
             )
             try:
-                tp_percent = float(tp_percent) if tp_percent is not None else 2.4
+                if tp_percent is None:
+                    logger.warning(
+                        f"⚠️ ExitAnalyzer TRENDING: TP отключен (нет параметров) для {symbol}"
+                    )
+                tp_percent = (
+                    float(tp_percent) if tp_percent is not None else float("inf")
+                )
             except (TypeError, ValueError) as e:
                 logger.error(
                     f"❌ ExitAnalyzer TRENDING: Ошибка приведения tp_percent для {symbol}: {e}"
                 )
-                tp_percent = 2.4
+                tp_percent = float("inf")
             if pnl_percent >= tp_percent:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Защита от TP на убыточных позициях
                 # Проверяем реальный PnL от entry_price к current_price
@@ -4510,7 +4552,11 @@ class ExitAnalyzer:
                 metadata=metadata,
             )
             # ✅ ИСПРАВЛЕНО: Используем helper функцию для безопасной конвертации
-            tp_percent = self._to_float(tp_percent, "tp_percent", 2.4)
+            if tp_percent is None:
+                logger.warning(
+                    f"⚠️ ExitAnalyzer RANGING: TP отключен (нет параметров) для {symbol}"
+                )
+            tp_percent = self._to_float(tp_percent, "tp_percent", float("inf"))
             net_format_tp = (
                 f"{net_pnl_percent:.4f}"
                 if abs(net_pnl_percent) < 0.1
@@ -5729,12 +5775,18 @@ class ExitAnalyzer:
                 metadata=metadata,
             )
             try:
-                tp_percent = float(tp_percent) if tp_percent is not None else 2.4
+                if tp_percent is None:
+                    logger.warning(
+                        f"⚠️ ExitAnalyzer CHOPPY: TP отключен (нет параметров) для {symbol}"
+                    )
+                tp_percent = (
+                    float(tp_percent) if tp_percent is not None else float("inf")
+                )
             except (TypeError, ValueError) as e:
                 logger.error(
                     f"❌ ExitAnalyzer CHOPPY: Ошибка приведения tp_percent для {symbol}: {e}"
                 )
-                tp_percent = 2.4
+                tp_percent = float("inf")
             if pnl_percent >= tp_percent:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Защита от TP на убыточных позициях
                 # Проверяем реальный PnL от entry_price к current_price

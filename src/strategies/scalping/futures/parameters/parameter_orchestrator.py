@@ -49,9 +49,15 @@ class ParameterOrchestrator:
         self._patterns = self._scalping.get("patterns") or {}
         self._by_symbol = self._scalping.get("by_symbol") or {}
 
-        logger.info(f"ParameterOrchestrator init: raw scalping keys: {list(self._scalping.keys())}")
-        logger.info(f"ParameterOrchestrator init: adaptive_regime keys: {list(self._adaptive_regime.keys())}")
-        logger.info(f"ParameterOrchestrator init: patterns keys: {list(self._patterns.keys())}")
+        logger.info(
+            f"ParameterOrchestrator init: raw scalping keys: {list(self._scalping.keys())}"
+        )
+        logger.info(
+            f"ParameterOrchestrator init: adaptive_regime keys: {list(self._adaptive_regime.keys())}"
+        )
+        logger.info(
+            f"ParameterOrchestrator init: patterns keys: {list(self._patterns.keys())}"
+        )
 
     def resolve_bundle(
         self,
@@ -66,15 +72,27 @@ class ParameterOrchestrator:
         include_risk: bool = True,
         include_patterns: bool = True,
     ) -> ParameterBundle:
+        status = ParameterStatus(valid=True)
         # Extract candles and current_price from market_data if available
         candles = None
         current_price = None
-        if market_data and hasattr(market_data, 'ohlcv_data'):
-            candles = market_data.ohlcv_data
-        if not current_price:
-            current_price = self.data_registry.get_fresh_price_for_signals(symbol)
-        
-        regime_value = self._resolve_regime(symbol, regime, status, candles, current_price)
+        if market_data:
+            if hasattr(market_data, "ohlcv_data"):
+                candles = market_data.ohlcv_data
+            if hasattr(market_data, "current_tick") and market_data.current_tick:
+                try:
+                    current_price = float(market_data.current_tick.price)
+                except Exception:
+                    current_price = None
+            if current_price is None and candles:
+                try:
+                    current_price = float(candles[-1].close)
+                except Exception:
+                    current_price = None
+
+        regime_value = self._resolve_regime(
+            symbol, regime, status, candles, current_price
+        )
 
         signal_params = None
         exit_params = None
@@ -84,7 +102,9 @@ class ParameterOrchestrator:
 
         if include_signal:
             signal_params = self._resolve_signal_params(symbol, regime_value, status)
-            logger.debug(f"PARAM_ORCH: signal_params resolved: {signal_params is not None}, errors: {status.errors}")
+            logger.debug(
+                f"PARAM_ORCH: signal_params resolved: {signal_params is not None}, errors: {status.errors}"
+            )
         if include_exit:
             exit_params = self._resolve_exit_params(
                 symbol, regime_value, market_data, status
@@ -110,10 +130,17 @@ class ParameterOrchestrator:
         )
 
     def _resolve_regime(
-        self, symbol: str, regime: Optional[str], status: ParameterStatus, candles: Optional[List] = None, current_price: Optional[float] = None
+        self,
+        symbol: str,
+        regime: Optional[str],
+        status: ParameterStatus,
+        candles: Optional[List] = None,
+        current_price: Optional[float] = None,
     ) -> Optional[str]:
         if regime:
-            logger.debug(f"PARAM_ORCH: _resolve_regime: using provided regime '{regime}'")
+            logger.debug(
+                f"PARAM_ORCH: _resolve_regime: using provided regime '{regime}'"
+            )
             return str(regime).lower()
         if self.regime_manager is None:
             status.errors.append("regime_manager is not set")
@@ -121,24 +148,29 @@ class ParameterOrchestrator:
             return None
         try:
             # Try detect_regime first (per-symbol), fallback to get_current_regime (global)
-            if hasattr(self.regime_manager, 'detect_regime'):
-                # Use provided candles and current_price, or get them
-                if candles is None:
-                    candles = self.data_registry.get_candles(symbol)
-                if current_price is None:
-                    current_price = self.data_registry.get_fresh_price_for_signals(symbol)
+            if hasattr(self.regime_manager, "detect_regime"):
                 if candles is None or current_price is None:
-                    status.errors.append(f"failed to get market data for regime detection: candles={candles is not None}, price={current_price is not None}")
+                    status.errors.append(
+                        f"failed to get market data for regime detection: candles={candles is not None}, price={current_price is not None}"
+                    )
                     return None
                 resolved = self.regime_manager.detect_regime(candles, current_price)
-                resolved = resolved.regime if hasattr(resolved, 'regime') else str(resolved)
-                logger.debug(f"PARAM_ORCH: _resolve_regime: detect_regime('{symbol}') returned '{resolved}'")
+                resolved = (
+                    resolved.regime if hasattr(resolved, "regime") else str(resolved)
+                )
+                logger.debug(
+                    f"PARAM_ORCH: _resolve_regime: detect_regime('{symbol}') returned '{resolved}'"
+                )
             else:
                 resolved = self.regime_manager.get_current_regime()
-                logger.debug(f"PARAM_ORCH: _resolve_regime: get_current_regime() returned '{resolved}'")
+                logger.debug(
+                    f"PARAM_ORCH: _resolve_regime: get_current_regime() returned '{resolved}'"
+                )
         except Exception as exc:
             status.errors.append(f"failed to get regime: {exc}")
-            logger.debug(f"PARAM_ORCH: _resolve_regime: exception getting regime: {exc}")
+            logger.debug(
+                f"PARAM_ORCH: _resolve_regime: exception getting regime: {exc}"
+            )
             return None
         if not resolved:
             status.errors.append("regime is empty")

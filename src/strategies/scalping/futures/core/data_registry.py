@@ -128,9 +128,7 @@ class DataRegistry:
                 f"WS reconnect requested for {symbol} (fallback_count={fallback_count}, reason={reason})"
             )
         except Exception as e:
-            logger.debug(
-                f"WS reconnect callback failed for {symbol}: {e}"
-            )
+            logger.debug(f"WS reconnect callback failed for {symbol}: {e}")
 
     async def is_stale(self, symbol: str) -> bool:
         """Проверяет, устарели ли рыночные данные для символа"""
@@ -216,7 +214,9 @@ class DataRegistry:
             logger.debug(f"✅ DataRegistry: Обновлены market data для {symbol}")
             try:
                 updated = self._market_data[symbol].get("updated_at")
-                price = self._market_data[symbol].get("price") or self._market_data[symbol].get("last_price")
+                price = self._market_data[symbol].get("price") or self._market_data[
+                    symbol
+                ].get("last_price")
                 source = self._market_data[symbol].get("source")
                 age = (datetime.now() - updated).total_seconds() if updated else None
                 logger.debug(
@@ -511,7 +511,7 @@ class DataRegistry:
 
             if updated_at and isinstance(updated_at, datetime) and price:
                 age = (datetime.now() - updated_at).total_seconds()
-                if age <= 3.0:  # ✅ Умеренный TTL для SignalGenerator
+                if age <= 10.0:  # ✅ TTL для SignalGenerator (WS может идти с паузами)
                     logger.debug(
                         f"✅ SignalGenerator: Используем WebSocket цену для {symbol}: "
                         f"${price:.4f} (age={age:.1f}s)"
@@ -519,7 +519,7 @@ class DataRegistry:
                     return price
                 else:
                     logger.warning(
-                        f"⚠️ SignalGenerator: WebSocket цена для {symbol} устарела на {age:.1f}s (>3.0s), "
+                        f"⚠️ SignalGenerator: WebSocket цена для {symbol} устарела на {age:.1f}s (>10.0s), "
                         f"fallback на REST API"
                     )
 

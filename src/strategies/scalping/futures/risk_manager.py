@@ -17,9 +17,9 @@ from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
 from src.config import BotConfig
-from .config.config_view import get_scalping_view
 
 from .config.config_manager import ConfigManager
+from .config.config_view import get_scalping_view
 from .risk.liquidation_protector import LiquidationProtector
 from .risk.margin_monitor import MarginMonitor
 from .risk.max_size_limiter import MaxSizeLimiter
@@ -1614,8 +1614,8 @@ class FuturesRiskManager:
                 try:
                     # Получаем детали инструмента для проверки минимального размера
                     inst_details = await self.client.get_instrument_details(symbol)
-                    ct_val = float(inst_details.get("ctVal", 0.01))
-                    min_sz = float(inst_details.get("minSz", 0.01))
+                    ct_val = float(inst_details.get("ctVal") or 0.01)
+                    min_sz = float(inst_details.get("minSz") or 0.01)
 
                     # Конвертируем размер из монет в контракты
                     size_in_contracts = position_size / ct_val if ct_val > 0 else 0
@@ -1771,7 +1771,9 @@ class FuturesRiskManager:
                 if self.data_registry:
                     ticker_data = await self.data_registry.get_ticker(symbol)
                     if ticker_data and "last" in ticker_data:
-                        current_price = float(ticker_data["last"])
+                        raw_last = ticker_data.get("last")
+                        if raw_last is not None:
+                            current_price = float(raw_last)
             except Exception:
                 pass
 

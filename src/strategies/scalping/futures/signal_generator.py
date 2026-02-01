@@ -10,7 +10,7 @@ Futures Signal Generator для скальпинг стратегии.
 
 import copy
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import numpy as np  # ✅ Для per-symbol ATR расчётов
@@ -314,7 +314,11 @@ class FuturesSignalGenerator:
             self._allow_rest_for_ws = bool(sg_cfg.get("allow_rest_for_ws", False))
         else:
             self._allow_rest_for_ws = bool(getattr(sg_cfg, "allow_rest_for_ws", False))
-        self._rest_update_cooldown = float(sg_cfg.get("rest_update_cooldown", 1.0)) if isinstance(sg_cfg, dict) else float(getattr(sg_cfg, "rest_update_cooldown", 1.0))
+        self._rest_update_cooldown = (
+            float(sg_cfg.get("rest_update_cooldown", 1.0))
+            if isinstance(sg_cfg, dict)
+            else float(getattr(sg_cfg, "rest_update_cooldown", 1.0))
+        )
         self._last_rest_update_ts: Dict[str, float] = {}
 
     def set_data_registry(self, data_registry):
@@ -436,7 +440,9 @@ class FuturesSignalGenerator:
         if not updated_at or not isinstance(updated_at, datetime) or not price:
             return False
 
-        age = (datetime.now() - updated_at).total_seconds()
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - updated_at).total_seconds()
         if age <= grace_period:
             logger.debug(
                 f"✅ SignalGenerator: допускаем устаревший сигнал для {symbol} "
@@ -1623,14 +1629,17 @@ class FuturesSignalGenerator:
                                     )
                                     extra = ""
                                     if data_snapshot:
-                                        age = (
-                                            (
-                                                datetime.now()
-                                                - data_snapshot.get("updated_at")
+                                        updated_at = data_snapshot.get("updated_at")
+                                        if isinstance(updated_at, datetime):
+                                            if updated_at.tzinfo is None:
+                                                updated_at = updated_at.replace(
+                                                    tzinfo=timezone.utc
+                                                )
+                                            age = (
+                                                datetime.now(timezone.utc) - updated_at
                                             ).total_seconds()
-                                            if data_snapshot.get("updated_at")
-                                            else None
-                                        )
+                                        else:
+                                            age = None
                                         age_str = (
                                             f"{age:.1f}s" if age is not None else "N/A"
                                         )
@@ -1947,8 +1956,9 @@ class FuturesSignalGenerator:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Используем get_fresh_price_for_signals вместо get_price
         try:
             if self.data_registry:
+                client_for_fresh = self.client if self._allow_rest_for_ws else None
                 price = await self.data_registry.get_fresh_price_for_signals(
-                    symbol, client=self.client
+                    symbol, client=client_for_fresh
                 )
                 # ✅ ВАЖНО: Проверяем что price это float и > 0
                 if (
@@ -3038,7 +3048,7 @@ class FuturesSignalGenerator:
                         "price": self._adjust_price_for_slippage(
                             symbol, current_price, "sell"
                         ),
-                        "timestamp": datetime.now(),
+                        "timestamp": datetime.now(timezone.utc),
                         "rsi": rsi_value,
                         "macd_line": macd_line,
                         "signal_line": signal_line,
@@ -3099,7 +3109,7 @@ class FuturesSignalGenerator:
                             "price": self._adjust_price_for_slippage(
                                 symbol, current_price, "sell"
                             ),
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": adx_value,
                             "confidence": 0.7,  # Высокая уверенность при сильном bearish тренде
                             "has_conflict": False,
@@ -3126,7 +3136,7 @@ class FuturesSignalGenerator:
                             "price": self._adjust_price_for_slippage(
                                 symbol, current_price, "buy"
                             ),
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": adx_value,
                             "confidence": 0.7,  # Высокая уверенность при сильном bullish тренде
                             "has_conflict": False,
@@ -3290,9 +3300,13 @@ class FuturesSignalGenerator:
                     adx_block_cfg = sg_cfg.get("adx_blocking")
                 else:
                     adx_block_cfg = getattr(sg_cfg, "adx_blocking", None)
-                logger.warning(f"[DEBUG] adx_block_cfg type: {type(adx_block_cfg)}, value: {adx_block_cfg}")
+                logger.warning(
+                    f"[DEBUG] adx_block_cfg type: {type(adx_block_cfg)}, value: {adx_block_cfg}"
+                )
                 if not adx_block_cfg:
-                    logger.error(f"[DEBUG] adx_block_cfg is missing or empty! sg_cfg: {sg_cfg}")
+                    logger.error(
+                        f"[DEBUG] adx_block_cfg is missing or empty! sg_cfg: {sg_cfg}"
+                    )
                     raise ValueError(
                         "❌ adx_blocking config section is required in signal_generator config (strict orchestrator-only mode)"
                     )
@@ -3301,7 +3315,9 @@ class FuturesSignalGenerator:
                         "allow_countertrend_on_price_action" not in adx_block_cfg
                         or "min_confidence_to_block" not in adx_block_cfg
                     ):
-                        logger.error(f"[DEBUG] adx_block_cfg missing required keys! adx_block_cfg: {adx_block_cfg}")
+                        logger.error(
+                            f"[DEBUG] adx_block_cfg missing required keys! adx_block_cfg: {adx_block_cfg}"
+                        )
                         raise ValueError(
                             "❌ Both allow_countertrend_on_price_action and min_confidence_to_block must be set in adx_blocking config (strict orchestrator-only mode)"
                         )
@@ -3316,7 +3332,9 @@ class FuturesSignalGenerator:
                         hasattr(adx_block_cfg, "allow_countertrend_on_price_action")
                         and hasattr(adx_block_cfg, "min_confidence_to_block")
                     ):
-                        logger.error(f"[DEBUG] adx_block_cfg object missing required attributes! adx_block_cfg: {adx_block_cfg}")
+                        logger.error(
+                            f"[DEBUG] adx_block_cfg object missing required attributes! adx_block_cfg: {adx_block_cfg}"
+                        )
                         raise ValueError(
                             "❌ Both allow_countertrend_on_price_action and min_confidence_to_block must be set in adx_blocking config (strict orchestrator-only mode)"
                         )
@@ -3326,7 +3344,9 @@ class FuturesSignalGenerator:
                     min_confidence_to_block = float(
                         getattr(adx_block_cfg, "min_confidence_to_block")
                     )
-                logger.warning(f"[DEBUG] allow_countertrend_on_price_action: {allow_countertrend_on_price_action}, min_confidence_to_block: {min_confidence_to_block}")
+                logger.warning(
+                    f"[DEBUG] allow_countertrend_on_price_action: {allow_countertrend_on_price_action}, min_confidence_to_block: {min_confidence_to_block}"
+                )
             except Exception as e:
                 logger.error(f"❌ Ошибка инициализации adx_blocking config: {e}")
                 logger.error(f"[DEBUG] Exception details: {e}")
@@ -4384,7 +4404,7 @@ class FuturesSignalGenerator:
                             "type": "rsi_oversold",
                             "strength": strength,
                             "price": adjusted_price,
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": rsi,
                             "confidence": confidence,
                             "has_conflict": has_conflict,
@@ -4470,7 +4490,7 @@ class FuturesSignalGenerator:
                             "price": self._adjust_price_for_slippage(
                                 symbol, current_price, "sell"
                             ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": rsi,
                             "confidence": confidence,
                             "has_conflict": has_conflict,
@@ -4762,7 +4782,7 @@ class FuturesSignalGenerator:
                             "price": self._adjust_price_for_slippage(
                                 symbol, current_price, "buy"
                             ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": histogram,
                             "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
                         }
@@ -4862,7 +4882,7 @@ class FuturesSignalGenerator:
                             "price": self._adjust_price_for_slippage(
                                 symbol, current_price, "sell"
                             ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": histogram,
                             "confidence": macd_confidence,  # ✅ АДАПТИВНО: Из конфига
                         }
@@ -5108,7 +5128,7 @@ class FuturesSignalGenerator:
                             "price": self._adjust_price_for_slippage(
                                 symbol, current_price, "buy"
                             ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": current_price,
                             "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
                         }
@@ -5244,7 +5264,7 @@ class FuturesSignalGenerator:
                             "price": self._adjust_price_for_slippage(
                                 symbol, current_price, "sell"
                             ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": current_price,
                             "confidence": bb_confidence,  # ✅ АДАПТИВНО: Из конфига
                         }
@@ -5354,7 +5374,7 @@ class FuturesSignalGenerator:
                         "price": self._adjust_price_for_slippage(
                             symbol, current_price, "buy"
                         ),
-                        "timestamp": datetime.now(),
+                        "timestamp": datetime.now(timezone.utc),
                         "indicator_value": distance_to_lower,
                         "confidence": 0.70,  # Средняя уверенность для range-bounce
                     }
@@ -5386,7 +5406,7 @@ class FuturesSignalGenerator:
                         "price": self._adjust_price_for_slippage(
                             symbol, current_price, "sell"
                         ),
-                        "timestamp": datetime.now(),
+                        "timestamp": datetime.now(timezone.utc),
                         "indicator_value": distance_to_upper,
                         "confidence": 0.70,  # Средняя уверенность для range-bounce
                     }
@@ -6113,7 +6133,7 @@ class FuturesSignalGenerator:
                             "price": self._adjust_price_for_slippage(
                                 symbol, current_price, "buy"
                             ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": ma_fast,
                             "confidence": (
                                 confidence_config.get("bullish_strong", 0.7)
@@ -6183,7 +6203,7 @@ class FuturesSignalGenerator:
                             "price": self._adjust_price_for_slippage(
                                 symbol, current_price, "sell"
                             ),  # ✅ НОВОЕ (28.12.2025): Учет slippage
-                            "timestamp": datetime.now(),
+                            "timestamp": datetime.now(timezone.utc),
                             "indicator_value": ma_fast,
                             "confidence": (
                                 confidence_config.get("bearish_strong", 0.7)
@@ -6487,7 +6507,7 @@ class FuturesSignalGenerator:
             "type": "impulse_breakout",
             "strength": strength,
             "price": current_market_price,  # ✅ Используем актуальную цену из стакана
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
             "indicator_value": body_ratio,
             "confidence": 0.9,
             "is_impulse": True,
@@ -7787,7 +7807,9 @@ class FuturesSignalGenerator:
                             if isinstance(regime_obj, str)
                             else str(regime_obj).lower()
                         )
-                logger.debug(f"PARAM_ORCH: using regime '{regime_name_min_strength}' for min_signal_strength")
+                logger.debug(
+                    f"PARAM_ORCH: using regime '{regime_name_min_strength}' for min_signal_strength"
+                )
             except Exception as exc:
                 logger.debug("Ignored error in optional block: %s", exc)
 
@@ -7977,7 +7999,7 @@ class FuturesSignalGenerator:
     def _update_signal_history(self, signals: List[Dict[str, Any]]):
         """Обновление истории сигналов"""
         try:
-            timestamp = datetime.now()
+            timestamp = datetime.now(timezone.utc)
 
             for signal in signals:
                 signal_record = {
