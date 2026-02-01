@@ -1189,6 +1189,7 @@ class SignalCoordinator:
 
             # Используем блокировку - только один поток может обрабатывать сигнал для символа одновременно
             async with self.signal_locks_ref[normalized_symbol]:
+                signal = None  # prevent UnboundLocalError in pre-signal checks
                 # ✅ ИСПРАВЛЕНИЕ: Убираем проверку "если позиция уже есть по символу"
                 # Теперь разрешаем несколько позиций по одному символу (например, 3 на BTC и 3 на ETH)
                 # Проверяем только общий лимит позиций
@@ -1386,20 +1387,23 @@ class SignalCoordinator:
 
                             # ✅ НОВОЕ: Разрешаем LONG и SHORT одновременно, разрешаем суммирование ордеров
                             # Подсчитываем ордера в том же направлении что и сигнал
-                            signal_position_side = signal.get(
-                                "position_side", "long"
-                            ).lower()
-                            same_direction_count = 0
-                            for pos in symbol_positions:
-                                pos_side_raw = pos.get("posSide", "").lower()
-                                pos_raw = float(pos.get("pos", "0"))
-                                if pos_side_raw in ["long", "short"]:
-                                    pos_side = pos_side_raw
-                                else:
-                                    pos_side = "long" if pos_raw > 0 else "short"
+                            if signal is not None:
+                                signal_position_side = signal.get(
+                                    "position_side", "long"
+                                ).lower()
+                                same_direction_count = 0
+                                for pos in symbol_positions:
+                                    pos_side_raw = pos.get("posSide", "").lower()
+                                    pos_raw = float(pos.get("pos", "0"))
+                                    if pos_side_raw in ["long", "short"]:
+                                        pos_side = pos_side_raw
+                                    else:
+                                        pos_side = "long" if pos_raw > 0 else "short"
 
-                                if pos_side == signal_position_side:
-                                    same_direction_count += 1
+                                    if pos_side == signal_position_side:
+                                        same_direction_count += 1
+                            else:
+                                same_direction_count = 0
 
                             # Если уже 5 ордеров в том же направлении → полное закрытие позиции
                             if same_direction_count >= 5:

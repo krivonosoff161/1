@@ -12,7 +12,7 @@ import asyncio
 import re
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
@@ -325,8 +325,6 @@ class FuturesOrderExecutor:
                     signal_timestamp = signal.get("timestamp")
                     if signal_timestamp:
                         try:
-                            from datetime import datetime, timezone
-
                             if isinstance(signal_timestamp, str):
                                 signal_dt = datetime.fromisoformat(
                                     signal_timestamp.replace("Z", "+00:00")
