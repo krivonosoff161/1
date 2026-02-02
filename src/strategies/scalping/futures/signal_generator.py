@@ -7961,13 +7961,19 @@ class FuturesSignalGenerator:
             strength_values = [
                 _safe_strength(s.get("strength", 0.0)) for s in signals if s is not None
             ]
-            max_strength = max(strength_values) if strength_values else 0.0
+            positive_strengths = [v for v in strength_values if v > 0.0]
+            p90_strength = 0.0
+            if positive_strengths:
+                try:
+                    p90_strength = float(np.percentile(positive_strengths, 90))
+                except Exception:
+                    p90_strength = max(positive_strengths)
             norm_factor = 1.0
-            if 0.0 < max_strength < 0.2:
-                norm_factor = 1.0 / max_strength
+            if 0.0 < p90_strength < 0.2:
+                norm_factor = 1.0 / p90_strength
                 logger.info(
-                    f"[STRENGTH NORMALIZE] max_strength={max_strength:.6f}, "
-                    f"norm_factor={norm_factor:.3f}"
+                    f"[STRENGTH NORMALIZE] p90_strength={p90_strength:.6f}, "
+                    f"norm_factor={norm_factor:.3f}, samples={len(positive_strengths)}"
                 )
 
             for s in signals:
