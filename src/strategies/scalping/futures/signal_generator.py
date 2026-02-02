@@ -1633,9 +1633,7 @@ class FuturesSignalGenerator:
                                         if isinstance(updated_at, datetime):
                                             if updated_at.tzinfo is None:
                                                 local_tz = (
-                                                    datetime.now()
-                                                    .astimezone()
-                                                    .tzinfo
+                                                    datetime.now().astimezone().tzinfo
                                                 )
                                                 updated_at = updated_at.replace(
                                                     tzinfo=local_tz
@@ -7952,6 +7950,37 @@ class FuturesSignalGenerator:
                     signal["strength"] = strength_val
                     signal["pattern_bias"] = bias
                     signal["pattern_confidence"] = ctx.get("confidence", 0.0)
+
+            # Нормализация силы сигнала до 0..1 для согласования с min_signal_strength
+            def _safe_strength(value: Any) -> float:
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return 0.0
+
+            strength_values = [
+                _safe_strength(s.get("strength", 0.0)) for s in signals if s is not None
+            ]
+            max_strength = max(strength_values) if strength_values else 0.0
+            norm_factor = 1.0
+            if 0.0 < max_strength < 0.2:
+                norm_factor = 1.0 / max_strength
+                logger.info(
+                    f"[STRENGTH NORMALIZE] max_strength={max_strength:.6f}, "
+                    f"norm_factor={norm_factor:.3f}"
+                )
+
+            for s in signals:
+                raw_strength = _safe_strength(s.get("strength", 0.0))
+                s["strength_raw"] = raw_strength
+                if norm_factor != 1.0:
+                    raw_strength = raw_strength * norm_factor
+                    s["strength_normed"] = True
+                    s["strength_norm_factor"] = norm_factor
+                else:
+                    s["strength_normed"] = False
+                    s["strength_norm_factor"] = 1.0
+                s["strength"] = max(0.0, min(1.0, raw_strength))
 
             filtered_signals = []
             for s in signals:
