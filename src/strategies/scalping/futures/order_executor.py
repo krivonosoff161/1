@@ -434,6 +434,29 @@ class FuturesOrderExecutor:
 
     def _determine_order_type(self, signal: Dict[str, Any]) -> str:
         """Определение типа ордера на основе сигнала"""
+        # ✅ Приоритет: если в конфиге включены market-входы — используем market
+        try:
+            order_executor_cfg = getattr(self.scalping_config, "order_executor", {})
+            limit_cfg = (
+                order_executor_cfg.get("limit_order", {})
+                if order_executor_cfg
+                else {}
+            )
+            use_market = False
+            if isinstance(limit_cfg, dict):
+                use_market = bool(limit_cfg.get("use_market_order", False))
+                regime = signal.get("regime")
+                if regime and isinstance(limit_cfg.get("by_regime"), dict):
+                    regime_cfg = limit_cfg["by_regime"].get(str(regime).lower(), {})
+                    if (
+                        isinstance(regime_cfg, dict)
+                        and regime_cfg.get("use_market_order") is True
+                    ):
+                        use_market = True
+            if use_market:
+                return "market"
+        except Exception:
+            pass
         # ✅ ИСПРАВЛЕНО (04.01.2026): Используем limit ордера для экономии комиссий
         # Market ордера имеют комиссию 0.05% (taker), limit ордера - 0.02% (maker)
         # Экономия: $108/месяц при 200 сделках/день
