@@ -1539,29 +1539,31 @@ scalping:
     limit_order:
       # ✅ СНИЖЕНО (14.01.2026): offset до 0.01% для максимальной исполнимости
       limit_offset_percent: 0.01  # Снижен до 0.01% для всех режимов
-      max_wait_seconds: 60
+      max_wait_seconds: 1
       auto_cancel_enabled: true
-      auto_replace_enabled: true
+      auto_replace_enabled: false
       replace_with_market: true  # ✅ ВКЛЮЧЕНО: После таймаута лимитный ордер заменяется на рыночный
-      post_only: true
+      post_only: false
+      use_market_order: true
       adaptive_spread_offset: true
       
       # ✅ АДАПТИВНО: Параметры по режимам рынка (все оффсеты снижены до 0.01%)
       by_regime:
         trending:
           limit_offset_percent: 0.01
-          max_wait_seconds: 60
-          use_market_order: false
-          post_only: true
+          max_wait_seconds: 1
+          use_market_order: true
+          post_only: false
         ranging:
           limit_offset_percent: 0.01
-          max_wait_seconds: 60
-          post_only: true
+          max_wait_seconds: 1
+          use_market_order: true
+          post_only: false
         choppy:
           limit_offset_percent: 0.01
-          max_wait_seconds: 60
-          use_market_order: false
-          post_only: true
+          max_wait_seconds: 1
+          use_market_order: true
+          post_only: false
       
       # ✅ НОВОЕ: Настройки для каждой пары (все оффсеты снижены до 0.01%)
       by_symbol:
