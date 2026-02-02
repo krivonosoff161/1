@@ -7962,30 +7962,45 @@ class FuturesSignalGenerator:
                 _safe_strength(s.get("strength", 0.0)) for s in signals if s is not None
             ]
             positive_strengths = [v for v in strength_values if v > 0.0]
-            p90_strength = 0.0
+            norm_factor = 1.0
+            # Вариант 2: нормализация по медиане/квантилям без резкого апскейла
             if positive_strengths:
                 try:
+                    median_strength = float(np.percentile(positive_strengths, 50))
                     p90_strength = float(np.percentile(positive_strengths, 90))
                 except Exception:
-                    p90_strength = max(positive_strengths)
-            norm_factor = 1.0
-            if 0.0 < p90_strength < 0.2:
-                norm_factor = 1.0 / p90_strength
-                logger.info(
-                    f"[STRENGTH NORMALIZE] p90_strength={p90_strength:.6f}, "
-                    f"norm_factor={norm_factor:.3f}, samples={len(positive_strengths)}"
-                )
+                    sorted_strengths = sorted(positive_strengths)
+                    mid_idx = max(0, int(len(sorted_strengths) * 0.5) - 1)
+                    p90_idx = max(0, int(len(sorted_strengths) * 0.9) - 1)
+                    median_strength = float(sorted_strengths[mid_idx])
+                    p90_strength = float(sorted_strengths[p90_idx])
+
+                target_median = 0.10
+                if median_strength > 0:
+                    norm_factor = min(10.0, max(1.0, target_median / median_strength))
+                if p90_strength > 0:
+                    max_by_p90 = 0.90 / p90_strength
+                    norm_factor = min(norm_factor, max_by_p90)
+
+                if norm_factor > 1.0:
+                    logger.info(
+                        "[STRENGTH NORMALIZE v2] "
+                        f"median={median_strength:.6f}, p90={p90_strength:.6f}, "
+                        f"norm_factor={norm_factor:.3f}, samples={len(positive_strengths)}"
+                    )
 
             for s in signals:
                 raw_strength = _safe_strength(s.get("strength", 0.0))
                 s["strength_raw"] = raw_strength
-                if norm_factor != 1.0:
+                if norm_factor > 1.0:
                     raw_strength = raw_strength * norm_factor
                     s["strength_normed"] = True
                     s["strength_norm_factor"] = norm_factor
+                    s["strength_norm_method"] = "median_p90"
                 else:
                     s["strength_normed"] = False
                     s["strength_norm_factor"] = 1.0
+                    s["strength_norm_method"] = "none"
                 s["strength"] = max(0.0, min(1.0, raw_strength))
 
             filtered_signals = []

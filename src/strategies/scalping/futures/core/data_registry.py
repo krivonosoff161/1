@@ -271,24 +271,8 @@ class DataRegistry:
         self, symbol: str, client=None
     ) -> Optional[float]:
         """
-        ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): Получить СВЕЖУЮ цену для ExitAnalyzer.
-
-        ExitAnalyzer НЕ ДОЛЖЕН принимать решения на устаревших данных (>2s)!
-        Если WebSocket цена устарела → fallback на REST API.
-
-        Проблема: DataRegistry терпит устаревание до 60s, что приводит к:
-        - TP срабатывает на убыточных позициях
-        - PnL рассчитывается неправильно
-        - Адаптивные параметры настраиваются на ложных данных
-
-        Args:
-            symbol: Торговый символ
-            client: Futures client для REST fallback
-
-        Returns:
-            СВЕЖАЯ цена (max 2s old) или None
+        Get fresh price for ExitAnalyzer using WS only (no REST fallback).
         """
-        # Проверяем WebSocket цену с жестким TTL=2s
         async with self._lock:
             md = self._market_data.get(symbol, {})
             updated_at = md.get("updated_at")
@@ -296,92 +280,20 @@ class DataRegistry:
 
             if updated_at and isinstance(updated_at, datetime) and price:
                 age = (datetime.now() - updated_at).total_seconds()
-                if age <= 2.0:  # ✅ СТРОГИЙ TTL для ExitAnalyzer
+                max_age = float(getattr(self, "market_data_ttl", 60.0))
+                if age <= max_age:
                     logger.debug(
-                        f"✅ ExitAnalyzer: Используем WebSocket цену для {symbol}: "
-                        f"${price:.4f} (age={age:.1f}s)"
+                        f"ExitAnalyzer: WS price for {symbol} = ${price:.4f} (age={age:.1f}s)"
                     )
                     return price
-                else:
-                    logger.warning(
-                        f"⚠️ ExitAnalyzer: WebSocket цена для {symbol} устарела на {age:.1f}s (>2.0s), "
-                        f"fallback на REST API"
-                    )
+                logger.warning(
+                    f"ExitAnalyzer: WS price for {symbol} stale {age:.1f}s (> TTL={max_age:.1f}s), REST fallback disabled"
+                )
 
-        # Fallback: запрос свежей цены с биржи через REST API (с кэшированием)
-        if client:
-            try:
-                # ✅ Проверяем кэш REST API (TTL 1s)
-                cache_key = f"{symbol}_ticker"
-                cached = self._rest_ticker_cache.get(cache_key)
-                if (
-                    cached
-                    and (datetime.now() - cached["timestamp"]).total_seconds()
-                    < self._rest_cache_ttl
-                ):
-                    logger.debug(
-                        f"✅ ExitAnalyzer: Используем кэшированную REST цену для {symbol}: ${cached['price']:.4f}"
-                    )
-                    return cached["price"]
-
-                # ✅ Rate limiter: Max 5 concurrent requests
-                async with self._rest_api_semaphore:
-                    # ✅ Delay 100ms между запросами
-                    await asyncio.sleep(0.1)
-
-                    logger.info(
-                        f"🔄 ExitAnalyzer: Запрос СВЕЖЕЙ цены для {symbol} через REST API..."
-                    )
-                    ticker = await client.get_ticker(symbol)
-                    if ticker and isinstance(ticker, dict):
-                        fresh_price = float(
-                            ticker.get("last") or ticker.get("lastPx", 0)
-                        )
-                        if fresh_price > 0:
-                            # ✅ Сохраняем в кэш
-                            self._rest_ticker_cache[cache_key] = {
-                                "price": fresh_price,
-                                "timestamp": datetime.now(),
-                            }
-
-                            # ✅ Увеличиваем счетчик fallback
-                            self._rest_fallback_counter[symbol] = (
-                                self._rest_fallback_counter.get(symbol, 0) + 1
-                            )
-                            fallback_count = self._rest_fallback_counter[symbol]
-
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Мониторинг частых fallback
-                            if fallback_count > 20:
-                                logger.critical(
-                                    f"❌❌❌ КРИТИЧЕСКАЯ ПРОБЛЕМА: WebSocket для {symbol} постоянно отстает! "
-                                    f"REST fallback count={fallback_count}. "
-                                    f"ТРЕБУЕТСЯ RECONNECT WebSocket!"
-                                )
-                                await self._maybe_trigger_ws_reconnect(
-                                    symbol, fallback_count, "exit_analyzer"
-                                )
-                            elif fallback_count > 10:
-                                logger.error(
-                                    f"❌ WebSocket для {symbol} часто отстает! "
-                                    f"REST fallback count={fallback_count}"
-                                )
-
-                            logger.info(
-                                f"✅ ExitAnalyzer: Получена СВЕЖАЯ цена с REST API для {symbol}: ${fresh_price:.4f} "
-                                f"(fallback count={fallback_count})"
-                            )
-                            return fresh_price
-            except Exception as e:
-                logger.error(f"❌ ExitAnalyzer: Ошибка REST fallback для {symbol}: {e}")
-
-        # Если ни WebSocket ни REST не дали свежую цену → КРИТИЧЕСКАЯ ОШИБКА
         logger.error(
-            f"❌ ExitAnalyzer: НЕТ СВЕЖЕЙ ЦЕНЫ для {symbol}! "
-            f"WebSocket устарел, REST fallback failed. "
-            f"НЕ ПРИНИМАЕМ РЕШЕНИЕ о закрытии позиции!"
+            f"ExitAnalyzer: NO FRESH PRICE for {symbol}! WS stale, REST fallback disabled."
         )
         return None
-
     async def get_fresh_price_for_orders(
         self, symbol: str, client=None
     ) -> Optional[float]:
