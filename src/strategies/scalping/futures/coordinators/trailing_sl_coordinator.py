@@ -1808,6 +1808,25 @@ class TrailingSLCoordinator:
         except Exception as e:
             logger.debug(f"⚠️ TSL: Failed to get last candle from DataRegistry: {e}")
 
+        # ✅ ПРИОРИТЕТ 2.5: markPx из позиции (биржевой mark price)
+        try:
+            position = self._get_position(symbol)
+            if position:
+                mark_px = (
+                    position.get("markPx")
+                    or position.get("mark_price")
+                    or position.get("mark_px")
+                )
+                if mark_px is not None:
+                    mark_px = float(mark_px)
+                    if mark_px > 0:
+                        logger.debug(
+                            f"✅ TSL: Using markPx from position for {symbol}: {mark_px:.8f}"
+                        )
+                        return mark_px
+        except Exception as e:
+            logger.debug(f"⚠️ TSL: Failed to get markPx from position: {e}")
+
         # ✅ ПРИОРИТЕТ 3: REST API callback (медленнее чем WebSocket, но все еще OK)
         if self.get_current_price_callback:
             try:
