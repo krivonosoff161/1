@@ -66,16 +66,9 @@ class TakeProfitManager:
             side = position.get("posSide", "long").lower()
             entry_price = float(position.get("avgPx", "0"))
 
-            # Получаем текущую цену
+            # Используем markPx как основную цену для TP (маркировочная цена биржи)
             if current_price is None:
-                try:
-                    price_limits = await self.client.get_price_limits(symbol)
-                    if price_limits:
-                        current_price = price_limits.get("current_price", 0)
-                    else:
-                        current_price = float(position.get("markPx", "0"))
-                except Exception:
-                    current_price = float(position.get("markPx", "0"))
+                current_price = float(position.get("markPx", "0"))
 
             if current_price <= 0 or entry_price <= 0:
                 return False

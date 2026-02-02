@@ -24,6 +24,7 @@ class StopLossManager:
         orchestrator=None,
         exit_analyzer=None,
         close_position_callback=None,
+        get_sl_percent_callback=None,  # ✅ Новый callback для SL% (из position_manager)
     ):
         """
         Инициализация StopLossManager.
@@ -42,6 +43,7 @@ class StopLossManager:
         self.orchestrator = orchestrator
         self.exit_analyzer = exit_analyzer
         self.close_position_callback = close_position_callback
+        self.get_sl_percent_callback = get_sl_percent_callback
 
     async def check_sl(
         self, position: Dict[str, Any], current_price: Optional[float] = None
@@ -61,16 +63,9 @@ class StopLossManager:
             size = float(position.get("pos", "0"))
             entry_price = float(position.get("avgPx", "0"))
 
-            # Получаем текущую цену
+            # Используем markPx как основную цену для SL (маркировочная цена биржи)
             if current_price is None:
-                try:
-                    price_limits = await self.client.get_price_limits(symbol)
-                    if price_limits:
-                        current_price = price_limits.get("current_price", 0)
-                    else:
-                        current_price = float(position.get("markPx", "0"))
-                except Exception:
-                    current_price = float(position.get("markPx", "0"))
+                current_price = float(position.get("markPx", "0"))
 
             if size == 0 or entry_price == 0 or current_price == 0:
                 return False
@@ -305,6 +300,13 @@ class StopLossManager:
         Returns:
             SL процент
         """
+        if self.get_sl_percent_callback:
+            try:
+                return float(self.get_sl_percent_callback(symbol, regime))
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ Ошибка получения SL% через callback: {e}, используем fallback"
+                )
         try:
             # Получаем SL из конфига по режиму
             if self.scalping_config:

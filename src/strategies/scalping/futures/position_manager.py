@@ -179,6 +179,7 @@ class FuturesPositionManager:
             orchestrator=self.orchestrator,
             exit_analyzer=exit_analyzer,
             close_position_callback=self._close_position_by_reason,
+            get_sl_percent_callback=self._get_adaptive_sl_percent,
         )
 
         logger.info(
