@@ -7958,45 +7958,63 @@ class FuturesSignalGenerator:
                 except (TypeError, ValueError):
                     return 0.0
 
-            strength_values = [
-                _safe_strength(s.get("strength", 0.0)) for s in signals if s is not None
-            ]
-            positive_strengths = [v for v in strength_values if v > 0.0]
-            norm_factor = 1.0
-            # Вариант 2: нормализация по медиане/квантилям без резкого апскейла
-            if positive_strengths:
-                try:
-                    median_strength = float(np.percentile(positive_strengths, 50))
-                    p90_strength = float(np.percentile(positive_strengths, 90))
-                except Exception:
-                    sorted_strengths = sorted(positive_strengths)
-                    mid_idx = max(0, int(len(sorted_strengths) * 0.5) - 1)
-                    p90_idx = max(0, int(len(sorted_strengths) * 0.9) - 1)
-                    median_strength = float(sorted_strengths[mid_idx])
-                    p90_strength = float(sorted_strengths[p90_idx])
+            # Вариант 2: нормализация по медиане/квантилям (PER-SYMBOL)
+            strengths_by_symbol: Dict[str, list] = {}
+            for s in signals:
+                if not s:
+                    continue
+                sym = s.get("symbol")
+                if not sym:
+                    continue
+                strengths_by_symbol.setdefault(sym, []).append(
+                    _safe_strength(s.get("strength", 0.0))
+                )
 
-                target_median = 0.10
-                if median_strength > 0:
-                    norm_factor = min(10.0, max(1.0, target_median / median_strength))
-                if p90_strength > 0:
-                    max_by_p90 = 0.90 / p90_strength
-                    norm_factor = min(norm_factor, max_by_p90)
+            norm_factor_by_symbol: Dict[str, float] = {}
+            for sym, values in strengths_by_symbol.items():
+                positive_strengths = [v for v in values if v > 0.0]
+                norm_factor = 1.0
+                if positive_strengths:
+                    try:
+                        median_strength = float(np.percentile(positive_strengths, 50))
+                        p90_strength = float(np.percentile(positive_strengths, 90))
+                    except Exception:
+                        sorted_strengths = sorted(positive_strengths)
+                        mid_idx = max(0, int(len(sorted_strengths) * 0.5) - 1)
+                        p90_idx = max(0, int(len(sorted_strengths) * 0.9) - 1)
+                        median_strength = float(sorted_strengths[mid_idx])
+                        p90_strength = float(sorted_strengths[p90_idx])
 
-                if norm_factor > 1.0:
-                    logger.info(
-                        "[STRENGTH NORMALIZE v2] "
-                        f"median={median_strength:.6f}, p90={p90_strength:.6f}, "
-                        f"norm_factor={norm_factor:.3f}, samples={len(positive_strengths)}"
-                    )
+                    target_median = 0.10
+                    if median_strength > 0:
+                        norm_factor = min(
+                            10.0, max(1.0, target_median / median_strength)
+                        )
+                    if p90_strength > 0:
+                        max_by_p90 = 0.90 / p90_strength
+                        norm_factor = min(norm_factor, max_by_p90)
+
+                    if norm_factor > 1.0:
+                        logger.info(
+                            "[STRENGTH NORMALIZE v2] "
+                            f"symbol={sym} median={median_strength:.6f}, "
+                            f"p90={p90_strength:.6f}, norm_factor={norm_factor:.3f}, "
+                            f"samples={len(positive_strengths)}"
+                        )
+                norm_factor_by_symbol[sym] = norm_factor
 
             for s in signals:
+                if not s:
+                    continue
+                sym = s.get("symbol")
                 raw_strength = _safe_strength(s.get("strength", 0.0))
                 s["strength_raw"] = raw_strength
+                norm_factor = norm_factor_by_symbol.get(sym, 1.0)
                 if norm_factor > 1.0:
                     raw_strength = raw_strength * norm_factor
                     s["strength_normed"] = True
                     s["strength_norm_factor"] = norm_factor
-                    s["strength_norm_method"] = "median_p90"
+                    s["strength_norm_method"] = "median_p90_per_symbol"
                 else:
                     s["strength_normed"] = False
                     s["strength_norm_factor"] = 1.0
