@@ -320,6 +320,22 @@ class FuturesSignalGenerator:
             else float(getattr(sg_cfg, "rest_update_cooldown", 1.0))
         )
         self._last_rest_update_ts: Dict[str, float] = {}
+        self._last_forced_rest_ts: Dict[str, float] = {}
+        self._forced_rest_logged = set()
+        if isinstance(sg_cfg, dict):
+            self._force_rest_on_ws_stale = bool(
+                sg_cfg.get("force_rest_on_ws_stale", True)
+            )
+            self._force_rest_min_age = float(sg_cfg.get("force_rest_min_age", 4.0))
+            self._force_rest_age_mult = float(sg_cfg.get("force_rest_age_mult", 2.0))
+        else:
+            self._force_rest_on_ws_stale = bool(
+                getattr(sg_cfg, "force_rest_on_ws_stale", True)
+            )
+            self._force_rest_min_age = float(getattr(sg_cfg, "force_rest_min_age", 4.0))
+            self._force_rest_age_mult = float(
+                getattr(sg_cfg, "force_rest_age_mult", 2.0)
+            )
 
     def set_data_registry(self, data_registry):
         """
@@ -458,6 +474,39 @@ class FuturesSignalGenerator:
         last_ts = self._last_rest_update_ts.get(symbol, 0.0)
         if now - last_ts < self._rest_update_cooldown:
             return False
+
+    async def _should_force_rest_fallback(self, symbol: str, ws_max_age: float) -> bool:
+        if not self._force_rest_on_ws_stale or not self.data_registry:
+            return False
+        try:
+            market_data = await self.data_registry.peek_market_data(symbol)
+        except Exception as e:
+            logger.debug(
+                f"SignalGenerator: failed to peek market_data for {symbol}: {e}"
+            )
+            return False
+        if not market_data:
+            return False
+        updated_at = market_data.get("updated_at")
+        if not updated_at or not isinstance(updated_at, datetime):
+            return False
+        age = (datetime.now() - updated_at).total_seconds()
+        force_after = max(
+            float(ws_max_age) * self._force_rest_age_mult, self._force_rest_min_age
+        )
+        if age < force_after:
+            return False
+        now = time.time()
+        last_ts = self._last_forced_rest_ts.get(symbol, 0.0)
+        if now - last_ts < self._rest_update_cooldown:
+            return False
+        self._last_forced_rest_ts[symbol] = now
+        if symbol not in self._forced_rest_logged:
+            logger.warning(
+                f"SignalGenerator: WS stale for {symbol} (age={age:.1f}s), forcing REST fallback"
+            )
+            self._forced_rest_logged.add(symbol)
+        return True
         self._last_rest_update_ts[symbol] = now
         try:
             ticker = await self.client.get_ticker(symbol)
@@ -1965,7 +2014,6 @@ class FuturesSignalGenerator:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Используем get_fresh_price_for_signals вместо get_price
         try:
             if self.data_registry:
-                client_for_fresh = self.client if self._allow_rest_for_ws else None
                 ws_max_age = 10.0
                 try:
                     sg_cfg = getattr(self.scalping_config, "signal_generator", {})
@@ -1977,6 +2025,17 @@ class FuturesSignalGenerator:
                         )
                 except Exception:
                     pass
+                client_for_fresh = None
+                if self._allow_rest_for_ws:
+                    client_for_fresh = self.client
+                else:
+                    try:
+                        if await self._should_force_rest_fallback(symbol, ws_max_age):
+                            client_for_fresh = self.client
+                    except Exception as e:
+                        logger.debug(
+                            f"SignalGenerator: force REST fallback check failed for {symbol}: {e}"
+                        )
                 max_allowed_age = 3.0
                 if ws_max_age > max_allowed_age:
                     if not getattr(self, "_ws_max_age_clamped", False):
@@ -7817,41 +7876,56 @@ class FuturesSignalGenerator:
                 )
 
             # ✅ ПРАВКА: Ограничение частоты сигналов по параметру из конфига
-            import time
-
-            # Получаем задержку между сигналами из конфига (по умолчанию 3.0)
-            cooldown = 3.0
+            # NOTE: Pre-filter cooldown in generator is disabled by default.
+            # Use coordinator cooldown based on executed trades to avoid blocking all signals.
+            prefilter_enabled = False
             try:
-                if hasattr(self.scalping_config, "signal_cooldown_seconds"):
-                    cooldown = float(
-                        getattr(self.scalping_config, "signal_cooldown_seconds", 3.0)
+                sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+                if isinstance(sg_cfg, dict):
+                    prefilter_enabled = bool(sg_cfg.get("cooldown_in_generator", False))
+                else:
+                    prefilter_enabled = bool(
+                        getattr(sg_cfg, "cooldown_in_generator", False)
                     )
-            except Exception as exc:
-                logger.warning(
-                    f"⚠️ Не удалось получить signal_cooldown_seconds из конфига: {exc}, используется 3.0"
-                )
+            except Exception:
+                prefilter_enabled = False
 
-            current_time = time.time()
-            filtered_by_time = []
-            for signal in signals:
-                symbol = signal.get("symbol", "")
-                if symbol:
-                    last_signal_time = self.signal_cache.get(symbol, 0)
-                    if current_time - last_signal_time < cooldown:
-                        logger.debug(
-                            f"🔍 Сигнал для {symbol} отфильтрован по времени: "
-                            f"прошло {current_time - last_signal_time:.1f}с < {cooldown}с"
+            if prefilter_enabled:
+                import time
+
+                cooldown = 3.0
+                try:
+                    if hasattr(self.scalping_config, "signal_cooldown_seconds"):
+                        cooldown = float(
+                            getattr(
+                                self.scalping_config, "signal_cooldown_seconds", 3.0
+                            )
                         )
-                        continue
-                    # Обновляем кэш
-                    self.signal_cache[symbol] = current_time
-                filtered_by_time.append(signal)
-            signals = filtered_by_time
-            if not signals:
-                logger.debug(
-                    "🛑 Все сигналы отфильтрованы по cooldown — пропускаем PARAM_ORCH и ранжирование."
-                )
-                return []
+                except Exception as exc:
+                    logger.warning(
+                        f"SignalGenerator: failed to read signal_cooldown_seconds: {exc}, using 3.0"
+                    )
+
+                current_time = time.time()
+                filtered_by_time = []
+                for signal in signals:
+                    symbol = signal.get("symbol", "")
+                    if symbol:
+                        last_signal_time = self.signal_cache.get(symbol, 0)
+                        if current_time - last_signal_time < cooldown:
+                            logger.debug(
+                                f"SignalGenerator cooldown filter: {symbol} skipped "
+                                f"({current_time - last_signal_time:.1f}s < {cooldown}s)"
+                            )
+                            continue
+                        self.signal_cache[symbol] = current_time
+                    filtered_by_time.append(signal)
+                signals = filtered_by_time
+                if not signals:
+                    logger.debug(
+                        "SignalGenerator: all signals filtered by cooldown, skipping ranking"
+                    )
+                    return []
 
             pattern_context_by_symbol = {}
             orchestrator_min_strength_by_symbol = {}

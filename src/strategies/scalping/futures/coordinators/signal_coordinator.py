@@ -148,6 +148,7 @@ class SignalCoordinator:
             "other": 0,
         }
         self._orders_pending_block_cycles: Dict[str, int] = {}
+        self._orders_pending_skip_until: Dict[str, float] = {}
         # ✅ ФИНАЛЬНОЕ ДОПОЛНЕНИЕ (Grok): Время последнего reset статистики
         self._block_stats_reset_time = time.time()
 
@@ -786,7 +787,6 @@ class SignalCoordinator:
                         )
                         return
                     # записываем время попытки входа
-                    self._last_signal_time[symbol] = now_ts
             except Exception as e:
                 logger.debug(f"⚠️ Не удалось применить cooldown для {symbol}: {e}")
 
@@ -879,44 +879,82 @@ class SignalCoordinator:
             # 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем активные ордера перед размещением
             try:
                 inst_id = f"{symbol}-SWAP"
+                normalized_symbol = (
+                    self.normalize_symbol_callback(symbol)
+                    if self.normalize_symbol_callback
+                    else symbol
+                )
+                now_ts = time.time()
                 block_cycles = self._orders_pending_block_cycles.get(symbol, 0)
+                skip_until = self._orders_pending_skip_until.get(symbol, 0.0)
                 if block_cycles > 0:
                     self._orders_pending_block_cycles[symbol] = block_cycles - 1
-                    logger.warning(
-                        f"🚫 [VALIDATION] {symbol}: временная блокировка входов из-за timeout orders-pending "
-                        f"(осталось циклов: {block_cycles - 1})"
+                skip_remote_check = (block_cycles > 0) or (
+                    skip_until and now_ts < skip_until
+                )
+
+                if skip_remote_check:
+                    cached_orders = self.active_orders_cache_ref.get(
+                        normalized_symbol, {}
                     )
-                    return
-                active_orders = await self.client.get_active_orders(symbol)
-                open_position_orders = [
-                    o
-                    for o in active_orders
-                    if o.get("instId") == inst_id
-                    and o.get("side", "").lower() in ["buy", "sell"]
-                    and o.get("reduceOnly", "false").lower() != "true"
-                ]
-                if len(open_position_orders) > 0:
+                    cached_ts = float(cached_orders.get("timestamp", 0) or 0)
+                    cached_ids = cached_orders.get("order_ids") or []
+                    if cached_ids and (now_ts - cached_ts) < 15:
+                        logger.warning(
+                            f"[VALIDATION] {symbol}: cached active orders ({len(cached_ids)}) after orders-pending timeout; block entry"
+                        )
+                        return
                     logger.warning(
-                        f"🚫 [VALIDATION] {symbol} {side.upper()}: Сигнал заблокирован - "
-                        f"уже есть {len(open_position_orders)} активных ордеров для открытия позиции"
+                        f"[VALIDATION] {symbol}: orders-pending check skipped due to recent timeout; no recent cache, continue"
                     )
-                    return
+                else:
+                    active_orders = await self.client.get_active_orders(symbol)
+                    open_position_orders = [
+                        o
+                        for o in active_orders
+                        if o.get("instId") == inst_id
+                        and o.get("side", "").lower() in ["buy", "sell"]
+                        and o.get("reduceOnly", "false").lower() != "true"
+                    ]
+                    self.active_orders_cache_ref[normalized_symbol] = {
+                        "order_ids": [o.get("ordId") for o in open_position_orders],
+                        "timestamp": now_ts,
+                    }
+                    if len(open_position_orders) > 0:
+                        logger.warning(
+                            f"[VALIDATION] {symbol} {side.upper()}: blocked - {len(open_position_orders)} open orders for entry"
+                        )
+                        return
             except Exception as e:
                 if (
                     isinstance(e, TimeoutError)
                     or "orders-pending timeout" in str(e).lower()
                 ):
                     self._orders_pending_block_cycles[symbol] = 2
+                    self._orders_pending_skip_until[symbol] = time.time() + 10
+                    cached_orders = self.active_orders_cache_ref.get(
+                        normalized_symbol
+                        if "normalized_symbol" in locals()
+                        else symbol,
+                        {},
+                    )
+                    cached_ts = float(cached_orders.get("timestamp", 0) or 0)
+                    cached_ids = cached_orders.get("order_ids") or []
+                    if cached_ids and (time.time() - cached_ts) < 15:
+                        logger.warning(
+                            f"[VALIDATION] {symbol}: orders-pending timeout; cached active orders present, block entry"
+                        )
+                        return
                     logger.warning(
-                        f"⚠️ Ошибка orders-pending для {symbol}: {e}. "
-                        f"Временная блокировка входов на 2 цикла."
+                        f"[VALIDATION] {symbol}: orders-pending timeout; no recent cache, continue"
+                    )
+                else:
+                    logger.warning(
+                        f"[VALIDATION] {symbol}: active orders check error: {e}"
                     )
                     return
-                logger.warning(f"⚠️ Ошибка проверки активных ордеров: {e}")
-                return
 
-            # ✅ НОВОЕ: Расчет размера позиции с использованием DataRegistry
-            # Получаем баланс из DataRegistry
+            # ??? ??????????: ???????????? ?????????????? ??????????????
             balance = None
             if self.data_registry:
                 try:
@@ -1142,6 +1180,10 @@ class SignalCoordinator:
 
             if result.get("success"):
                 logger.info(f"✅ Сигнал {symbol} {side} успешно исполнен")
+                try:
+                    self._last_signal_time[symbol] = datetime.utcnow().timestamp()
+                except Exception:
+                    pass
             else:
                 logger.error(
                     f"❌ Ошибка исполнения сигнала {symbol}: {result.get('error')}"
@@ -2219,7 +2261,47 @@ class SignalCoordinator:
 
                 # 🔥 ДОПОЛНИТЕЛЬНО: Проверяем активные ордера на открытие позиции
                 # Если есть pending ордер - тоже не открываем дубликат
-                active_orders = await self.client.get_active_orders(symbol)
+                active_orders = []
+                try:
+                    active_orders = await self.client.get_active_orders(symbol)
+                    normalized_symbol = (
+                        self.normalize_symbol_callback(symbol)
+                        if self.normalize_symbol_callback
+                        else symbol
+                    )
+                    self.active_orders_cache_ref[normalized_symbol] = {
+                        "order_ids": [o.get("ordId") for o in active_orders],
+                        "timestamp": time.time(),
+                    }
+                except Exception as e:
+                    if (
+                        isinstance(e, TimeoutError)
+                        or "orders-pending timeout" in str(e).lower()
+                    ):
+                        normalized_symbol = (
+                            self.normalize_symbol_callback(symbol)
+                            if self.normalize_symbol_callback
+                            else symbol
+                        )
+                        cached_orders = self.active_orders_cache_ref.get(
+                            normalized_symbol, {}
+                        )
+                        cached_ts = float(cached_orders.get("timestamp", 0) or 0)
+                        cached_ids = cached_orders.get("order_ids") or []
+                        if cached_ids and (time.time() - cached_ts) < 15:
+                            logger.warning(
+                                f"[VALIDATION] {symbol}: orders-pending timeout; cached active orders present, block entry"
+                            )
+                            return False
+                        logger.warning(
+                            f"[VALIDATION] {symbol}: orders-pending timeout; no recent cache, continue"
+                        )
+                        active_orders = []
+                    else:
+                        logger.warning(
+                            f"[VALIDATION] {symbol}: active orders check error: {e}"
+                        )
+                        return False
                 for order in active_orders:
                     order_inst_id = order.get("instId", "")
                     order_side = order.get("side", "").lower()
@@ -2263,9 +2345,11 @@ class SignalCoordinator:
             if signal and signal.get("price"):
                 signal_price = signal.get("price", 0.0)
                 signal_timestamp = signal.get("timestamp")
-                stale_ttl_seconds = 0.5
-                stale_price_diff_pct = 0.5
-                stale_action = "block"
+                stale_ttl_seconds = 2.0
+                stale_price_diff_pct = 1.0
+                stale_action = "refresh"
+                stale_hard_ttl_seconds = 5.0
+                stale_price_diff_atr_mult = 1.0
 
                 try:
                     sg_cfg = getattr(self.scalping_config, "signal_generator", {})
@@ -2280,6 +2364,18 @@ class SignalCoordinator:
                         )
                         stale_action = str(
                             sg_cfg.get("stale_signal_action", stale_action)
+                        )
+                        stale_hard_ttl_seconds = float(
+                            sg_cfg.get(
+                                "stale_signal_hard_ttl_seconds",
+                                stale_hard_ttl_seconds,
+                            )
+                        )
+                        stale_price_diff_atr_mult = float(
+                            sg_cfg.get(
+                                "stale_signal_price_diff_atr_mult",
+                                stale_price_diff_atr_mult,
+                            )
                         )
                     else:
                         stale_ttl_seconds = float(
@@ -2297,14 +2393,44 @@ class SignalCoordinator:
                         stale_action = str(
                             getattr(sg_cfg, "stale_signal_action", stale_action)
                         )
+                        stale_hard_ttl_seconds = float(
+                            getattr(
+                                sg_cfg,
+                                "stale_signal_hard_ttl_seconds",
+                                stale_hard_ttl_seconds,
+                            )
+                        )
+                        stale_price_diff_atr_mult = float(
+                            getattr(
+                                sg_cfg,
+                                "stale_signal_price_diff_atr_mult",
+                                stale_price_diff_atr_mult,
+                            )
+                        )
+                except Exception:
+                    pass
+
+                try:
+                    min_ttl = 1.5
+                    if stale_ttl_seconds < min_ttl:
+                        stale_ttl_seconds = min_ttl
+                    if stale_price_diff_pct < 0.8:
+                        stale_price_diff_pct = 0.8
+                    if stale_hard_ttl_seconds and stale_hard_ttl_seconds < (
+                        stale_ttl_seconds * 2
+                    ):
+                        stale_hard_ttl_seconds = stale_ttl_seconds * 2
                 except Exception:
                     pass
 
                 try:
                     current_price = 0.0
                     time_stale = False
+                    hard_time_stale = False
                     price_stale = False
+                    soft_stale = False
                     reasons = []
+                    time_diff = None
 
                     if signal_timestamp and stale_ttl_seconds and stale_ttl_seconds > 0:
                         if isinstance(signal_timestamp, datetime):
@@ -2326,29 +2452,92 @@ class SignalCoordinator:
                                 reasons.append(
                                     f"age {time_diff:.2f}s > {stale_ttl_seconds:.2f}s"
                                 )
+                            if (
+                                stale_hard_ttl_seconds
+                                and time_diff > stale_hard_ttl_seconds
+                            ):
+                                hard_time_stale = True
+                                reasons.append(
+                                    f"hard age {time_diff:.2f}s > {stale_hard_ttl_seconds:.2f}s"
+                                )
 
-                    if stale_price_diff_pct and stale_price_diff_pct > 0:
-                        price_client = (
-                            getattr(self.order_executor, "client", None) or self.client
-                        )
-                        if price_client and hasattr(price_client, "get_price_limits"):
-                            price_limits = await price_client.get_price_limits(symbol)
-                            if price_limits:
-                                current_price = price_limits.get("current_price", 0)
-                                if current_price > 0 and signal_price > 0:
-                                    price_diff_pct = (
-                                        abs(signal_price - current_price)
-                                        / current_price
-                                        * 100
+                    price_client = (
+                        getattr(self.order_executor, "client", None) or self.client
+                    )
+                    if price_client and hasattr(price_client, "get_price_limits"):
+                        price_limits = await price_client.get_price_limits(symbol)
+                        if price_limits:
+                            current_price = price_limits.get("current_price", 0)
+
+                    dynamic_price_diff_pct = stale_price_diff_pct
+                    try:
+                        if self.data_registry:
+                            indicators = await self.data_registry.get_indicators(
+                                symbol, check_freshness=False
+                            )
+                            if indicators:
+                                atr_val = (
+                                    indicators.get("atr")
+                                    or indicators.get("atr_1m")
+                                    or indicators.get("atr_14")
+                                )
+                                base_price = current_price or signal_price
+                                atr_pct = None
+                                if atr_val and base_price > 0:
+                                    atr_pct = (float(atr_val) / base_price) * 100
+                                else:
+                                    vol_pct = indicators.get("volatility_percent")
+                                    if vol_pct is not None:
+                                        try:
+                                            atr_pct = float(vol_pct)
+                                        except Exception:
+                                            atr_pct = None
+                                if atr_pct and atr_pct > 0:
+                                    dynamic_price_diff_pct = max(
+                                        stale_price_diff_pct,
+                                        atr_pct * stale_price_diff_atr_mult,
                                     )
-                                    if price_diff_pct > stale_price_diff_pct:
-                                        price_stale = True
-                                        reasons.append(
-                                            f"price diff {price_diff_pct:.2f}% > {stale_price_diff_pct:.2f}%"
-                                        )
+                    except Exception:
+                        pass
 
-                    is_stale = time_stale or price_stale
-                    if is_stale:
+                    if (
+                        current_price
+                        and current_price > 0
+                        and signal_price
+                        and signal_price > 0
+                        and dynamic_price_diff_pct > 0
+                    ):
+                        price_diff_pct = (
+                            abs(signal_price - current_price) / current_price * 100
+                        )
+                        if price_diff_pct > dynamic_price_diff_pct:
+                            price_stale = True
+                            reasons.append(
+                                f"price diff {price_diff_pct:.2f}% > {dynamic_price_diff_pct:.2f}%"
+                            )
+
+                    is_stale = price_stale or hard_time_stale
+                    if time_stale and not is_stale:
+                        soft_stale = True
+
+                    if soft_stale:
+                        action = str(stale_action).strip().lower()
+                        reason_text = "; ".join(reasons) if reasons else "time stale"
+                        if (
+                            action in ("refresh", "update", "replace")
+                            and current_price > 0
+                        ):
+                            old_price = signal_price
+                            signal["price"] = current_price
+                            signal["timestamp"] = datetime.now(timezone.utc)
+                            logger.warning(
+                                f"SOFT STALE signal {symbol}: refreshed price {old_price:.2f} -> {current_price:.2f} ({reason_text})"
+                            )
+                        else:
+                            logger.warning(
+                                f"SOFT STALE signal {symbol}: {reason_text}, allowed"
+                            )
+                    elif is_stale:
                         action = str(stale_action).strip().lower()
                         reason_text = "; ".join(reasons) if reasons else "stale"
                         if action in ("refresh", "update", "replace"):
@@ -2390,6 +2579,7 @@ class SignalCoordinator:
                             return False
                 except Exception as e:
                     logger.debug(f"Error checking signal staleness for {symbol}: {e}")
+
             if signal is None:
                 # ✅ НОВОЕ: Определяем режим из DataRegistry (если ARM активен)
                 regime = "ranging"  # По умолчанию
