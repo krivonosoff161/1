@@ -50,6 +50,9 @@ class TrailingStopLoss:
         ] = None,  # ✅ ЭТАП 4.1: Минимальный профит для закрытия
         extend_time_on_profit: bool = False,  # ✅ ЭТАП 4.3: Продлевать время для прибыльных позиций
         extend_time_multiplier: float = 1.0,  # ✅ ЭТАП 4.3: Множитель продления времени
+        min_profit_for_extension: Optional[
+            float
+        ] = None,  # ✅ Минимальная прибыль для продления (в долях или проц. пунктах)
         leverage: float = 1.0,  # ✅ КРИТИЧЕСКОЕ: Leverage для правильного расчета loss_cut от маржи
         min_critical_hold_seconds: Optional[
             float
@@ -134,6 +137,9 @@ class TrailingStopLoss:
         self.extend_time_multiplier = (
             extend_time_multiplier if extend_time_multiplier > 1.0 else 1.0
         )
+        self.min_profit_for_extension = self._normalize_pct_points(
+            min_profit_for_extension
+        )
         # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (из конфига)
         self.min_critical_hold_seconds = (
             min_critical_hold_seconds
@@ -172,6 +178,23 @@ class TrailingStopLoss:
         if value <= 0:
             return None
         return value / 100.0 if value > 1 else value
+
+    @staticmethod
+    def _normalize_pct_points(value: Optional[float]) -> Optional[float]:
+        """Normalize percent points or fraction to fraction (e.g., 0.4 -> 0.004)."""
+        if value is None:
+            return None
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            return None
+        if v <= 0:
+            return None
+        if v > 1:
+            return v / 100.0
+        if v > 0.05:
+            return v / 100.0
+        return v
 
     def initialize(
         self,
@@ -699,7 +722,13 @@ class TrailingStopLoss:
             and effective_min_holding is not None
         ):
             # Применяем множитель продления времени для прибыльных позиций
-            effective_min_holding = effective_min_holding * self.extend_time_multiplier
+            if (
+                self.min_profit_for_extension is None
+                or profit_pct >= self.min_profit_for_extension
+            ):
+                effective_min_holding = (
+                    effective_min_holding * self.extend_time_multiplier
+                )
 
         # ✅ TODO #3: КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ - Проверяем loss_cut ПЕРЕД MIN_HOLDING блокировкой
         # Loss_cut должен иметь приоритет над MIN_HOLDING для больших убытков
@@ -903,7 +932,13 @@ class TrailingStopLoss:
             and profit_pct > 0
             and effective_min_holding is not None
         ):
-            effective_min_holding = effective_min_holding * self.extend_time_multiplier
+            if (
+                self.min_profit_for_extension is None
+                or profit_pct >= self.min_profit_for_extension
+            ):
+                effective_min_holding = (
+                    effective_min_holding * self.extend_time_multiplier
+                )
 
         if (
             effective_min_holding is not None

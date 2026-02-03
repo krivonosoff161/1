@@ -44,6 +44,8 @@ class EntryManager:
         """
         self.position_registry = position_registry
         self.order_executor = order_executor
+        # ✅ FIX: привязываем client из order_executor, если он уже есть
+        self.client = getattr(order_executor, "client", None)
         self.position_sizer = position_sizer
         self.performance_tracker = None  # Будет установлен из orchestrator
         self.conversion_metrics = (
@@ -52,6 +54,20 @@ class EntryManager:
         self.data_registry = None  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): DataRegistry для fallback entry_price
 
         logger.info("✅ EntryManager инициализирован")
+
+    def _resolve_client(self):
+        """Получить client (с lazy fallback к order_executor)."""
+        if self.client:
+            return self.client
+        if hasattr(self.order_executor, "client") and self.order_executor.client:
+            self.client = self.order_executor.client
+            return self.client
+        return None
+
+    def set_client(self, client):
+        """Установить client вручную (fallback если не пришёл из order_executor)."""
+        self.client = client
+        logger.debug("✅ EntryManager: client установлен вручную")
 
     def set_position_sizer(self, position_sizer):
         """Установить PositionSizer"""
@@ -113,23 +129,29 @@ class EntryManager:
             # ✅ НОВОЕ: Дополнительная проверка на бирже (синхронизация)
             # Получаем актуальные позиции с биржи для проверки
             try:
-                exchange_positions = await self.client.get_positions(symbol)
-                for pos in exchange_positions:
-                    inst_id = pos.get("instId", "").replace("-SWAP", "")
-                    if inst_id == symbol:
-                        pos_size = float(pos.get("pos", "0"))
-                        if abs(pos_size) >= 1e-8:  # Позиция существует на бирже
-                            pos_side = pos.get("posSide", "long").lower()
-                            signal_side = signal.get("side", "buy").lower()
-                            signal_position_side = (
-                                "long" if signal_side == "buy" else "short"
-                            )
+                client = self._resolve_client()
+                if not client:
+                    logger.warning(
+                        f"⚠️ EntryManager: client не установлен, пропускаем проверку позиций на бирже для {symbol}"
+                    )
+                else:
+                    exchange_positions = await client.get_positions(symbol)
+                    for pos in exchange_positions:
+                        inst_id = pos.get("instId", "").replace("-SWAP", "")
+                        if inst_id == symbol:
+                            pos_size = float(pos.get("pos", "0"))
+                            if abs(pos_size) >= 1e-8:  # Позиция существует на бирже
+                                pos_side = pos.get("posSide", "long").lower()
+                                signal_side = signal.get("side", "buy").lower()
+                                signal_position_side = (
+                                    "long" if signal_side == "buy" else "short"
+                                )
 
-                            logger.warning(
-                                f"⚠️ EntryManager: Позиция {symbol} {pos_side.upper()} уже существует на бирже "
-                                f"(size={pos_size:.6f}), блокируем открытие новой позиции {signal_position_side.upper()}"
-                            )
-                            return False
+                                logger.warning(
+                                    f"⚠️ EntryManager: Позиция {symbol} {pos_side.upper()} уже существует на бирже "
+                                    f"(size={pos_size:.6f}), блокируем открытие новой позиции {signal_position_side.upper()}"
+                                )
+                                return False
             except Exception as e:
                 logger.warning(
                     f"⚠️ EntryManager: Ошибка проверки позиций на бирже для {symbol}: {e}. "
@@ -381,8 +403,13 @@ class EntryManager:
                                 # OKX возвращает pos_size в КОНТРАКТАХ, а не в монетах!
                                 # Нужно умножить на ctVal чтобы получить размер в монетах
                                 try:
-                                    inst_details = (
-                                        await self.client.get_instrument_details(symbol)
+                                    client = self._resolve_client()
+                                    if not client:
+                                        raise RuntimeError(
+                                            "client не установлен (ctVal fallback)"
+                                        )
+                                    inst_details = await client.get_instrument_details(
+                                        symbol
                                     )
                                     ct_val = (
                                         float(inst_details.get("ctVal", 1.0))
@@ -499,8 +526,15 @@ class EntryManager:
                                             # OKX возвращает pos_size в КОНТРАКТАХ, а не в монетах!
                                             # Нужно умножить на ctVal чтобы получить размер в монетах
                                             try:
-                                                inst_details = await self.client.get_instrument_details(
-                                                    symbol
+                                                client = self._resolve_client()
+                                                if not client:
+                                                    raise RuntimeError(
+                                                        "client не установлен (ctVal retry fallback)"
+                                                    )
+                                                inst_details = (
+                                                    await client.get_instrument_details(
+                                                        symbol
+                                                    )
                                                 )
                                                 ct_val = (
                                                     float(

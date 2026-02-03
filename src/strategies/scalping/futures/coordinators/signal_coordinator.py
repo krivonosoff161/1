@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
+
 from ..config.config_view import get_scalping_view
 
 
@@ -982,7 +983,6 @@ class SignalCoordinator:
                         )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем адаптивный risk_per_trade_percent из конфига по режиму
-            # margin_calculator сам выберет правильный риск из конфига (risk_per_trade_percent из режима -> risk секции -> base_risk_percentage)
             risk_percentage = (
                 None  # None - margin_calculator читает из конфига по режиму
             )
@@ -2120,6 +2120,24 @@ class SignalCoordinator:
     ) -> bool:
         """Выполняет торговый сигнал на основе цены. Возвращает True если позиция успешно открыта."""
         try:
+            # ✅ RATE LIMIT: per-symbol cooldown между входами
+            try:
+                cooldown = (
+                    getattr(self.scalping_config, "signal_cooldown_seconds", 0.0) or 0.0
+                )
+                if cooldown and cooldown > 0:
+                    now_ts = datetime.utcnow().timestamp()
+                    last_ts = self._last_signal_time.get(symbol)
+                    if last_ts and (now_ts - last_ts) < cooldown:
+                        wait_left = cooldown - (now_ts - last_ts)
+                        logger.debug(
+                            f"⏳ Cooldown: по {symbol} прошло лишь {now_ts - last_ts:.2f}s < {cooldown:.2f}s, "
+                            f"ждём ещё {wait_left:.2f}s, пропускаем вход"
+                        )
+                        return False
+            except Exception as e:
+                logger.debug(f"⚠️ Не удалось применить cooldown для {symbol}: {e}")
+
             # 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем РЕАЛЬНЫЕ позиции на бирже ПЕРЕД открытием новой
             # Это предотвращает дубликаты даже при race condition или перезапуске бота
             try:
@@ -2245,86 +2263,133 @@ class SignalCoordinator:
             if signal and signal.get("price"):
                 signal_price = signal.get("price", 0.0)
                 signal_timestamp = signal.get("timestamp")
-                should_update_price = False
-                update_reason = ""
+                stale_ttl_seconds = 0.5
+                stale_price_diff_pct = 0.5
+                stale_action = "block"
 
                 try:
-                    current_price = 0  # Инициализируем для использования ниже
-
-                    # ✅ Проверка 1: Время устаревания (TTL 0.5 секунды)
-                    if signal_timestamp:
-                        if isinstance(signal_timestamp, datetime):
-                            # Убеждаемся, что оба datetime имеют timezone
-                            now_utc = datetime.now(timezone.utc)
-                            if signal_timestamp.tzinfo is None:
-                                # Если timestamp без timezone, считаем его локальным временем
-                                local_tz = datetime.now().astimezone().tzinfo
-                                signal_timestamp_utc = signal_timestamp.replace(
-                                    tzinfo=local_tz
-                                ).astimezone(timezone.utc)
-                            else:
-                                signal_timestamp_utc = signal_timestamp.astimezone(
-                                    timezone.utc
-                                )
-
-                            time_diff = (now_utc - signal_timestamp_utc).total_seconds()
-                            if time_diff < 0:
-                                time_diff = 0.0
-                            if time_diff > 0.5:  # TTL: 0.5 секунды (учитываем задержки)
-                                should_update_price = True
-                                update_reason = (
-                                    f"TTL истек (прошло {time_diff:.2f}с > 0.5с)"
-                                )
-
-                    # ✅ Проверка 2: Разница цены (>0.5%)
-                    price_limits = await self.order_executor.client.get_price_limits(
-                        symbol
-                    )
-                    if price_limits:
-                        current_price = price_limits.get("current_price", 0)
-                        if current_price > 0 and signal_price > 0:
-                            price_diff_pct = (
-                                abs(signal_price - current_price) / current_price * 100
-                            )
-                            if price_diff_pct > 0.5:  # Разница > 0.5% - сигнал устарел
-                                should_update_price = True
-                                update_reason = (
-                                    f"разница цены {price_diff_pct:.2f}% > 0.5%"
-                                )
-
-                    # ✅ Обновляем цену сигнала если устарел
-                    if should_update_price and current_price > 0:
-                        old_price = signal_price
-                        signal["price"] = current_price
-                        # Обновляем timestamp на текущее время
-                        signal["timestamp"] = datetime.now(timezone.utc)
-                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Детальное логирование устаревания сигнала
-                        time_info = ""
-                        if signal_timestamp and isinstance(signal_timestamp, datetime):
-                            now_utc = datetime.now(timezone.utc)
-                            if signal_timestamp.tzinfo is None:
-                                local_tz = datetime.now().astimezone().tzinfo
-                                signal_timestamp_utc = signal_timestamp.replace(
-                                    tzinfo=local_tz
-                                ).astimezone(timezone.utc)
-                            else:
-                                signal_timestamp_utc = signal_timestamp.astimezone(
-                                    timezone.utc
-                                )
-                            time_diff = (now_utc - signal_timestamp_utc).total_seconds()
-                            if time_diff < 0:
-                                time_diff = 0.0
-                            time_info = f", signal_age={time_diff:.2f}с"
-
-                        logger.warning(
-                            f"⚠️ УСТАРЕВАНИЕ сигнала {symbol}: цена обновлена {old_price:.2f} → {current_price:.2f} ({update_reason}){time_info}"
+                    sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+                    if isinstance(sg_cfg, dict):
+                        stale_ttl_seconds = float(
+                            sg_cfg.get("stale_signal_ttl_seconds", stale_ttl_seconds)
                         )
-                except Exception as e:
-                    logger.debug(
-                        f"⚠️ Ошибка проверки актуальности signal['price'] для {symbol}: {e}"
-                    )
+                        stale_price_diff_pct = float(
+                            sg_cfg.get(
+                                "stale_signal_price_diff_pct", stale_price_diff_pct
+                            )
+                        )
+                        stale_action = str(
+                            sg_cfg.get("stale_signal_action", stale_action)
+                        )
+                    else:
+                        stale_ttl_seconds = float(
+                            getattr(
+                                sg_cfg, "stale_signal_ttl_seconds", stale_ttl_seconds
+                            )
+                        )
+                        stale_price_diff_pct = float(
+                            getattr(
+                                sg_cfg,
+                                "stale_signal_price_diff_pct",
+                                stale_price_diff_pct,
+                            )
+                        )
+                        stale_action = str(
+                            getattr(sg_cfg, "stale_signal_action", stale_action)
+                        )
+                except Exception:
+                    pass
 
-            # Используем переданный сигнал или создаем тестовый
+                try:
+                    current_price = 0.0
+                    time_stale = False
+                    price_stale = False
+                    reasons = []
+
+                    if signal_timestamp and stale_ttl_seconds and stale_ttl_seconds > 0:
+                        if isinstance(signal_timestamp, datetime):
+                            now_utc = datetime.now(timezone.utc)
+                            if signal_timestamp.tzinfo is None:
+                                local_tz = datetime.now().astimezone().tzinfo
+                                signal_timestamp_utc = signal_timestamp.replace(
+                                    tzinfo=local_tz
+                                ).astimezone(timezone.utc)
+                            else:
+                                signal_timestamp_utc = signal_timestamp.astimezone(
+                                    timezone.utc
+                                )
+                            time_diff = (now_utc - signal_timestamp_utc).total_seconds()
+                            if time_diff < 0:
+                                time_diff = 0.0
+                            if time_diff > stale_ttl_seconds:
+                                time_stale = True
+                                reasons.append(
+                                    f"age {time_diff:.2f}s > {stale_ttl_seconds:.2f}s"
+                                )
+
+                    if stale_price_diff_pct and stale_price_diff_pct > 0:
+                        price_client = (
+                            getattr(self.order_executor, "client", None) or self.client
+                        )
+                        if price_client and hasattr(price_client, "get_price_limits"):
+                            price_limits = await price_client.get_price_limits(symbol)
+                            if price_limits:
+                                current_price = price_limits.get("current_price", 0)
+                                if current_price > 0 and signal_price > 0:
+                                    price_diff_pct = (
+                                        abs(signal_price - current_price)
+                                        / current_price
+                                        * 100
+                                    )
+                                    if price_diff_pct > stale_price_diff_pct:
+                                        price_stale = True
+                                        reasons.append(
+                                            f"price diff {price_diff_pct:.2f}% > {stale_price_diff_pct:.2f}%"
+                                        )
+
+                    is_stale = time_stale or price_stale
+                    if is_stale:
+                        action = str(stale_action).strip().lower()
+                        reason_text = "; ".join(reasons) if reasons else "stale"
+                        if action in ("refresh", "update", "replace"):
+                            if current_price <= 0:
+                                price_client = (
+                                    getattr(self.order_executor, "client", None)
+                                    or self.client
+                                )
+                                if price_client and hasattr(
+                                    price_client, "get_price_limits"
+                                ):
+                                    price_limits = await price_client.get_price_limits(
+                                        symbol
+                                    )
+                                    if price_limits:
+                                        current_price = price_limits.get(
+                                            "current_price", 0
+                                        )
+                            if current_price and current_price > 0:
+                                old_price = signal_price
+                                signal["price"] = current_price
+                                signal["timestamp"] = datetime.now(timezone.utc)
+                                logger.warning(
+                                    f"STALE signal {symbol}: refreshed price {old_price:.2f} -> {current_price:.2f} ({reason_text})"
+                                )
+                            else:
+                                logger.warning(
+                                    f"STALE signal {symbol}: {reason_text}, no fresh price; blocking"
+                                )
+                                return False
+                        elif action in ("allow", "ignore", "pass"):
+                            logger.warning(
+                                f"STALE signal {symbol}: {reason_text}, allowed by config"
+                            )
+                        else:
+                            logger.warning(
+                                f"STALE signal {symbol}: {reason_text}, blocked (action={action})"
+                            )
+                            return False
+                except Exception as e:
+                    logger.debug(f"Error checking signal staleness for {symbol}: {e}")
             if signal is None:
                 # ✅ НОВОЕ: Определяем режим из DataRegistry (если ARM активен)
                 regime = "ranging"  # По умолчанию
@@ -3630,7 +3695,6 @@ class SignalCoordinator:
                 # 🛡️ Обновляем total_margin_used
                 # ⚠️ ИСПРАВЛЕНИЕ: Правильный расчет margin из position_size (монеты)
                 # position_size в МОНЕТАХ, price в USD, leverage из конфига
-                # margin = (size_in_coins × price) / leverage = notional / leverage
                 # ✅ АДАПТИВНО: leverage из конфига
                 leverage = getattr(self.scalping_config, "leverage", None)
                 if leverage is None or leverage <= 0:
@@ -3763,7 +3827,9 @@ class SignalCoordinator:
                         "position_side": position_side_for_storage,  # "long" или "short" для правильного расчета PnL
                         "size": position_size,
                         "entry_price": real_entry_price,  # ✅ ИСПРАВЛЕНИЕ: Используем реальную цену входа с биржи
-                        "margin": margin_used,  # margin для этой позиции
+                        "margin": margin_used,  # margin for this position
+                        "leverage": leverage,  # leverage for calculations
+                        "lever": leverage,  # compatibility alias
                         "entry_time": entry_time,  # ✅ НОВОЕ: Время открытия позиции
                         "timestamp": entry_time,  # Для совместимости
                         "time_extended": False,  # ✅ НОВОЕ: Флаг продления времени
@@ -3773,6 +3839,11 @@ class SignalCoordinator:
                         # ✅ БЕЗ tp_order_id и sl_order_id - используем TrailingSL!
                     }
                 )
+                # ✅ FIX: обновляем время последнего сигнала только после успешного открытия
+                try:
+                    self._last_signal_time[symbol] = datetime.utcnow().timestamp()
+                except Exception:
+                    pass
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Проверяем существование TSL перед инициализацией
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Переинициализируем trailing stop loss с правильной ценой входа

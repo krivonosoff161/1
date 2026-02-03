@@ -309,12 +309,28 @@ class TrailingSLCoordinator:
         params.setdefault("timeout_minutes", None)
         params.setdefault("min_holding_minutes", None)
         params.setdefault("min_profit_to_close", None)
+        params.setdefault("min_profit_for_extension", None)
         params.setdefault("extend_time_on_profit", False)
         params.setdefault("extend_time_multiplier", 1.0)
         params.setdefault("min_critical_hold_seconds", 30.0)
         params.setdefault("trail_growth_low_multiplier", 1.5)
         params.setdefault("trail_growth_medium_multiplier", 2.0)
         params.setdefault("trail_growth_high_multiplier", 3.0)
+        if params.get("min_profit_for_extension") in (None, 0, "0"):
+            try:
+                if self.parameter_provider:
+                    exit_params = self.parameter_provider.get_exit_params(
+                        symbol=symbol, regime=regime
+                    )
+                    if (
+                        exit_params
+                        and exit_params.get("min_profit_for_extension") is not None
+                    ):
+                        params["min_profit_for_extension"] = exit_params.get(
+                            "min_profit_for_extension"
+                        )
+            except Exception:
+                pass
 
         # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Логирование параметра enabled из конфига
         tsl_config = getattr(self.scalping_config, "trailing_sl", {})
@@ -390,12 +406,32 @@ class TrailingSLCoordinator:
                 )
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Проверяем существование TSL перед инициализацией
+        leverage = None
+        if signal:
+            try:
+                leverage = float(
+                    signal.get("leverage")
+                    or signal.get("leverage_used")
+                    or signal.get("leverage_x")
+                    or 0
+                )
+            except (TypeError, ValueError):
+                leverage = None
+        if leverage is None or leverage <= 0:
+            leverage = getattr(self.scalping_config, "leverage", 3)
+            if leverage is None or leverage <= 0:
+                leverage = 3
+                logger.warning(
+                    f"⚠️ leverage не указан в конфиге для {symbol}, используем 3 (fallback)"
+                )
+
         existing_tsl = self.trailing_sl_by_symbol.get(symbol)
         if existing_tsl:
             # ✅ ИСПРАВЛЕНИЕ: Если TSL уже существует и параметры не изменились, не переинициализируем
             # Проверяем, изменились ли критичные параметры (trail, loss_cut)
             existing_trail = getattr(existing_tsl, "initial_trail", None)
             existing_loss_cut = getattr(existing_tsl, "loss_cut_percent", None)
+            existing_leverage = getattr(existing_tsl, "leverage", None)
             new_trail = params.get("initial_trail", 0.0)
             new_loss_cut = params.get("loss_cut_percent", 0.0)
 
@@ -403,6 +439,11 @@ class TrailingSLCoordinator:
             if (
                 existing_trail == new_trail
                 and existing_loss_cut == new_loss_cut
+                and (
+                    existing_leverage is None
+                    or leverage is None
+                    or abs(float(existing_leverage) - float(leverage)) < 1e-6
+                )
                 and abs(getattr(existing_tsl, "entry_price", 0) - entry_price) < 0.01
             ):
                 logger.debug(
@@ -430,12 +471,7 @@ class TrailingSLCoordinator:
 
         # ✅ ЭТАП 4: Создаем TrailingStopLoss с новыми параметрами
         # ✅ КРИТИЧЕСКОЕ: Получаем leverage из конфига для правильного расчета loss_cut от маржи
-        leverage = getattr(self.scalping_config, "leverage", 3)
-        if leverage is None or leverage <= 0:
-            leverage = 3
-            logger.warning(
-                f"⚠️ leverage не указан в конфиге для {symbol}, используем 3 (fallback)"
-            )
+        # leverage уже рассчитан выше (с приоритетом сигнала)
 
         tsl = TrailingStopLoss(
             initial_trail=initial_trail,
@@ -449,6 +485,7 @@ class TrailingSLCoordinator:
             timeout_minutes=params["timeout_minutes"],
             min_holding_minutes=params["min_holding_minutes"],  # ✅ ЭТАП 4.4
             min_profit_to_close=params["min_profit_to_close"],  # ✅ ЭТАП 4.1
+            min_profit_for_extension=params["min_profit_for_extension"],  # ✅ ЭТАП 4.3
             extend_time_on_profit=params["extend_time_on_profit"],  # ✅ ЭТАП 4.3
             extend_time_multiplier=params["extend_time_multiplier"],  # ✅ ЭТАП 4.3
             leverage=leverage,  # ✅ КРИТИЧЕСКОЕ: Передаем leverage для правильного расчета loss_cut от маржи
@@ -784,6 +821,7 @@ class TrailingSLCoordinator:
                     pos_size = float(position.get("pos", "0") or 0)
                     leverage = float(
                         position.get("lever")
+                        or position.get("leverage")
                         or getattr(self.scalping_config, "leverage", 5)
                         or 5
                     )
@@ -1783,19 +1821,23 @@ class TrailingSLCoordinator:
                 market_data = (
                     await self.position_registry.data_registry.get_market_data(symbol)
                 )
-                if (
-                    market_data
-                    and hasattr(market_data, "current_tick")
-                    and market_data.current_tick
-                ):
-                    if (
-                        hasattr(market_data.current_tick, "price")
-                        and market_data.current_tick.price > 0
-                    ):
-                        logger.debug(
-                            f"✅ TSL: WebSocket real-time price for {symbol}: {market_data.current_tick.price:.8f}"
-                        )
-                        return market_data.current_tick.price
+                if market_data:
+                    if isinstance(market_data, dict):
+                        current_tick = market_data.get("current_tick")
+                    else:
+                        current_tick = getattr(market_data, "current_tick", None)
+                    if current_tick:
+                        if isinstance(current_tick, dict):
+                            tick_price = current_tick.get("price") or current_tick.get(
+                                "last"
+                            )
+                        else:
+                            tick_price = getattr(current_tick, "price", None)
+                        if tick_price is not None and float(tick_price) > 0:
+                            logger.debug(
+                                f"✅ TSL: WebSocket real-time price for {symbol}: {float(tick_price):.8f}"
+                            )
+                            return float(tick_price)
         except Exception as e:
             logger.debug(f"⚠️ TSL: Failed to get DataRegistry market_data: {e}")
 
@@ -1987,6 +2029,7 @@ class TrailingSLCoordinator:
             extend_time_if_profitable = True
             min_profit_for_extension = 0.1
             extension_percent = 50.0
+            regime_obj = None
 
             try:
                 if (
@@ -2038,6 +2081,46 @@ class TrailingSLCoordinator:
                     f"Не удалось получить параметры режима: {e}, используем fallback"
                 )
 
+            # ✅ Дополнительно: берем exit_params из ParameterProvider (единый источник параметров)
+            try:
+                if self.parameter_provider:
+                    regime_for_exit = None
+                    if market_regime:
+                        regime_for_exit = market_regime
+                    elif isinstance(regime_obj, str):
+                        regime_for_exit = regime_obj
+                    exit_params = self.parameter_provider.get_exit_params(
+                        symbol=symbol, regime=regime_for_exit, balance=None
+                    )
+                    if exit_params:
+                        max_holding_minutes = float(
+                            exit_params.get("max_holding_minutes", max_holding_minutes)
+                        )
+                        min_profit_for_extension = float(
+                            exit_params.get(
+                                "min_profit_for_extension", min_profit_for_extension
+                            )
+                        )
+                        extension_percent = float(
+                            exit_params.get("extension_percent", extension_percent)
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"Не удалось получить exit_params для {symbol}: {e}, используем fallback"
+                )
+
+            # ✅ ЕДИНЫЙ СТАНДАРТ: min_profit_for_extension в конфиге = процентные пункты (0.4 = 0.4%)
+            min_profit_for_extension_frac = 0.0
+            try:
+                if min_profit_for_extension is not None:
+                    min_profit_for_extension_val = float(min_profit_for_extension)
+                    if min_profit_for_extension_val > 0:
+                        min_profit_for_extension_frac = (
+                            min_profit_for_extension_val / 100.0
+                        )
+            except (TypeError, ValueError):
+                min_profit_for_extension_frac = 0.0
+
             actual_max_holding = float(
                 position.get("max_holding_minutes", max_holding_minutes)
             )
@@ -2049,7 +2132,7 @@ class TrailingSLCoordinator:
                     extend_time_if_profitable
                     and not time_extended
                     and profit_pct
-                    >= min_profit_for_extension  # ✅ ИСПРАВЛЕНО: >= вместо > (0.44% >= 0.5% = false, но это правильно, нужно >= 0.5%)
+                    >= min_profit_for_extension_frac  # ✅ ИСПРАВЛЕНО: >= вместо > (0.44% >= 0.5% = false, но это правильно, нужно >= 0.5%)
                 ):
                     original_max_holding = max_holding_minutes
                     extension_minutes = original_max_holding * (
@@ -2069,7 +2152,7 @@ class TrailingSLCoordinator:
                             ] = new_max_holding
                     logger.info(
                         f"✅ Позиция {symbol} в прибыли {profit_pct:.2%} "
-                        f"(>={min_profit_for_extension:.2%}), продлеваем время на "
+                        f"(>={min_profit_for_extension_frac:.2%}), продлеваем время на "
                         f"{extension_minutes:.1f} минут (с {original_max_holding:.1f} до {new_max_holding:.1f} минут)"
                     )
                     return
@@ -2103,11 +2186,11 @@ class TrailingSLCoordinator:
                     return
 
                 # ✅ ИСПРАВЛЕНО: Закрываем ТОЛЬКО если прибыль мала (< min_profit_for_extension) И время вышло
-                if profit_pct < min_profit_for_extension:
+                if profit_pct < min_profit_for_extension_frac:
                     logger.warning(
                         f"⏰ Позиция {symbol} удерживается {time_held:.1f} минут "
                         f"(лимит: {actual_max_holding:.1f} минут), "
-                        f"прибыль {profit_pct:.2%} < {min_profit_for_extension:.2%} (min для продления), закрываем по времени"
+                        f"прибыль {profit_pct:.2%} < {min_profit_for_extension_frac:.2%} (min для продления), закрываем по времени"
                     )
                     await self.close_position_callback(symbol, "max_holding_time")
                 else:
@@ -2116,7 +2199,7 @@ class TrailingSLCoordinator:
                     logger.info(
                         f"✅ Позиция {symbol} удерживается {time_held:.1f} минут "
                         f"(лимит: {actual_max_holding:.1f} минут), "
-                        f"прибыль {profit_pct:.2%} >= {min_profit_for_extension:.2%}, НЕ закрываем (используем trailing stop)"
+                        f"прибыль {profit_pct:.2%} >= {min_profit_for_extension_frac:.2%}, НЕ закрываем (используем trailing stop)"
                     )
                     return
 

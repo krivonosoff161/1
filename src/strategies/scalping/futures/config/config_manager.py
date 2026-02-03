@@ -626,6 +626,7 @@ class ConfigManager:
             "timeout_minutes": None,
             "min_holding_minutes": None,  # ✅ ЭТАП 4.4
             "min_profit_to_close": None,  # ✅ ЭТАП 4.1
+            "min_profit_for_extension": None,  # ✅ ЭТАП 4.3
             "extend_time_on_profit": False,  # ✅ ЭТАП 4.3
             "extend_time_multiplier": 1.0,  # ✅ ЭТАП 4.3
             "regime_multiplier": 1.0,  # ✅ НОВОЕ: Множитель режима (из конфига, fallback)
@@ -683,6 +684,11 @@ class ConfigManager:
             # ✅ ЭТАП 4.1: Минимальный профит для закрытия
             params["min_profit_to_close"] = self.get_config_value(
                 trailing_sl_config, "min_profit_to_close", params["min_profit_to_close"]
+            )
+            params["min_profit_for_extension"] = self.get_config_value(
+                trailing_sl_config,
+                "min_profit_for_extension",
+                params["min_profit_for_extension"],
             )
             # ✅ ЭТАП 4.3: Продлевание времени для прибыльных позиций
             params["extend_time_on_profit"] = self.get_config_value(
@@ -786,6 +792,10 @@ class ConfigManager:
                         if "min_profit_to_close" in regime_params_dict:
                             params["min_profit_to_close"] = regime_params_dict[
                                 "min_profit_to_close"
+                            ]
+                        if "min_profit_for_extension" in regime_params_dict:
+                            params["min_profit_for_extension"] = regime_params_dict[
+                                "min_profit_for_extension"
                             ]
                         if "min_holding_minutes" in regime_params_dict:
                             params["min_holding_minutes"] = regime_params_dict[

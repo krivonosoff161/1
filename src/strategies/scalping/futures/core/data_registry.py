@@ -467,7 +467,7 @@ class DataRegistry:
         return None
 
     async def get_fresh_price_for_signals(
-        self, symbol: str, client=None, max_age: float = 10.0
+        self, symbol: str, client=None, max_age: float = 3.0
     ) -> Optional[float]:
         """
         ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Получить СВЕЖУЮ цену для SignalGenerator.
@@ -483,6 +483,10 @@ class DataRegistry:
             СВЕЖАЯ цена (max 3s old) или None
         """
         # Проверяем WebSocket цену с TTL (конфиг через max_age)
+        if max_age is None or max_age <= 0:
+            max_age = 3.0
+        if max_age > 3.0:
+            max_age = 3.0
         async with self._lock:
             md = self._market_data.get(symbol, {})
             updated_at = md.get("updated_at")

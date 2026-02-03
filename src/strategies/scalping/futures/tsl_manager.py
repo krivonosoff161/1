@@ -72,6 +72,7 @@ class TSLManager:
             timeout_minutes=tsl_params.get("timeout_minutes"),
             min_holding_minutes=tsl_params.get("min_holding_minutes"),
             min_profit_to_close=tsl_params.get("min_profit_to_close"),
+            min_profit_for_extension=tsl_params.get("min_profit_for_extension"),
             extend_time_on_profit=tsl_params.get("extend_time_on_profit", False),
             extend_time_multiplier=tsl_params.get("extend_time_multiplier", 1.0),
             leverage=leverage,
