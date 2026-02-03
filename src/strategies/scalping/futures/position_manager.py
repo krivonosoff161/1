@@ -6384,6 +6384,11 @@ class FuturesPositionManager:
 
                 # Ищем нужную позицию в списке
                 for pos_data in positions:
+                    if not isinstance(pos_data, dict):
+                        logger.debug(
+                            f"⚠️ {symbol}: пропуск некорректной позиции (type={type(pos_data)})"
+                        )
+                        continue
                     inst_id = pos_data.get("instId", "").replace("-SWAP", "")
                     if inst_id != symbol:
                         continue

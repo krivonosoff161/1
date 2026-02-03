@@ -90,17 +90,19 @@ class StopLossManager:
                         # Проверяем TSL loss_cut
                         tsl_loss_cut = getattr(tsl, "loss_cut_percent", None)
                         if tsl_loss_cut is not None:
+                            # loss_cut может быть в % (1.5) или в доле (0.015)
+                            loss_cut_fraction = (
+                                float(tsl_loss_cut) / 100.0
+                                if float(tsl_loss_cut) > 1
+                                else float(tsl_loss_cut)
+                            )
                             # Рассчитываем TSL stop price
                             position_side = position.get("posSide", "long").lower()
                             if position_side == "long":
-                                tsl_stop_price = entry_price * (
-                                    1 - tsl_loss_cut / 100.0
-                                )
+                                tsl_stop_price = entry_price * (1 - loss_cut_fraction)
                                 tsl_triggered = current_price <= tsl_stop_price
                             else:
-                                tsl_stop_price = entry_price * (
-                                    1 + tsl_loss_cut / 100.0
-                                )
+                                tsl_stop_price = entry_price * (1 + loss_cut_fraction)
                                 tsl_triggered = current_price >= tsl_stop_price
 
                             if tsl_triggered:

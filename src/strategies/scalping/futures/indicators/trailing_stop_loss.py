@@ -516,9 +516,13 @@ class TrailingStopLoss:
                 f"entry={self.entry_price:.2f}, current={current_price:.2f}"
             )
 
-            gross_pnl_pct_from_margin = (
-                unrealized_pnl / margin_used
-            ) * 100  # От маржи!
+            # PnL от маржи (доля), конвертируем в долю от цены через leverage
+            gross_pnl_from_margin = unrealized_pnl / margin_used
+            gross_profit_from_price = (
+                gross_pnl_from_margin / self.leverage
+                if self.leverage
+                else gross_pnl_from_margin
+            )
 
             if include_fees:
                 seconds_since_open = (
@@ -530,27 +534,27 @@ class TrailingStopLoss:
                     # В первые 10 секунд не учитываем комиссию
                     logger.debug(
                         f"⏱️ Позиция открыта {seconds_since_open:.1f} сек назад, "
-                        f"комиссия не учитывается (PnL% от маржи={gross_pnl_pct_from_margin:.4f}%)"
+                        f"комиссия не учитывается (PnL от цены={gross_profit_from_price:.4%})"
                     )
-                    return gross_pnl_pct_from_margin
+                    return gross_profit_from_price
                 else:
                     # После 10 секунд учитываем комиссию (ставка за сторону)
                     fee_rate_per_side = self.trading_fee_rate
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Учитываем leverage в комиссиях
-                    # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
-                    # (т.к. комиссия считается от номинала, а PnL% от маржи)
-                    commission_pct = (fee_rate_per_side * 2) * self.leverage * 100
-                    net_pnl_pct_from_margin = gross_pnl_pct_from_margin - commission_pct
+                    # Комиссия: 0.02% на вход + 0.02% на выход (доля от цены)
+                    commission_fraction = fee_rate_per_side * 2
+                    net_profit_from_price = (
+                        gross_profit_from_price - commission_fraction
+                    )
                     logger.debug(
                         f"💰 TrailingStopLoss: PnL calc: leverage={self.leverage}, "
-                        f"fees_adj={commission_pct:.4f}%, "
-                        f"gross={gross_pnl_pct_from_margin:.4f}%, net={net_pnl_pct_from_margin:.4f}%"
+                        f"fees_adj={commission_fraction:.4%}, "
+                        f"gross={gross_profit_from_price:.4%}, net={net_profit_from_price:.4%}"
                     )
-                    return net_pnl_pct_from_margin
+                    return net_profit_from_price
             else:
-                return gross_pnl_pct_from_margin
+                return gross_profit_from_price
 
-        # ✅ FALLBACK: Если нет margin - считаем от цены и конвертируем в % от маржи
+        # ✅ FALLBACK: Если нет margin - считаем от цены (доля от цены)
         # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (10.01.2026): Проверяем значение self.side перед расчетом
         logger.debug(
             f"🔍 [PNL_CALC] {self._symbol}: self.side={self.side}, "
@@ -559,17 +563,13 @@ class TrailingStopLoss:
         )
 
         if self.side == "long":
-            gross_profit_pct_from_price = (
+            gross_profit_from_price = (
                 current_price - self.entry_price
             ) / self.entry_price
         else:
-            gross_profit_pct_from_price = (
+            gross_profit_from_price = (
                 self.entry_price - current_price
             ) / self.entry_price
-
-        # ✅ КРИТИЧЕСКОЕ: Конвертируем процент от цены в процент от маржи
-        # При leverage 3x: 1% от цены = 3% от маржи
-        gross_profit_pct_from_margin = gross_profit_pct_from_price * self.leverage
 
         # ✅ ИСПРАВЛЕНИЕ: Не учитываем комиссию в первые 10 секунд после открытия
         if include_fees:
@@ -580,24 +580,23 @@ class TrailingStopLoss:
                 # В первые 10 секунд не учитываем комиссию (учитываем только спред)
                 logger.debug(
                     f"⏱️ Позиция открыта {seconds_since_open:.1f} сек назад, "
-                    f"комиссия не учитывается (PnL% от маржи={gross_profit_pct_from_margin:.4f}%, fallback от цены)"
+                    f"комиссия не учитывается (PnL от цены={gross_profit_from_price:.4%}, fallback от цены)"
                 )
-                return gross_profit_pct_from_margin
+                return gross_profit_from_price
             else:
                 # После 10 секунд учитываем комиссию
                 fee_rate_per_side = self.trading_fee_rate
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Учитываем leverage в комиссиях (fallback)
-                # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
-                commission_pct = (fee_rate_per_side * 2) * self.leverage * 100
-                net_pnl_pct_from_margin = gross_profit_pct_from_margin - commission_pct
+                # Комиссия: 0.02% на вход + 0.02% на выход (доля от цены)
+                commission_fraction = fee_rate_per_side * 2
+                net_profit_from_price = gross_profit_from_price - commission_fraction
                 logger.debug(
                     f"💰 TrailingStopLoss: PnL calc (fallback): leverage={self.leverage}, "
-                    f"fees_adj={commission_pct:.4f}%, "
-                    f"gross={gross_profit_pct_from_margin:.4f}%, net={net_pnl_pct_from_margin:.4f}%"
+                    f"fees_adj={commission_fraction:.4%}, "
+                    f"gross={gross_profit_from_price:.4%}, net={net_profit_from_price:.4%}"
                 )
-                return net_pnl_pct_from_margin
+                return net_profit_from_price
         else:
-            return gross_profit_pct_from_margin
+            return gross_profit_from_price
 
     def get_distance_to_stop_pct(self, current_price: float) -> float:
         """

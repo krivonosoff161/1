@@ -807,14 +807,18 @@ class TrailingSLCoordinator:
                     pos_side = position.get("posSide") or position.get(
                         "position_side", "long"
                     )
-                    
+
                     # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ (10.01.2026): Проверяем откуда берётся pos_side
-                    pos_side_source = "posSide" if position.get("posSide") else "position_side_or_default"
+                    pos_side_source = (
+                        "posSide"
+                        if position.get("posSide")
+                        else "position_side_or_default"
+                    )
                     logger.debug(
                         f"🔍 [UNREALIZED_PNL_CALC] {symbol}: pos_side='{pos_side}' (source={pos_side_source}), "
                         f"pos_size={pos_size:.6f}, entry={entry_price:.2f}, current={current_price:.2f}"
                     )
-                    
+
                     ct_val = float(position.get("ctVal", "1") or 1)
                     position_value = abs(pos_size) * ct_val
                     if pos_side.lower() == "long":
@@ -1419,13 +1423,18 @@ class TrailingSLCoordinator:
                             ) / 60.0
                         else:
                             minutes_in_position = 0.0
+                        margin_value = float(position.get("margin", 0) or 0)
+                        leverage_value = getattr(tsl, "leverage", 1.0) or 1.0
+                        pnl_usd = (
+                            profit_pct * margin_value * leverage_value
+                            if margin_value
+                            else 0.0
+                        )
                         self.debug_logger.log_position_close(
                             symbol=symbol,
                             exit_price=current_price,
-                            # profit_pct здесь в долях (0.005 = 0.5% от маржи)
-                            pnl_usd=(profit_pct * float(position.get("margin", 0)))
-                            if position.get("margin")
-                            else 0.0,
+                            # profit_pct здесь в долях от цены (0.005 = 0.5% от цены)
+                            pnl_usd=pnl_usd,
                             pnl_pct=profit_pct,
                             time_in_position_minutes=minutes_in_position,
                             reason="order_flow_reversal",
@@ -1580,13 +1589,18 @@ class TrailingSLCoordinator:
                     f"profit={profit_pct:.2%}, time={minutes_in_position:.2f} мин, trend={trend_str_close})"
                 )
                 if self.debug_logger:
+                    margin_value = float(position.get("margin", 0) or 0)
+                    leverage_value = getattr(tsl, "leverage", 1.0) or 1.0
+                    pnl_usd = (
+                        profit_pct * margin_value * leverage_value
+                        if margin_value
+                        else 0.0
+                    )
                     self.debug_logger.log_position_close(
                         symbol=symbol,
                         exit_price=current_price,
-                        # profit_pct здесь в долях (0.005 = 0.5% от маржи)
-                        pnl_usd=(profit_pct * float(position.get("margin", 0)))
-                        if position.get("margin")
-                        else 0.0,
+                        # profit_pct здесь в долях от цены (0.005 = 0.5% от цены)
+                        pnl_usd=pnl_usd,
                         pnl_pct=profit_pct,
                         time_in_position_minutes=minutes_in_position,
                         reason=reason_str,
@@ -1874,7 +1888,9 @@ class TrailingSLCoordinator:
                     )
                     return entry_price
         except Exception as e:
-            logger.debug(f"⚠️ TSL: Не удалось получить entry_price fallback для {symbol}: {e}")
+            logger.debug(
+                f"⚠️ TSL: Не удалось получить entry_price fallback для {symbol}: {e}"
+            )
 
         # Если даже entry_price недоступен - логируем критическую ошибку
         logger.error(
