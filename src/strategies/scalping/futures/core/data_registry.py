@@ -247,6 +247,33 @@ class DataRegistry:
                 else None
             )
 
+
+    async def get_price_snapshot(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Return a point-in-time price snapshot for exit decisions.
+
+        Returns:
+            dict with keys: price, source, age, updated_at
+        """
+        async with self._lock:
+            md = self._market_data.get(symbol, {})
+            updated_at = md.get("updated_at")
+            price = md.get("price") or md.get("last_price")
+            source = md.get("source")
+
+        age = None
+        if updated_at and isinstance(updated_at, datetime):
+            age = (datetime.now() - updated_at).total_seconds()
+
+        if price is None and source is None and age is None:
+            return None
+        return {
+            "price": price,
+            "source": source,
+            "age": age,
+            "updated_at": updated_at,
+        }
+
     async def get_price(self, symbol: str) -> Optional[float]:
         """
         Получить текущую цену символа.

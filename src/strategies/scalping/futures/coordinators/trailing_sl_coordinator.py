@@ -1237,7 +1237,21 @@ class TrailingSLCoordinator:
                                 f"✅ ExitAnalyzer: Закрываем {symbol} (reason={reason}, pnl={decision_pnl_frac:.2%})"
                             )
                             if self._has_position(symbol):
-                                await self.close_position_callback(symbol, reason)
+                                decision_payload = {
+
+                                    "price": current_price,
+
+                                    "price_source": "TSL",
+
+                                    "price_age": None,
+
+                                    "position_data": position,
+
+                                    "decision": exit_decision,
+
+                                }
+
+                                await self.close_position_callback(symbol, reason, decision_payload)
                             return
                         # ✅ Если ExitAnalyzer решил частично закрыть - выполняем частичное закрытие
                         elif action == "partial_close":
@@ -1478,9 +1492,19 @@ class TrailingSLCoordinator:
                             reason="order_flow_reversal",
                         )
                     if self._has_position(symbol):
-                        await self.close_position_callback(
-                            symbol, "order_flow_reversal"
-                        )
+                        decision_payload = {
+
+                            "price": current_price,
+
+                            "price_source": "TSL",
+
+                            "price_age": None,
+
+                            "position_data": position,
+
+                        }
+
+                        await self.close_position_callback(symbol, "order_flow_reversal", decision_payload)
                     return
 
                 reversal_config = getattr(
@@ -1644,7 +1668,19 @@ class TrailingSLCoordinator:
                         reason=reason_str,
                     )
                 if self._has_position(symbol):
-                    await self.close_position_callback(symbol, reason_str)
+                    decision_payload = {
+
+                        "price": current_price,
+
+                        "price_source": "TSL",
+
+                        "price_age": None,
+
+                        "position_data": position,
+
+                    }
+
+                    await self.close_position_callback(symbol, reason_str, decision_payload)
                 else:
                     logger.debug(
                         f"⚠️ Позиция {symbol} уже была закрыта, пропускаем закрытие"
@@ -1689,7 +1725,19 @@ class TrailingSLCoordinator:
                         logger.info(
                             f"💰 PH сработал для {symbol} - закрываем позицию немедленно!"
                         )
-                        await self.close_position_callback(symbol, "profit_harvest")
+                        decision_payload = {
+
+                            "price": current_price,
+
+                            "price_source": "TSL",
+
+                            "price_age": None,
+
+                            "position_data": position,
+
+                        }
+
+                        await self.close_position_callback(symbol, "profit_harvest", decision_payload)
                         return
 
             await self._check_position_holding_time(
@@ -2192,7 +2240,19 @@ class TrailingSLCoordinator:
                         f"(лимит: {actual_max_holding:.1f} минут), "
                         f"прибыль {profit_pct:.2%} < {min_profit_for_extension_frac:.2%} (min для продления), закрываем по времени"
                     )
-                    await self.close_position_callback(symbol, "max_holding_time")
+                    decision_payload = {
+
+                        "price": current_price,
+
+                        "price_source": "TSL",
+
+                        "price_age": None,
+
+                        "position_data": position,
+
+                    }
+
+                    await self.close_position_callback(symbol, "max_holding_time", decision_payload)
                 else:
                     # ✅ Если прибыль >= min_profit_for_extension, но не продлеваем (возможно, уже продлена)
                     # Используем trailing stop вместо закрытия по времени

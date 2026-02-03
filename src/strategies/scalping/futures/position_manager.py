@@ -4149,6 +4149,28 @@ class FuturesPositionManager:
                             )
                 return None
 
+            # Route close through orchestrator exit gate (single entry point)
+            if hasattr(self, "orchestrator") and self.orchestrator:
+                price = (
+                    actual_position.get("markPx")
+                    or actual_position.get("last")
+                    or actual_position.get("lastPx")
+                )
+                try:
+                    price = float(price) if price is not None else None
+                except (TypeError, ValueError):
+                    price = None
+                decision_payload = {
+                    "price": price,
+                    "price_source": "REST",
+                    "price_age": 0.0,
+                    "position_data": actual_position,
+                }
+                await self.orchestrator._close_position(
+                    symbol, reason, decision_payload
+                )
+                return None
+
             # ✅ EXIT GUARD: Защита от преждевременного закрытия по min_holding
             try:
                 non_blocking_reasons = {

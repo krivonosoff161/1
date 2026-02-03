@@ -48,6 +48,7 @@ from .coordinators.smart_exit_coordinator import SmartExitCoordinator
 from .coordinators.trailing_sl_coordinator import TrailingSLCoordinator
 from .coordinators.websocket_coordinator import WebSocketCoordinator
 from .core.data_registry import DataRegistry
+from .core.exit_guard import ExitGuard
 from .core.position_registry import PositionRegistry
 from .core.position_sync import PositionSync
 from .core.trading_control_center import TradingControlCenter
@@ -242,6 +243,15 @@ class FuturesScalpingOrchestrator:
             leverage=leverage,  # ✅ АДАПТИВНО: Из конфига
             margin_mode=margin_mode,
         )
+
+        self.exit_guard = ExitGuard(
+            config=self.scalping_config,
+            data_registry=self.data_registry,
+            position_registry=self.position_registry,
+            client=self.client,
+            parameter_provider=self.parameter_provider,
+        )
+        logger.info("ExitGuard initialized")
 
         # Модули безопасности - берем параметры из futures_modules или defaults
         futures_modules = config.futures_modules if config.futures_modules else {}
@@ -874,9 +884,9 @@ class FuturesScalpingOrchestrator:
             """Callback для получения позиции по символу"""
             return self.active_positions.get(symbol, {})
 
-        async def _close_position_for_tsl_callback(symbol: str, reason: str) -> None:
+        async def _close_position_for_tsl_callback(symbol: str, reason: str, decision_payload: Optional[Dict[str, Any]] = None) -> None:
             """Callback для закрытия позиции"""
-            await self._close_position(symbol, reason)
+            await self._close_position(symbol, reason, decision_payload)
 
         self.signal_coordinator = SignalCoordinator(
             client=self.client,
@@ -1466,6 +1476,8 @@ class FuturesScalpingOrchestrator:
                 logger.info("✅ SignalGenerator: инициализирован и готов к работе")
 
             # ✅ НОВОЕ: Инициализация ParameterProvider после signal_generator
+
+
             # Получаем regime_manager из signal_generator (теперь он инициализирован)
             regime_manager = getattr(self.signal_generator, "regime_manager", None)
             self.parameter_orchestrator = ParameterOrchestrator(
@@ -1481,6 +1493,9 @@ class FuturesScalpingOrchestrator:
                 strict_mode=True,
             )
             logger.info("✅ ParameterProvider инициализирован в orchestrator")
+            if hasattr(self, "exit_guard") and self.exit_guard:
+                self.exit_guard.parameter_provider = self.parameter_provider
+                logger.info("ExitGuard updated with new ParameterProvider")
             if hasattr(self.signal_generator, "set_parameter_orchestrator"):
                 self.signal_generator.set_parameter_orchestrator(
                     self.parameter_orchestrator
@@ -1886,9 +1901,7 @@ class FuturesScalpingOrchestrator:
                             f"🛑 Закрываем противоположную позицию {symbol} {side_to_close.upper()} "
                             f"(PnL={position_to_close['upl']:.2f} USDT) при загрузке (allow_concurrent=false)"
                         )
-                        await self.position_manager.close_position_manually(
-                            symbol, reason="opposite_position_on_load"
-                        )
+                        await self._close_position(symbol, "opposite_position_on_load")
                         # Удаляем закрытую позицию из списка для загрузки
                         symbol_positions.remove(
                             next(
@@ -3454,7 +3467,7 @@ class FuturesScalpingOrchestrator:
             logger.critical("🚨 ЭКСТРЕННОЕ ЗАКРЫТИЕ ВСЕХ ПОЗИЦИЙ!")
 
             for symbol in list(self.active_positions.keys()):
-                await self.position_manager.close_position_manually(symbol)
+                await self._close_position(symbol, "emergency")
                 logger.info(f"✅ Позиция {symbol} закрыта экстренно")
 
         except Exception as e:
@@ -4108,7 +4121,7 @@ class FuturesScalpingOrchestrator:
             logger.critical("🛑 Закрытие всех позиций...")
             for symbol, position in list(self.active_positions.items()):
                 try:
-                    await self.position_manager.close_position_manually(symbol)
+                    await self._close_position(symbol, "emergency")
                     logger.info(f"✅ Позиция {symbol} закрыта")
                 except Exception as e:
                     logger.error(f"❌ Ошибка закрытия {symbol}: {e}")
@@ -4680,7 +4693,85 @@ class FuturesScalpingOrchestrator:
         """Совместимость: делегирует обновление статуса ордеров координатору."""
         await self.order_coordinator.update_orders_cache_status(self._normalize_symbol)
 
-    async def _close_position(self, symbol: str, reason: str):
+    async def _build_exit_payload(
+        self,
+        symbol: str,
+        reason: str,
+        decision_payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload = dict(decision_payload) if isinstance(decision_payload, dict) else {}
+
+        if self.data_registry:
+            try:
+                if (
+                    payload.get("price") in (None, 0)
+                    or payload.get("price_source") is None
+                    or payload.get("price_age") is None
+                ):
+                    snapshot = await self.data_registry.get_price_snapshot(symbol)
+                    if snapshot:
+                        if payload.get("price") in (None, 0):
+                            payload["price"] = snapshot.get("price")
+                        if payload.get("price_source") is None:
+                            payload["price_source"] = snapshot.get("source")
+                        if payload.get("price_age") is None:
+                            payload["price_age"] = snapshot.get("age")
+            except Exception:
+                pass
+
+        if payload.get("position_data") is None:
+            pos = None
+            try:
+                if self.position_registry:
+                    pos = await self.position_registry.get_position(symbol)
+            except Exception:
+                pos = None
+            if not pos and symbol in self.active_positions:
+                pos = self.active_positions.get(symbol)
+            if pos:
+                payload["position_data"] = pos
+
+        metadata = None
+        try:
+            if self.position_registry:
+                metadata = await self.position_registry.get_metadata(symbol)
+        except Exception:
+            metadata = None
+
+        if payload.get("regime") is None and metadata and getattr(metadata, "regime", None):
+            payload["regime"] = metadata.regime
+
+        if payload.get("time_in_pos") is None:
+            entry_time = None
+            if metadata and getattr(metadata, "entry_time", None):
+                entry_time = metadata.entry_time
+            elif isinstance(payload.get("position_data"), dict):
+                entry_time = payload["position_data"].get("entry_time")
+
+            if isinstance(entry_time, str):
+                try:
+                    entry_time = datetime.fromisoformat(
+                        entry_time.replace("Z", "+00:00")
+                    )
+                except Exception:
+                    entry_time = None
+
+            if isinstance(entry_time, datetime):
+                if entry_time.tzinfo is None:
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                payload["time_in_pos"] = (
+                    datetime.now(timezone.utc) - entry_time
+                ).total_seconds()
+            elif entry_time is not None:
+                try:
+                    entry_ts = float(entry_time)
+                    payload["time_in_pos"] = time.time() - entry_ts
+                except Exception:
+                    pass
+
+        return payload
+
+    async def _close_position(self, symbol: str, reason: str, decision_payload: Optional[Dict[str, Any]] = None):
         """Закрытие позиции через position_manager"""
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Инициализируем asyncio.Lock и TTLCache для защиты от race condition
         if not hasattr(self, "_closing_locks"):
@@ -4700,19 +4791,39 @@ class FuturesScalpingOrchestrator:
             # ✅ Проверяем TTLCache - если позиция недавно закрывалась, пропускаем
             if symbol in self._closing_positions_cache:
                 logger.debug(
-                    f"⚠️ Позиция {symbol} уже закрывается (TTLCache, reason={reason}), пропускаем"
+                    f"Position {symbol} already closing (TTLCache, reason={reason}), skip"
                 )
                 return
 
-            # ✅ Помечаем в TTLCache
+            decision_payload = await self._build_exit_payload(
+                symbol, reason, decision_payload
+            )
+            if hasattr(self, "exit_guard") and self.exit_guard:
+                can_close, block_reason = await self.exit_guard.check(
+                    symbol=symbol, reason=reason, payload=decision_payload
+                )
+                if not can_close:
+                    logger.warning(
+                        f"EXIT_GUARD blocked close: {symbol} reason={reason} block={block_reason}"
+                    )
+                    return
+
             self._closing_positions_cache[symbol] = True
 
             try:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Проверяем наличие позиции
                 # Если позиция уже удалена sync кодом, значит она уже закрыта - пропускаем
                 position = self.active_positions.get(symbol, {})
+                if not position and isinstance(decision_payload, dict):
+                    position = decision_payload.get("position_data") or {}
+                if not position and hasattr(self, "position_registry") and self.position_registry:
+                    try:
+                        position = await self.position_registry.get_position(symbol) or {}
+                    except Exception:
+                        position = {}
 
                 if not position:
+
                     logger.debug(
                         f"⚠️ Позиция {symbol} уже закрыта или не найдена (reason={reason}), пропускаем"
                     )
