@@ -247,7 +247,6 @@ class DataRegistry:
                 else None
             )
 
-
     async def get_price_snapshot(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
         Return a point-in-time price snapshot for exit decisions.

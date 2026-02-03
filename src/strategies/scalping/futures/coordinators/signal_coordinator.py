@@ -50,7 +50,9 @@ class SignalCoordinator:
         total_margin_used_ref,
         get_used_margin_callback: Optional[Callable[[], Awaitable[float]]] = None,
         get_position_callback: Optional[Callable[[str], Dict[str, Any]]] = None,
-        close_position_callback: Optional[Callable[[str, str, Optional[Dict[str, Any]]], Awaitable[None]]] = None,
+        close_position_callback: Optional[
+            Callable[[str, str, Optional[Dict[str, Any]]], Awaitable[None]]
+        ] = None,
         normalize_symbol_callback: Optional[Callable[[str], str]] = None,
         initialize_trailing_stop_callback: Optional[
             Callable[[str, float, str, float, Dict[str, Any]], Any]
@@ -1460,7 +1462,9 @@ class SignalCoordinator:
                                     await self.close_position_callback(
                                         symbol, "max_orders_reached"
                                     )
-                                elif hasattr(self, "orchestrator") and self.orchestrator:
+                                elif (
+                                    hasattr(self, "orchestrator") and self.orchestrator
+                                ):
                                     await self.orchestrator._close_position(
                                         symbol, "max_orders_reached"
                                     )

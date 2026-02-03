@@ -293,9 +293,7 @@ class ExitGuard:
         )
         side = str(side).lower() if side else "unknown"
         try:
-            size = float(
-                position_data.get("size", position_data.get("pos", 0)) or 0
-            )
+            size = float(position_data.get("size", position_data.get("pos", 0)) or 0)
         except (TypeError, ValueError):
             size = 0.0
         return side, size
@@ -343,9 +341,7 @@ class ExitGuard:
             return False, f"min_holding_{time_in_pos:.1f}s<{min_holding_sec:.1f}s"
         return True, None
 
-    def _should_bypass_min_holding(
-        self, reason: str, payload: Dict[str, Any]
-    ) -> bool:
+    def _should_bypass_min_holding(self, reason: str, payload: Dict[str, Any]) -> bool:
         if self._is_critical_reason(reason):
             return True
 

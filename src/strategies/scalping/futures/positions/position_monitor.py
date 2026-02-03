@@ -245,14 +245,14 @@ class PositionMonitor:
                     metadata = await self.position_registry.get_metadata(symbol)
                 time_in_pos_sec = None
                 entry_time = None
-                if metadata and getattr(metadata, 'entry_time', None):
+                if metadata and getattr(metadata, "entry_time", None):
                     entry_time = metadata.entry_time
                 elif isinstance(position, dict):
-                    entry_time = position.get('entry_time')
+                    entry_time = position.get("entry_time")
                 if isinstance(entry_time, str):
                     try:
                         entry_time = datetime.fromisoformat(
-                            entry_time.replace('Z', '+00:00')
+                            entry_time.replace("Z", "+00:00")
                         )
                     except Exception:
                         entry_time = None
@@ -273,21 +273,21 @@ class PositionMonitor:
                 if position is not None:
                     if isinstance(position, dict):
                         position_payload = position
-                    elif hasattr(position, 'to_dict'):
+                    elif hasattr(position, "to_dict"):
                         position_payload = position.to_dict()
-                    elif hasattr(position, '__dict__'):
+                    elif hasattr(position, "__dict__"):
                         position_payload = dict(position.__dict__)
 
                 decision_payload = {
-                    'price': current_price,
-                    'price_source': price_source,
-                    'price_age': price_age,
-                    'pnl_pct': decision.get('pnl_pct'),
-                    'net_pnl_pct': decision.get('net_pnl_pct'),
-                    'time_in_pos': time_in_pos_sec,
-                    'position_data': position_payload,
-                    'regime': decision.get('regime') or regime,
-                    'decision': decision,
+                    "price": current_price,
+                    "price_source": price_source,
+                    "price_age": price_age,
+                    "pnl_pct": decision.get("pnl_pct"),
+                    "net_pnl_pct": decision.get("net_pnl_pct"),
+                    "time_in_pos": time_in_pos_sec,
+                    "position_data": position_payload,
+                    "regime": decision.get("regime") or regime,
+                    "decision": decision,
                 }
 
                 action = decision.get("action")
@@ -305,7 +305,9 @@ class PositionMonitor:
                         logger.info(
                             f"✅ PositionMonitor: Закрываем {symbol} (reason={reason})"
                         )
-                        await self.close_position_callback(symbol, reason, decision_payload)
+                        await self.close_position_callback(
+                            symbol, reason, decision_payload
+                        )
                     else:
                         logger.warning(
                             f"⚠️ PositionMonitor: Решение закрыть {symbol}, но close_position_callback не установлен"
@@ -387,57 +389,55 @@ class PositionMonitor:
         # Level 1: DataRegistry (WS)
         if market_data:
             if isinstance(market_data, dict):
-                updated_at = market_data.get('updated_at')
-                source = market_data.get('source') or 'WEBSOCKET'
-                price = market_data.get('price') or market_data.get('last_price')
+                updated_at = market_data.get("updated_at")
+                source = market_data.get("source") or "WEBSOCKET"
+                price = market_data.get("price") or market_data.get("last_price")
                 if price:
                     return float(price), source, _calc_age(updated_at)
 
-                tick = market_data.get('current_tick')
-                if tick is not None and hasattr(tick, 'price'):
+                tick = market_data.get("current_tick")
+                if tick is not None and hasattr(tick, "price"):
                     return float(tick.price), source, _calc_age(updated_at)
-            elif hasattr(market_data, 'price'):
-                updated_at = getattr(market_data, 'updated_at', None)
-                source = getattr(market_data, 'source', None) or 'WEBSOCKET'
+            elif hasattr(market_data, "price"):
+                updated_at = getattr(market_data, "updated_at", None)
+                source = getattr(market_data, "source", None) or "WEBSOCKET"
                 return float(market_data.price), source, _calc_age(updated_at)
 
         if not self.allow_rest_fallback:
-            return 0.0, 'NONE', None
+            return 0.0, "NONE", None
 
         # Level 2 & 3: REST API (mark_price, last_price)
         if self.client:
             try:
                 ticker = await self.client.get_ticker(symbol)
                 if ticker:
-                    mark_price = ticker.get('markPx')
+                    mark_price = ticker.get("markPx")
                     if mark_price:
-                        return float(mark_price), 'REST', 0.0
-                    last_price = ticker.get('last')
+                        return float(mark_price), "REST", 0.0
+                    last_price = ticker.get("last")
                     if last_price:
-                        return float(last_price), 'REST', 0.0
+                        return float(last_price), "REST", 0.0
             except Exception as e:
-                logger.debug(
-                    f"REST price fallback error for {symbol}: {e}"
-                )
+                logger.debug(f"REST price fallback error for {symbol}: {e}")
 
         # Level 4: last_known_price (TTL 15s)
-        if hasattr(self, '_last_known_prices'):
+        if hasattr(self, "_last_known_prices"):
             last_price, timestamp = self._last_known_prices.get(symbol, (None, 0))
             if last_price:
                 age = time.time() - float(timestamp)
                 if age < 15:
-                    return float(last_price), 'MEMORY', age
+                    return float(last_price), "MEMORY", age
 
         # Ultimate fallback: entry_price if available
-        if position and hasattr(position, 'entry_price'):
+        if position and hasattr(position, "entry_price"):
             if position.entry_price:
                 logger.warning(
                     f"PositionMonitor {symbol}: using entry_price={position.entry_price} "
                     "(all fallbacks exhausted)"
                 )
-                return float(position.entry_price), 'ENTRY', None
+                return float(position.entry_price), "ENTRY", None
 
         logger.warning(
             f"PositionMonitor {symbol}: current_price=0.0 (no data from any fallback)"
         )
-        return 0.0, 'NONE', None
+        return 0.0, "NONE", None

@@ -97,10 +97,14 @@ class FuturesScalpingOrchestrator:
         self.config = config
         self.scalping_config = get_scalping_view(config)
         from loguru import logger
+
         logger.warning(f"[DEBUG] scalping_config type: {type(self.scalping_config)}")
         try:
             import json
-            logger.warning(f"[DEBUG] scalping_config as dict: {self.scalping_config.__dict__ if hasattr(self.scalping_config, '__dict__') else self.scalping_config}")
+
+            logger.warning(
+                f"[DEBUG] scalping_config as dict: {self.scalping_config.__dict__ if hasattr(self.scalping_config, '__dict__') else self.scalping_config}"
+            )
         except Exception as e:
             logger.error(f"[DEBUG] Exception while logging scalping_config: {e}")
         self.risk_config = config.risk
@@ -189,8 +193,12 @@ class FuturesScalpingOrchestrator:
         # ✅ FAIL-FAST: Проверка наличия signal_generator config
         sg_cfg = self.scalping_config.get("signal_generator", None)
         if not sg_cfg or not isinstance(sg_cfg, dict) or len(sg_cfg) == 0:
-            logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: signal_generator config отсутствует или пуст! sg_cfg={sg_cfg}")
-            raise ValueError("❌ КРИТИЧЕСКАЯ ОШИБКА: signal_generator config отсутствует или пуст! Проверьте config_futures.yaml → scalping.signal_generator")
+            logger.error(
+                f"❌ КРИТИЧЕСКАЯ ОШИБКА: signal_generator config отсутствует или пуст! sg_cfg={sg_cfg}"
+            )
+            raise ValueError(
+                "❌ КРИТИЧЕСКАЯ ОШИБКА: signal_generator config отсутствует или пуст! Проверьте config_futures.yaml → scalping.signal_generator"
+            )
         allow_rest_ws = bool(sg_cfg.get("allow_rest_for_ws", False))
         self.data_registry.set_require_ws_source_for_fresh(not allow_rest_ws)
         logger.info(
@@ -208,7 +216,9 @@ class FuturesScalpingOrchestrator:
                     f"✅ DataRegistry: market_data_ttl set to {self.data_registry.market_data_ttl}s"
                 )
         except Exception as exc:
-            logger.warning(f"⚠️ DataRegistry: не удалось установить market_data_ttl: {exc}")
+            logger.warning(
+                f"⚠️ DataRegistry: не удалось установить market_data_ttl: {exc}"
+            )
 
         # 🛡️ Защиты риска
         self.initial_balance = None  # Для drawdown расчета
@@ -378,7 +388,9 @@ class FuturesScalpingOrchestrator:
 
         # Торговые модули
         # ✅ Передаем клиент в signal_generator для инициализации фильтров
-        logger.warning(f"[DEBUG] signal_generator config before init: {self.scalping_config.get('signal_generator', None)}")
+        logger.warning(
+            f"[DEBUG] signal_generator config before init: {self.scalping_config.get('signal_generator', None)}"
+        )
         self.signal_generator = FuturesSignalGenerator(config, client=self.client)
         logger.warning(f"[DEBUG] signal_generator after init: {self.signal_generator}")
         # ✅ НОВОЕ: Передаем trading_statistics в signal_generator для ARM
@@ -884,7 +896,9 @@ class FuturesScalpingOrchestrator:
             """Callback для получения позиции по символу"""
             return self.active_positions.get(symbol, {})
 
-        async def _close_position_for_tsl_callback(symbol: str, reason: str, decision_payload: Optional[Dict[str, Any]] = None) -> None:
+        async def _close_position_for_tsl_callback(
+            symbol: str, reason: str, decision_payload: Optional[Dict[str, Any]] = None
+        ) -> None:
             """Callback для закрытия позиции"""
             await self._close_position(symbol, reason, decision_payload)
 
@@ -1476,7 +1490,6 @@ class FuturesScalpingOrchestrator:
                 logger.info("✅ SignalGenerator: инициализирован и готов к работе")
 
             # ✅ НОВОЕ: Инициализация ParameterProvider после signal_generator
-
 
             # Получаем regime_manager из signal_generator (теперь он инициализирован)
             regime_manager = getattr(self.signal_generator, "regime_manager", None)
@@ -4738,7 +4751,11 @@ class FuturesScalpingOrchestrator:
         except Exception:
             metadata = None
 
-        if payload.get("regime") is None and metadata and getattr(metadata, "regime", None):
+        if (
+            payload.get("regime") is None
+            and metadata
+            and getattr(metadata, "regime", None)
+        ):
             payload["regime"] = metadata.regime
 
         if payload.get("time_in_pos") is None:
@@ -4771,7 +4788,12 @@ class FuturesScalpingOrchestrator:
 
         return payload
 
-    async def _close_position(self, symbol: str, reason: str, decision_payload: Optional[Dict[str, Any]] = None):
+    async def _close_position(
+        self,
+        symbol: str,
+        reason: str,
+        decision_payload: Optional[Dict[str, Any]] = None,
+    ):
         """Закрытие позиции через position_manager"""
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Инициализируем asyncio.Lock и TTLCache для защиты от race condition
         if not hasattr(self, "_closing_locks"):
@@ -4816,14 +4838,19 @@ class FuturesScalpingOrchestrator:
                 position = self.active_positions.get(symbol, {})
                 if not position and isinstance(decision_payload, dict):
                     position = decision_payload.get("position_data") or {}
-                if not position and hasattr(self, "position_registry") and self.position_registry:
+                if (
+                    not position
+                    and hasattr(self, "position_registry")
+                    and self.position_registry
+                ):
                     try:
-                        position = await self.position_registry.get_position(symbol) or {}
+                        position = (
+                            await self.position_registry.get_position(symbol) or {}
+                        )
                     except Exception:
                         position = {}
 
                 if not position:
-
                     logger.debug(
                         f"⚠️ Позиция {symbol} уже закрыта или не найдена (reason={reason}), пропускаем"
                     )
