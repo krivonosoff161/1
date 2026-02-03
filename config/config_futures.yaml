@@ -234,22 +234,22 @@ scalping:
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Per-symbol Smart Close параметры для BTC
         reversal_score_threshold:
           ranging: 4  # ✅ BTC более стабильный - используем стандартный порог 4 (как общий для ranging)
-    max_concurrent_signals: 3  # Меньше одновременных сигналов
-    max_positions_per_symbol: 1  # ✅ По одной позиции на символ (предотвращаем «сложение» ордеров)
-    allow_concurrent_positions: true  # ✅ ИЗМЕНЕНО: true - разрешаем суммирование ордеров (до 5 в одном направлении) и LONG/SHORT одновременно
-    
-    # Направление торговли (по умолчанию разрешены обе стороны)
-    allow_long_positions: true   # LONG позиции разрешены
-    allow_short_positions: true  # SHORT позиции разрешены (настраивается по необходимости)
-    
-    # Take Profit и Stop Loss (для частотного скальпинга)
-    tp_percent: 7.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): 5.55%→7.0% - больше дышания, достижимый TP
-    sl_percent: 1.3  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): 1.0%→1.3% - баланс с новым TP
-    order_type: "limit"  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: Limit ордера для экономии комиссий (0.02% вместо 0.05%)
-    
-    # ✅ НОВОЕ: Динамическая маржа - адаптация к волатильности и риску
-    # ✅ АГРЕССИВНО: Увеличено для большей прибыли (защита все равно спасет)
-    risk_config:
+  max_concurrent_signals: 3  # Меньше одновременных сигналов
+  max_positions_per_symbol: 1  # ✅ По одной позиции на символ (предотвращаем «сложение» ордеров)
+  allow_concurrent_positions: true  # ✅ ИЗМЕНЕНО: true - разрешаем суммирование ордеров (до 5 в одном направлении) и LONG/SHORT одновременно
+  
+  # Направление торговли (по умолчанию разрешены обе стороны)
+  allow_long_positions: true   # LONG позиции разрешены
+  allow_short_positions: true  # SHORT позиции разрешены (настраивается по необходимости)
+  
+  # Take Profit и Stop Loss (для частотного скальпинга)
+  tp_percent: 7.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): 5.55%→7.0% - больше дышания, достижимый TP
+  sl_percent: 1.3  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): 1.0%→1.3% - баланс с новым TP
+  order_type: "limit"  # ✅ ЧАСТОТНЫЙ СКАЛЬПИНГ: Limit ордера для экономии комиссий (0.02% вместо 0.05%)
+  
+  # ✅ НОВОЕ: Динамическая маржа - адаптация к волатильности и риску
+  # ✅ АГРЕССИВНО: Увеличено для большей прибыли (защита все равно спасет)
+  risk_config:
     max_margin_per_trade: 22.0  # ✅ АГРЕССИВНО: Увеличено с 15% до 22% (+47%) - больше маржи на сделку
     max_portfolio_margin: 65.0  # ✅ АГРЕССИВНО: Увеличено с 50% до 65% (+30%) - больше маржи в портфеле
     use_risk_based_sizing: true  # Включить расчет через risk_usd / sl_distance (Уровень 3)
@@ -257,9 +257,9 @@ scalping:
     drawdown_factor_enabled: true  # Учитывать просадку портфеля при расчете динамического капа
     min_margin_cap: 8.0  # Минимальная маржа в USD (защита от слишком маленьких позиций)
     max_margin_cap_multiplier: 2.5  # ✅ АГРЕССИВНО: Увеличено с 2.0 до 2.5 (+25%) - до 55% при базе 22%
-    
-    # Усиленный Partial TP: maker с быстрым fallback на market
-    partial_tp:
+  
+  # Усиленный Partial TP: maker с быстрым fallback на market
+  partial_tp:
     enabled: true
     fraction: 0.5            # ✅ ИСПРАВЛЕНО (06.01.2026): Уменьшено с 0.6 до 0.5 (50% позиции) - меньше раннего закрытия
     trigger_percent: 1.0     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): 1.5%→1.0% - раньше SL (иерархия фильтров)
@@ -285,9 +285,9 @@ scalping:
       choppy:
         fraction: 0.5        # ✅ ИСПРАВЛЕНО (06.01.2026): Уменьшено с 0.6 до 0.5 (50% позиции)
         trigger_percent: 1.0 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): 1.5%→1.0% - раньше SL 1.4%
-    
-    # ✅ ОПТИМИЗАЦИЯ #4: Динамический размер позиций на основе волатильности
-    volatility_adjustment:
+  
+  # ✅ ОПТИМИЗАЦИЯ #4: Динамический размер позиций на основе волатильности
+  volatility_adjustment:
     enabled: true
     base_atr_percent: 0.02   # 2% базовая волатильность (ATR % от цены)
     min_multiplier: 0.5      # Минимум 50% от базового размера (низкая волатильность)
@@ -306,40 +306,40 @@ scalping:
         base_atr_percent: 0.025  # 2.5% базовая волатильность для choppy
         min_multiplier: 0.4      # 40% минимум для choppy (больше снижаем)
         max_multiplier: 1.2      # 120% максимум для choppy (меньше увеличиваем)
-    
-    # Commission & Fees
-    commission:
-      trading_fee_rate: 0.0010  # ✅ ОБНОВЛЕНО: 0.10% на круг (0.05% вход + 0.05% выход для taker на OKX) - используется как fallback
-      maker_fee_rate: 0.0002  # ✅ ЗАДАЧА #10: Maker комиссия 0.02% (для POST-ONLY/LIMIT ордеров)
-      taker_fee_rate: 0.0005  # ✅ ЗАДАЧА #10: Taker комиссия 0.05% (для MARKET ордеров)
-      slippage_buffer_percent: 0.15  # ✅ НОВОЕ: Буфер на slippage в процентах от маржи (0.15% = 0.0015)
-      tp_buffer_percent: 0.1  # ✅ НОВОЕ: Дополнительный буфер для TP в процентах от маржи (0.1% = 0.001)
-    
-    # ✅ НОВОЕ: Profit Drawdown Protection - защита от отката прибыли
-    profit_drawdown:
-      enabled: true
-      drawdown_percent: 0.75  # ✅ ИСПРАВЛЕНО (17.12.2025): Увеличено с 0.65 до 0.75 (+15%) - дать больше места для роста, меньше преждевременных закрытий
-      min_profit_to_activate_type: "margin_percent"  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (21.12.2025): Адаптивный min_profit от маржи
-      min_profit_to_activate_percent: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): 3.0%→1.0% - достижимо для скальпинга (иерархия фильтров)
-      min_profit_to_activate_usd: 0.5  # ✅ Fallback для обратной совместимости
+  
+  # Commission & Fees
+  commission:
+    trading_fee_rate: 0.0010  # ✅ ОБНОВЛЕНО: 0.10% на круг (0.05% вход + 0.05% выход для taker на OKX) - используется как fallback
+    maker_fee_rate: 0.0002  # ✅ ЗАДАЧА #10: Maker комиссия 0.02% (для POST-ONLY/LIMIT ордеров)
+    taker_fee_rate: 0.0005  # ✅ ЗАДАЧА #10: Taker комиссия 0.05% (для MARKET ордеров)
+    slippage_buffer_percent: 0.15  # ✅ НОВОЕ: Буфер на slippage в процентах от маржи (0.15% = 0.0015)
+    tp_buffer_percent: 0.1  # ✅ НОВОЕ: Дополнительный буфер для TP в процентах от маржи (0.1% = 0.001)
+  
+  # ✅ НОВОЕ: Profit Drawdown Protection - защита от отката прибыли
+  profit_drawdown:
+    enabled: true
+    drawdown_percent: 0.75  # ✅ ИСПРАВЛЕНО (17.12.2025): Увеличено с 0.65 до 0.75 (+15%) - дать больше места для роста, меньше преждевременных закрытий
+    min_profit_to_activate_type: "margin_percent"  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (21.12.2025): Адаптивный min_profit от маржи
+    min_profit_to_activate_percent: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): 3.0%→1.0% - достижимо для скальпинга (иерархия фильтров)
+    min_profit_to_activate_usd: 0.5  # ✅ Fallback для обратной совместимости
     # Адаптивные пороги по режимам (множители от базового drawdown_percent)
-      by_regime:
-        trending:
-          multiplier: 2.0  # 130% откат в тренде (0.65 * 2.0) - больше времени для продолжения тренда
-        ranging:
-          multiplier: 0.25  # ✅ ГРОК КОМПРОМИСС: 20-25% откат от пика (0.75 * 0.25 = 0.1875 ≈ 20%) - быстрее защитит прибыль
-        choppy:
-          multiplier: 1.0  # 65% откат в хаосе (0.65 * 1.0) - больше времени для фиксации прибыли
-    
-    # Адаптивные параметры
-    adaptive_tp_sl: true  # Адаптивные TP/SL на основе волатильности
-    volatility_multiplier: 1.2  # Меньший множитель для Futures
-    
-    # ✅ НОВОЕ: Параметры синхронизации позиций - АДАПТИВНЫЕ
-    positions_sync:
-      base_interval_min: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Уменьшено с 5.0 до 1.0 секунды для немедленного обнаружения закрытий
+    by_regime:
+      trending:
+        multiplier: 2.0  # 130% откат в тренде (0.65 * 2.0) - больше времени для продолжения тренда
+      ranging:
+        multiplier: 0.25  # ✅ ГРОК КОМПРОМИСС: 20-25% откат от пика (0.75 * 0.25 = 0.1875 ≈ 20%) - быстрее защитит прибыль
+      choppy:
+        multiplier: 1.0  # 65% откат в хаосе (0.65 * 1.0) - больше времени для фиксации прибыли
+  
+  # Адаптивные параметры
+  adaptive_tp_sl: true  # Адаптивные TP/SL на основе волатильности
+  volatility_multiplier: 1.2  # Меньший множитель для Futures
+  
+  # ✅ НОВОЕ: Параметры синхронизации позиций - АДАПТИВНЫЕ
+  positions_sync:
+    base_interval_min: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Уменьшено с 5.0 до 1.0 секунды для немедленного обнаружения закрытий
     base_interval_multiplier: 1.0  # ✅ МОДЕРНИЗАЦИЯ: Множитель 1.0 (было 3.0) - более частое обновление
-    
+  
     # Адаптация по режиму рынка (ПРИОРИТЕТ 1)
     by_regime:
       trending:
@@ -348,7 +348,7 @@ scalping:
         interval_multiplier: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Уменьшено с 1.2 до 1.0 (= каждую секунду)
       choppy:
         interval_multiplier: 1.0  # ✅ ИСПРАВЛЕНО: Быстрее в хаосе (1.0x = каждую 1 секунду)
-    
+  
     # Адаптация по балансу (ПРИОРИТЕТ 2)
     by_balance:
       micro:
@@ -359,7 +359,7 @@ scalping:
         interval_multiplier: 1.2  # Медленнее для большого баланса (1.2x = каждые 6 секунд)
       large:
         interval_multiplier: 1.5  # Медленнее для очень большого баланса (1.5x = каждые 7.5 секунд)
-    
+  
   # Adaptive Regime Manager - адаптация под режим рынка
   adaptive_regime:
     enabled: true
@@ -1503,16 +1503,16 @@ scalping:
             trailing:
               max_trail: 0.015
 
-    # Фильтры (адаптированы для Futures)
-    enable_rsi_filter: true
-    enable_macd_filter: true
-    enable_bollinger_filter: true
-    enable_ma_filter: true
-    
-    # ✅ Order Executor - Лимитные ордера (ПЕРЕМЕЩЕНО из futures_modules)
-    
-    # ✅ Position Manager Settings (ПЕРЕМЕЩЕНО из futures_modules)
-    position_manager:
+  # Фильтры (адаптированы для Futures)
+  enable_rsi_filter: true
+  enable_macd_filter: true
+  enable_bollinger_filter: true
+  enable_ma_filter: true
+  
+  # ✅ Order Executor - Лимитные ордера (ПЕРЕМЕЩЕНО из futures_modules)
+  
+  # ✅ Position Manager Settings (ПЕРЕМЕЩЕНО из futures_modules)
+  position_manager:
     false_trigger_protection:
       margin_ratio_threshold: 1.5  # Порог для защиты от ложных срабатываний
       pnl_threshold: 10.0  # Порог PnL для защиты (USDT)
@@ -1650,15 +1650,15 @@ risk:
     
     # Адаптивные минимумы для Futures (более агрессивные)
     adaptive_minimums:
-    small:  # $100 - $1500
-      balance_threshold: 1500.0
-      minimum_order_usd: 5.0  # Futures может быть меньше
-    medium:  # $1500 - $2300
-      balance_threshold: 2300.0
-      minimum_order_usd: 10.0  # Стандартный минимум
-    large:  # $2300+
-      balance_threshold: 999999.0  # Большое число для "от"
-      minimum_order_usd: 15.0  # Больше для большого баланса
+      small:  # $100 - $1500
+        balance_threshold: 1500.0
+        minimum_order_usd: 5.0  # Futures может быть меньше
+      medium:  # $1500 - $2300
+        balance_threshold: 2300.0
+        minimum_order_usd: 10.0  # Стандартный минимум
+      large:  # $2300+
+        balance_threshold: 999999.0  # Большое число для "от"
+        minimum_order_usd: 15.0  # Больше для большого баланса
     
     # ✅ НОВОЕ: Адаптивные параметры риска (ПРИОРИТЕТ над базовыми)
     # Базовые параметры (по умолчанию, используются как fallback)
@@ -1817,31 +1817,31 @@ exit_params:
     extension_percent: 110.0
 
 exit_params_legacy:
-    ranging:
+  ranging:
     max_holding_minutes: 25.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильное значение для ranging режима
     sl_percent: 0.8  # ✅ ПРАВКА #11: Адаптивный SL для ranging
     tp_percent: 2.5  # ✅ ПРАВКА #11: Адаптивный TP для ranging
     spread_buffer: 0.15  # ✅ ПРАВКА #10: Увеличен для ranging
-    trending:
+  trending:
     max_holding_minutes: 15.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Было 45, исправлено на 15 мин для trending
     sl_percent: 2.0  # ✅ ПРАВКА #11: Адаптивный SL для trending
     tp_percent: 8.0  # ✅ ПРАВКА #11: Адаптивный TP для trending
     spread_buffer: 0.05
-    choppy:
+  choppy:
     max_holding_minutes: 10.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильное значение для choppy режима
     sl_percent: 1.5
     tp_percent: 3.0
     spread_buffer: 0.10
-    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Адаптивные пороги Smart Close по режимам
-    smart_close:
-      reversal_score_threshold:
-        ranging: 4      # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Увеличено с 3 до 4 (Grok рекомендация) - уменьшение ложных SL в ranging режиме
-        trending: 1     # ✅ TRENDING: Быстрее реакция против тренда (1+ сигнал) - оставляем как есть
-        choppy: 4       # ✅ CHOPPY: Максимальная осторожность (4+ сигнала) - оставляем как есть
-      trend_against_threshold:
-        ranging: 0.80   # ✅ RANGING: Более строгий порог (0.80) - нужен сильный тренд против - оставляем как есть
-        trending: 0.60  # ✅ TRENDING: Менее строгий порог (0.60) - быстрее выход против тренда - оставляем как есть
-        choppy: 0.90    # ✅ CHOPPY: Максимально строгий порог (0.90) - только при очень сильном тренде против - оставляем как есть
+  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Адаптивные пороги Smart Close по режимам
+  smart_close:
+    reversal_score_threshold:
+      ranging: 4      # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Увеличено с 3 до 4 (Grok рекомендация) - уменьшение ложных SL в ranging режиме
+      trending: 1     # ✅ TRENDING: Быстрее реакция против тренда (1+ сигнал) - оставляем как есть
+      choppy: 4       # ✅ CHOPPY: Максимальная осторожность (4+ сигнала) - оставляем как есть
+    trend_against_threshold:
+      ranging: 0.80   # ✅ RANGING: Более строгий порог (0.80) - нужен сильный тренд против - оставляем как есть
+      trending: 0.60  # ✅ TRENDING: Менее строгий порог (0.60) - быстрее выход против тренда - оставляем как есть
+      choppy: 0.90    # ✅ CHOPPY: Максимально строгий порог (0.90) - только при очень сильном тренде против - оставляем как есть
 
     # ✅ НОВОЕ: Signal Generator - параметры генерации сигналов
 signal_generator:

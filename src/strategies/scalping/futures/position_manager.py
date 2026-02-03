@@ -19,10 +19,10 @@ from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
 from src.config import BotConfig, ScalpingConfig
-from .config.config_view import get_scalping_view
 
 from ..spot.position_manager import TradeResult
 from .calculations.margin_calculator import MarginCalculator
+from .config.config_view import get_scalping_view
 from .core.data_registry import DataRegistry
 from .core.position_registry import PositionRegistry
 
@@ -544,6 +544,64 @@ class FuturesPositionManager:
         except Exception as e:
             logger.warning(f"⚠️ Error getting trading fee rate for {symbol}: {e}")
             return None
+
+    def _get_commission_rates_for_symbol(self, symbol: str):
+        """Return commission config and per-side entry/exit fee rates."""
+        commission_config = getattr(self.scalping_config, "commission", None)
+        if commission_config is None:
+            commission_config = getattr(self.config, "commission", {})
+        if not commission_config:
+            commission_config = {}
+
+        if isinstance(commission_config, dict):
+            maker_fee_rate = commission_config.get("maker_fee_rate")
+            taker_fee_rate = commission_config.get("taker_fee_rate")
+            trading_fee_rate = commission_config.get("trading_fee_rate")
+        else:
+            maker_fee_rate = getattr(commission_config, "maker_fee_rate", None)
+            taker_fee_rate = getattr(commission_config, "taker_fee_rate", None)
+            trading_fee_rate = getattr(commission_config, "trading_fee_rate", None)
+
+        if trading_fee_rate is None:
+            trading_fee_rate = 0.0010
+
+        if maker_fee_rate is None:
+            maker_fee_rate = trading_fee_rate / 2.0
+        if taker_fee_rate is None:
+            taker_fee_rate = trading_fee_rate / 2.0
+
+        entry_order_type = "market"
+        entry_post_only = False
+        if symbol in self.active_positions:
+            stored_position = self.active_positions[symbol]
+            if isinstance(stored_position, dict):
+                entry_order_type = stored_position.get("order_type", entry_order_type)
+                entry_post_only = stored_position.get("post_only", entry_post_only)
+        if (
+            hasattr(self, "orchestrator")
+            and self.orchestrator
+            and hasattr(self.orchestrator, "active_positions")
+        ):
+            stored_position = self.orchestrator.active_positions.get(symbol)
+            if isinstance(stored_position, dict):
+                entry_order_type = stored_position.get("order_type", entry_order_type)
+                entry_post_only = stored_position.get("post_only", entry_post_only)
+
+        entry_order_type = str(entry_order_type).lower()
+        entry_post_only = bool(entry_post_only)
+        if entry_order_type == "limit" and entry_post_only:
+            entry_commission_rate = maker_fee_rate
+        else:
+            entry_commission_rate = taker_fee_rate
+
+        exit_commission_rate = taker_fee_rate
+        return (
+            commission_config,
+            entry_commission_rate,
+            exit_commission_rate,
+            maker_fee_rate,
+            taker_fee_rate,
+        )
 
     async def initialize(self):
         """Инициализация менеджера позиций"""
@@ -1901,6 +1959,7 @@ class FuturesPositionManager:
                 commission_rate = await self._get_actual_trading_fee_rate(
                     symbol, order_type="market"
                 )  # Default to market/taker rate
+                commission_rate_round = False
                 if commission_rate is None:
                     # Fallback к конфигу если API не доступен
                     commission_config = getattr(
@@ -1913,6 +1972,7 @@ class FuturesPositionManager:
                             "⚠️ Комиссия не найдена в конфиге, используем значение по умолчанию 0.0010 (0.10%)"
                         )
                         commission_rate = 0.0010
+                        commission_rate_round = True
                     else:
                         if isinstance(commission_config, dict):
                             commission_rate = commission_config.get("trading_fee_rate")
@@ -1920,6 +1980,8 @@ class FuturesPositionManager:
                             commission_rate = getattr(
                                 commission_config, "trading_fee_rate", None
                             )
+                        if commission_rate is not None:
+                            commission_rate_round = True
                         if commission_rate is None:
                             order_type = getattr(
                                 self.scalping_config, "order_type", "limit"
@@ -1931,6 +1993,8 @@ class FuturesPositionManager:
                             logger.debug(
                                 f"✅ Используем комиссию {order_type}: {commission_rate:.4f} ({commission_rate*100:.2f}%)"
                             )
+                if commission_rate_round:
+                    commission_rate = commission_rate / 2.0
                 position_value = size_in_coins * entry_price
                 commission = position_value * commission_rate * 2  # Открытие + закрытие
                 net_pnl_usd = pnl_usd - commission
@@ -2720,24 +2784,22 @@ class FuturesPositionManager:
                             symbol, regime, current_price
                         )
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Учитываем комиссии при проверке TP
-                        # Получаем комиссию из конфига
-                        commission_config = getattr(
-                            self.scalping_config, "commission", {}
+                        (
+                            commission_config,
+                            entry_commission_rate,
+                            exit_commission_rate,
+                            _,
+                            _,
+                        ) = self._get_commission_rates_for_symbol(symbol)
+                        commission_rate_total = (
+                            entry_commission_rate + exit_commission_rate
                         )
-                        if isinstance(commission_config, dict):
-                            commission_rate = commission_config.get(
-                                "trading_fee_rate", 0.0002
-                            )
-                        else:
-                            commission_rate = getattr(
-                                commission_config, "trading_fee_rate", 0.0002
-                            )
                         leverage_fallback = (
                             getattr(self.scalping_config, "leverage", 5) or 5
                         )
-                        # Комиссия от маржи: commission_rate * leverage * 2 (вход + выход)
+                        # Комиссия от маржи: total_commission_rate * leverage (вход + выход)
                         commission_pct_from_margin = (
-                            commission_rate * leverage_fallback * 2 * 100
+                            commission_rate_total * leverage_fallback * 100
                         )
                         slippage_buffer_pct = (
                             commission_config.get("slippage_buffer_percent", 0.15)
@@ -2874,30 +2936,22 @@ class FuturesPositionManager:
                             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Учитываем комиссии при проверке TP
                             # Получаем комиссию из конфига (используем существующий commission_config если есть)
                             try:
-                                commission_config_fallback = getattr(
-                                    self.scalping_config, "commission", {}
+                                (
+                                    commission_config_fallback,
+                                    entry_commission_rate,
+                                    exit_commission_rate,
+                                    _,
+                                    _,
+                                ) = self._get_commission_rates_for_symbol(symbol)
+                                commission_rate_total = (
+                                    entry_commission_rate + exit_commission_rate
                                 )
-                                if isinstance(commission_config_fallback, dict):
-                                    commission_rate_fallback = (
-                                        commission_config_fallback.get(
-                                            "trading_fee_rate", 0.0002
-                                        )
-                                    )
-                                else:
-                                    commission_rate_fallback = getattr(
-                                        commission_config_fallback,
-                                        "trading_fee_rate",
-                                        0.0002,
-                                    )
                                 leverage_fallback = (
                                     getattr(self.scalping_config, "leverage", 5) or 5
                                 )
-                                # Комиссия от маржи: commission_rate * leverage * 2 (вход + выход)
+                                # Комиссия от маржи: total_commission_rate * leverage (вход + выход)
                                 commission_pct_from_margin = (
-                                    commission_rate_fallback
-                                    * leverage_fallback
-                                    * 2
-                                    * 100
+                                    commission_rate_total * leverage_fallback * 100
                                 )
                                 slippage_buffer_pct = (
                                     commission_config_fallback.get(
@@ -2976,19 +3030,16 @@ class FuturesPositionManager:
             # Если трейлинг стоп-лосс активен (позиция в прибыли и достиг min_profit_to_close),
             # то TP отключен (трейлинг стоп-лосс имеет приоритет)
             # ✅ ИСПРАВЛЕНО: Комиссия из конфига (может быть в scalping или на верхнем уровне)
-            commission_config = getattr(self.scalping_config, "commission", None)
-            if commission_config is None:
-                # Пробуем получить с верхнего уровня конфига
-                commission_config = getattr(self.config, "commission", {})
-            if not commission_config:
-                commission_config = {}
-            # ✅ ИСПРАВЛЕНО: Получаем комиссию из конфига, без захардкоженного fallback
-            if isinstance(commission_config, dict):
-                commission_rate = commission_config.get("trading_fee_rate")
-            else:
-                commission_rate = getattr(commission_config, "trading_fee_rate", None)
+            (
+                commission_config,
+                entry_commission_rate,
+                exit_commission_rate,
+                _,
+                _,
+            ) = self._get_commission_rates_for_symbol(symbol)
+            commission_rate_total = entry_commission_rate + exit_commission_rate
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: commission_rate ОБЯЗАТЕЛЕН в конфиге (без fallback)
-            if commission_rate is None:
+            if not commission_config:
                 raise ValueError(
                     "❌ КРИТИЧЕСКАЯ ОШИБКА: trading_fee_rate не найден в конфиге! "
                     "Добавьте в config_futures.yaml: scalping.commission.trading_fee_rate (например, 0.0010 для 0.10%)"
@@ -3079,7 +3130,7 @@ class FuturesPositionManager:
                     getattr(self.scalping_config, "leverage", leverage) or leverage or 5
                 )
                 commission_rate_from_margin_calc = (
-                    commission_rate * leverage_for_calc * 2
+                    commission_rate_total * leverage_for_calc
                 )
                 commission_pct = (
                     commission_rate_from_margin_calc * 100
@@ -3169,7 +3220,7 @@ class FuturesPositionManager:
                             or 5
                         )
                         commission_rate_from_margin_ext = (
-                            commission_rate * leverage_for_ext * 2
+                            commission_rate_total * leverage_for_ext
                         )
                         commission_pct_from_margin_ext = (
                             commission_rate_from_margin_ext * 100
@@ -3194,7 +3245,7 @@ class FuturesPositionManager:
             # При плече 5x: 0.10% от номинала = 1.00% от маржи (0.10% × 5 × 2 для открытия+закрытия)
             # ✅ ИСПРАВЛЕНО: Учитываем плечо при расчете комиссии от маржи
             commission_rate_from_margin = (
-                commission_rate * leverage * 2
+                commission_rate_total * leverage
             )  # Комиссия от маржи (открытие + закрытие)
             commission_pct_from_margin = (
                 commission_rate_from_margin * 100
@@ -4225,16 +4276,13 @@ class FuturesPositionManager:
                 unrealized_pnl = float(actual_position.get("upl", "0") or 0)
                 margin_used = float(actual_position.get("margin", "0") or 0)
 
-                # Получаем комиссию из конфига
-                commission_config = getattr(self.scalping_config, "commission", None)
-                if commission_config is None:
-                    commission_config = getattr(self.config, "commission", {})
-                if isinstance(commission_config, dict):
-                    commission_rate = commission_config.get("trading_fee_rate", 0.001)
-                else:
-                    commission_rate = getattr(
-                        commission_config, "trading_fee_rate", 0.001
-                    )
+                (
+                    _commission_config,
+                    entry_commission_rate,
+                    exit_commission_rate,
+                    _,
+                    _,
+                ) = self._get_commission_rates_for_symbol(symbol)
 
                 # Рассчитываем комиссию (вход + выход)
                 position_value = float(actual_position.get("notionalUsd", 0) or 0)
@@ -4246,7 +4294,9 @@ class FuturesPositionManager:
                         position_value = size_in_coins * entry_price
                     except Exception:
                         position_value = abs(size) * entry_price
-                total_commission = position_value * commission_rate * 2  # Вход + выход
+                total_commission = position_value * (
+                    entry_commission_rate + exit_commission_rate
+                )
 
                 # Проверяем: если PnL < комиссия, не закрываем (кроме SL)
                 if unrealized_pnl < total_commission and reason not in [
@@ -5218,25 +5268,20 @@ class FuturesPositionManager:
                 else:  # short
                     current_pnl = (entry_price - current_price) * size_in_coins
 
-                # Вычитаем комиссию
-                commission_config = getattr(self.scalping_config, "commission", {})
-                # ✅ ИСПРАВЛЕНО: Используем maker_fee_rate для limit ордеров (0.02% на сторону)
-                if isinstance(commission_config, dict):
-                    commission_rate = commission_config.get(
-                        "maker_fee_rate",
-                        commission_config.get("trading_fee_rate", 0.0002),
-                    )
-                else:
-                    commission_rate = getattr(
-                        commission_config,
-                        "maker_fee_rate",
-                        getattr(commission_config, "trading_fee_rate", 0.0002),
-                    )
+                (
+                    _commission_config,
+                    entry_commission_rate,
+                    exit_commission_rate,
+                    _,
+                    _,
+                ) = self._get_commission_rates_for_symbol(symbol)
 
-                position_value = size_in_coins * entry_price
+                position_value_entry = size_in_coins * entry_price
+                position_value_exit = size_in_coins * current_price
                 commission = (
-                    position_value * commission_rate * 2
-                )  # Открытие + закрытие (0.02% × 2 = 0.04%)
+                    position_value_entry * entry_commission_rate
+                    + position_value_exit * exit_commission_rate
+                )
                 net_pnl = current_pnl - commission
 
                 # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Расчет PnL
@@ -5494,17 +5539,20 @@ class FuturesPositionManager:
                 else:  # short
                     current_pnl = (entry_price - current_price) * size_in_coins
 
-                # Вычитаем комиссию
-                commission_config = getattr(self.scalping_config, "commission", {})
-                if isinstance(commission_config, dict):
-                    commission_rate = commission_config.get("trading_fee_rate", 0.0010)
-                else:
-                    commission_rate = getattr(
-                        commission_config, "trading_fee_rate", 0.0010
-                    )
+                (
+                    _commission_config,
+                    entry_commission_rate,
+                    exit_commission_rate,
+                    _,
+                    _,
+                ) = self._get_commission_rates_for_symbol(symbol)
 
-                position_value = size_in_coins * entry_price
-                commission = position_value * commission_rate * 2
+                position_value_entry = size_in_coins * entry_price
+                position_value_exit = size_in_coins * current_price
+                commission = (
+                    position_value_entry * entry_commission_rate
+                    + position_value_exit * exit_commission_rate
+                )
                 net_pnl = current_pnl - commission
 
                 # Получаем режим для адаптивного порога отката
@@ -6055,21 +6103,20 @@ class FuturesPositionManager:
                         else:
                             gross_pnl = size_in_coins * (entry_price - current_price)
 
-                        # Комиссия
-                        commission_config = getattr(
-                            self.scalping_config, "commission", {}
-                        )
-                        if isinstance(commission_config, dict):
-                            commission_rate = commission_config.get(
-                                "trading_fee_rate", 0.0010
-                            )
-                        else:
-                            commission_rate = getattr(
-                                commission_config, "trading_fee_rate", 0.0010
-                            )
+                        (
+                            _commission_config,
+                            entry_commission_rate,
+                            exit_commission_rate,
+                            _,
+                            _,
+                        ) = self._get_commission_rates_for_symbol(symbol)
 
-                        position_value = size_in_coins * entry_price
-                        commission = position_value * commission_rate * 2
+                        position_value_entry = size_in_coins * entry_price
+                        position_value_exit = size_in_coins * current_price
+                        commission = (
+                            position_value_entry * entry_commission_rate
+                            + position_value_exit * exit_commission_rate
+                        )
                         net_pnl = gross_pnl - commission
 
                         # Рассчитываем PnL% от маржи
@@ -6125,21 +6172,20 @@ class FuturesPositionManager:
                         else:
                             gross_pnl = size_in_coins * (entry_price - current_price)
 
-                        # Комиссия
-                        commission_config = getattr(
-                            self.scalping_config, "commission", {}
-                        )
-                        if isinstance(commission_config, dict):
-                            commission_rate = commission_config.get(
-                                "trading_fee_rate", 0.0010
-                            )
-                        else:
-                            commission_rate = getattr(
-                                commission_config, "trading_fee_rate", 0.0010
-                            )
+                        (
+                            _commission_config,
+                            entry_commission_rate,
+                            exit_commission_rate,
+                            _,
+                            _,
+                        ) = self._get_commission_rates_for_symbol(symbol)
 
-                        position_value = size_in_coins * entry_price
-                        commission = position_value * commission_rate * 2
+                        position_value_entry = size_in_coins * entry_price
+                        position_value_exit = size_in_coins * current_price
+                        commission = (
+                            position_value_entry * entry_commission_rate
+                            + position_value_exit * exit_commission_rate
+                        )
                         net_pnl = gross_pnl - commission
 
                         if margin_used > 0:
@@ -7083,29 +7129,20 @@ class FuturesPositionManager:
                     else:  # short
                         partial_pnl = close_size_coins * (entry_price - current_price)
 
-                    # Получаем комиссию из конфига
-                    commission_config = getattr(
-                        self.scalping_config, "commission", None
-                    )
-                    if commission_config is None:
-                        commission_config = getattr(self.config, "commission", {})
-                    if isinstance(commission_config, dict):
-                        commission_rate = commission_config.get(
-                            "trading_fee_rate", 0.001
-                        )
-                    else:
-                        commission_rate = getattr(
-                            commission_config, "trading_fee_rate", 0.001
-                        )
+                    (
+                        _commission_config,
+                        entry_commission_rate,
+                        exit_commission_rate,
+                        _,
+                        _,
+                    ) = self._get_commission_rates_for_symbol(symbol)
 
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Пропорциональная комиссия на partial_size
-                    # Комиссия рассчитывается как на отдельную сделку: entry + exit для partial_size
-                    # Формула: commission = (partial_size * entry_price) * fee_rate * 2 (entry + exit)
+                    # Пропорциональная комиссия на partial_size: entry + exit
+                    entry_notional = close_size_coins * entry_price
+                    exit_notional = close_size_coins * current_price
                     partial_commission = (
-                        close_size_coins
-                        * entry_price
-                        * commission_rate
-                        * 2  # entry + exit
+                        entry_notional * entry_commission_rate
+                        + exit_notional * exit_commission_rate
                     )
 
                     net_partial_pnl = partial_pnl - partial_commission

@@ -231,36 +231,51 @@ class ExitAnalyzer:
     def _get_fee_rate_per_side(self, order_type: str = "market") -> float:
         """Возвращает ставку комиссии за сторону (maker/taker) из scalping_config."""
         fee_rate = 0.0002
+        used_trading_fee = False
         commission_config = getattr(self.scalping_config, "commission", None)
         try:
             if isinstance(commission_config, dict):
                 if order_type == "market":
-                    fee_rate = commission_config.get(
-                        "taker_fee_rate",
-                        commission_config.get("trading_fee_rate", fee_rate),
-                    )
+                    if commission_config.get("taker_fee_rate") is not None:
+                        fee_rate = commission_config.get("taker_fee_rate", fee_rate)
+                    else:
+                        fee_rate = commission_config.get("trading_fee_rate", fee_rate)
+                        used_trading_fee = True
                 else:
-                    fee_rate = commission_config.get(
-                        "maker_fee_rate",
-                        commission_config.get("trading_fee_rate", fee_rate),
-                    )
+                    if commission_config.get("maker_fee_rate") is not None:
+                        fee_rate = commission_config.get("maker_fee_rate", fee_rate)
+                    else:
+                        fee_rate = commission_config.get("trading_fee_rate", fee_rate)
+                        used_trading_fee = True
             elif commission_config is not None:
                 if order_type == "market":
-                    fee_rate = getattr(
-                        commission_config,
-                        "taker_fee_rate",
-                        getattr(commission_config, "trading_fee_rate", fee_rate),
-                    )
+                    if getattr(commission_config, "taker_fee_rate", None) is not None:
+                        fee_rate = getattr(
+                            commission_config, "taker_fee_rate", fee_rate
+                        )
+                    else:
+                        fee_rate = getattr(
+                            commission_config, "trading_fee_rate", fee_rate
+                        )
+                        used_trading_fee = True
                 else:
-                    fee_rate = getattr(
-                        commission_config,
-                        "maker_fee_rate",
-                        getattr(commission_config, "trading_fee_rate", fee_rate),
-                    )
+                    if getattr(commission_config, "maker_fee_rate", None) is not None:
+                        fee_rate = getattr(
+                            commission_config, "maker_fee_rate", fee_rate
+                        )
+                    else:
+                        fee_rate = getattr(
+                            commission_config, "trading_fee_rate", fee_rate
+                        )
+                        used_trading_fee = True
         except Exception:
             fee_rate = fee_rate
         try:
-            return max(0.0, float(fee_rate))
+            fee_rate = max(0.0, float(fee_rate))
+            # Если взяли legacy trading_fee_rate "на круг", приводим к ставке за сторону
+            if used_trading_fee and fee_rate > 0.0003:
+                fee_rate = fee_rate / 2.0
+            return fee_rate
         except (TypeError, ValueError):
             return 0.0002
 
@@ -920,7 +935,9 @@ class ExitAnalyzer:
         try:
             if self.config_manager and hasattr(self.config_manager, "_raw_config_dict"):
                 cfg = self.config_manager._raw_config_dict or {}
-                bypass_mult = float(cfg.get("exit_params_min_hold_bypass_mult", bypass_mult))
+                bypass_mult = float(
+                    cfg.get("exit_params_min_hold_bypass_mult", bypass_mult)
+                )
         except Exception:
             bypass_mult = 1.2
         try:

@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 from src.config import BotConfig
+
 from .config_view import get_scalping_view
 
 
@@ -898,11 +899,17 @@ class ConfigManager:
                     params[fee_key] = default_value
 
         # Если maker не задан, но есть trading_fee_rate (старое поле "на круг"), делим на 2 чтобы получить ставку за сторону
+        derived_from_trading_fee = False
         if params.get("maker_fee_rate") is None and params.get("trading_fee_rate"):
             params["maker_fee_rate"] = params["trading_fee_rate"] / 2
-        if params.get("taker_fee_rate") is None and params.get("maker_fee_rate"):
-            # Taker по умолчанию чуть выше maker; если явного нет, используем maker*2.5 (0.05% при maker 0.02%)
-            params["taker_fee_rate"] = params["maker_fee_rate"] * 2.5
+            derived_from_trading_fee = True
+        if params.get("taker_fee_rate") is None:
+            if derived_from_trading_fee and params.get("maker_fee_rate") is not None:
+                # Если maker получен из trading_fee_rate "на круг" — taker = maker (per-side fallback)
+                params["taker_fee_rate"] = params["maker_fee_rate"]
+            elif params.get("maker_fee_rate") is not None:
+                # Taker по умолчанию чуть выше maker; если явного нет, используем maker*2.5 (0.05% при maker 0.02%)
+                params["taker_fee_rate"] = params["maker_fee_rate"] * 2.5
 
         # trading_fee_rate приводим к ставке за сторону (alias maker_fee_rate)
         params["trading_fee_rate"] = params.get("maker_fee_rate", 0.0002)
@@ -1595,8 +1602,12 @@ class ConfigManager:
             by_regime = self.to_dict(risk_dict.get("by_regime", {}))
             regime_params = self.to_dict(by_regime.get(regime, {}))
             logger.info(f"regime_params for {regime}: {regime_params}")
-            logger.info(f"by_regime keys: {list(by_regime.keys()) if by_regime else 'None'}")
-            logger.info(f"risk_dict keys: {list(risk_dict.keys()) if risk_dict else 'None'}")
+            logger.info(
+                f"by_regime keys: {list(by_regime.keys()) if by_regime else 'None'}"
+            )
+            logger.info(
+                f"risk_dict keys: {list(risk_dict.keys()) if risk_dict else 'None'}"
+            )
 
             # 4. Объединяем параметры с приоритетом: режим > баланс > базовые
             # Начинаем с базовых параметров

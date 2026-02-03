@@ -2087,6 +2087,34 @@ class FuturesSignalGenerator:
                 try:
                     candles_1m = await self.data_registry.get_candles(symbol, "1m")
 
+                    def _detect_candle_gaps(candles: List[OHLCV]) -> Optional[str]:
+                        if not candles:
+                            return None
+                        last_ts = getattr(candles[-1], "timestamp", None)
+                        if last_ts is not None:
+                            age_sec = time.time() - float(last_ts)
+                            if age_sec > 120:
+                                return f"last_candle_stale_{age_sec:.0f}s"
+                        lookback = min(len(candles), 20)
+                        recent = candles[-lookback:]
+                        prev_ts = None
+                        for candle in recent:
+                            ts = getattr(candle, "timestamp", None)
+                            if ts is None:
+                                continue
+                            if prev_ts is not None and (ts - prev_ts) > 90:
+                                return f"gap_{ts - prev_ts:.0f}s"
+                            prev_ts = ts
+                        return None
+
+                    gap_reason = _detect_candle_gaps(candles_1m or [])
+                    if gap_reason:
+                        logger.warning(
+                            f"⚠️ {symbol}: обнаружены разрывы/устаревание свечей 1m ({gap_reason}) — "
+                            f"используем REST fallback для восстановления"
+                        )
+                        candles_1m = None
+
                     if (
                         candles_1m and len(candles_1m) >= 15
                     ):  # 🔴 BUG #4 FIX: Снижена граница с 30 до 15 свечей для ранней генерации сигналов

@@ -8,7 +8,7 @@ PositionRegistry - Единый реестр всех позиций.
 import asyncio
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -269,6 +269,58 @@ class PositionRegistry:
                     f"⚠️ PositionRegistry: Попытка обновить несуществующую позицию {symbol}"
                 )
                 return
+
+            # ✅ Доп. защита: если в position_updates пришел entry_time/cTime/openTime — обновляем metadata.entry_time
+            def _parse_entry_time(value: Any) -> Optional[datetime]:
+                if value is None:
+                    return None
+                if isinstance(value, datetime):
+                    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+                if isinstance(value, (int, float)):
+                    ts = float(value)
+                    if ts > 1e12:
+                        ts /= 1000.0
+                    return datetime.fromtimestamp(ts, tz=timezone.utc)
+                if isinstance(value, str):
+                    if value.isdigit():
+                        ts = float(value) / 1000.0
+                        return datetime.fromtimestamp(ts, tz=timezone.utc)
+                    try:
+                        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                        return (
+                            parsed
+                            if parsed.tzinfo
+                            else parsed.replace(tzinfo=timezone.utc)
+                        )
+                    except ValueError:
+                        return None
+                return None
+
+            entry_time_candidate = None
+            if position_updates:
+                for key in ("entry_time", "cTime", "openTime", "c_time", "open_time"):
+                    if key in position_updates and position_updates.get(key):
+                        entry_time_candidate = _parse_entry_time(
+                            position_updates.get(key)
+                        )
+                        if entry_time_candidate:
+                            break
+
+            if entry_time_candidate and symbol in self._metadata:
+                existing_entry_time = self._metadata[symbol].entry_time
+                if existing_entry_time and existing_entry_time.tzinfo is None:
+                    existing_entry_time = existing_entry_time.replace(
+                        tzinfo=timezone.utc
+                    )
+                should_update_entry = (
+                    existing_entry_time is None
+                    or entry_time_candidate
+                    < (existing_entry_time - timedelta(seconds=5))
+                )
+                if should_update_entry:
+                    if metadata_updates is None:
+                        metadata_updates = {}
+                    metadata_updates["entry_time"] = entry_time_candidate
 
             # Обновляем position
             if position_updates:
