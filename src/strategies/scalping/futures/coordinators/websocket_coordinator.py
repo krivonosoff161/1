@@ -57,6 +57,7 @@ class WebSocketCoordinator:
             Callable[[str, str, Dict[str, Any]], None]
         ] = None,
         data_registry=None,  # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
+        position_registry=None,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.02.2026): PositionRegistry для синхронизации на WS updates
         structured_logger=None,  # ✅ НОВОЕ: StructuredLogger для логирования свечей
         smart_exit_coordinator=None,  # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
         performance_tracker=None,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
@@ -108,6 +109,8 @@ class WebSocketCoordinator:
         self.update_active_orders_cache_callback = update_active_orders_cache_callback
         # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
         self.data_registry = data_registry
+        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.02.2026): PositionRegistry для синхронизации на WS updates
+        self.position_registry = position_registry
         # ✅ НОВОЕ: StructuredLogger для логирования свечей
         self.structured_logger = structured_logger
         # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
