@@ -242,6 +242,68 @@ class EntryManager:
                 f"TP={'{:.2f}'.format(tp_price) if tp_price else 'N/A'}"
             )
 
+            # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (07.02.2026): Установка базового SL на бирже для защиты
+            # Hybrid approach: базовый SL на бирже (защита от краша) + динамический TSL в боте (гибкость)
+            try:
+                if sl_price and entry_price > 0:
+                    # Расчет базового SL (на 50% шире чем обычный для safety buffer)
+                    if sl_percent:
+                        base_sl_percent = sl_percent * 1.5  # Safety buffer
+                        if position_side == "long":
+                            base_sl_price = entry_price * (1 - base_sl_percent / 100)
+                            base_sl_side = "sell"
+                        else:  # short
+                            base_sl_price = entry_price * (1 + base_sl_percent / 100)
+                            base_sl_side = "buy"
+
+                        # Размещаем базовый SL на бирже
+                        client = self._resolve_client()
+                        if client and hasattr(client, 'place_algo_order'):
+                            try:
+                                algo_result = await client.place_algo_order(
+                                    symbol=symbol,
+                                    side=base_sl_side,
+                                    size=position_size,
+                                    trigger_price=base_sl_price,
+                                    order_price="-1",  # market order при срабатывании
+                                    order_type="conditional",
+                                    reduce_only=True,
+                                )
+
+                                if algo_result and algo_result.get("code") == "0":
+                                    algo_id = algo_result.get("data", [{}])[0].get("algoId")
+                                    logger.info(
+                                        f"✅ Exchange base SL установлен для {symbol}: "
+                                        f"trigger={base_sl_price:.2f} (safety buffer 50%), "
+                                        f"algoId={algo_id}"
+                                    )
+                                    # Сохраняем algo_id в metadata для последующего обновления
+                                    if algo_id:
+                                        metadata_dict = metadata.__dict__ if hasattr(metadata, '__dict__') else {}
+                                        metadata_dict['exchange_sl_algo_id'] = algo_id
+                                        await self.position_registry.update_metadata(
+                                            symbol, metadata_dict
+                                        )
+                                else:
+                                    logger.warning(
+                                        f"⚠️ Не удалось установить exchange SL для {symbol}: "
+                                        f"{algo_result.get('msg', 'unknown error')}"
+                                    )
+                            except Exception as e:
+                                logger.warning(
+                                    f"⚠️ Ошибка установки exchange SL для {symbol}: {e}"
+                                )
+                        else:
+                            logger.debug(
+                                f"ℹ️ Client не поддерживает place_algo_order, пропускаем exchange SL для {symbol}"
+                            )
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Критическая ошибка установки exchange SL для {symbol}: {e}. "
+                    f"Позиция открыта, но БЕЗ защиты на бирже!"
+                )
+                # НЕ прерываем открытие позиции из-за ошибки SL
+
             return True
 
         except Exception as e:

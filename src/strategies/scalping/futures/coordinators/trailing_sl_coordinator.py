@@ -970,6 +970,36 @@ class TrailingSLCoordinator:
                     f"stop_loss корректирован под {tsl_mode} режим"
                 )
 
+            # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (07.02.2026): Обновление базового SL на бирже при движении TSL
+            # Hybrid approach: синхронизируем биржевой SL с динамическим TSL
+            try:
+                if stop_loss and hasattr(self, 'position_registry') and self.position_registry:
+                    # Получаем metadata для доступа к exchange_sl_algo_id
+                    metadata = await self.position_registry.get_metadata(symbol)
+                    if metadata:
+                        algo_id = metadata.get('exchange_sl_algo_id')
+                        if algo_id and self.client and hasattr(self.client, 'amend_algo_order'):
+                            # Обновляем биржевой SL под новый stop_loss
+                            # Применяем safety buffer (используем текущий stop_loss без дополнительного расширения)
+                            try:
+                                await self.client.amend_algo_order(
+                                    symbol=symbol,
+                                    algo_id=algo_id,
+                                    new_trigger_price=stop_loss,
+                                )
+                                logger.debug(
+                                    f"✅ Exchange base SL обновлён для {symbol}: "
+                                    f"new_trigger={stop_loss:.2f}, algoId={algo_id}"
+                                )
+                            except Exception as e:
+                                # Не критично если обновление не удалось - динамический TSL всё равно работает
+                                logger.debug(
+                                    f"⚠️ Не удалось обновить exchange SL для {symbol}: {e}"
+                                )
+            except Exception as e:
+                # Не критично - продолжаем работу с динамическим TSL
+                logger.debug(f"⚠️ Ошибка синхронизации exchange SL для {symbol}: {e}")
+
             profit_pct = tsl.get_profit_pct(
                 current_price,
                 include_fees=True,

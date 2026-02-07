@@ -1569,6 +1569,177 @@ class OKXFuturesClient:
             "POST", "/api/v5/trade/order-algo", data=payload
         )
 
+    async def place_algo_order(
+        self,
+        symbol: str,
+        side: str,
+        size: float,
+        trigger_price: float,
+        order_price: str = "-1",
+        order_type: str = "conditional",
+        reduce_only: bool = True,
+    ) -> dict:
+        """
+        Размещение algo order (conditional SL/TP) на бирже.
+
+        Args:
+            symbol: Торговый символ (например, "BTC-USDT")
+            side: Направление ("buy" или "sell")
+            size: Размер позиции
+            trigger_price: Цена срабатывания (triggerPx)
+            order_price: Цена исполнения ("-1" для market order)
+            order_type: Тип ордера ("conditional", "oco", "trigger")
+            reduce_only: Только закрытие позиции (True для SL/TP)
+
+        Returns:
+            Ответ от биржи с algoId
+        """
+        # Определяем size_step для округления
+        if "BTC" in symbol:
+            size_step = 0.001
+        elif "ETH" in symbol:
+            size_step = 0.01
+        elif "SOL" in symbol:
+            size_step = 0.01
+        elif "XRP" in symbol:
+            size_step = 1.0
+        elif "DOGE" in symbol:
+            size_step = 1.0
+        else:
+            size_step = 0.001
+
+        rounded_size = round_to_step(size, size_step)
+
+        payload = {
+            "instId": f"{symbol}-SWAP",
+            "tdMode": self.margin_mode,
+            "side": side,
+            "ordType": order_type,
+            "sz": str(rounded_size),
+            "triggerPx": str(trigger_price),
+            "orderPx": order_price,
+        }
+
+        if reduce_only:
+            payload["reduceOnly"] = "true"
+
+        logger.debug(
+            f"Placing algo order: {symbol} {side} size={rounded_size} "
+            f"trigger={trigger_price} type={order_type}"
+        )
+
+        return await self._make_request(
+            "POST", "/api/v5/trade/order-algo", data=payload
+        )
+
+    async def amend_algo_order(
+        self,
+        symbol: str,
+        algo_id: str,
+        new_trigger_price: Optional[float] = None,
+        new_size: Optional[float] = None,
+    ) -> dict:
+        """
+        Изменение существующего algo order (для обновления SL при движении TSL).
+
+        Args:
+            symbol: Торговый символ
+            algo_id: ID algo ордера (algoId)
+            new_trigger_price: Новая цена срабатывания (опционально)
+            new_size: Новый размер (опционально)
+
+        Returns:
+            Ответ от биржи
+        """
+        payload = {
+            "instId": f"{symbol}-SWAP",
+            "algoId": algo_id,
+        }
+
+        if new_trigger_price is not None:
+            payload["newTpTriggerPx"] = str(new_trigger_price)
+
+        if new_size is not None:
+            # Определяем size_step для округления
+            if "BTC" in symbol:
+                size_step = 0.001
+            elif "ETH" in symbol:
+                size_step = 0.01
+            elif "SOL" in symbol:
+                size_step = 0.01
+            elif "XRP" in symbol:
+                size_step = 1.0
+            elif "DOGE" in symbol:
+                size_step = 1.0
+            else:
+                size_step = 0.001
+
+            rounded_size = round_to_step(new_size, size_step)
+            payload["newSz"] = str(rounded_size)
+
+        logger.debug(
+            f"Amending algo order: {symbol} algoId={algo_id} "
+            f"new_trigger={new_trigger_price}"
+        )
+
+        return await self._make_request(
+            "POST", "/api/v5/trade/amend-algos", data=payload
+        )
+
+    async def get_algo_orders(
+        self, symbol: Optional[str] = None, order_type: str = "conditional"
+    ) -> list:
+        """
+        Получение активных algo orders.
+
+        Args:
+            symbol: Торговый символ (опционально)
+            order_type: Тип ордера ("conditional", "oco", "trigger")
+
+        Returns:
+            Список активных algo orders
+        """
+        params = {
+            "instType": "SWAP",
+            "ordType": order_type,
+        }
+
+        if symbol:
+            params["instId"] = f"{symbol}-SWAP"
+
+        try:
+            data = await self._make_request(
+                "GET", "/api/v5/trade/orders-algo-pending", params=params
+            )
+            return data.get("data", [])
+        except Exception as e:
+            logger.debug(f"Failed to get algo orders for {symbol}: {e}")
+            return []
+
+    async def cancel_algo_order(
+        self, symbol: str, algo_id: str
+    ) -> dict:
+        """
+        Отмена algo order.
+
+        Args:
+            symbol: Торговый символ
+            algo_id: ID algo ордера (algoId)
+
+        Returns:
+            Ответ от биржи
+        """
+        payload = [
+            {
+                "instId": f"{symbol}-SWAP",
+                "algoId": algo_id,
+            }
+        ]
+
+        return await self._make_request(
+            "POST", "/api/v5/trade/cancel-algos", data=payload
+        )
+
     async def cancel_order(self, symbol: str, order_id: str) -> dict:
         return await self._make_request(
             "POST",
