@@ -701,6 +701,15 @@ class SignalCoordinator:
             symbol = signal.get("symbol")
             side = signal.get("side")
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.02.2026): Блокировка SOL-USDT SHORT (0% win rate)
+            # SOL находится в сильном восходящем тренде, шорты убыточны
+            if symbol == "SOL-USDT" and side == "short":
+                logger.warning(
+                    f"🚫 [VALIDATION] {symbol} SHORT: Сигнал заблокирован - "
+                    f"SOL-USDT SHORT временно отключен (0% win rate, восходящий тренд)"
+                )
+                return False
+
             # ✅ НОВОЕ: Получение баланса из DataRegistry
             balance = None
             if self.data_registry:
