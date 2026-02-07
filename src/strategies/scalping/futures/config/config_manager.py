@@ -621,18 +621,18 @@ class ConfigManager:
             "initial_trail": 0.005,  # ✅ ИСПРАВЛЕНО: 0.5% (было 0.05 = 5%)
             "max_trail": 0.01,  # ✅ ИСПРАВЛЕНО: 1% (было 0.2 = 20%)
             "min_trail": 0.003,  # ✅ ИСПРАВЛЕНО: 0.3% (было 0.02 = 2%)
-            "loss_cut_percent": None,
+            "loss_cut_percent": 1.8,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.02.2026): 1.8% от маржи (учитывает комиссию 0.08% + буфер)
             "timeout_loss_percent": None,
             "timeout_minutes": None,
-            "min_holding_minutes": None,  # ✅ ЭТАП 4.4
-            "min_profit_to_close": None,  # ✅ ЭТАП 4.1
+            "min_holding_minutes": 5.0,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.02.2026): Минимум 5 минут удержания позиции
+            "min_profit_to_close": 0.15,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.02.2026): Минимум 0.15% чистой прибыли для закрытия (учитывает комиссию 0.08% + запас)
             "min_profit_for_extension": None,  # ✅ ЭТАП 4.3
             "extend_time_on_profit": False,  # ✅ ЭТАП 4.3
             "extend_time_multiplier": 1.0,  # ✅ ЭТАП 4.3
             "regime_multiplier": 1.0,  # ✅ НОВОЕ: Множитель режима (из конфига, fallback)
             "trend_strength_boost": 1.0,  # ✅ НОВОЕ: Буст при сильном тренде (из конфига, fallback)
             "check_interval_seconds": 1.5,  # ✅ АДАПТИВНО: Интервал проверки TSL (fallback)
-            "min_critical_hold_seconds": 60.0,  # ✅ КРИТИЧЕСКОЕ: Минимальное время для критических убытков (fallback, увеличено с 30 до 60 сек 06.01.2026)
+            "min_critical_hold_seconds": 180.0,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.02.2026): Grace period 3 минуты перед критическим закрытием (было 60 сек)
             "short_reversal_min_duration": 30,  # ✅ АДАПТИВНО: Short reversal protection (fallback)
             "short_reversal_max_percent": 0.5,  # ✅ АДАПТИВНО: Short reversal protection (fallback)
             "trail_growth_low_multiplier": 1.5,  # ✅ АДАПТИВНО: Trail growth (fallback)
