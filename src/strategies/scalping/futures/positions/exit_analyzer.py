@@ -429,8 +429,25 @@ class ExitAnalyzer:
         import time
 
         try:
-            # Получаем позицию и метаданные
-            position = await self.position_registry.get_position(symbol)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем позицию из FRESH источника (active_positions)
+            # Приоритет 1: active_positions (FRESH из WS, обновляется real-time)
+            # Приоритет 2: PositionRegistry (fallback, может отставать до 30-60 сек)
+            position = None
+            if hasattr(self, "orchestrator") and self.orchestrator:
+                if (
+                    hasattr(self.orchestrator, "active_positions")
+                    and symbol in self.orchestrator.active_positions
+                ):
+                    position = self.orchestrator.active_positions.get(symbol)
+                    logger.debug(
+                        f"ExitAnalyzer using FRESH position from active_positions for {symbol}"
+                    )
+
+            if not position and self.position_registry:
+                position = await self.position_registry.get_position(symbol)
+                logger.debug(f"ExitAnalyzer using position from Registry for {symbol}")
+
+            # Получаем метаданные
             metadata = await self.position_registry.get_metadata(symbol)
 
             if not position:

@@ -35,6 +35,7 @@ class PositionMonitor:
         close_position_callback=None,  # ✅ НОВОЕ: Callback для закрытия позиций
         position_manager=None,  # ✅ НОВОЕ: PositionManager для частичного закрытия
         allow_rest_fallback: bool = True,  # ✅ Разрешить REST fallback для цены
+        active_positions_ref=None,  # ✅ НОВОЕ: Ссылка на active_positions (FRESH данные)
     ):
         """
         Инициализация PositionMonitor.
@@ -44,6 +45,7 @@ class PositionMonitor:
             data_registry: Реестр данных
             exit_analyzer: ExitAnalyzer для анализа позиций (опционально)
             check_interval: Интервал проверки позиций в секундах
+            active_positions_ref: Ссылка на active_positions для FRESH данных (опционально)
         """
         self.position_registry = position_registry
         self.data_registry = data_registry
@@ -55,6 +57,7 @@ class PositionMonitor:
         self.check_interval = check_interval
         self.close_position_callback = close_position_callback  # ✅ НОВОЕ
         self.position_manager = position_manager  # ✅ НОВОЕ
+        self.active_positions_ref = active_positions_ref  # ✅ НОВОЕ: FRESH данные
         self.allow_rest_fallback = allow_rest_fallback
 
         self.is_running = False
@@ -173,8 +176,23 @@ class PositionMonitor:
 
             # ✅ НОВОЕ (26.12.2025): Используем ExitDecisionCoordinator если доступен
             if self.exit_decision_coordinator:
-                # Получаем позицию и метаданные для координатора
-                position = await self.position_registry.get_position(symbol)
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем позицию из FRESH источника (active_positions)
+                # Приоритет 1: active_positions_ref (FRESH из WS, real-time)
+                # Приоритет 2: PositionRegistry (fallback, может отставать)
+                position = None
+                if self.active_positions_ref and symbol in self.active_positions_ref:
+                    position = self.active_positions_ref.get(symbol)
+                    logger.debug(
+                        f"PositionMonitor using FRESH position from active_positions for {symbol}"
+                    )
+
+                if not position and self.position_registry:
+                    position = await self.position_registry.get_position(symbol)
+                    logger.debug(
+                        f"PositionMonitor using position from Registry for {symbol}"
+                    )
+
+                # Получаем метаданные
                 metadata = await self.position_registry.get_metadata(symbol)
                 market_data = await self.data_registry.get_market_data(symbol)
                 if market_data is None:

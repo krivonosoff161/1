@@ -1220,22 +1220,6 @@ class WebSocketCoordinator:
                     saved_position_side = self.active_positions_ref[symbol].get(
                         "position_side"
                     )
-
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Немедленная синхронизация при закрытии позиций
-            if (
-                position_closed
-                and hasattr(self, "sync_positions_with_exchange")
-                and self.sync_positions_with_exchange
-            ):
-                try:
-                    logger.info(
-                        "🔄 Private WS: Обнаружено закрытие позиции, синхронизируем немедленно..."
-                    )
-                    await self.sync_positions_with_exchange(force=True)
-                except Exception as e:
-                    logger.error(
-                        f"❌ Ошибка синхронизации позиций после закрытия через WS: {e}"
-                    )
                     saved_time_extended = self.active_positions_ref[symbol].get(
                         "time_extended", False
                     )
@@ -1244,6 +1228,7 @@ class WebSocketCoordinator:
                     )
                     saved_post_only = self.active_positions_ref[symbol].get("post_only")
 
+                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем active_positions ЗДЕСЬ (не в except!)
                     self.active_positions_ref[symbol].update(update_data)
 
                     # Восстанавливаем метаданные после update
@@ -1264,17 +1249,19 @@ class WebSocketCoordinator:
                     if saved_post_only is not None:
                         self.active_positions_ref[symbol]["post_only"] = saved_post_only
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Немедленная синхронизация при закрытии позиций
-            if position_closed and self.sync_positions_with_exchange:
-                try:
-                    logger.info(
-                        "🔄 Private WS: Обнаружено закрытие позиции, синхронизируем немедленно..."
-                    )
-                    await self.sync_positions_with_exchange(force=True)
-                except Exception as e:
-                    logger.error(
-                        f"❌ Ошибка синхронизации позиций после закрытия через WS: {e}"
-                    )
+                    # ✅ НОВОЕ: Синхронизация с PositionRegistry при WS updates
+                    if hasattr(self, "position_registry") and self.position_registry:
+                        try:
+                            await self.position_registry.update_position(
+                                symbol=symbol, position_updates=update_data
+                            )
+                            logger.debug(
+                                f"✅ Registry синхронизирован с WS для {symbol}: upl={update_data.get('upl', 0)}"
+                            )
+                        except Exception as e:
+                            logger.debug(
+                                f"Failed to update Registry from WS for {symbol}: {e}"
+                            )
 
                     # ✅ НОВОЕ: Логируем ADL при обновлении позиции (если доступно)
                     if "adl_rank" in update_data:
@@ -1301,12 +1288,22 @@ class WebSocketCoordinator:
                     logger.debug(
                         f"📊 Private WS: Позиция {symbol} обновлена (size={pos_size}, upl={position_data.get('upl', '0')})"
                     )
-                else:
-                    # Новая позиция - добавляем
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Немедленная синхронизация при закрытии позиций
+            if (
+                position_closed
+                and hasattr(self, "sync_positions_with_exchange")
+                and self.sync_positions_with_exchange
+            ):
+                try:
                     logger.info(
-                        f"📊 Private WS: Обнаружена новая позиция {symbol} (size={pos_size})"
+                        "🔄 Private WS: Обнаружено закрытие позиции, синхронизируем немедленно..."
                     )
-                    # Позиция будет обработана при следующей синхронизации
+                    await self.sync_positions_with_exchange(force=True)
+                except Exception as e:
+                    logger.error(
+                        f"❌ Ошибка синхронизации позиций после закрытия через WS: {e}"
+                    )
 
         except Exception as e:
             logger.error(f"❌ Ошибка обработки обновлений позиций из Private WS: {e}")

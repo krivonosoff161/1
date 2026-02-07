@@ -4733,14 +4733,26 @@ class FuturesScalpingOrchestrator:
                 pass
 
         if payload.get("position_data") is None:
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Приоритет FRESH данных (active_positions)
+            # Приоритет 1: active_positions (FRESH из WS, real-time)
+            # Приоритет 2: PositionRegistry (fallback, может отставать)
             pos = None
-            try:
-                if self.position_registry:
-                    pos = await self.position_registry.get_position(symbol)
-            except Exception:
-                pos = None
-            if not pos and symbol in self.active_positions:
+            if symbol in self.active_positions:
                 pos = self.active_positions.get(symbol)
+                logger.debug(
+                    f"_build_exit_payload: using FRESH position from active_positions for {symbol}"
+                )
+
+            if not pos:
+                try:
+                    if self.position_registry:
+                        pos = await self.position_registry.get_position(symbol)
+                        logger.debug(
+                            f"_build_exit_payload: using position from Registry for {symbol}"
+                        )
+                except Exception:
+                    pos = None
+
             if pos:
                 payload["position_data"] = pos
 
@@ -4788,6 +4800,37 @@ class FuturesScalpingOrchestrator:
 
         return payload
 
+    async def _position_exists(self, symbol: str) -> bool:
+        """
+        Быстрая проверка существования позиции (для race condition в ExitGuard).
+
+        Проверяет наличие позиции в active_positions (мгновенно) и Registry (fallback).
+        НЕ проверяет биржу (слишком медленно для каждого вызова).
+
+        Args:
+            symbol: Символ позиции
+
+        Returns:
+            bool: True если позиция существует, False иначе
+        """
+        # 1. Проверка active_positions (мгновенно, FRESH)
+        if symbol in self.active_positions:
+            pos = self.active_positions.get(symbol)
+            if pos and pos.get("size", 0) > 0:
+                return True
+
+        # 2. Проверка Registry (fallback, может отставать)
+        if hasattr(self, "position_registry") and self.position_registry:
+            try:
+                pos = await self.position_registry.get_position(symbol)
+                if pos and pos.get("size", 0) > 0:
+                    return True
+            except Exception:
+                pass
+
+        # 3. НЕ проверяем биржу здесь - слишком медленно
+        return False
+
     async def _close_position(
         self,
         symbol: str,
@@ -4814,6 +4857,14 @@ class FuturesScalpingOrchestrator:
             if symbol in self._closing_positions_cache:
                 logger.debug(
                     f"Position {symbol} already closing (TTLCache, reason={reason}), skip"
+                )
+                return
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка существования позиции ПЕРЕД ExitGuard
+            # Это устраняет race condition где TP блокируется после того как SL уже закрыл позицию
+            if not await self._position_exists(symbol):
+                logger.debug(
+                    f"Position {symbol} already closed, skipping {reason} (race condition avoided)"
                 )
                 return
 
