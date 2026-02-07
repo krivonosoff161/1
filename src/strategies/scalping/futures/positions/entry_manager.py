@@ -279,10 +279,9 @@ class EntryManager:
                                     )
                                     # Сохраняем algo_id в metadata для последующего обновления
                                     if algo_id:
-                                        metadata_dict = metadata.__dict__ if hasattr(metadata, '__dict__') else {}
-                                        metadata_dict['exchange_sl_algo_id'] = algo_id
-                                        await self.position_registry.update_metadata(
-                                            symbol, metadata_dict
+                                        await self.position_registry.update_position(
+                                            symbol,
+                                            metadata_updates={'exchange_sl_algo_id': algo_id}
                                         )
                                 else:
                                     logger.warning(

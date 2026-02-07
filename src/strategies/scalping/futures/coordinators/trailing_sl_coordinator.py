@@ -977,7 +977,7 @@ class TrailingSLCoordinator:
                     # Получаем metadata для доступа к exchange_sl_algo_id
                     metadata = await self.position_registry.get_metadata(symbol)
                     if metadata:
-                        algo_id = metadata.get('exchange_sl_algo_id')
+                        algo_id = metadata.exchange_sl_algo_id  # dataclass attribute access
                         if algo_id and self.client and hasattr(self.client, 'amend_algo_order'):
                             # Обновляем биржевой SL под новый stop_loss
                             # Применяем safety buffer (используем текущий stop_loss без дополнительного расширения)

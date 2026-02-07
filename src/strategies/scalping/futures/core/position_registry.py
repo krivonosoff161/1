@@ -45,6 +45,7 @@ class PositionMetadata:
     scaling_history: Optional[
         List[Dict[str, Any]]
     ] = None  # ✅ НОВОЕ: История добавлений к позиции
+    exchange_sl_algo_id: Optional[str] = None  # ✅ НОВОЕ (07.02.2026): algoId базового SL на бирже (Phase 3)
 
     def to_dict(self) -> Dict[str, Any]:
         """Конвертация в словарь для сериализации"""
