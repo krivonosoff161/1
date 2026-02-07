@@ -219,6 +219,15 @@ class EntryManager:
             tp_percent = signal.get("tp_percent")
             signal_strength = signal.get("strength", 0)
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.02.2026): Fallback для sl_percent если отсутствует в signal
+            # БАГ #6: Exchange SL не устанавливался, потому что sl_percent был None
+            if not sl_percent and regime_params:
+                sl_percent = regime_params.get("sl_percent")
+                logger.debug(
+                    f"📊 EntryManager: sl_percent не найден в signal, "
+                    f"используем из regime_params: {sl_percent}%"
+                )
+
             # Рассчитываем SL/TP цены для лога
             sl_price = None
             tp_price = None
@@ -245,6 +254,11 @@ class EntryManager:
             # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (07.02.2026): Установка базового SL на бирже для защиты
             # Hybrid approach: базовый SL на бирже (защита от краша) + динамический TSL в боте (гибкость)
             try:
+                if not sl_price or entry_price <= 0:
+                    logger.warning(
+                        f"⚠️ Exchange SL НЕ БУДЕТ установлен для {symbol}: "
+                        f"sl_price={sl_price}, entry_price={entry_price}, sl_percent={sl_percent}"
+                    )
                 if sl_price and entry_price > 0:
                     # Расчет базового SL (на 50% шире чем обычный для safety buffer)
                     if sl_percent:
@@ -258,7 +272,7 @@ class EntryManager:
 
                         # Размещаем базовый SL на бирже
                         client = self._resolve_client()
-                        if client and hasattr(client, 'place_algo_order'):
+                        if client and hasattr(client, "place_algo_order"):
                             try:
                                 algo_result = await client.place_algo_order(
                                     symbol=symbol,
@@ -271,7 +285,9 @@ class EntryManager:
                                 )
 
                                 if algo_result and algo_result.get("code") == "0":
-                                    algo_id = algo_result.get("data", [{}])[0].get("algoId")
+                                    algo_id = algo_result.get("data", [{}])[0].get(
+                                        "algoId"
+                                    )
                                     logger.info(
                                         f"✅ Exchange base SL установлен для {symbol}: "
                                         f"trigger={base_sl_price:.2f} (safety buffer 50%), "
@@ -281,7 +297,9 @@ class EntryManager:
                                     if algo_id:
                                         await self.position_registry.update_position(
                                             symbol,
-                                            metadata_updates={'exchange_sl_algo_id': algo_id}
+                                            metadata_updates={
+                                                "exchange_sl_algo_id": algo_id
+                                            },
                                         )
                                 else:
                                     logger.warning(

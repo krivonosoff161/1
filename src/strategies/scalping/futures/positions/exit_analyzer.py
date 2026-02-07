@@ -999,6 +999,22 @@ class ExitAnalyzer:
             tsl = self.orchestrator.trailing_sl_coordinator.get_tsl(symbol)
             if not tsl or not hasattr(tsl, "get_stop_loss"):
                 return False, None
+
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.02.2026): Проверка min_holding_minutes ПЕРЕД TSL триггером
+            # БАГ #4: TSL закрывал позиции на 1-2 минутах когда min_holding=5 мин
+            if hasattr(tsl, "min_holding_minutes") and tsl.min_holding_minutes:
+                if hasattr(tsl, "entry_timestamp") and tsl.entry_timestamp > 0:
+                    import time
+
+                    minutes_in_position = (time.time() - tsl.entry_timestamp) / 60.0
+                    if minutes_in_position < tsl.min_holding_minutes:
+                        logger.debug(
+                            f"⏱️ ExitAnalyzer: TSL min_holding блокировка для {symbol}: "
+                            f"{minutes_in_position:.2f} мин < {tsl.min_holding_minutes:.2f} мин, "
+                            f"не закрываем по TSL (требуется минимум {tsl.min_holding_minutes:.2f} мин)"
+                        )
+                        return False, None
+
             stop_loss = tsl.get_stop_loss()
             if stop_loss is None:
                 return False, None
@@ -3706,13 +3722,16 @@ class ExitAnalyzer:
                                 "regime": regime,
                             }
 
-                        logger.info(
+                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.02.2026): ЗАКРЫВАЕМ при max_holding даже в trending!
+                        # БАГ БЫЛ: "НЕ закрываем, ждем восстановления" → позиции висели с убытком
+                        # ИСПРАВЛЕНИЕ: max_holding ПРИОРИТЕТНЕЕ trending - закрываем принудительно
+                        logger.warning(
                             f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
-                            f"но позиция в убытке ({pnl_percent:.2f}%) - НЕ закрываем, ждем SL или восстановления"
+                            f"позиция в убытке ({pnl_percent:.2f}%) - ПРИНУДИТЕЛЬНО ЗАКРЫВАЕМ! (max_holding exceeded)"
                         )
                         return {
-                            "action": "hold",
-                            "reason": "max_holding_exceeded_but_loss_trending",
+                            "action": "close",  # ← ИЗМЕНЕНО: hold → close
+                            "reason": "max_holding_exceeded",  # ← ИЗМЕНЕНО: более понятная причина
                             "pnl_pct": pnl_percent,
                             "trend_strength": trend_strength,
                             "minutes_in_position": minutes_in_position,

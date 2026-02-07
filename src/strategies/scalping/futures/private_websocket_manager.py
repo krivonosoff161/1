@@ -96,6 +96,17 @@ class PrivateWebSocketManager:
                 logger.warning("⚠️ Private WebSocket уже подключен")
                 return True
 
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.02.2026): Закрываем старую сессию перед созданием новой
+            # БАГ #3: Утечка aiohttp sessions - старая сессия перезаписывалась без закрытия
+            if self.session and not self.session.closed:
+                try:
+                    await self.session.close()
+                    logger.debug(
+                        "✅ Закрыта предыдущая Private WebSocket сессия перед переподключением"
+                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка при закрытии старой сессии: {e}")
+
             # Создаем сессию
             self.session = aiohttp.ClientSession()
 

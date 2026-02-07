@@ -1258,12 +1258,12 @@ class WebSocketCoordinator:
                             await self.position_registry.update_position(
                                 symbol=symbol, position_updates=update_data
                             )
-                            logger.debug(
+                            logger.info(
                                 f"✅ Registry синхронизирован с WS для {symbol}: upl={update_data.get('upl', 0)}"
                             )
                         except Exception as e:
-                            logger.debug(
-                                f"Failed to update Registry from WS for {symbol}: {e}"
+                            logger.warning(
+                                f"⚠️ Failed to update Registry from WS for {symbol}: {e}"
                             )
 
                     # ✅ НОВОЕ: Логируем ADL при обновлении позиции (если доступно)
