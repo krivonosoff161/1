@@ -667,6 +667,7 @@ class FuturesScalpingOrchestrator:
             close_position_callback=self._close_position,  # ✅ НОВОЕ: Callback для закрытия
             position_manager=self.position_manager,  # ✅ НОВОЕ: PositionManager для частичного закрытия
             allow_rest_fallback=allow_rest_fallback,
+            active_positions_ref=self.active_positions,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: FRESH data из WebSocket
         )
         logger.info("✅ PositionMonitor инициализирован в orchestrator")
 
@@ -1038,6 +1039,7 @@ class FuturesScalpingOrchestrator:
             update_active_positions_callback=None,  # Используем прямую ссылку
             update_active_orders_cache_callback=_update_orders_cache_from_ws,
             data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для централизованного хранения данных
+            position_registry=self.position_registry,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: PositionRegistry для синхронизации на WS updates
             structured_logger=self.structured_logger,  # ✅ НОВОЕ: StructuredLogger для логирования свечей
             smart_exit_coordinator=self.smart_exit_coordinator,  # ✅ НОВОЕ: SmartExitCoordinator для умного закрытия
             performance_tracker=self.performance_tracker,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
