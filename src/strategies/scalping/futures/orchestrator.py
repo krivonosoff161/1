@@ -732,7 +732,8 @@ class FuturesScalpingOrchestrator:
         from .risk.margin_monitor import MarginMonitor
 
         self.liquidation_protector = LiquidationProtector(
-            config=get_scalping_view(config) if config else None
+            config=get_scalping_view(config) if config else None,
+            margin_calculator=self.margin_calculator,
         )
         self.margin_monitor = MarginMonitor(
             config=config.risk if hasattr(config, "risk") else None

@@ -2036,14 +2036,6 @@ class FuturesSignalGenerator:
                         logger.debug(
                             f"SignalGenerator: force REST fallback check failed for {symbol}: {e}"
                         )
-                max_allowed_age = 3.0
-                if ws_max_age > max_allowed_age:
-                    if not getattr(self, "_ws_max_age_clamped", False):
-                        logger.warning(
-                            f"SignalGenerator: ws_fresh_max_age clamped to {max_allowed_age:.1f}s (was {ws_max_age:.1f}s)"
-                        )
-                        self._ws_max_age_clamped = True
-                    ws_max_age = max_allowed_age
                 price = await self.data_registry.get_fresh_price_for_signals(
                     symbol, client=client_for_fresh, max_age=ws_max_age
                 )

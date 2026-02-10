@@ -625,12 +625,12 @@ class OKXFuturesClient:
                             f"🔌 Connector/Session закрыт при VPN (попытка {attempt + 1}/{max_retries}): "
                             f"{method} {url}, переподключаемся через {wait_time:.1f}с"
                         )
-                        self.session = None  # Принудительно сбросить session
                         if self.session and not self.session.closed:
                             try:
                                 await self.session.close()
-                            except:
+                            except Exception:
                                 pass
+                        self.session = None  # Принудительно сбросить session
                         await asyncio.sleep(wait_time)
                         continue
 

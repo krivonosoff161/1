@@ -512,9 +512,7 @@ class DataRegistry:
         """
         # Проверяем WebSocket цену с TTL (конфиг через max_age)
         if max_age is None or max_age <= 0:
-            max_age = 3.0
-        if max_age > 3.0:
-            max_age = 3.0
+            max_age = 15.0
         async with self._lock:
             md = self._market_data.get(symbol, {})
             updated_at = md.get("updated_at")
