@@ -35,3 +35,6 @@ logs/**/*.json
 logs/**/*.log
 logs/**/*.log.zip
 logs/futures/archived/
+
+# Claude Code temporary files
+tmpclaude-*
