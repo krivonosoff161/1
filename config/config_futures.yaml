@@ -98,8 +98,8 @@ scalping:
     allow_rest_for_ws: false
     rest_update_cooldown: 1.0
     # WebSocket watchdog параметры для предотвращения ложных reconnect
-    ws_fresh_max_age: 5.0  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Снижено с 45.0 до 5.0 сек - WebSocket должен быть свежим! (было 4238 ошибок stale data из-за 45s TTL)
-    ws_watchdog_consecutive_stale: 3  # Увеличено с 2 до 3 для большей стабильности
+    ws_fresh_max_age: 15.0  # 🔥 ИСПРАВЛЕНО (10.02.2026): OKX шлет тикеры каждые 7-20 сек, 5s блокировало ВСЕ входы! 15s = реальный интервал OKX (не 45s которое было слишком много)
+    ws_watchdog_consecutive_stale: 5  # Увеличено с 3 до 5: меньше агрессивных reconnect
     adx_blocking:
       enabled: true
       adx_threshold: 25.0
@@ -1544,7 +1544,7 @@ scalping:
       bollinger_check: true
   order_executor:
     require_ws_fresh_for_entries: true
-    ws_fresh_max_age: 5.0  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Снижено с 45.0 до 5.0 сек
+    ws_fresh_max_age: 15.0  # 🔥 ИСПРАВЛЕНО (10.02.2026): OKX шлет тикеры каждые 7-20 сек, 5s блокировало ВСЕ входы!
     limit_order:
       # ✅ СНИЖЕНО (14.01.2026): offset до 0.01% для максимальной исполнимости
       limit_offset_percent: 0.01  # Снижен до 0.01% для всех режимов
@@ -1862,8 +1862,8 @@ signal_generator:
     strength_multiplier: 2000.0  # Множитель для strength (histogram / 200.0)
     strength_reduction_neutral: 0.9  # Снижение strength для neutral направления
     base_signal_strength: 0.001  # Базовый размер сигнала
-    ws_fresh_max_age: 5.0  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Снижено с 45.0 до 5.0 сек
-    ws_watchdog_consecutive_stale: 3
+    ws_fresh_max_age: 15.0  # 🔥 ИСПРАВЛЕНО (10.02.2026): OKX шлет тикеры каждые 7-20 сек, 5s блокировало ВСЕ входы!
+    ws_watchdog_consecutive_stale: 5  # Увеличено с 3 до 5
     ws_signal_grace_period: 10.0
     allow_rest_for_ws: false
     adx_blocking:
@@ -2422,7 +2422,7 @@ futures_modules:
 
 
 
-    ws_watchdog_consecutive_stale: 3
+    ws_watchdog_consecutive_stale: 5  # Увеличено с 3 до 5: меньше агрессивных reconnect
     ws_signal_grace_period: 10.0
     allow_rest_for_ws: false
     adx_blocking:
