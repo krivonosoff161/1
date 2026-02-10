@@ -82,6 +82,8 @@ class DataRegistry:
         self._margin: Optional[Dict[str, Any]] = None
         self._candle_buffers: Dict[str, Dict[str, CandleBuffer]] = {}
         self._lock = asyncio.Lock()
+        # 🔇 Для условного логирования баланса (только при значительном изменении)
+        self._last_logged_balance: Optional[float] = None
         # TTL для данных (секунды)
         self.market_data_ttl = 5.0
         self.indicator_ttl = 2.0
@@ -824,9 +826,27 @@ class DataRegistry:
                 "updated_at": datetime.now(),
             }
 
-            logger.debug(
-                f"✅ DataRegistry: Обновлен баланс: {balance:.2f} USDT (profile={profile})"
-            )
+            # 🔇 УСЛОВНОЕ ЛОГИРОВАНИЕ (2026-02-08): Логируем только при значительном изменении баланса (>1%)
+            # Раскомментировать для постоянного логирования
+            should_log = False
+            if self._last_logged_balance is None:
+                should_log = True  # Первое обновление всегда логируем
+            elif self._last_logged_balance > 0:
+                change_pct = (
+                    abs(balance - self._last_logged_balance) / self._last_logged_balance
+                )
+                if change_pct >= 0.01:  # Изменение >= 1%
+                    should_log = True
+
+            if should_log:
+                logger.info(
+                    f"✅ DataRegistry: Обновлен баланс: {balance:.2f} USDT (profile={profile})"
+                )
+                self._last_logged_balance = balance
+            # Если нужно всегда логировать, раскомментируй:
+            # logger.debug(
+            #     f"✅ DataRegistry: Обновлен баланс: {balance:.2f} USDT (profile={profile})"
+            # )
 
     async def get_balance(self) -> Optional[Dict[str, Any]]:
         """

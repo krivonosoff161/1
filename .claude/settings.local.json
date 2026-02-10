@@ -8,7 +8,8 @@
       "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\logs\\\\futures\\\\archived\\\\staging_2026-01-25_02-59-21\")",
       "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\logs\\\\futures\\\\archived\\\\staging_2026-01-25_15-36-51\")",
       "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\src\\\\strategies\\\\scalping\\\\futures\\\\*.py\")",
-      "Read(//c/**)"
+      "Read(//c/**)",
+      "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\logs\\\\futures\\\\archived\\\\staging_2026-02-03_21-36-18\\\\logs_futures_debug\")"
     ]
   }
 }

@@ -1627,7 +1627,7 @@ class WebSocketCoordinator:
             base_url = "https://www.okx.com"
             ticker_url = f"{base_url}/api/v5/market/ticker?instId={inst_id}"
 
-            # Создаем временную сессию если нужно
+            # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.02.2026): Используем ТОЛЬКО shared session, не создаем новую
             session = (
                 self.client.session
                 if self.client
@@ -1637,10 +1637,12 @@ class WebSocketCoordinator:
                 else None
             )
             if not session:
-                session = aiohttp.ClientSession()
-                close_session = True
-            else:
-                close_session = False
+                # НЕ создаем новую сессию (было: 12 утечек на SOL-USDT), возвращаем None
+                logger.debug(
+                    f"⚠️ Shared session недоступна для REST fallback {symbol}, пропускаем"
+                )
+                return None
+            close_session = False  # Никогда не закрываем shared session!
 
             try:
                 async with session.get(ticker_url) as ticker_resp:

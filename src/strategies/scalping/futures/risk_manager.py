@@ -786,24 +786,25 @@ class FuturesRiskManager:
                         original_size = base_usd_size
                         if position_multiplier != 1.0:
                             base_usd_size = base_usd_size * float(position_multiplier)
-                            logger.info(
+                            # 🔇 ИЗМЕНЕНО (2026-02-08): INFO → DEBUG для снижения объема логов
+                            logger.debug(
                                 f"📊 Per-symbol multiplier для {symbol}: {position_multiplier}x "
                                 f"→ размер ${original_size:.2f} → ${base_usd_size:.2f}"
                             )
-                        else:
-                            logger.debug(
-                                f"📊 Per-symbol multiplier для {symbol}: {position_multiplier}x "
-                                f"→ размер ${original_size:.2f} (без изменений)"
-                            )
-                    else:
-                        logger.debug(
-                            f"📊 Per-symbol multiplier для {symbol}: не найден "
-                            f"(используем базовый размер ${base_usd_size:.2f})"
-                        )
-                else:
-                    logger.debug(
-                        f"⚠️ symbol_profile не найден для {symbol} в symbol_profiles"
-                    )
+                        # else:
+                        #     logger.debug(
+                        #         f"📊 Per-symbol multiplier для {symbol}: {position_multiplier}x "
+                        #         f"→ размер ${original_size:.2f} (без изменений)"
+                        #     )
+                    # else:
+                    #     logger.debug(
+                    #         f"📊 Per-symbol multiplier для {symbol}: не найден "
+                    #         f"(используем базовый размер ${base_usd_size:.2f})"
+                    #     )
+                # else:
+                #     logger.debug(
+                #         f"⚠️ symbol_profile не найден для {symbol} в symbol_profiles"
+                #     )
 
             # Применяем position overrides (если указаны, они имеют приоритет для точной настройки)
             position_overrides: Dict[str, Any] = {}

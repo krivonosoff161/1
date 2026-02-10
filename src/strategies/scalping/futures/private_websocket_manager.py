@@ -457,7 +457,9 @@ class PrivateWebSocketManager:
         if self.ws:
             try:
                 await self.ws.close()
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(
+                    1.0
+                )  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.02.2026): Увеличено с 0.1 до 1.0 сек для SSL cleanup
             except Exception:
                 pass
 
@@ -467,7 +469,9 @@ class PrivateWebSocketManager:
                 if not self.session.closed:
                     await self.session.close()
                     # Даем время на полное закрытие сессии
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(
+                        1.0
+                    )  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.02.2026): Увеличено с 0.2 до 1.0 сек для SSL cleanup (88 ошибок "Unclosed session")
                 self.session = None
                 logger.debug("✅ Private WebSocket сессия закрыта")
             except Exception as e:

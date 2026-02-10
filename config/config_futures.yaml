@@ -32,11 +32,19 @@ scalping:
   balance_profiles:
     micro:
       threshold: 500.0
-      base_position_usd: 50.0
-      min_position_usd: 10.0
-      max_position_usd: 70.0
-      max_open_positions: 2
+      # 🔥 ПРОГРЕССИВНАЯ АДАПТАЦИЯ: Размер маржи растет от 20$ до 120$ по мере роста баланса
+      progressive: true           # Включить прогрессивный расчет
+      min_balance: 100.0          # Минимальный баланс для профиля
+      size_at_min: 20.0          # Маржа при min_balance (100$) = 20% баланса
+      size_at_max: 120.0         # Маржа при threshold (500$) = 24% баланса
+      min_position_usd: 10.0      # Минимальная маржа (для защиты)
+      max_position_usd: 150.0     # Максимальная маржа (увеличено с 70)
+      max_open_positions: 3       # 🔥 УВЕЛИЧЕНО: 2→3 (с маржой 120$ и балансом 498$ безопасно держать 3 позиции)
       max_position_percent: 25.0
+      # Примеры расчета:
+      # Баланс 100$ → маржа 20$ (20%)
+      # Баланс 300$ → маржа 70$ (23%)
+      # Баланс 498$ → маржа ~120$ (24%)
     small:
       threshold: 1500.0
       base_position_usd: 360.0
@@ -90,7 +98,7 @@ scalping:
     allow_rest_for_ws: false
     rest_update_cooldown: 1.0
     # WebSocket watchdog параметры для предотвращения ложных reconnect
-    ws_fresh_max_age: 45.0  # 1m таймфрейм: допускаем более "старую" WS цену
+    ws_fresh_max_age: 5.0  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Снижено с 45.0 до 5.0 сек - WebSocket должен быть свежим! (было 4238 ошибок stale data из-за 45s TTL)
     ws_watchdog_consecutive_stale: 3  # Увеличено с 2 до 3 для большей стабильности
     adx_blocking:
       enabled: true
@@ -189,6 +197,7 @@ scalping:
         reversal_score_threshold:
           ranging: 5  # ✅ SOL более волатильный - требуется еще больше подтверждений разворота (5 вместо 4)
     XRP-USDT:
+      enabled: false  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.02.2026): ЗАБЛОКИРОВАН из-за катастрофически низкого win rate 11.6% (43 сделки, 5 wins, 38 losses, убыток -$12.42)
       # ✅ НОВОЕ (06.01.2026): Специальные параметры для низковолатильной пары
       min_adx: 10.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 12.0→10.0
       min_signal_strength: 0.10  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.55→0.35
@@ -1535,7 +1544,7 @@ scalping:
       bollinger_check: true
   order_executor:
     require_ws_fresh_for_entries: true
-    ws_fresh_max_age: 45.0
+    ws_fresh_max_age: 5.0  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Снижено с 45.0 до 5.0 сек
     limit_order:
       # ✅ СНИЖЕНО (14.01.2026): offset до 0.01% для максимальной исполнимости
       limit_offset_percent: 0.01  # Снижен до 0.01% для всех режимов
@@ -1789,9 +1798,10 @@ exit_params:
     tp_max_percent: 2.6
     sl_min_percent: 1.0
     sl_max_percent: 1.6
-    max_holding_minutes: 20.0
+    max_holding_minutes: 40.0  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): Увеличено 20→40 для соответствия adaptive_regime
     min_holding_minutes: 2.0
-    min_profit_for_extension: 0.5
+    extend_time_if_profitable: true  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): Добавлен для консистентности с adaptive_regime
+    min_profit_for_extension: 0.4  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): 0.5→0.4 для соответствия adaptive_regime
     extension_percent: 120.0
   ranging:
     tp_atr_multiplier: 1.5
@@ -1802,6 +1812,7 @@ exit_params:
     sl_max_percent: 1.5
     max_holding_minutes: 25.0
     min_holding_minutes: 1.0
+    extend_time_if_profitable: true  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): Добавлен для консистентности с adaptive_regime
     min_profit_for_extension: 0.4
     extension_percent: 120.0
   choppy:
@@ -1811,8 +1822,9 @@ exit_params:
     tp_max_percent: 2.0
     sl_min_percent: 0.8
     sl_max_percent: 1.3
-    max_holding_minutes: 10.0
+    max_holding_minutes: 20.0  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): Увеличено 10→20 для соответствия adaptive_regime
     min_holding_minutes: 1.0
+    extend_time_if_profitable: false  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): Добавлен для консистентности с adaptive_regime (не продлевать в хаосе)
     min_profit_for_extension: 0.4
     extension_percent: 110.0
 
@@ -1850,7 +1862,7 @@ signal_generator:
     strength_multiplier: 2000.0  # Множитель для strength (histogram / 200.0)
     strength_reduction_neutral: 0.9  # Снижение strength для neutral направления
     base_signal_strength: 0.001  # Базовый размер сигнала
-    ws_fresh_max_age: 45.0
+    ws_fresh_max_age: 5.0  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Снижено с 45.0 до 5.0 сек
     ws_watchdog_consecutive_stale: 3
     ws_signal_grace_period: 10.0
     allow_rest_for_ws: false

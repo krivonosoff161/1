@@ -98,15 +98,17 @@ class FuturesScalpingOrchestrator:
         self.scalping_config = get_scalping_view(config)
         from loguru import logger
 
-        logger.warning(f"[DEBUG] scalping_config type: {type(self.scalping_config)}")
-        try:
-            import json
-
-            logger.warning(
-                f"[DEBUG] scalping_config as dict: {self.scalping_config.__dict__ if hasattr(self.scalping_config, '__dict__') else self.scalping_config}"
-            )
-        except Exception as e:
-            logger.error(f"[DEBUG] Exception while logging scalping_config: {e}")
+        # 🔇 ОТКЛЮЧЕНО (2026-02-08): Избыточное логирование конфига (2000+ символов)
+        # Раскомментировать для диагностики проблем с конфигом
+        # logger.warning(f"[DEBUG] scalping_config type: {type(self.scalping_config)}")
+        # try:
+        #     import json
+        #
+        #     logger.warning(
+        #         f"[DEBUG] scalping_config as dict: {self.scalping_config.__dict__ if hasattr(self.scalping_config, '__dict__') else self.scalping_config}"
+        #     )
+        # except Exception as e:
+        #     logger.error(f"[DEBUG] Exception while logging scalping_config: {e}")
         self.risk_config = config.risk
         try:
             setattr(self.config, "scalping", self.scalping_config)
@@ -388,11 +390,12 @@ class FuturesScalpingOrchestrator:
 
         # Торговые модули
         # ✅ Передаем клиент в signal_generator для инициализации фильтров
-        logger.warning(
-            f"[DEBUG] signal_generator config before init: {self.scalping_config.get('signal_generator', None)}"
-        )
+        # 🔇 ОТКЛЮЧЕНО (2026-02-08): Избыточное DEBUG логирование инициализации
+        # logger.warning(
+        #     f"[DEBUG] signal_generator config before init: {self.scalping_config.get('signal_generator', None)}"
+        # )
         self.signal_generator = FuturesSignalGenerator(config, client=self.client)
-        logger.warning(f"[DEBUG] signal_generator after init: {self.signal_generator}")
+        # logger.warning(f"[DEBUG] signal_generator after init: {self.signal_generator}")
         # ✅ НОВОЕ: Передаем trading_statistics в signal_generator для ARM
         if hasattr(self.signal_generator, "set_trading_statistics"):
             self.signal_generator.set_trading_statistics(self.trading_statistics)
@@ -1295,11 +1298,12 @@ class FuturesScalpingOrchestrator:
             # ✅ НОВОЕ: Проверяем режим позиций на бирже
             try:
                 account_config = await self.client.get_account_config()
-                logger.warning(f"[DEBUG] RAW account_config from OKX: {account_config}")
+                # 🔇 ОТКЛЮЧЕНО (2026-02-08): Избыточное логирование полного конфига аккаунта
+                # logger.warning(f"[DEBUG] RAW account_config from OKX: {account_config}")
                 pos_mode = None
                 if account_config.get("code") == "0" and account_config.get("data"):
                     config = account_config["data"][0]
-                    logger.info(f"[DEBUG] account_config['data'][0]: {config}")
+                    # logger.info(f"[DEBUG] account_config['data'][0]: {config}")
                     pos_mode = config.get("posMode", "")
                     logger.info(f"📊 Режим позиций на бирже: {pos_mode}")
                 if pos_mode:

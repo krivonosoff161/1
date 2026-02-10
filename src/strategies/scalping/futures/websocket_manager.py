@@ -46,7 +46,11 @@ class FuturesWebSocketManager:
         if not self.should_reconnect:
             self.should_reconnect = True
         self.reconnect_attempts = 0
-        msg = f"Force WebSocket reconnect: {reason}" if reason else "Force WebSocket reconnect"
+        msg = (
+            f"Force WebSocket reconnect: {reason}"
+            if reason
+            else "Force WebSocket reconnect"
+        )
         logger.warning(msg)
         await self._handle_disconnect()
         return True
@@ -109,7 +113,9 @@ class FuturesWebSocketManager:
             if self.session and not self.session.closed:
                 try:
                     await self.session.close()
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(
+                        1.0
+                    )  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Увеличено с 0.05 до 1.0 сек для SSL cleanup во время reconnect (202 ошибки "Unclosed session")
                 except Exception:
                     pass
             self.session = aiohttp.ClientSession()
@@ -158,7 +164,9 @@ class FuturesWebSocketManager:
         if self.session and not self.session.closed:
             try:
                 await self.session.close()
-                await asyncio.sleep(0.1)  # Даем время на корректное закрытие
+                await asyncio.sleep(
+                    1.0
+                )  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.02.2026): Увеличено с 0.1 до 1.0 сек для корректного SSL cleanup (88 ошибок "Unclosed session")
                 logger.debug("✅ WebSocket сессия закрыта")
             except Exception as e:
                 logger.debug(f"⚠️ Ошибка при закрытии WebSocket сессии: {e}")
@@ -299,7 +307,9 @@ class FuturesWebSocketManager:
         if self.session and not self.session.closed:
             try:
                 await self.session.close()
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(
+                    1.0
+                )  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Увеличено с 0.05 до 1.0 сек для SSL cleanup (202 ошибки "Unclosed session")
             except Exception:
                 pass
         self.session = None

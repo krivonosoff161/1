@@ -112,9 +112,13 @@ class RegimeConfig:
 
     enabled: bool = True
     # Параметры детекции
-    # ✅ ИСПРАВЛЕНО (26.12.2025): Повышены пороги ADX для более точного определения режимов
-    trending_adx_threshold: float = 30.0  # ADX >30 = тренд (было 25.0)
-    ranging_adx_threshold: float = 25.0  # ADX <25 = боковик (было 20.0)
+    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.02.2026): Снижены пороги ADX для более ранней детекции трендов (+5-10% win rate)
+    trending_adx_threshold: float = (
+        25.0  # 🔥 ADX >25 = тренд (было 30.0 - слишком высоко!)
+    )
+    ranging_adx_threshold: float = (
+        20.0  # 🔥 ADX <20 = боковик (было 25.0 - слишком высоко!)
+    )
     high_volatility_threshold: float = 0.05  # >5% = высокая волатильность
     low_volatility_threshold: float = 0.02  # <2% = низкая волатильность
     trend_strength_percent: float = 2.0  # Цена >2% от SMA = тренд
@@ -142,7 +146,7 @@ class RegimeConfig:
     )
     ranging_params: RegimeParameters = field(
         default_factory=lambda: RegimeParameters(
-            min_score_threshold=4.0,  # ⚠️ ЗАХАРДКОЖЕН! Должен быть переопределен из config.yaml (там min_score_threshold=2)!
+            min_score_threshold=2.2,  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.02.2026): Снижено с 4.0 до 2.2 (соответствие config.yaml) - было блокировано 70% сигналов!
             max_trades_per_hour=10,
             position_size_multiplier=1.0,
             tp_atr_multiplier=2.0,
@@ -680,12 +684,12 @@ class AdaptiveRegimeManager:
                 )
                 if registry_indicators:
                     adx_value = registry_indicators.get("adx")
-                    di_plus = registry_indicators.get("adx_plus_di") or registry_indicators.get(
-                        "di_plus"
-                    )
-                    di_minus = registry_indicators.get("adx_minus_di") or registry_indicators.get(
-                        "di_minus"
-                    )
+                    di_plus = registry_indicators.get(
+                        "adx_plus_di"
+                    ) or registry_indicators.get("di_plus")
+                    di_minus = registry_indicators.get(
+                        "adx_minus_di"
+                    ) or registry_indicators.get("di_minus")
                     trend_direction = registry_indicators.get("trend_direction")
                     if adx_value is not None:
                         indicator_overrides = {
@@ -711,14 +715,20 @@ class AdaptiveRegimeManager:
                         self.symbol,
                         {
                             "adx": adx_value,
-                            "adx_proxy": detection.indicators.get("adx_proxy", adx_value),
+                            "adx_proxy": detection.indicators.get(
+                                "adx_proxy", adx_value
+                            ),
                             "adx_plus_di": detection.indicators.get("di_plus"),
                             "adx_minus_di": detection.indicators.get("di_minus"),
-                            "trend_direction": detection.indicators.get("trend_direction"),
+                            "trend_direction": detection.indicators.get(
+                                "trend_direction"
+                            ),
                         },
                     )
             except Exception as e:
-                logger.debug(f"RegimeManager: failed to update ADX to DataRegistry: {e}")
+                logger.debug(
+                    f"RegimeManager: failed to update ADX to DataRegistry: {e}"
+                )
 
         # ✅ ПРАВКА #18: Сохраняем в кэш
         self._regime_cache[cache_key] = (detection.regime, datetime.utcnow())

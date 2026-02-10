@@ -271,7 +271,40 @@ class ExitDecisionCoordinator:
 
             # Проверяем, сработал ли trailing stop
             # ✅ ИСПРАВЛЕНО (08.01.2026): Метод должен быть should_close_position, а не should_close
-            should_close, reason = trailing_stop.should_close_position(current_price)
+            # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Передаем margin_used и unrealized_pnl для правильного расчета PnL
+            margin_used = None
+            unrealized_pnl = None
+            if metadata:
+                # Получаем margin_used из metadata
+                if hasattr(metadata, "margin_used"):
+                    margin_used = (
+                        float(metadata.margin_used)
+                        if metadata.margin_used and metadata.margin_used > 0
+                        else None
+                    )
+                elif hasattr(metadata, "margin"):
+                    margin_used = (
+                        float(metadata.margin)
+                        if metadata.margin and metadata.margin > 0
+                        else None
+                    )
+                # Получаем unrealized_pnl из metadata
+                if hasattr(metadata, "unrealized_pnl"):
+                    unrealized_pnl = (
+                        float(metadata.unrealized_pnl)
+                        if metadata.unrealized_pnl is not None
+                        else None
+                    )
+                elif hasattr(metadata, "pnl"):
+                    unrealized_pnl = (
+                        float(metadata.pnl) if metadata.pnl is not None else None
+                    )
+
+            should_close, reason = trailing_stop.should_close_position(
+                current_price,
+                margin_used=margin_used,
+                unrealized_pnl=unrealized_pnl,
+            )
             if should_close:
                 return {
                     "action": "close",
