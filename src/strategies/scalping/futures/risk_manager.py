@@ -724,49 +724,34 @@ class FuturesRiskManager:
 
             balance_profile = self.config_manager.get_balance_profile(balance)
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Прогрессивная интерполяция размера позиции на основе баланса
-            is_progressive = balance_profile.get("progressive", False)
-            if is_progressive:
-                # Для прогрессивных профилей интерполируем между size_at_min и size_at_max
-                size_at_min = balance_profile.get(
-                    "size_at_min", balance_profile.get("min_position_usd", 50.0)
-                )
-                size_at_max = balance_profile.get(
-                    "size_at_max", balance_profile.get("max_position_usd", 200.0)
-                )
-                min_balance = balance_profile.get("min_balance", 500.0)
-                max_balance = balance_profile.get(
-                    "threshold", balance_profile.get("max_balance", 1500.0)
-                )
+            # 🔥 АДАПТИВНЫЙ РАСЧЁТ (11.02.2026): маржа = balance × max_position_percent%
+            # Истинная адаптивность — размер позиции всегда пропорционален текущему балансу.
+            # Профиль (micro/small/medium/large) задаёт только процент и защитные лимиты.
+            # При росте баланса 350$ → 1000$ → маржа автоматически растёт (% × баланс).
+            is_progressive = (
+                False  # Прогрессивная интерполяция заменена процентным расчётом
+            )
 
-                # Линейная интерполяция: size = size_at_min + (size_at_max - size_at_min) * (balance - min_balance) / (max_balance - min_balance)
-                if max_balance > min_balance:
-                    balance_range = max_balance - min_balance
-                    size_range = size_at_max - size_at_min
-                    # Ограничиваем баланс в пределах [min_balance, max_balance]
-                    clamped_balance = max(min_balance, min(balance, max_balance))
-                    # Интерполируем размер
-                    interpolated_size = size_at_min + (
-                        size_range * (clamped_balance - min_balance) / balance_range
-                    )
-                    base_usd_size = interpolated_size
-                    logger.info(
-                        f"📊 Прогрессивный расчет размера для баланса ${balance:.2f}: "
-                        f"${size_at_min:.2f} → ${size_at_max:.2f} (range: ${min_balance:.2f}-${max_balance:.2f}) "
-                        f"→ base_size=${base_usd_size:.2f}"
-                    )
-                else:
-                    # Если диапазон некорректен, используем base_position_usd
-                    base_usd_size = balance_profile.get(
-                        "base_position_usd", size_at_min
-                    )
-                    logger.warning(
-                        f"⚠️ Некорректный диапазон баланса для прогрессивного расчета ({min_balance}-{max_balance}), "
-                        f"используем base_position_usd=${base_usd_size:.2f}"
-                    )
-            else:
-                # Для не-прогрессивных профилей используем base_position_usd
-                base_usd_size = balance_profile["base_position_usd"]
+            # Получаем leverage заранее (нужен для расчёта номинала)
+            _leverage_for_size = None
+            if signal:
+                _leverage_for_size = signal.get("leverage")
+            if not _leverage_for_size or _leverage_for_size <= 0:
+                _leverage_for_size = getattr(self.scalping_config, "leverage", None)
+            if not _leverage_for_size or _leverage_for_size <= 0:
+                _leverage_for_size = 3  # fallback
+
+            max_pct = balance_profile.get("max_position_percent", 15.0)
+            margin_target_usd = balance * max_pct / 100.0  # целевая МАРЖА в USD
+            base_usd_size = (
+                margin_target_usd * _leverage_for_size
+            )  # номинальная стоимость
+
+            logger.info(
+                f"📊 Адаптивный размер [{balance_profile.get('name', '?')}]: "
+                f"${balance:.2f} × {max_pct}% = ${margin_target_usd:.2f} маржа "
+                f"× {_leverage_for_size}x = ${base_usd_size:.2f} номинал"
+            )
 
             min_usd_size = balance_profile["min_position_usd"]
             max_usd_size = balance_profile["max_position_usd"]
@@ -1689,7 +1674,7 @@ class FuturesRiskManager:
             logger.info(f"   Базовый размер (notional): ${base_usd_size:.2f}")
             if is_progressive:
                 logger.info(
-                    f"   Прогрессивный расчет: ${size_at_min:.2f} → ${size_at_max:.2f}"
+                    f"   Прогрессивный расчет: ${size_at_min:.2f} → ${size_at_max:.2f}"  # noqa: F821
                 )
 
             # Получаем все множители для логирования

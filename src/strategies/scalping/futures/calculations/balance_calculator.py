@@ -4,7 +4,7 @@ BalanceCalculator - Расчеты по балансу.
 Определяет профиль баланса и рассчитывает параметры для профиля.
 """
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple  # noqa: F401
 
 from loguru import logger
 
@@ -25,14 +25,34 @@ class BalanceCalculator:
         """
         self.config = config
 
-        # Пороги профилей (могут быть в конфиге)
-        self.small_threshold = 500.0  # До 500 USDT
-        self.medium_threshold = 2000.0  # 500-2000 USDT
-        # large: > 2000 USDT
+        # Пороги профилей — читаем из balance_profiles в конфиге
+        # Fallback: micro=500, small=1500, medium=3000 (из config_futures.yaml)
+        self.small_threshold = 500.0
+        self.medium_threshold = 2000.0
 
         if config:
-            # TODO: Загрузить пороги из конфига
-            pass
+            try:
+                scalping = getattr(config, "scalping", None)
+                profiles = (
+                    getattr(scalping, "balance_profiles", None) if scalping else None
+                )
+                if profiles:
+                    # Читаем threshold каждого профиля из конфига
+                    micro_cfg = getattr(profiles, "micro", None)
+                    small_cfg = getattr(profiles, "small", None)
+                    medium_cfg = getattr(profiles, "medium", None)  # noqa: F841
+                    if micro_cfg and getattr(micro_cfg, "threshold", None):
+                        self.small_threshold = float(micro_cfg.threshold)
+                    if small_cfg and getattr(small_cfg, "threshold", None):
+                        self.medium_threshold = float(small_cfg.threshold)
+                    logger.debug(
+                        f"✅ BalanceCalculator: пороги из конфига: "
+                        f"micro<{self.small_threshold}$, small<{self.medium_threshold}$"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ BalanceCalculator: не удалось загрузить пороги из конфига: {e}"
+                )
 
         logger.info("✅ BalanceCalculator инициализирован")
 

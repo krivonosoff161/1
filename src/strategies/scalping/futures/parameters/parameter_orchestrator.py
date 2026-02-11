@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
 
 from loguru import logger
 
@@ -16,7 +16,7 @@ from .parameter_schema import (
     RiskParams,
     SignalParams,
 )
-from .parameter_validators import (
+from .parameter_validators import (  # noqa: F401
     optional_float,
     optional_str,
     require_bool,
@@ -506,11 +506,17 @@ class ParameterOrchestrator:
             status.errors.extend(errors)
             return None
 
-        base_position_usd = profile.get("base_position_usd")
         min_position_usd = profile.get("min_position_usd")
         max_position_usd = profile.get("max_position_usd")
         max_open_positions = profile.get("max_open_positions")
         max_position_percent = profile.get("max_position_percent")
+
+        # ✅ ИСПРАВЛЕНИЕ (11.02.2026): base_position_usd теперь вычисляется динамически
+        # из max_position_percent × balance, если не задан явно в конфиге
+        base_position_usd = profile.get("base_position_usd")
+        if base_position_usd is None and max_position_percent is not None and balance:
+            base_position_usd = float(balance) * float(max_position_percent) / 100.0
+
         if any(
             v is None
             for v in (

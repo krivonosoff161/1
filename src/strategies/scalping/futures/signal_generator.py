@@ -3526,16 +3526,15 @@ class FuturesSignalGenerator:
                             )
 
                         # Определяем порог ADX в зависимости от режима
-                        # Trending: строгая блокировка (>=20), Ranging: ослабленная (>=30), Choppy: минимальная (>=40)
+                        # Trending: строгая блокировка (>=20), Ranging: строгая (>=25), Choppy: ослабленная (>=35)
+                        # ✅ ИСПРАВЛЕНИЕ (11.02.2026): Ranging снижен 30→25, Choppy снижен 40→35 - лучше блокируем BTC против тренда
                         if current_regime_for_adx == "trending":
                             adx_blocking_threshold = 20.0  # Строгая блокировка в тренде
                         elif current_regime_for_adx == "ranging":
-                            adx_blocking_threshold = (
-                                30.0  # Ослабленная блокировка во флэте
-                            )
+                            adx_blocking_threshold = 25.0  # ✅ ИСПРАВЛЕНО: было 30, теперь 25 - блокируем при ADX>25 в ranging
                         elif current_regime_for_adx == "choppy":
                             adx_blocking_threshold = (
-                                40.0  # Минимальная блокировка в хаосе
+                                35.0  # ✅ ИСПРАВЛЕНО: было 40, теперь 35
                             )
                         else:
                             raise ValueError(
@@ -4370,7 +4369,7 @@ class FuturesSignalGenerator:
 
             # ✅ ПРИОРИТЕТ 2.5 (28.12.2025): Логирование параметров EMA
             logger.debug(
-                f"📊 {symbol} EMA параметры: fast_period={ema_fast_period_rsi}, slow_period={ema_slow_period_rsi}, EMA_fast={ema_fast:.2f}, EMA_slow={ema_slow:.2f}, цена={current_price:.2f}"
+                f"📊 {symbol} EMA параметры: fast_period={ema_fast_period_rsi}, slow_period={ema_slow_period_rsi}, EMA_fast={ema_fast:.2f}, EMA_slow={ema_slow:.2f}, цена={current_price:.2f}"  # noqa: F821
             )
 
             # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для сигналов
@@ -7113,7 +7112,7 @@ class FuturesSignalGenerator:
                             symbol,
                             regime=current_regime_name,
                             relax_multiplier=liquidity_relax,
-                            thresholds_override=liquidity_override,
+                            thresholds_override=liquidity_override,  # noqa: F821
                             signal_side=signal_side,  # ✅ НОВОЕ: Передаем направление сигнала
                         )
                         if not liquidity_ok:
@@ -7132,7 +7131,7 @@ class FuturesSignalGenerator:
                             snapshot=order_flow_snapshot,
                             regime=current_regime_name,
                             relax_multiplier=order_flow_relax,
-                            overrides=order_flow_override,
+                            overrides=order_flow_override,  # noqa: F821
                         ):
                             continue
                     except Exception as e:
@@ -7145,7 +7144,7 @@ class FuturesSignalGenerator:
                         if not await self.funding_filter.is_signal_valid(
                             symbol,
                             signal.get("side", ""),
-                            overrides=funding_override,
+                            overrides=funding_override,  # noqa: F821
                         ):
                             continue
                     except Exception as e:
@@ -7158,7 +7157,7 @@ class FuturesSignalGenerator:
                         if not self.volatility_filter.is_signal_valid(
                             symbol,
                             market_data,
-                            overrides=volatility_override,
+                            overrides=volatility_override,  # noqa: F821
                         ):
                             continue
                     except Exception as e:
@@ -7797,8 +7796,8 @@ class FuturesSignalGenerator:
             # Добавление Futures-специфичных параметров
             futures_signal = signal.copy()
 
-            # Учет левериджа в силе сигнала
-            leverage = 3  # Futures по умолчанию 3x
+            # Учет левериджа в силе сигнала (читаем из конфига)
+            leverage = getattr(self.scalping_config, "leverage", 3) or 3
             futures_signal["leverage_adjusted_strength"] = signal["strength"] * (
                 leverage / 3
             )

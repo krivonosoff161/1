@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-import numpy as np
+import numpy as np  # noqa: F401
 from loguru import logger
 
 from src.indicators.advanced.candle_patterns import CandlePatternDetector
@@ -19,7 +19,7 @@ from src.indicators.advanced.volume_profile import VolumeProfileCalculator
 
 from ..config.parameter_provider import ParameterProvider
 from ..core.data_registry import DataRegistry
-from ..core.position_registry import PositionMetadata, PositionRegistry
+from ..core.position_registry import PositionMetadata, PositionRegistry  # noqa: F401
 from ..indicators.atr_provider import ATRProvider
 from ..indicators.liquidity_levels import LiquidityLevelsDetector
 
@@ -563,7 +563,9 @@ class ExitAnalyzer:
                             pass
                 if entry_ts and entry_ts > 0:
                     minutes_now = (time.time() - entry_ts) / 60.0
-                    max_holding = self._get_max_holding_minutes(symbol, regime)
+                    max_holding = self._get_max_holding_minutes(
+                        regime, symbol
+                    )  # ✅ ИСПРАВЛЕНО (11.02.2026): были перепутаны аргументы symbol/regime
                     if max_holding and minutes_now >= max_holding:
                         logger.warning(
                             f"⏰ ExitAnalyzer: TIMEOUT {symbol}! "
@@ -578,7 +580,9 @@ class ExitAnalyzer:
                             "current_price": 0.0,
                         }
             except Exception as _e:
-                logger.debug(f"⚠️ ExitAnalyzer: Ошибка pre-price max_holding check для {symbol}: {_e}")
+                logger.debug(
+                    f"⚠️ ExitAnalyzer: Ошибка pre-price max_holding check для {symbol}: {_e}"
+                )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): Используем СТРОГИЙ TTL для ExitAnalyzer
             # Решение: get_fresh_price_for_exit_analyzer() с TTL=15s + REST fallback
@@ -827,23 +831,26 @@ class ExitAnalyzer:
                     exit_fee_rate = self._get_fee_rate_per_side("market")
 
                     # ✅ ИСПРАВЛЕНО: Комиссия учитывает плечо и две стороны (вход + выход)
-                    # Получаем leverage из metadata или position
-                    leverage = 5  # Default
+                    # Получаем leverage из metadata/position/конфига (не захардкожен)
+                    _cfg_leverage = (
+                        int(getattr(self.scalping_config, "leverage", 3))
+                        if self.scalping_config
+                        else 3
+                    )
+                    leverage = _cfg_leverage
                     if metadata and hasattr(metadata, "leverage") and metadata.leverage:
                         try:
-                            leverage = int(
-                                float(metadata.leverage)
-                            )  # ✅ ФИКС: Конвертируем в float сначала
+                            leverage = int(float(metadata.leverage))
                         except (ValueError, TypeError):
-                            leverage = 5
+                            leverage = _cfg_leverage
                     elif position and isinstance(position, dict):
                         try:
-                            leverage_val = position.get("leverage", 5) or 5
-                            leverage = int(
-                                float(leverage_val)
-                            )  # ✅ ФИКС: Конвертируем в float сначала
+                            leverage_val = (
+                                position.get("leverage", _cfg_leverage) or _cfg_leverage
+                            )
+                            leverage = int(float(leverage_val))
                         except (ValueError, TypeError):
-                            leverage = 5
+                            leverage = _cfg_leverage
 
                     # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
                     # (т.к. комиссия считается от номинала, а PnL% от маржи)
@@ -1871,23 +1878,26 @@ class ExitAnalyzer:
             Буфер комиссии в процентах (например, 0.2 для 0.2% при leverage=5)
         """
         try:
-            # Получаем leverage
-            leverage = 5  # Default
+            # Получаем leverage из metadata/position/конфига (не захардкожен)
+            _cfg_leverage = (
+                int(getattr(self.scalping_config, "leverage", 3))
+                if self.scalping_config
+                else 3
+            )
+            leverage = _cfg_leverage
             if metadata and hasattr(metadata, "leverage") and metadata.leverage:
                 try:
-                    leverage = int(
-                        float(metadata.leverage)
-                    )  # ✅ ФИКС: Конвертируем в float сначала
+                    leverage = int(float(metadata.leverage))
                 except (ValueError, TypeError):
-                    leverage = 5
+                    leverage = _cfg_leverage
             elif position and isinstance(position, dict):
                 try:
-                    leverage_val = position.get("leverage", 5) or 5
-                    leverage = int(
-                        float(leverage_val)
-                    )  # ✅ ФИКС: Конвертируем в float сначала
+                    leverage_val = (
+                        position.get("leverage", _cfg_leverage) or _cfg_leverage
+                    )
+                    leverage = int(float(leverage_val))
                 except (ValueError, TypeError):
-                    leverage = 5
+                    leverage = _cfg_leverage
 
             # Получаем maker_fee_rate из конфига
             trading_fee_rate = 0.0002  # 0.02% по умолчанию

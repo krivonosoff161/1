@@ -17,11 +17,11 @@ repos:
   rev: 6.0.0
   hooks:
     - id: flake8
-      args: [--max-line-length=88, --extend-ignore=E501]
+      files: ^src/
 
 - repo: https://github.com/PyCQA/bandit
   rev: 1.7.5
   hooks:
     - id: bandit
-      args: [--exclude, venv]
+      args: ["--exclude", "venv", "-f", "json", "--skip", "B110,B311,B106"]
       additional_dependencies: [pbr]

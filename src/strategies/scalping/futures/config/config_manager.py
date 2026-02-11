@@ -1022,78 +1022,21 @@ class ConfigManager:
                 profile_config = profile["config"]
                 profile_name = profile["name"]
 
-                # ✅ ВАРИАНТ B: Прогрессивная адаптация
-                progressive = getattr(profile_config, "progressive", False)
-                if progressive:
-                    min_balance = getattr(profile_config, "min_balance", None)
-                    size_at_min = getattr(profile_config, "size_at_min", None)
-                    size_at_max = getattr(profile_config, "size_at_max", None)
+                # 🔥 АДАПТИВНЫЙ РАСЧЁТ (11.02.2026): маржа = balance × max_position_percent%
+                max_position_percent = getattr(
+                    profile_config, "max_position_percent", None
+                )
+                if max_position_percent is None or max_position_percent <= 0:
+                    logger.error(
+                        f"❌ max_position_percent не указан в конфиге для профиля {profile_name}! "
+                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_percent"
+                    )
+                    raise ValueError(
+                        f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
+                    )
 
-                    if (
-                        min_balance is not None
-                        and size_at_min is not None
-                        and size_at_max is not None
-                    ):
-                        threshold = profile_config.threshold
-
-                        # Для профиля 'large' используется max_balance вместо threshold
-                        if profile_name == "large":
-                            max_balance = getattr(
-                                profile_config, "max_balance", threshold
-                            )
-                            if balance <= min_balance:
-                                base_pos_usd = size_at_min
-                            elif balance >= max_balance:
-                                base_pos_usd = size_at_max
-                            else:
-                                progress = (balance - min_balance) / (
-                                    max_balance - min_balance
-                                )
-                                base_pos_usd = (
-                                    size_at_min + (size_at_max - size_at_min) * progress
-                                )
-                        else:
-                            # Для других профилей
-                            if balance <= min_balance:
-                                base_pos_usd = size_at_min
-                            elif balance >= threshold:
-                                base_pos_usd = size_at_max
-                            else:
-                                progress = (balance - min_balance) / (
-                                    threshold - min_balance
-                                )
-                                base_pos_usd = (
-                                    size_at_min + (size_at_max - size_at_min) * progress
-                                )
-
-                        logger.debug(
-                            f"📊 Прогрессивная адаптация для {profile_name}: "
-                            f"баланс ${balance:.2f} → размер ${base_pos_usd:.2f} "
-                            f"(min_balance=${min_balance:.2f}, threshold=${threshold:.2f}, "
-                            f"size_at_min=${size_at_min:.2f}, size_at_max=${size_at_max:.2f})"
-                        )
-                    else:
-                        # Если параметры прогрессивной адаптации не указаны, используем base_position_usd
-                        base_pos_usd = getattr(
-                            profile_config, "base_position_usd", None
-                        )
-                        if base_pos_usd is None or base_pos_usd <= 0:
-                            logger.error(
-                                f"❌ Профиль {profile_name}: base_position_usd не указан или <= 0 в конфиге!"
-                            )
-                            raise ValueError(
-                                f"base_position_usd должен быть указан в конфиге для профиля {profile_name}"
-                            )
-                else:
-                    # Используем фиксированный base_position_usd
-                    base_pos_usd = getattr(profile_config, "base_position_usd", None)
-                    if base_pos_usd is None or base_pos_usd <= 0:
-                        logger.error(
-                            f"❌ Профиль {profile_name}: base_position_usd не указан или <= 0 в конфиге!"
-                        )
-                        raise ValueError(
-                            f"base_position_usd должен быть указан в конфиге для профиля {profile_name}"
-                        )
+                # base_position_usd = целевая МАРЖА (для совместимости с adaptive_leverage и другими модулями)
+                base_pos_usd = balance * float(max_position_percent) / 100.0
 
                 # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
                 min_pos_usd = getattr(profile_config, "min_position_usd", None)
@@ -1126,43 +1069,20 @@ class ConfigManager:
                         f"max_open_positions должен быть указан в конфиге для профиля {profile_name}"
                     )
 
-                # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
-                max_position_percent = getattr(
-                    profile_config, "max_position_percent", None
+                logger.debug(
+                    f"📊 Профиль [{profile_name}]: баланс=${balance:.2f} × {max_position_percent}% "
+                    f"= ${base_pos_usd:.2f} маржа (notional рассчитает risk_manager с учётом плеча)"
                 )
-                if max_position_percent is None or max_position_percent <= 0:
-                    logger.error(
-                        f"❌ max_position_percent не указан в конфиге для профиля {profile_name}! "
-                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_percent"
-                    )
-                    raise ValueError(
-                        f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
-                    )
 
-                # ✅ ИСПРАВЛЕНО: Возвращаем параметры progressive для risk_manager
-                result = {
+                return {
                     "name": profile_name,
-                    "base_position_usd": base_pos_usd,
+                    "base_position_usd": base_pos_usd,  # = маржа (balance × pct%), для совместимости
                     "min_position_usd": min_pos_usd,
                     "max_position_usd": max_pos_usd,
                     "max_open_positions": max_open_positions,
                     "max_position_percent": max_position_percent,
-                    "progressive": progressive,
+                    "progressive": False,
                 }
-
-                # Добавляем параметры progressive, если они есть
-                if progressive:
-                    result["size_at_min"] = size_at_min
-                    result["size_at_max"] = size_at_max
-                    result["min_balance"] = min_balance
-                    if profile_name == "large":
-                        result["max_balance"] = getattr(
-                            profile_config, "max_balance", threshold
-                        )
-                    else:
-                        result["threshold"] = threshold
-
-                return result
 
         # Если баланс больше всех порогов - используем последний (самый большой) профиль
         last_profile = profile_list[-1]
@@ -1172,64 +1092,18 @@ class ConfigManager:
             f"📊 Баланс {balance:.2f} больше всех порогов, используем профиль {profile_name}"
         )
 
-        # ✅ ВАРИАНТ B: Прогрессивная адаптация для последнего профиля
-        progressive = getattr(profile_config, "progressive", False)
-        if progressive:
-            min_balance = getattr(profile_config, "min_balance", None)
-            size_at_min = getattr(profile_config, "size_at_min", None)
-            size_at_max = getattr(profile_config, "size_at_max", None)
+        # 🔥 АДАПТИВНЫЙ РАСЧЁТ (11.02.2026) для последнего профиля
+        max_position_percent = getattr(profile_config, "max_position_percent", None)
+        if max_position_percent is None or max_position_percent <= 0:
+            logger.error(
+                f"❌ max_position_percent не указан в конфиге для профиля {profile_name}! "
+                f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_percent"
+            )
+            raise ValueError(
+                f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
+            )
 
-            if (
-                min_balance is not None
-                and size_at_min is not None
-                and size_at_max is not None
-            ):
-                # Для профиля 'large' используется max_balance
-                if profile_name == "large":
-                    max_balance = getattr(profile_config, "max_balance", 999999.0)
-                    if balance <= min_balance:
-                        base_pos_usd = size_at_min
-                    elif balance >= max_balance:
-                        base_pos_usd = size_at_max
-                    else:
-                        progress = (balance - min_balance) / (max_balance - min_balance)
-                        base_pos_usd = (
-                            size_at_min + (size_at_max - size_at_min) * progress
-                        )
-                else:
-                    threshold = profile_config.threshold
-                    if balance <= min_balance:
-                        base_pos_usd = size_at_min
-                    elif balance >= threshold:
-                        base_pos_usd = size_at_max
-                    else:
-                        progress = (balance - min_balance) / (threshold - min_balance)
-                        base_pos_usd = (
-                            size_at_min + (size_at_max - size_at_min) * progress
-                        )
-
-                logger.debug(
-                    f"📊 Прогрессивная адаптация для {profile_name}: "
-                    f"баланс ${balance:.2f} → размер ${base_pos_usd:.2f}"
-                )
-            else:
-                base_pos_usd = getattr(profile_config, "base_position_usd", None)
-                if base_pos_usd is None or base_pos_usd <= 0:
-                    logger.error(
-                        f"❌ Профиль {profile_name}: base_position_usd не указан в конфиге!"
-                    )
-                    raise ValueError(
-                        f"base_position_usd должен быть указан в конфиге для профиля {profile_name}"
-                    )
-        else:
-            base_pos_usd = getattr(profile_config, "base_position_usd", None)
-            if base_pos_usd is None or base_pos_usd <= 0:
-                logger.error(
-                    f"❌ Профиль {profile_name}: base_position_usd не указан в конфиге!"
-                )
-                raise ValueError(
-                    f"base_position_usd должен быть указан в конфиге для профиля {profile_name}"
-                )
+        base_pos_usd = balance * float(max_position_percent) / 100.0
 
         # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
         min_pos_usd = getattr(profile_config, "min_position_usd", None)
@@ -1261,43 +1135,20 @@ class ConfigManager:
                 f"max_open_positions должен быть указан в конфиге для профиля {profile_name}"
             )
 
-        max_position_percent = getattr(profile_config, "max_position_percent", None)
-        if max_position_percent is None or max_position_percent <= 0:
-            logger.error(
-                f"❌ max_position_percent не указан в конфиге для профиля {profile_name}! "
-                f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_percent"
-            )
-            raise ValueError(
-                f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
-            )
+        logger.debug(
+            f"📊 Профиль [{profile_name}] (max balance): баланс=${balance:.2f} × {max_position_percent}% "
+            f"= ${base_pos_usd:.2f} маржа"
+        )
 
-        # ✅ ИСПРАВЛЕНО: Возвращаем параметры progressive для risk_manager
         result = {
             "name": profile_name,
-            "base_position_usd": base_pos_usd,
+            "base_position_usd": base_pos_usd,  # = маржа (balance × pct%), для совместимости
             "min_position_usd": min_pos_usd,
             "max_position_usd": max_pos_usd,
             "max_open_positions": max_open_positions,
             "max_position_percent": max_position_percent,
-            "progressive": progressive,
+            "progressive": False,
         }
-
-        # Добавляем параметры progressive, если они есть
-        if progressive:
-            if (
-                min_balance is not None
-                and size_at_min is not None
-                and size_at_max is not None
-            ):
-                result["size_at_min"] = size_at_min
-                result["size_at_max"] = size_at_max
-                result["min_balance"] = min_balance
-                if profile_name == "large":
-                    result["max_balance"] = getattr(
-                        profile_config, "max_balance", 999999.0
-                    )
-                else:
-                    result["threshold"] = getattr(profile_config, "threshold", None)
 
         return result
 

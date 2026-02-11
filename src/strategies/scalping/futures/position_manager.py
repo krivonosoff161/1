@@ -18,19 +18,19 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
-from src.config import BotConfig, ScalpingConfig
+from src.config import BotConfig, ScalpingConfig  # noqa: F401
 
 from ..spot.position_manager import TradeResult
 from .calculations.margin_calculator import MarginCalculator
 from .config.config_view import get_scalping_view
-from .core.data_registry import DataRegistry
-from .core.position_registry import PositionRegistry
+from .core.data_registry import DataRegistry  # noqa: F401
+from .core.position_registry import PositionRegistry  # noqa: F401
 
 # ✅ РЕФАКТОРИНГ: Импортируем новые модули
-from .positions.entry_manager import EntryManager
-from .positions.exit_analyzer import ExitAnalyzer
+from .positions.entry_manager import EntryManager  # noqa: F401
+from .positions.exit_analyzer import ExitAnalyzer  # noqa: F401
 from .positions.peak_profit_tracker import PeakProfitTracker
-from .positions.position_monitor import PositionMonitor
+from .positions.position_monitor import PositionMonitor  # noqa: F401
 from .positions.stop_loss_manager import StopLossManager
 from .positions.take_profit_manager import TakeProfitManager
 
@@ -680,7 +680,11 @@ class FuturesPositionManager:
                     f"⚠️ Не удалось получить цену из стакана для {symbol}, используем markPx: {e}"
                 )
             # 🔥 ИСПРАВЛЕНИЕ (11.02.2026): Если current_price=0 (markPx=0 + REST failed) - пробуем DataRegistry
-            if current_price <= 0 and hasattr(self, "data_registry") and self.data_registry:
+            if (
+                current_price <= 0
+                and hasattr(self, "data_registry")
+                and self.data_registry
+            ):
                 try:
                     dr_price = await self.data_registry.get_price(symbol)
                     if dr_price and dr_price > 0:
@@ -2477,10 +2481,15 @@ class FuturesPositionManager:
                             if leverage and leverage > 0:
                                 loss_cut_from_price = loss_cut_percent / leverage
                             else:
-                                logger.warning(
-                                    f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем fallback leverage=5"
+                                _cfg_lev = (
+                                    int(getattr(self.scalping_config, "leverage", 3))
+                                    if self.scalping_config
+                                    else 3
                                 )
-                                leverage = 5
+                                logger.warning(
+                                    f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем leverage={_cfg_lev} из конфига"
+                                )
+                                leverage = _cfg_lev
                                 loss_cut_from_price = loss_cut_percent / leverage
 
                             # ✅ Для больших убытков (>= loss_cut) закрываем после минимальной задержки (5 сек)
@@ -2741,10 +2750,15 @@ class FuturesPositionManager:
                         if leverage and leverage > 0:
                             margin_used = position_value / leverage
                         else:
-                            logger.warning(
-                                f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем fallback leverage=3"
+                            _cfg_lev = (
+                                int(getattr(self.scalping_config, "leverage", 3))
+                                if self.scalping_config
+                                else 3
                             )
-                            margin_used = position_value / 3
+                            logger.warning(
+                                f"⚠️ leverage <= 0 ({leverage}) для {symbol}, используем leverage={_cfg_lev} из конфига"
+                            )
+                            margin_used = position_value / _cfg_lev
                     except Exception as e:
                         logger.debug(f"Не удалось рассчитать margin для {symbol}: {e}")
                         # Fallback: используем старый метод (процент от цены)
@@ -5566,6 +5580,7 @@ class FuturesPositionManager:
                 details = await self.client.get_instrument_details(symbol)
                 ct_val = float(details.get("ctVal", "0.01"))
                 size_in_coins = abs(size) * ct_val
+                position_value = size_in_coins * entry_price  # Размер позиции в USD
 
                 if side.lower() == "long":
                     current_pnl = (current_price - entry_price) * size_in_coins

@@ -8,6 +8,7 @@ PositionMonitor - Периодический мониторинг позиций
 """
 
 import asyncio
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -216,6 +217,85 @@ class PositionMonitor:
                     symbol=symbol, market_data=market_data, position=position
                 )
                 if not isinstance(current_price, (int, float)) or current_price <= 0:
+                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (11.02.2026): Даже без цены проверяем timeout
+                    # Проблема: WebSocket staleness → price=0 → return None → позиция висит вечно
+                    # Решение: если max_holding превышен - закрываем через markPx (REST цена из позиции)
+                    _entry_ts_pm = None
+                    try:
+                        _et = None
+                        if metadata and getattr(metadata, "entry_time", None):
+                            _et = metadata.entry_time
+                        elif isinstance(position, dict):
+                            _et = position.get("entry_time") or position.get(
+                                "entryTime"
+                            )
+                        if isinstance(_et, str):
+                            _et = datetime.fromisoformat(_et.replace("Z", "+00:00"))
+                        if isinstance(_et, datetime):
+                            if _et.tzinfo is None:
+                                _et = _et.replace(tzinfo=timezone.utc)
+                            _entry_ts_pm = _et.timestamp()
+                        elif isinstance(_et, (int, float)):
+                            _entry_ts_pm = float(_et)
+                    except Exception:
+                        pass
+                    if _entry_ts_pm and _entry_ts_pm > 0:
+                        import time as _time
+
+                        _minutes_now = (_time.time() - _entry_ts_pm) / 60.0
+                        # Получаем max_holding из конфига (default 120 мин)
+                        _max_holding = 120.0
+                        try:
+                            if self.exit_analyzer and hasattr(
+                                self.exit_analyzer, "_get_max_holding_minutes"
+                            ):
+                                _regime_now = "ranging"
+                                if hasattr(self.data_registry, "get_regime_name_sync"):
+                                    _regime_now = (
+                                        self.data_registry.get_regime_name_sync(symbol)
+                                        or "ranging"
+                                    )
+                                _max_holding = (
+                                    self.exit_analyzer._get_max_holding_minutes(
+                                        _regime_now, symbol
+                                    )
+                                )
+                        except Exception:
+                            pass
+                        if _minutes_now >= _max_holding:
+                            _mark_px = 0.0
+                            try:
+                                if isinstance(position, dict):
+                                    _mark_px = float(position.get("markPx", 0) or 0)
+                            except Exception:
+                                pass
+                            logger.warning(
+                                f"⏰ PositionMonitor: TIMEOUT {symbol} при stale цене! "
+                                f"{_minutes_now:.1f}мин >= {_max_holding:.1f}мин. "
+                                f"Закрываем по markPx={_mark_px:.2f} (нет WS цены)"
+                            )
+                            if self.close_position_callback:
+                                _timeout_payload = {
+                                    "price": _mark_px,
+                                    "price_source": "mark_price_fallback",
+                                    "price_age": None,
+                                    "pnl_pct": 0.0,
+                                    "net_pnl_pct": 0.0,
+                                    "time_in_pos": _minutes_now * 60,
+                                    "position_data": position
+                                    if isinstance(position, dict)
+                                    else None,
+                                    "regime": "ranging",
+                                    "decision": {
+                                        "action": "close",
+                                        "reason": "timeout",
+                                        "current_price": _mark_px,
+                                    },
+                                }
+                                await self.close_position_callback(
+                                    symbol, "timeout", _timeout_payload
+                                )
+                            return None
                     logger.error(
                         f"❌ PositionMonitor: Некорректная цена для {symbol} (current_price={current_price}), "
                         f"пропускаем анализ позиции"
