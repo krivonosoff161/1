@@ -663,7 +663,7 @@ class FuturesPositionManager:
                         )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Используем bid/ask avg для точного PnL расчета
-            current_price = float(position.get("markPx", "0"))  # Fallback
+            current_price = float(position.get("markPx", "0") or "0")  # Fallback
             try:
                 price_limits = await self.client.get_price_limits(symbol)
                 if price_limits:
@@ -679,6 +679,17 @@ class FuturesPositionManager:
                 logger.debug(
                     f"⚠️ Не удалось получить цену из стакана для {symbol}, используем markPx: {e}"
                 )
+            # 🔥 ИСПРАВЛЕНИЕ (11.02.2026): Если current_price=0 (markPx=0 + REST failed) - пробуем DataRegistry
+            if current_price <= 0 and hasattr(self, "data_registry") and self.data_registry:
+                try:
+                    dr_price = await self.data_registry.get_price(symbol)
+                    if dr_price and dr_price > 0:
+                        current_price = dr_price
+                        logger.debug(
+                            f"✅ PositionManager: price=0 для {symbol}, DataRegistry fallback: {current_price:.4f}"
+                        )
+                except Exception:
+                    pass
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало управления позицией
             logger.debug(

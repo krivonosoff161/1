@@ -296,12 +296,12 @@ class DataRegistry:
             return market_data.get("price") or market_data.get("last_price")
 
     async def get_fresh_price_for_exit_analyzer(
-        self, symbol: str, client=None, max_age: float = 2.0
+        self, symbol: str, client=None, max_age: float = 15.0
     ) -> Optional[float]:
         """
         Получить свежую цену для ExitAnalyzer.
 
-        - Строгий TTL для WebSocket (по умолчанию 2s)
+        - TTL для WebSocket (по умолчанию 15s - соответствует ws_fresh_max_age)
         - REST fallback при устаревшей цене
         """
         async with self._lock:

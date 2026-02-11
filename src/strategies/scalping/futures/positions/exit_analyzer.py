@@ -533,11 +533,55 @@ class ExitAnalyzer:
                 f"position.regime={position.get('regime') if isinstance(position, dict) else None}"
             )
 
+            # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (11.02.2026): Проверяем max_holding ПЕРЕД проверкой свежести цены
+            # Проблема: позиции держались 808+ минут т.к. WS был стale >2s → price check → return None
+            # Теперь: если max_holding_minutes превышен - закрываем НЕЗАВИСИМО от свежести цены
+            try:
+                entry_ts = None
+                if isinstance(position, dict):
+                    etime = position.get("entry_time") or position.get("entryTime")
+                    if etime is not None:
+                        if isinstance(etime, (int, float)):
+                            entry_ts = float(etime)
+                        elif isinstance(etime, datetime):
+                            entry_ts = etime.timestamp()
+                        elif isinstance(etime, str):
+                            try:
+                                entry_ts = datetime.fromisoformat(etime).timestamp()
+                            except Exception:
+                                pass
+                if entry_ts is None and metadata and hasattr(metadata, "entry_time"):
+                    etime = metadata.entry_time
+                    if isinstance(etime, (int, float)):
+                        entry_ts = float(etime)
+                    elif isinstance(etime, datetime):
+                        entry_ts = etime.timestamp()
+                    elif isinstance(etime, str):
+                        try:
+                            entry_ts = datetime.fromisoformat(etime).timestamp()
+                        except Exception:
+                            pass
+                if entry_ts and entry_ts > 0:
+                    minutes_now = (time.time() - entry_ts) / 60.0
+                    max_holding = self._get_max_holding_minutes(symbol, regime)
+                    if max_holding and minutes_now >= max_holding:
+                        logger.warning(
+                            f"⏰ ExitAnalyzer: TIMEOUT {symbol}! "
+                            f"{minutes_now:.1f}мин >= max_holding={max_holding:.1f}мин (режим={regime}). "
+                            f"Закрываем БЕЗ проверки свежести цены!"
+                        )
+                        return {
+                            "action": "close",
+                            "reason": "timeout",
+                            "pnl_pct": 0.0,
+                            "entry_regime": regime,
+                            "current_price": 0.0,
+                        }
+            except Exception as _e:
+                logger.debug(f"⚠️ ExitAnalyzer: Ошибка pre-price max_holding check для {symbol}: {_e}")
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): Используем СТРОГИЙ TTL для ExitAnalyzer
-            # Проблема: DataRegistry.get_price() терпит устаревание до 60s, что приводит к:
-            # - TP срабатывает на убыточных позициях (ложная прибыль от устаревшей цены)
-            # - Адаптивные параметры настраиваются на ложных данных
-            # Решение: get_fresh_price_for_exit_analyzer() с TTL=2s + REST fallback
+            # Решение: get_fresh_price_for_exit_analyzer() с TTL=15s + REST fallback
 
             # Получаем client для REST fallback
             client = None
@@ -550,9 +594,9 @@ class ExitAnalyzer:
             price_source = "data_registry_fresh"
 
             if current_price is None or current_price <= 0:
-                logger.error(
-                    f"❌ ExitAnalyzer: Нет СВЕЖЕЙ цены для {symbol} (WebSocket устарел >2s, REST fallback failed), "
-                    f"позиция не анализируется - НЕ ПРИНИМАЕМ РЕШЕНИЕ о закрытии!"
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: Нет свежей цены для {symbol} (WebSocket устарел >{self.data_registry._ws_fresh_max_age_exit if hasattr(self.data_registry, '_ws_fresh_max_age_exit') else 15}s, REST fallback failed). "
+                    f"Пропускаем детальный анализ."
                 )
                 analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
                 return None

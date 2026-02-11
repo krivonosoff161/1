@@ -701,6 +701,15 @@ class TrailingStopLoss:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем прибыль С УЧЕТОМ КОМИССИИ и передаем margin/unrealized_pnl для правильного расчета от маржи
         # ✅ НОВОЕ (10.01.2026): Если current_price == entry_price (fallback), не считаем комиссию
         is_fallback_price = (current_price == self.entry_price) and (current_price != 0)
+
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (11.02.2026): Если цена была 0.0 и использован fallback —
+        # НЕ принимаем решение о закрытии. Без реальной цены нельзя определить P&L и TSL.
+        if is_fallback_price:
+            logger.debug(
+                f"⚠️ TSL: Цена была 0.0 (fallback=entry_price), пропускаем TSL check для {getattr(self, '_symbol', 'UNKNOWN')}"
+            )
+            return False, None
+
         profit_pct = self.get_profit_pct(
             current_price,
             include_fees=not is_fallback_price,  # Не считаем комиссию если это fallback цена
