@@ -53,13 +53,13 @@ scalping:
       max_position_percent: 25.0  # 25% от баланса = маржа
       min_position_usd: 15.0      # мин номинал (защита от слишком маленьких позиций)
       max_position_usd: 450.0     # макс номинал (защита при высоком плече)
-      max_open_positions: 3
+      max_open_positions: 5       # 🔥 ИСПРАВЛЕНО 13.02.2026: было 3, теперь все 5 пар торгуют
     small:
       threshold: 1500.0
       max_position_percent: 15.0  # 15% от баланса = маржа
       min_position_usd: 50.0      # мин номинал
       max_position_usd: 1350.0    # макс номинал (=300$ маржа × leverage 4.5x)
-      max_open_positions: 3
+      max_open_positions: 5       # 🔥 ИСПРАВЛЕНО 13.02.2026: было 3
     medium:
       threshold: 3000.0
       max_position_percent: 10.0  # 10% от баланса = маржа
@@ -104,8 +104,9 @@ scalping:
     allow_rest_for_ws: false
     rest_update_cooldown: 1.0
     # WebSocket watchdog параметры для предотвращения ложных reconnect
-    ws_fresh_max_age: 30.0  # 🔥 ИСПРАВЛЕНО (10.02.2026): OKX шлет тикеры каждые 7-20 сек, 5s блокировало ВСЕ входы! 15s = реальный интервал OKX (не 45s которое было слишком много)
-    ws_watchdog_consecutive_stale: 5  # Увеличено с 3 до 5: меньше агрессивных reconnect
+    ws_fresh_max_age: 30.0  # Для проверки входов: OKX шлет тикеры каждые 7-20 сек, 30s = достаточно
+    ws_watchdog_max_age: 12.0  # ОТДЕЛЬНЫЙ порог для watchdog reconnect (агрессивнее чем ws_fresh_max_age)
+    ws_watchdog_consecutive_stale: 2  # 🔥 ИСПРАВЛЕНО 13.02.2026: было 5 (55s до reconnect!), теперь 2 (10s max)
     adx_blocking:
       enabled: true
       adx_threshold: 25.0
@@ -1868,8 +1869,9 @@ signal_generator:
     strength_multiplier: 2000.0  # Множитель для strength (histogram / 200.0)
     strength_reduction_neutral: 0.9  # Снижение strength для neutral направления
     base_signal_strength: 0.001  # Базовый размер сигнала
-    ws_fresh_max_age: 30.0  # 🔥 ИСПРАВЛЕНО (10.02.2026): OKX шлет тикеры каждые 7-20 сек, 5s блокировало ВСЕ входы!
-    ws_watchdog_consecutive_stale: 5  # Увеличено с 3 до 5
+    ws_fresh_max_age: 30.0  # Для проверки входов
+    ws_watchdog_max_age: 12.0  # ОТДЕЛЬНЫЙ порог для watchdog reconnect
+    ws_watchdog_consecutive_stale: 2  # 🔥 ИСПРАВЛЕНО 13.02.2026: было 5 (55s!), теперь 2 (10s max)
     ws_signal_grace_period: 10.0
     allow_rest_for_ws: false
     adx_blocking:
@@ -2428,7 +2430,8 @@ futures_modules:
 
 
 
-    ws_watchdog_consecutive_stale: 5  # Увеличено с 3 до 5: меньше агрессивных reconnect
+    ws_watchdog_max_age: 12.0  # ОТДЕЛЬНЫЙ порог для watchdog reconnect
+    ws_watchdog_consecutive_stale: 2  # 🔥 ИСПРАВЛЕНО 13.02.2026: было 5 (55s!), теперь 2 (10s max)
     ws_signal_grace_period: 10.0
     allow_rest_for_ws: false
     adx_blocking:

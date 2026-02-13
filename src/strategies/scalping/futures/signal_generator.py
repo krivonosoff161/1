@@ -1962,6 +1962,37 @@ class FuturesSignalGenerator:
                     f"📊 {symbol}: Базовые сигналы не сгенерированы (см. детали в _generate_base_signals)"
                 )
 
+            # ✅ ИСПРАВЛЕНИЕ (13.02.2026): Дедупликация конфликтующих BUY+SELL сигналов
+            # Проблема: RSI генерирует SELL, MACD генерирует BUY на одном тике → downstream выбирает случайно
+            # Решение: если есть и buy и sell → оставляем более сильный; при равной силе (±0.05) → убираем оба
+            if base_signals and len(base_signals) > 1:
+                buy_signals = [
+                    s for s in base_signals if s.get("side") in ("buy", "long")
+                ]
+                sell_signals = [
+                    s for s in base_signals if s.get("side") in ("sell", "short")
+                ]
+                if buy_signals and sell_signals:
+                    best_buy = max(buy_signals, key=lambda s: s.get("strength", 0))
+                    best_sell = max(sell_signals, key=lambda s: s.get("strength", 0))
+                    buy_str = best_buy.get("strength", 0)
+                    sell_str = best_sell.get("strength", 0)
+                    diff = abs(buy_str - sell_str)
+                    if diff <= 0.05:
+                        logger.warning(
+                            f"⚡ {symbol}: КОНФЛИКТ BUY({buy_str:.3f}) vs SELL({sell_str:.3f}) — "
+                            f"сила равная (diff={diff:.3f}), пропускаем оба сигнала"
+                        )
+                        base_signals = []
+                    else:
+                        winner = best_buy if buy_str > sell_str else best_sell
+                        loser_side = "SELL" if buy_str > sell_str else "BUY"
+                        logger.warning(
+                            f"⚡ {symbol}: КОНФЛИКТ BUY({buy_str:.3f}) vs SELL({sell_str:.3f}) — "
+                            f"убираем {loser_side}, оставляем {'BUY' if buy_str > sell_str else 'SELL'} (strength={winner.get('strength', 0):.3f})"
+                        )
+                        base_signals = [winner]
+
             # Применение фильтров (передаем позиции для CorrelationFilter)
             filtered_signals = await self._apply_filters(
                 symbol, base_signals, market_data, current_positions=current_positions

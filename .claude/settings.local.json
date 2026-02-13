@@ -9,7 +9,8 @@
       "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\logs\\\\futures\\\\archived\\\\staging_2026-01-25_15-36-51\")",
       "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\src\\\\strategies\\\\scalping\\\\futures\\\\*.py\")",
       "Read(//c/**)",
-      "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\logs\\\\futures\\\\archived\\\\staging_2026-02-03_21-36-18\\\\logs_futures_debug\")"
+      "Bash(dir /s /b \"C:\\\\Users\\\\krivo\\\\simple trading bot okx\\\\logs\\\\futures\\\\archived\\\\staging_2026-02-03_21-36-18\\\\logs_futures_debug\")",
+      "Bash(__NEW_LINE_6c34c4e4d3fec3f9__ echo \"=== S2: Trades per symbol ===\")"
     ]
   }
 }

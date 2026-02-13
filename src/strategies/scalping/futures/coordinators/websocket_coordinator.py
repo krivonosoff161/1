@@ -790,16 +790,25 @@ class WebSocketCoordinator:
         try:
             sg_cfg = getattr(self.scalping_config, "signal_generator", {})
             if isinstance(sg_cfg, dict):
-                if sg_cfg.get("ws_fresh_max_age") is not None:
+                # ws_watchdog_max_age приоритетнее ws_fresh_max_age для watchdog
+                watchdog_age = sg_cfg.get("ws_watchdog_max_age")
+                if watchdog_age is not None:
+                    self._ws_watchdog_max_age = float(watchdog_age)
+                elif sg_cfg.get("ws_fresh_max_age") is not None:
                     self._ws_watchdog_max_age = float(sg_cfg.get("ws_fresh_max_age"))
                 if sg_cfg.get("ws_watchdog_consecutive_stale") is not None:
                     self._ws_watchdog_stale_threshold = max(
                         1, int(sg_cfg.get("ws_watchdog_consecutive_stale"))
                     )
             else:
-                ws_age = getattr(sg_cfg, "ws_fresh_max_age", None)
-                if ws_age is not None:
-                    self._ws_watchdog_max_age = float(ws_age)
+                # ws_watchdog_max_age приоритетнее ws_fresh_max_age для watchdog
+                watchdog_age = getattr(sg_cfg, "ws_watchdog_max_age", None)
+                if watchdog_age is not None:
+                    self._ws_watchdog_max_age = float(watchdog_age)
+                else:
+                    ws_age = getattr(sg_cfg, "ws_fresh_max_age", None)
+                    if ws_age is not None:
+                        self._ws_watchdog_max_age = float(ws_age)
                 threshold_val = getattr(
                     sg_cfg,
                     "ws_watchdog_consecutive_stale",
@@ -809,7 +818,10 @@ class WebSocketCoordinator:
         except Exception:
             pass
         self._ws_watchdog_task = asyncio.create_task(self._ws_watchdog_loop())
-        logger.info("WS watchdog started")
+        logger.info(
+            f"WS watchdog started (max_age={self._ws_watchdog_max_age:.1f}s, "
+            f"threshold={self._ws_watchdog_stale_threshold})"
+        )
 
     async def _ws_watchdog_loop(self) -> None:
         while True:

@@ -973,12 +973,22 @@ class TrailingSLCoordinator:
             # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (07.02.2026): Обновление базового SL на бирже при движении TSL
             # Hybrid approach: синхронизируем биржевой SL с динамическим TSL
             try:
-                if stop_loss and hasattr(self, 'position_registry') and self.position_registry:
+                if (
+                    stop_loss
+                    and hasattr(self, "position_registry")
+                    and self.position_registry
+                ):
                     # Получаем metadata для доступа к exchange_sl_algo_id
                     metadata = await self.position_registry.get_metadata(symbol)
                     if metadata:
-                        algo_id = metadata.exchange_sl_algo_id  # dataclass attribute access
-                        if algo_id and self.client and hasattr(self.client, 'amend_algo_order'):
+                        algo_id = (
+                            metadata.exchange_sl_algo_id
+                        )  # dataclass attribute access
+                        if (
+                            algo_id
+                            and self.client
+                            and hasattr(self.client, "amend_algo_order")
+                        ):
                             # Обновляем биржевой SL под новый stop_loss
                             # Применяем safety buffer (используем текущий stop_loss без дополнительного расширения)
                             try:
@@ -1376,19 +1386,15 @@ class TrailingSLCoordinator:
                         exc_info=True,
                     )
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.01.2026): Валидация current_price перед вызовом should_close_position
-            # Если current_price = 0, это означает критическую проблему с получением данных
+            # ✅ ИСПРАВЛЕНИЕ (13.02.2026): Если цена=0 — пропускаем проверку TSL
+            # БЫЛО: падало на entry_price → создавало 0% PnL → триггерило timeout/emergency close
+            # ТЕПЕРЬ: просто пропускаем итерацию, позиция проверится в следующем цикле
             if current_price is None or current_price <= 0:
-                logger.error(
-                    f"❌ {symbol}: current_price={current_price} перед should_close_position - это критическая ошибка! "
-                    f"Используем entry_price={entry_price:.8f} вместо нее"
+                logger.warning(
+                    f"⚠️ {symbol}: price=0 перед should_close_position, пропускаем TSL проверку. "
+                    f"WS watchdog должен восстановить соединение."
                 )
-                current_price = entry_price if entry_price and entry_price > 0 else 0
-                if current_price <= 0:
-                    logger.error(
-                        f"❌ {symbol}: Не удалось получить валидную цену для проверки TSL, пропускаем проверку"
-                    )
-                    return
+                return
 
             should_close_by_sl, close_reason = tsl.should_close_position(
                 current_price,
@@ -1843,11 +1849,50 @@ class TrailingSLCoordinator:
                         current_price = await self._get_current_price(symbol)
 
                         if current_price is None or current_price == 0:
-                            # Если снова price=0, пропускаем проверку
+                            # Если снова price=0 — проверяем возраст данных для CRITICAL алерта
                             logger.error(
                                 f"❌ {symbol}: Не удалось получить валидную цену после повторной попытки "
                                 f"(price={current_price}), пропускаем проверку TSL"
                             )
+                            # ✅ FIX 3 (13.02.2026): CRITICAL алерт если позиция открыта при мертвом WS
+                            try:
+                                has_position = (
+                                    self.active_positions_ref
+                                    and symbol in self.active_positions_ref
+                                )
+                                if (
+                                    has_position
+                                    and hasattr(self, "position_registry")
+                                    and self.position_registry
+                                ):
+                                    dr = getattr(
+                                        self.position_registry, "data_registry", None
+                                    )
+                                    if dr:
+                                        md = await dr.get_market_data(symbol)
+                                        if md:
+                                            updated_at = getattr(
+                                                md, "updated_at", None
+                                            ) or (
+                                                md.get("updated_at")
+                                                if isinstance(md, dict)
+                                                else None
+                                            )
+                                            if updated_at:
+                                                from datetime import datetime
+
+                                                data_age = (
+                                                    datetime.now() - updated_at
+                                                ).total_seconds()
+                                                if data_age > 45:
+                                                    logger.critical(
+                                                        f"🚨 STALE DATA ALERT {symbol}: открытая позиция, "
+                                                        f"данные устарели на {data_age:.0f}с! "
+                                                        f"WS watchdog должен сделать реконнект. "
+                                                        f"Проверьте логи watchdog."
+                                                    )
+                            except Exception:
+                                pass
                             continue
 
                     if current_price and current_price > 0:
