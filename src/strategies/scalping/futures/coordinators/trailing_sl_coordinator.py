@@ -1230,66 +1230,36 @@ class TrailingSLCoordinator:
                         else 0.0
                     )
                     if current_price <= 0:
-                        # Если snapshot недоступен, используем entry_price как fallback.
-                        entry_price_fallback = 0.0
-                        if isinstance(position, dict):
-                            try:
-                                entry_price_fallback = float(
-                                    position.get("entry_price")
-                                    or position.get("avgPx")
-                                    or 0.0
-                                )
-                            except (TypeError, ValueError):
-                                entry_price_fallback = 0.0
-                        elif position and hasattr(position, "entry_price"):
-                            try:
-                                entry_price_fallback = float(
-                                    position.entry_price or 0.0
-                                )
-                            except (TypeError, ValueError):
-                                entry_price_fallback = 0.0
+                        logger.error(
+                            f"❌ {symbol}: Snapshot цены недоступен, пропускаем проверку ExitDecisionCoordinator в этом цикле"
+                        )
+                        exit_decision = None
+                        current_price = 0.0
 
-                        if entry_price_fallback > 0:
-                            logger.error(
-                                f"❌ {symbol}: Snapshot цены недоступен, используем entry_price={entry_price_fallback} как fallback"
+                    if current_price > 0:
+                        # Получаем режим
+                        regime = "ranging"
+                        if self.signal_generator and hasattr(
+                            self.signal_generator, "regime_managers"
+                        ):
+                            regime_manager = self.signal_generator.regime_managers.get(
+                                symbol
                             )
-                            current_price = entry_price_fallback
-                            self._remember_price_snapshot(
+                            if regime_manager:
+                                regime = (
+                                    regime_manager.get_current_regime() or "ranging"
+                                )
+
+                        exit_decision = (
+                            await self.exit_decision_coordinator.analyze_position(
                                 symbol=symbol,
-                                price=current_price,
-                                source="ENTRY_FALLBACK",
-                                age=None,
+                                position=position,
+                                metadata=metadata,
+                                market_data=None,
+                                current_price=current_price,
+                                regime=regime,
                             )
-                        else:
-                            logger.error(
-                                f"❌ {symbol}: Критическая ошибка - не удалось получить валидную цену "
-                                "(snapshot и entry_price недоступны), пропускаем проверку ExitDecisionCoordinator"
-                            )
-                            # ❌ НЕ ИСПОЛЬЗУЕМ current_price = 0.0 - это приводит к profit=-100%
-                            # Вместо этого - пропускаем проверку ExitDecisionCoordinator и используем базовый TSL
-                            exit_decision = None
-
-                    # Получаем режим
-                    regime = "ranging"
-                    if self.signal_generator and hasattr(
-                        self.signal_generator, "regime_managers"
-                    ):
-                        regime_manager = self.signal_generator.regime_managers.get(
-                            symbol
                         )
-                        if regime_manager:
-                            regime = regime_manager.get_current_regime() or "ranging"
-
-                    exit_decision = (
-                        await self.exit_decision_coordinator.analyze_position(
-                            symbol=symbol,
-                            position=position,
-                            metadata=metadata,
-                            market_data=None,
-                            current_price=current_price,
-                            regime=regime,
-                        )
-                    )
                 except Exception as e:
                     logger.debug(
                         f"⚠️ TrailingSLCoordinator: Ошибка вызова ExitDecisionCoordinator для {symbol}: {e}"
@@ -1835,21 +1805,6 @@ class TrailingSLCoordinator:
             except Exception as e:
                 logger.debug(f"TSL snapshot fallback error for {symbol}: {e}")
 
-        current_price = await self._get_current_price(symbol)
-        if current_price and current_price > 0:
-            self._remember_price_snapshot(
-                symbol=symbol,
-                price=float(current_price),
-                source="TSL_FALLBACK",
-                age=None,
-            )
-            return {
-                "price": float(current_price),
-                "source": "TSL_FALLBACK",
-                "age": None,
-                "stale": False,
-                "rest_fallback": False,
-            }
         return None
 
     async def periodic_check(self):

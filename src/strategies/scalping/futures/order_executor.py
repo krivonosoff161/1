@@ -255,38 +255,27 @@ class FuturesOrderExecutor:
             # ✅ КРИТИЧНО (09.01.2026): Используем DataRegistry WebSocket вместо REST API!
             try:
                 if hasattr(self, "data_registry") and self.data_registry:
-                    market_data = await self.data_registry.get_market_data(symbol)
-                    if (
-                        market_data
-                        and hasattr(market_data, "current_tick")
-                        and market_data.current_tick
-                    ):
-                        if (
-                            hasattr(market_data.current_tick, "price")
-                            and market_data.current_tick.price > 0
-                        ):
-                            current_price_for_check = market_data.current_tick.price
-                            logger.debug(
-                                f"✅ OrderExecutor: WebSocket price for delta check: {current_price_for_check:.2f}"
+                    snapshot = await self.data_registry.get_decision_price_snapshot(
+                        symbol=symbol,
+                        client=self.client,
+                        max_age=3.0,
+                        allow_rest_fallback=True,
+                    )
+                    if snapshot:
+                        snap_price = float(snapshot.get("price") or 0.0)
+                        if snap_price > 0:
+                            current_price_for_check = snap_price
+                            snap_source = snapshot.get("source", "UNKNOWN")
+                            snap_age = snapshot.get("age")
+                            age_str = (
+                                f"{float(snap_age):.1f}s"
+                                if isinstance(snap_age, (int, float))
+                                else "N/A"
                             )
-                    # Fallback на свечу если WebSocket недоступен
-                    elif (
-                        market_data
-                        and hasattr(market_data, "ohlcv_data")
-                        and market_data.ohlcv_data
-                    ):
-                        current_price_for_check = market_data.ohlcv_data[-1].close
-                        logger.debug(
-                            f"⚠️ OrderExecutor: Using candle for delta check: {current_price_for_check:.2f}"
-                        )
-                # Fallback на REST API только если DataRegistry полностью недоступен
-                if current_price_for_check <= 0:
-                    price_limits = await self.client.get_price_limits(symbol)
-                    if price_limits:
-                        current_price_for_check = price_limits.get("current_price", 0)
-                        logger.warning(
-                            f"🔴 OrderExecutor: Fallback to REST API for delta check: {current_price_for_check:.2f}"
-                        )
+                            logger.debug(
+                                f"✅ OrderExecutor: decision snapshot for delta check {symbol}: "
+                                f"price={current_price_for_check:.2f}, source={snap_source}, age={age_str}"
+                            )
             except Exception as e:
                 logger.debug(
                     f"⚠️ Не удалось получить текущую цену для проверки дельты: {e}"
@@ -438,9 +427,7 @@ class FuturesOrderExecutor:
         try:
             order_executor_cfg = getattr(self.scalping_config, "order_executor", {})
             limit_cfg = (
-                order_executor_cfg.get("limit_order", {})
-                if order_executor_cfg
-                else {}
+                order_executor_cfg.get("limit_order", {}) if order_executor_cfg else {}
             )
             use_market = False
             if isinstance(limit_cfg, dict):

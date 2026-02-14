@@ -336,6 +336,20 @@ class FuturesSignalGenerator:
             self._force_rest_age_mult = float(
                 getattr(sg_cfg, "force_rest_age_mult", 2.0)
             )
+        if isinstance(sg_cfg, dict):
+            self._allow_candle_price_fallback = bool(
+                sg_cfg.get("allow_candle_price_fallback", False)
+            )
+            self._allow_price_limits_fallback = bool(
+                sg_cfg.get("allow_price_limits_fallback", False)
+            )
+        else:
+            self._allow_candle_price_fallback = bool(
+                getattr(sg_cfg, "allow_candle_price_fallback", False)
+            )
+            self._allow_price_limits_fallback = bool(
+                getattr(sg_cfg, "allow_price_limits_fallback", False)
+            )
 
     def set_data_registry(self, data_registry):
         """
@@ -468,11 +482,39 @@ class FuturesSignalGenerator:
         return False
 
     async def _refresh_market_data_from_rest(self, symbol: str) -> bool:
-        if not self.client or not self._allow_rest_for_ws:
+        if not self.client or not self._allow_rest_for_ws or not self.data_registry:
             return False
         now = time.time()
         last_ts = self._last_rest_update_ts.get(symbol, 0.0)
         if now - last_ts < self._rest_update_cooldown:
+            return False
+        self._last_rest_update_ts[symbol] = now
+        try:
+            ticker = await self.client.get_ticker(symbol)
+            if not ticker or not isinstance(ticker, dict):
+                return False
+            raw_price = (
+                ticker.get("last") or ticker.get("lastPx") or ticker.get("markPx")
+            )
+            if raw_price is None:
+                return False
+            price = float(raw_price)
+            if price <= 0:
+                return False
+            await self.data_registry.update_market_data(
+                symbol,
+                {
+                    "price": price,
+                    "last_price": price,
+                    "source": "REST",
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
+            self._forced_rest_logged.discard(symbol)
+            logger.debug(f"SignalGenerator: REST refresh for {symbol} at ${price:.4f}")
+            return True
+        except Exception as e:
+            logger.debug(f"SignalGenerator REST refresh failed for {symbol}: {e}")
             return False
 
     async def _should_force_rest_fallback(self, symbol: str, ws_max_age: float) -> bool:
@@ -490,7 +532,11 @@ class FuturesSignalGenerator:
         updated_at = market_data.get("updated_at")
         if not updated_at or not isinstance(updated_at, datetime):
             return False
-        age = (datetime.now() - updated_at).total_seconds()
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        else:
+            updated_at = updated_at.astimezone(timezone.utc)
+        age = (datetime.now(timezone.utc) - updated_at).total_seconds()
         force_after = max(
             float(ws_max_age) * self._force_rest_age_mult, self._force_rest_min_age
         )
@@ -507,31 +553,6 @@ class FuturesSignalGenerator:
             )
             self._forced_rest_logged.add(symbol)
         return True
-        self._last_rest_update_ts[symbol] = now
-        try:
-            ticker = await self.client.get_ticker(symbol)
-            if not ticker or not isinstance(ticker, dict):
-                return False
-            raw_price = ticker.get("last") or ticker.get("lastPx")
-            if raw_price is None:
-                return False
-            price = float(raw_price)
-            await self.data_registry.update_market_data(
-                symbol,
-                {
-                    "price": price,
-                    "last_price": price,
-                    "source": "REST",
-                    "updated_at": datetime.now(),
-                },
-            )
-            logger.debug(
-                f"✅ SignalGenerator: REST refresh for {symbol} at ${price:.4f}"
-            )
-            return True
-        except Exception as e:
-            logger.debug(f"⚠️ SignalGenerator REST refresh failed for {symbol}: {e}")
-            return False
 
     @staticmethod
     def _to_dict(raw: Any) -> Dict[str, Any]:
@@ -1712,6 +1733,7 @@ class FuturesSignalGenerator:
                                         snapshot_source == "REST"
                                         and age is not None
                                         and age <= 10.0
+                                        and self._allow_rest_for_ws
                                     ):
                                         logger.info(
                                             f"WS_STALE_SIGNAL_FALLBACK {symbol}: "
@@ -1720,9 +1742,9 @@ class FuturesSignalGenerator:
                                     else:
                                         logger.warning(
                                             f"WS_STALE_SIGNAL_FALLBACK {symbol}: "
-                                            f"no fresh WS price within {ws_max_age:.1f}s{extra}, continue with fallback data"
+                                            f"no fresh WS price within {ws_max_age:.1f}s{extra}, skip signal generation"
                                         )
-                                    # return []  # Временно отключено для тестирования
+                                        return []
                         except Exception as e:
                             logger.debug(
                                 f"SignalGenerator WS freshness check error for {symbol}: {e}"
@@ -2100,15 +2122,23 @@ class FuturesSignalGenerator:
 
         # ✅ ПРИОРИТЕТ 2: Цена из свечи (fallback_price) - быстро, но может быть устаревшей
         if (
-            fallback_price
+            self._allow_candle_price_fallback
+            and fallback_price
             and isinstance(fallback_price, (int, float))
             and float(fallback_price) > 0
         ):
+            logger.warning(
+                f"SignalGenerator: using candle fallback price for {symbol}: {float(fallback_price):.4f}"
+            )
             return float(fallback_price)
 
         # ✅ ПРИОРИТЕТ 3: API запрос (только если нет других источников) - МЕДЛЕННО
         try:
-            if self.client and hasattr(self.client, "get_price_limits"):
+            if (
+                self._allow_price_limits_fallback
+                and self.client
+                and hasattr(self.client, "get_price_limits")
+            ):
                 price_limits = await self.client.get_price_limits(symbol)
                 if price_limits and isinstance(price_limits, dict):
                     current_price = price_limits.get("current_price", 0)
@@ -2125,9 +2155,8 @@ class FuturesSignalGenerator:
         except Exception as e:
             logger.debug(f"⚠️ Не удалось получить цену через API для {symbol}: {e}")
 
-        # ✅ ФИНАЛЬНЫЙ FALLBACK: Возвращаем fallback_price или 0.0
-        # Всегда возвращаем float, никогда None
-        return float(fallback_price) if fallback_price else 0.0
+        # Без свежего snapshot не торгуем.
+        return 0.0
 
     def _adjust_price_for_slippage(self, symbol: str, price: float, side: str) -> float:
         """

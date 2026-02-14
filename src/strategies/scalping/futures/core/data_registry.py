@@ -599,6 +599,17 @@ class DataRegistry:
                                 "price": fresh_price,
                                 "timestamp": datetime.now(),
                             }
+                            try:
+                                await self.update_market_data(
+                                    symbol,
+                                    {
+                                        "price": fresh_price,
+                                        "last_price": fresh_price,
+                                        "source": "REST_FALLBACK",
+                                    },
+                                )
+                            except Exception:
+                                pass
 
                             # ✅ Увеличиваем счетчик fallback
                             self._rest_fallback_counter[symbol] = (
@@ -660,16 +671,23 @@ class DataRegistry:
         async with self._lock:
             md = self._market_data.get(symbol, {})
             updated_at = md.get("updated_at")
-            price = md.get("price") or md.get("last_price")
+            price = self._to_positive_float(md.get("price") or md.get("last_price"))
+            source = str(md.get("source", "UNKNOWN")).upper()
+            ws_source_ok = source == "WEBSOCKET" or source.startswith("WS")
 
             if updated_at and isinstance(updated_at, datetime) and price:
                 age = (datetime.now() - updated_at).total_seconds()
-                if age <= max_age:
+                if age <= max_age and ws_source_ok:
                     logger.debug(
                         f"✅ SignalGenerator: Используем WebSocket цену для {symbol}: "
                         f"${price:.4f} (age={age:.1f}s)"
                     )
                     return price
+                if age <= max_age and not ws_source_ok:
+                    logger.warning(
+                        f"⚠️ SignalGenerator: цена для {symbol} свежая по времени (age={age:.1f}s), "
+                        f"но источник не WebSocket (source={source}), fallback на REST API"
+                    )
                 else:
                     logger.warning(
                         f"⚠️ SignalGenerator: WebSocket цена для {symbol} устарела на {age:.1f}s (>{max_age:.1f}s), "

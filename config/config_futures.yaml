@@ -102,6 +102,8 @@ scalping:
         min_bars: 2
   signal_generator:
     allow_rest_for_ws: false
+    allow_candle_price_fallback: false
+    allow_price_limits_fallback: false
     rest_update_cooldown: 1.0
     # WebSocket watchdog параметры для предотвращения ложных reconnect
     ws_fresh_max_age: 30.0  # Для проверки входов: OKX шлет тикеры каждые 7-20 сек, 30s = достаточно
@@ -328,6 +330,17 @@ scalping:
     taker_fee_rate: 0.0005  # ✅ ЗАДАЧА #10: Taker комиссия 0.05% (для MARKET ордеров)
     slippage_buffer_percent: 0.15  # ✅ НОВОЕ: Буфер на slippage в процентах от маржи (0.15% = 0.0015)
     tp_buffer_percent: 0.1  # ✅ НОВОЕ: Дополнительный буфер для TP в процентах от маржи (0.1% = 0.001)
+
+  # Единый gate перед закрытием позиций (не фиксируем микроприбыль после комиссии).
+  exit_guard:
+    stale_thresholds:
+      entry: 3.0
+      exit_normal: 5.0
+      exit_critical: 10.0
+      monitoring: 15.0
+    fee_rate_round_trip: 0.0010
+    min_gross_edge: 0.0003
+    min_net_profit: 0.0005
 
   # ✅ НОВОЕ: Profit Drawdown Protection - защита от отката прибыли
   profit_drawdown:
@@ -1564,6 +1577,8 @@ signal_generator:
     ws_watchdog_consecutive_stale: 2  # 🔥 ИСПРАВЛЕНО 13.02.2026: было 5 (55s!), теперь 2 (10s max)
     ws_signal_grace_period: 10.0
     allow_rest_for_ws: false
+    allow_candle_price_fallback: false
+    allow_price_limits_fallback: false
     adx_blocking:
       allow_countertrend_on_price_action: true
       min_confidence_to_block: 0.65

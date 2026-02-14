@@ -4835,6 +4835,85 @@ class FuturesScalpingOrchestrator:
                 except Exception:
                     pass
 
+        if (
+            payload.get("gross_pnl_pct") is None
+            or payload.get("net_pnl_pct") is None
+            or payload.get("pnl_pct") is None
+        ):
+            pos = payload.get("position_data")
+            current_price = payload.get("price")
+            if (
+                isinstance(pos, dict)
+                and isinstance(current_price, (int, float))
+                and float(current_price) > 0
+            ):
+                try:
+                    entry_price = float(
+                        pos.get("entry_price")
+                        or pos.get("avgPx")
+                        or pos.get("avg_price")
+                        or 0.0
+                    )
+                except (TypeError, ValueError):
+                    entry_price = 0.0
+
+                if entry_price > 0:
+                    side_raw = str(
+                        pos.get("side")
+                        or pos.get("posSide")
+                        or pos.get("position_side")
+                        or "long"
+                    ).lower()
+                    is_short = side_raw in {"short", "sell"}
+
+                    try:
+                        leverage = float(
+                            pos.get("leverage")
+                            or pos.get("lever")
+                            or getattr(self.scalping_config, "leverage", 1.0)
+                            or 1.0
+                        )
+                    except (TypeError, ValueError):
+                        leverage = 1.0
+                    leverage = max(1.0, leverage)
+
+                    gross_move = (
+                        (entry_price - float(current_price)) / entry_price
+                        if is_short
+                        else (float(current_price) - entry_price) / entry_price
+                    )
+                    gross_pnl_frac = gross_move * leverage
+
+                    fee_round_trip = 0.001
+                    commission_cfg = getattr(self.scalping_config, "commission", None)
+                    try:
+                        if isinstance(commission_cfg, dict):
+                            fee_round_trip = float(
+                                commission_cfg.get(
+                                    "trading_fee_rate",
+                                    commission_cfg.get(
+                                        "taker_fee_rate", fee_round_trip
+                                    ),
+                                )
+                            )
+                        elif commission_cfg is not None:
+                            fee_round_trip = float(
+                                getattr(
+                                    commission_cfg,
+                                    "trading_fee_rate",
+                                    getattr(
+                                        commission_cfg, "taker_fee_rate", fee_round_trip
+                                    ),
+                                )
+                            )
+                    except (TypeError, ValueError):
+                        fee_round_trip = 0.001
+
+                    net_pnl_frac = gross_pnl_frac - (fee_round_trip * leverage)
+                    payload.setdefault("gross_pnl_pct", gross_pnl_frac * 100.0)
+                    payload.setdefault("pnl_pct", gross_pnl_frac * 100.0)
+                    payload.setdefault("net_pnl_pct", net_pnl_frac * 100.0)
+
         return payload
 
     @staticmethod

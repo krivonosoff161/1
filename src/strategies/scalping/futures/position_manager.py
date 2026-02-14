@@ -1045,8 +1045,39 @@ class FuturesPositionManager:
                             pass
 
                 # Если нашли время открытия, проверяем задержку
+                position_open_ts = None
                 if position_open_time:
-                    time_since_open = time.time() - position_open_time
+                    if isinstance(position_open_time, datetime):
+                        if position_open_time.tzinfo is None:
+                            position_open_time = position_open_time.replace(
+                                tzinfo=timezone.utc
+                            )
+                        else:
+                            position_open_time = position_open_time.astimezone(
+                                timezone.utc
+                            )
+                        position_open_ts = position_open_time.timestamp()
+                    elif isinstance(position_open_time, (int, float)):
+                        position_open_ts = float(position_open_time)
+                    elif isinstance(position_open_time, str):
+                        try:
+                            position_open_ts = float(position_open_time)
+                        except (TypeError, ValueError):
+                            try:
+                                parsed_dt = datetime.fromisoformat(
+                                    position_open_time.replace("Z", "+00:00")
+                                )
+                                if parsed_dt.tzinfo is None:
+                                    parsed_dt = parsed_dt.replace(tzinfo=timezone.utc)
+                                position_open_ts = parsed_dt.timestamp()
+                            except Exception:
+                                position_open_ts = None
+
+                    if not position_open_ts:
+                        position_open_ts = None
+
+                if position_open_time and position_open_ts:
+                    time_since_open = time.time() - position_open_ts
                     min_check_delay = 10.0  # Минимум 10 секунд перед проверкой маржи
                     if time_since_open < min_check_delay:
                         logger.debug(
