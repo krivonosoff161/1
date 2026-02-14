@@ -1805,6 +1805,25 @@ class TrailingSLCoordinator:
             except Exception as e:
                 logger.debug(f"TSL snapshot fallback error for {symbol}: {e}")
 
+        # Локальный fallback для случаев, когда DataRegistry snapshot недоступен
+        # (например, сразу после reconnection или временного провала WS/REST).
+        fallback_price = await self._get_current_price(symbol)
+        if fallback_price and fallback_price > 0:
+            self._remember_price_snapshot(
+                symbol=symbol,
+                price=float(fallback_price),
+                source="TSL_LOCAL_FALLBACK",
+                age=None,
+            )
+            return {
+                "price": float(fallback_price),
+                "source": "TSL_LOCAL_FALLBACK",
+                "age": None,
+                "updated_at": datetime.now(),
+                "stale": False,
+                "rest_fallback": True,
+            }
+
         return None
 
     async def periodic_check(self):

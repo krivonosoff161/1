@@ -3018,6 +3018,12 @@ class FuturesSignalGenerator:
             current_price = await self._get_current_market_price(
                 symbol, candle_close_price
             )
+            if current_price <= 0:
+                logger.warning(
+                    f"⚠️ {symbol}: нет валидной текущей цены для генерации сигналов (current_price={current_price}), "
+                    "пропускаем символ в этом цикле"
+                )
+                return []
 
             # ✅ ОПТИМИЗАЦИЯ: Убрано избыточное DEBUG логирование всех индикаторов (экономия ~30% логов)
             # Логируем только при генерации реальных сигналов (INFO уровень)

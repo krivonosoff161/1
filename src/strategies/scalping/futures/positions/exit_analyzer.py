@@ -2414,6 +2414,18 @@ class ExitAnalyzer:
         Returns:
             True если обнаружен разворот, False если нет
         """
+        position_side = str(position_side or "").strip().lower()
+        if position_side in ("buy",):
+            position_side = "long"
+        elif position_side in ("sell",):
+            position_side = "short"
+
+        if position_side not in ("long", "short"):
+            logger.warning(
+                f"⚠️ [REVERSAL_CHECK] {symbol}: невалидный side={position_side}, пропускаем проверку разворота"
+            )
+            return False
+
         reversal_detected = False
         order_flow_reversal = False
         mtf_reversal = False
@@ -2487,13 +2499,66 @@ class ExitAnalyzer:
         mtf_filter = self._get_mtf_filter()
         if mtf_filter and not reversal_detected:
             try:
-                # MTF фильтр может показывать разворот тренда на более высоком таймфрейме
-                # Пока упрощенная проверка - можно расширить позже
-                logger.info(
-                    f"🔍 [REVERSAL_CHECK] {symbol} {position_side.upper()}: MTF фильтр доступен, "
-                    f"но проверка разворота еще не реализована (TODO)"
+                signal_side = "LONG" if position_side == "long" else "SHORT"
+                htf_trend = None
+                mtf_reason = None
+                mtf_confirmed = None
+                mtf_blocked = None
+
+                if hasattr(mtf_filter, "check_confirmation"):
+                    mtf_result = await mtf_filter.check_confirmation(
+                        symbol, signal_side
+                    )
+                    htf_trend = getattr(mtf_result, "htf_trend", None)
+                    mtf_reason = getattr(mtf_result, "reason", None)
+                    mtf_confirmed = bool(getattr(mtf_result, "confirmed", False))
+                    mtf_blocked = bool(getattr(mtf_result, "blocked", False))
+                elif hasattr(mtf_filter, "check_mtf_confirmation_async"):
+                    try:
+                        mtf_result = await mtf_filter.check_mtf_confirmation_async(
+                            symbol, signal_side
+                        )
+                    except TypeError:
+                        mtf_result = await mtf_filter.check_mtf_confirmation_async(
+                            symbol, signal_side, None, None
+                        )
+                    if isinstance(mtf_result, dict):
+                        htf_trend = mtf_result.get("htf_trend")
+                        mtf_reason = mtf_result.get("reason")
+                        mtf_confirmed = bool(mtf_result.get("confirmed", False))
+                        mtf_blocked = bool(mtf_result.get("blocked", False))
+                    else:
+                        mtf_confirmed = bool(mtf_result)
+                elif hasattr(mtf_filter, "_get_htf_candles") and hasattr(
+                    mtf_filter, "_calculate_trend"
+                ):
+                    candles = await mtf_filter._get_htf_candles(symbol)
+                    if candles:
+                        htf_trend = mtf_filter._calculate_trend(candles)
+                        mtf_reason = "htf_trend_fallback"
+
+                htf_trend_norm = (
+                    str(htf_trend).strip().upper() if htf_trend is not None else None
                 )
-                pass  # TODO: Реализовать проверку MTF разворота
+                mtf_reversal = (
+                    (position_side == "long" and htf_trend_norm == "BEARISH")
+                    or (position_side == "short" and htf_trend_norm == "BULLISH")
+                    or bool(mtf_blocked)
+                )
+
+                if mtf_reversal:
+                    reversal_detected = True
+                    logger.info(
+                        f"🔄 [REVERSAL_CHECK] {symbol} {position_side.upper()}: MTF разворот ОБНАРУЖЕН | "
+                        f"htf_trend={htf_trend_norm}, blocked={bool(mtf_blocked)}, "
+                        f"confirmed={bool(mtf_confirmed)}, reason={mtf_reason or 'n/a'}"
+                    )
+                else:
+                    logger.info(
+                        f"✅ [REVERSAL_CHECK] {symbol} {position_side.upper()}: MTF разворот НЕ обнаружен | "
+                        f"htf_trend={htf_trend_norm or 'N/A'}, blocked={bool(mtf_blocked)}, "
+                        f"confirmed={bool(mtf_confirmed)}, reason={mtf_reason or 'n/a'}"
+                    )
             except Exception as e:
                 logger.warning(
                     f"⚠️ [REVERSAL_CHECK] {symbol} {position_side.upper()}: Ошибка проверки MTF разворота: {e}"
@@ -3398,10 +3463,34 @@ class ExitAnalyzer:
                     adx_value = self.fast_adx.get_current_adx()
                 mtf_filter = self._get_mtf_filter()
                 if mtf_filter:
-                    mtf_result = await mtf_filter.check_mtf_confirmation_async(
-                        symbol, position_side, current_price, market_data
+                    signal_side = (
+                        "LONG"
+                        if str(position_side or "").lower() in ("long", "buy")
+                        else "SHORT"
                     )
-                    mtf_signal = "confirm" if mtf_result else "block"
+                    if hasattr(mtf_filter, "check_confirmation"):
+                        mtf_result = await mtf_filter.check_confirmation(
+                            symbol, signal_side
+                        )
+                        htf_trend = getattr(mtf_result, "htf_trend", None)
+                        if htf_trend:
+                            mtf_signal = str(htf_trend).lower()
+                        elif bool(getattr(mtf_result, "confirmed", False)):
+                            mtf_signal = "confirm"
+                        elif bool(getattr(mtf_result, "blocked", False)):
+                            mtf_signal = "block"
+                        else:
+                            mtf_signal = "neutral"
+                    elif hasattr(mtf_filter, "check_mtf_confirmation_async"):
+                        try:
+                            mtf_result = await mtf_filter.check_mtf_confirmation_async(
+                                symbol, signal_side
+                            )
+                        except TypeError:
+                            mtf_result = await mtf_filter.check_mtf_confirmation_async(
+                                symbol, signal_side, current_price, market_data
+                            )
+                        mtf_signal = "confirm" if mtf_result else "block"
             except Exception:
                 pass
 

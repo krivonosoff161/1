@@ -7097,7 +7097,13 @@ class FuturesPositionManager:
                 return None
 
             current_size = float(pos_data.get("pos", "0"))
-            side = pos_data.get("posSide", "long")
+            raw_side = str(pos_data.get("posSide", "") or "").lower()
+            side = self._resolve_pos_side(pos_data)
+            if raw_side not in ("long", "short") and side in ("long", "short"):
+                logger.debug(
+                    f"ℹ️ Partial close {symbol}: posSide={raw_side or 'N/A'} нормализован в {side} "
+                    f"(size={current_size})"
+                )
 
             # Рассчитываем размер для закрытия
             close_size_contracts = abs(current_size) * fraction
@@ -7186,7 +7192,7 @@ class FuturesPositionManager:
             remaining_size_coins = remaining_size_contracts * ct_val
 
             # Определение стороны закрытия
-            close_side = "sell" if side.lower() == "long" else "buy"
+            close_side = "sell" if side == "long" else "buy"
 
             # Получаем текущую цену для расчета PnL
             entry_price = float(pos_data.get("avgPx", "0"))
@@ -7272,7 +7278,7 @@ class FuturesPositionManager:
                         )
 
                     # Рассчитываем чистую прибыль partial закрытия
-                    if side.lower() == "long":
+                    if side == "long":
                         partial_pnl = close_size_coins * (current_price - entry_price)
                     else:  # short
                         partial_pnl = close_size_coins * (entry_price - current_price)
@@ -7342,7 +7348,7 @@ class FuturesPositionManager:
                 )
 
                 # Рассчитываем PnL для закрытой части
-                if side.lower() == "long":
+                if side == "long":
                     partial_pnl = (current_price - entry_price) * close_size_coins
                 else:
                     partial_pnl = (entry_price - current_price) * close_size_coins
