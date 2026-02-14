@@ -45,7 +45,9 @@ class PositionMetadata:
     scaling_history: Optional[
         List[Dict[str, Any]]
     ] = None  # ✅ НОВОЕ: История добавлений к позиции
-    exchange_sl_algo_id: Optional[str] = None  # ✅ НОВОЕ (07.02.2026): algoId базового SL на бирже (Phase 3)
+    exchange_sl_algo_id: Optional[
+        str
+    ] = None  # ✅ НОВОЕ (07.02.2026): algoId базового SL на бирже (Phase 3)
 
     def to_dict(self) -> Dict[str, Any]:
         """Конвертация в словарь для сериализации"""
@@ -469,3 +471,12 @@ class PositionRegistry:
             Копия словаря всех позиций
         """
         return {k: v.copy() for k, v in self._positions.items()}
+
+    def get_all_positions_ref_sync(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Return a live reference to internal positions map.
+
+        ⚠️ Использовать только в слоях оркестрации, где нужен единый shared-state
+        между модулями. Для внешних read-only сценариев используйте get_all_positions_sync().
+        """
+        return self._positions

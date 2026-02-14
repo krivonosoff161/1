@@ -14,6 +14,38 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """YAML loader that rejects duplicate mapping keys."""
+
+
+def _construct_mapping_no_duplicates(loader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            line = key_node.start_mark.line + 1
+            raise ValueError(f"Duplicate YAML key '{key}' at line {line}")
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_mapping_no_duplicates,
+)
+
+
+def load_yaml_strict(stream) -> Dict[str, Any]:
+    """
+    Load YAML with duplicate-key protection.
+
+    Raises:
+        ValueError: when duplicate keys are found.
+    """
+    data = yaml.load(stream, Loader=_UniqueKeyLoader)  # nosec B506
+    return data or {}
+
+
 class APIConfig(BaseModel):
     api_key: str = Field(..., description="OKX API Key")
     api_secret: str = Field(..., description="OKX API Secret")
@@ -220,7 +252,6 @@ class ScalpingConfig(BaseModel):
 
     # Balance Profiles - адаптивные параметры по размеру баланса
     balance_profiles: Dict[str, BalanceProfile] = Field(default_factory=dict)
-    
 
     # ✅ КРИТИЧЕСКОЕ: Signal Generator конфигурация (fail-fast)
     signal_generator: Dict[str, Any] = Field(default_factory=dict)
@@ -253,13 +284,13 @@ class ScalpingConfig(BaseModel):
     balance_checker: Dict = Field(default_factory=dict)
     adaptive_regime_enabled: bool = Field(default=False)
     adaptive_regime: AdaptiveRegimeConfig = Field(default_factory=AdaptiveRegimeConfig)
-    
+
     # ✅ НОВОЕ: Order Executor конфигурация
     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем Dict с default_factory=dict
     # Pydantic v2 с extra="allow" должен загружать дополнительные поля из YAML
     order_executor: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Конфигурация order_executor с limit_order и by_symbol/by_regime"
+        description="Конфигурация order_executor с limit_order и by_symbol/by_regime",
     )
 
 
@@ -602,7 +633,7 @@ class BotConfig(BaseModel):
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
         with open(config_file, "r", encoding="utf-8") as f:
-            raw_config = yaml.safe_load(f)
+            raw_config = load_yaml_strict(f)
 
         # Replace environment variable placeholders
         raw_config = cls._substitute_env_vars(raw_config)
@@ -622,7 +653,7 @@ class BotConfig(BaseModel):
                 pass  # Pydantic должен загрузить автоматически с extra="allow"
 
         config_obj = cls(**raw_config)
-        
+
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если order_executor или signal_generator не загрузились через Pydantic,
         # загружаем их вручную из raw_config
         if hasattr(config_obj, "scalping") and "scalping" in raw_config:
@@ -631,28 +662,45 @@ class BotConfig(BaseModel):
                 order_executor_raw = scalping_raw["order_executor"]
                 # Проверяем, загрузился ли order_executor в scalping_config
                 # Проверяем не только None, но и пустой словарь {}
-                order_executor_current = getattr(config_obj.scalping, "order_executor", None)
-                if order_executor_current is None or (isinstance(order_executor_current, dict) and len(order_executor_current) == 0):
+                order_executor_current = getattr(
+                    config_obj.scalping, "order_executor", None
+                )
+                if order_executor_current is None or (
+                    isinstance(order_executor_current, dict)
+                    and len(order_executor_current) == 0
+                ):
                     # Если не загрузился или пустой, устанавливаем вручную
-                    logger.debug(f"✅ order_executor вручную устанавливается в scalping_config (было: {order_executor_current})")
+                    logger.debug(
+                        f"✅ order_executor вручную устанавливается в scalping_config (было: {order_executor_current})"
+                    )
                     if isinstance(config_obj.scalping, dict):
                         config_obj.scalping["order_executor"] = order_executor_raw
                     else:
                         # Для Pydantic модели устанавливаем через setattr (более надежно, чем __dict__)
-                        setattr(config_obj.scalping, "order_executor", order_executor_raw)
-                        logger.debug(f"✅ order_executor установлен через setattr: {type(getattr(config_obj.scalping, 'order_executor', None))}")
-            
+                        setattr(
+                            config_obj.scalping, "order_executor", order_executor_raw
+                        )
+                        logger.debug(
+                            f"✅ order_executor установлен через setattr: {type(getattr(config_obj.scalping, 'order_executor', None))}"
+                        )
+
             # Аналогичная обработка для signal_generator
             if "signal_generator" in scalping_raw:
                 signal_generator_raw = scalping_raw["signal_generator"]
                 # Всегда устанавливаем, даже если пустой
-                logger.debug(f"✅ signal_generator найден в raw_config, keys: {list(signal_generator_raw.keys()) if isinstance(signal_generator_raw, dict) else 'not dict'}")
+                logger.debug(
+                    f"✅ signal_generator найден в raw_config, keys: {list(signal_generator_raw.keys()) if isinstance(signal_generator_raw, dict) else 'not dict'}"
+                )
                 setattr(config_obj.scalping, "signal_generator", signal_generator_raw)
-                logger.debug(f"✅ signal_generator установлен, проверка: {getattr(config_obj.scalping, 'signal_generator', {}).get('ws_fresh_max_age', 'NOT SET')}")
-                logger.debug(f"✅ signal_generator установлен: {type(getattr(config_obj.scalping, 'signal_generator', None))}")
+                logger.debug(
+                    f"✅ signal_generator установлен, проверка: {getattr(config_obj.scalping, 'signal_generator', {}).get('ws_fresh_max_age', 'NOT SET')}"
+                )
+                logger.debug(
+                    f"✅ signal_generator установлен: {type(getattr(config_obj.scalping, 'signal_generator', None))}"
+                )
             else:
                 logger.debug("❌ signal_generator не найден в raw_config")
-        
+
         return config_obj
 
     @staticmethod

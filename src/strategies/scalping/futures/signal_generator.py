@@ -3433,18 +3433,11 @@ class FuturesSignalGenerator:
             min_confidence_to_block = 0.65
             try:
                 sg_cfg = getattr(self.scalping_config, "signal_generator", {})
-                logger.warning(f"[DEBUG] sg_cfg type: {type(sg_cfg)}, value: {sg_cfg}")
                 if isinstance(sg_cfg, dict):
                     adx_block_cfg = sg_cfg.get("adx_blocking")
                 else:
                     adx_block_cfg = getattr(sg_cfg, "adx_blocking", None)
-                logger.warning(
-                    f"[DEBUG] adx_block_cfg type: {type(adx_block_cfg)}, value: {adx_block_cfg}"
-                )
                 if not adx_block_cfg:
-                    logger.error(
-                        f"[DEBUG] adx_block_cfg is missing or empty! sg_cfg: {sg_cfg}"
-                    )
                     raise ValueError(
                         "❌ adx_blocking config section is required in signal_generator config (strict orchestrator-only mode)"
                     )
@@ -3453,9 +3446,6 @@ class FuturesSignalGenerator:
                         "allow_countertrend_on_price_action" not in adx_block_cfg
                         or "min_confidence_to_block" not in adx_block_cfg
                     ):
-                        logger.error(
-                            f"[DEBUG] adx_block_cfg missing required keys! adx_block_cfg: {adx_block_cfg}"
-                        )
                         raise ValueError(
                             "❌ Both allow_countertrend_on_price_action and min_confidence_to_block must be set in adx_blocking config (strict orchestrator-only mode)"
                         )
@@ -3470,9 +3460,6 @@ class FuturesSignalGenerator:
                         hasattr(adx_block_cfg, "allow_countertrend_on_price_action")
                         and hasattr(adx_block_cfg, "min_confidence_to_block")
                     ):
-                        logger.error(
-                            f"[DEBUG] adx_block_cfg object missing required attributes! adx_block_cfg: {adx_block_cfg}"
-                        )
                         raise ValueError(
                             "❌ Both allow_countertrend_on_price_action and min_confidence_to_block must be set in adx_blocking config (strict orchestrator-only mode)"
                         )
@@ -3482,12 +3469,13 @@ class FuturesSignalGenerator:
                     min_confidence_to_block = float(
                         getattr(adx_block_cfg, "min_confidence_to_block")
                     )
-                logger.warning(
-                    f"[DEBUG] allow_countertrend_on_price_action: {allow_countertrend_on_price_action}, min_confidence_to_block: {min_confidence_to_block}"
+                logger.debug(
+                    "ADX block config loaded: "
+                    f"allow_countertrend_on_price_action={allow_countertrend_on_price_action}, "
+                    f"min_confidence_to_block={min_confidence_to_block}"
                 )
             except Exception as e:
                 logger.error(f"❌ Ошибка инициализации adx_blocking config: {e}")
-                logger.error(f"[DEBUG] Exception details: {e}")
                 raise
 
             filtered_signals = []

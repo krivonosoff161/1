@@ -198,16 +198,42 @@ class PositionMonitor:
                 market_data = await self.data_registry.get_market_data(symbol)
                 if market_data is None:
                     if not self.allow_rest_fallback:
+                        # Для входов REST fallback может быть запрещен, но для exit-пайплайна
+                        # нельзя глушить анализ полностью: пробуем получить свежую цену через
+                        # специализированный exit-fallback.
+                        rest_exit_price = None
+                        if self.data_registry and self.client:
+                            try:
+                                rest_exit_price = await self.data_registry.get_fresh_price_for_exit_analyzer(
+                                    symbol=symbol,
+                                    client=self.client,
+                                    max_age=15.0,
+                                )
+                            except Exception as e:
+                                logger.debug(
+                                    f"⚠️ PositionMonitor: exit REST fallback error for {symbol}: {e}"
+                                )
+                        if rest_exit_price and rest_exit_price > 0:
+                            market_data = {
+                                "price": float(rest_exit_price),
+                                "source": "REST_EXIT_FALLBACK",
+                            }
+                            logger.warning(
+                                f"⚠️ PositionMonitor: Нет свежих WS данных для {symbol}, "
+                                f"используем REST_EXIT_FALLBACK={rest_exit_price:.6f} для exit-анализа"
+                            )
+                        else:
+                            logger.warning(
+                                f"⚠️ PositionMonitor: Нет свежих рыночных данных для {symbol} (market_data is None), "
+                                f"fallback запрещен и REST exit fallback недоступен — пропускаем анализ позиции"
+                            )
+                            return None
+                    if market_data is None:
                         logger.warning(
                             f"⚠️ PositionMonitor: Нет свежих рыночных данных для {symbol} (market_data is None), "
-                            f"fallback запрещен — пропускаем анализ позиции"
+                            f"продолжаем с fallback ценой"
                         )
-                        return None
-                    logger.warning(
-                        f"⚠️ PositionMonitor: Нет свежих рыночных данных для {symbol} (market_data is None), "
-                        f"продолжаем с fallback ценой"
-                    )
-                    market_data = {}
+                        market_data = {}
                 # 🔴 BUG #10 FIX: 4-уровневый fallback для current_price
                 (
                     current_price,

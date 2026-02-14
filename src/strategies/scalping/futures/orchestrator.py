@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from src.clients.futures_client import OKXFuturesClient
-from src.config import BotConfig
+from src.config import BotConfig, load_yaml_strict
 
 # Futures-специфичные модули безопасности
 from src.strategies.modules.liquidation_guard import LiquidationGuard
@@ -138,8 +138,6 @@ class FuturesScalpingOrchestrator:
         # exit_params находится в корне YAML, но не в BotConfig модели
         from pathlib import Path
 
-        import yaml
-
         raw_config_dict = {}
         try:
             # Пробуем найти config файл
@@ -152,7 +150,7 @@ class FuturesScalpingOrchestrator:
                 config_file = Path(config_path)
                 if config_file.exists():
                     with open(config_file, "r", encoding="utf-8") as f:
-                        raw_config_dict = yaml.safe_load(f) or {}
+                        raw_config_dict = load_yaml_strict(f)
                     logger.debug(f"✅ Raw config загружен из {config_path}")
                     break
         except Exception as e:
@@ -4807,7 +4805,20 @@ class FuturesScalpingOrchestrator:
 
         return payload
 
-    async def _position_exists(self, symbol: str) -> bool:
+    @staticmethod
+    def _has_nonzero_position_size(position: Optional[Dict[str, Any]]) -> bool:
+        """Robust size check for both normalized (size) and exchange (pos) payloads."""
+        if not isinstance(position, dict) or not position:
+            return False
+        raw_size = position.get("size", position.get("pos", 0))
+        try:
+            return abs(float(raw_size or 0.0)) > 1e-8
+        except (TypeError, ValueError):
+            return False
+
+    async def _position_exists(
+        self, symbol: str, decision_payload: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Быстрая проверка существования позиции (для race condition в ExitGuard).
 
@@ -4820,22 +4831,28 @@ class FuturesScalpingOrchestrator:
         Returns:
             bool: True если позиция существует, False иначе
         """
-        # 1. Проверка active_positions (мгновенно, FRESH)
-        if symbol in self.active_positions:
-            pos = self.active_positions.get(symbol)
-            if pos and pos.get("size", 0) > 0:
+        # 1. Проверка позиции из decision payload (если есть)
+        if isinstance(decision_payload, dict):
+            payload_pos = decision_payload.get("position_data")
+            if self._has_nonzero_position_size(payload_pos):
                 return True
 
-        # 2. Проверка Registry (fallback, может отставать)
+        # 2. Проверка active_positions (мгновенно, FRESH)
+        if symbol in self.active_positions:
+            pos = self.active_positions.get(symbol)
+            if self._has_nonzero_position_size(pos):
+                return True
+
+        # 3. Проверка Registry (fallback, может отставать)
         if hasattr(self, "position_registry") and self.position_registry:
             try:
                 pos = await self.position_registry.get_position(symbol)
-                if pos and pos.get("size", 0) > 0:
+                if self._has_nonzero_position_size(pos):
                     return True
             except Exception:
                 pass
 
-        # 3. НЕ проверяем биржу здесь - слишком медленно
+        # 4. НЕ проверяем биржу здесь - слишком медленно
         return False
 
     async def _close_position(
@@ -4867,17 +4884,18 @@ class FuturesScalpingOrchestrator:
                 )
                 return
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверка существования позиции ПЕРЕД ExitGuard
-            # Это устраняет race condition где TP блокируется после того как SL уже закрыл позицию
-            if not await self._position_exists(symbol):
-                logger.debug(
-                    f"Position {symbol} already closed, skipping {reason} (race condition avoided)"
-                )
-                return
-
             decision_payload = await self._build_exit_payload(
                 symbol, reason, decision_payload
             )
+            # Важный момент: existence-check не блокирует close до ExitGuard.
+            # Иначе ложные отрицания (рассинхрон/формат size vs pos/short size<0)
+            # приводят к "подвисшим" позициям.
+            if not await self._position_exists(symbol, decision_payload):
+                logger.debug(
+                    f"Position {symbol} not confirmed locally before close ({reason}), "
+                    "proceeding to ExitGuard/resync"
+                )
+
             if hasattr(self, "exit_guard") and self.exit_guard:
                 can_close, block_reason = await self.exit_guard.check(
                     symbol=symbol, reason=reason, payload=decision_payload
@@ -4909,10 +4927,32 @@ class FuturesScalpingOrchestrator:
                         position = {}
 
                 if not position:
-                    logger.debug(
-                        f"⚠️ Позиция {symbol} уже закрыта или не найдена (reason={reason}), пропускаем"
-                    )
-                    return
+                    # Локальные реестры могут отстать. Делаем финальную проверку по бирже
+                    # перед тем как отказаться от close.
+                    try:
+                        exchange_positions = await self.client.get_positions(symbol)
+                    except Exception:
+                        exchange_positions = []
+
+                    exchange_position = None
+                    for p in exchange_positions or []:
+                        inst_id = p.get("instId", "")
+                        norm_inst = inst_id.replace("-SWAP", "")
+                        if norm_inst == symbol and self._has_nonzero_position_size(p):
+                            exchange_position = p
+                            break
+
+                    if exchange_position:
+                        position = exchange_position
+                        logger.warning(
+                            f"⚠️ Local state miss for {symbol} before close ({reason}), "
+                            "using exchange position snapshot"
+                        )
+                    else:
+                        logger.debug(
+                            f"⚠️ Позиция {symbol} уже закрыта или не найдена (reason={reason}), пропускаем"
+                        )
+                        return
 
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (23.01.2026): Проверяем флаг exchange_closed
                 # Если позиция уже закрыта на бирже (sync обнаружил), пропускаем закрытие
@@ -5360,20 +5400,16 @@ class FuturesScalpingOrchestrator:
     @property
     def active_positions(self) -> Dict[str, Dict[str, Any]]:
         """
-        ✅ ПРОКСИ к PositionRegistry для обратной совместимости.
+        ✅ Shared mutable positions map.
 
-        Возвращает все позиции из единого источника истины (PositionRegistry).
-        Это свойство обеспечивает обратную совместимость с существующим кодом,
-        который использует orchestrator.active_positions напрямую.
-
-        ⚠️ ВНИМАНИЕ: Для записи используйте position_registry.register_position()
-        Прямое присваивание в active_positions не синхронизирует данные!
+        Возвращает ЖИВУЮ ссылку на внутренний словарь PositionRegistry, чтобы все
+        модули работали с одним состоянием и не получали snapshot-копии.
 
         Returns:
-            Копия словаря всех позиций из PositionRegistry
+            Ссылка на словарь всех позиций
         """
         try:
-            return self.position_registry.get_all_positions_sync()
+            return self.position_registry.get_all_positions_ref_sync()
         except Exception as e:
             logger.error(
                 f"❌ Ошибка получения active_positions из PositionRegistry: {e}"
