@@ -109,14 +109,12 @@ class LiquidationProtector:
 
             # Рассчитываем цену ликвидации
             try:
-                liquidation_price = (
-                    await self.margin_calculator.calculate_liquidation_price(
-                        side=position_side,
-                        entry_price=entry_price,
-                        position_size=abs(position_size),
-                        equity=balance,
-                        leverage=None,  # Используется из конфига
-                    )
+                liquidation_price = self.margin_calculator.calculate_liquidation_price(
+                    side=position_side,
+                    entry_price=entry_price,
+                    position_size=abs(position_size),
+                    equity=balance,
+                    leverage=None,  # Используется из конфига
                 )
             except Exception as e:
                 logger.warning(

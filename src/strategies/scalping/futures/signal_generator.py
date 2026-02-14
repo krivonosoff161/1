@@ -1677,7 +1677,10 @@ class FuturesSignalGenerator:
                                         )
                                     )
                                     extra = ""
+                                    snapshot_source = None
+                                    age = None
                                     if data_snapshot:
+                                        snapshot_source = data_snapshot.get("source")
                                         updated_at = data_snapshot.get("updated_at")
                                         if isinstance(updated_at, datetime):
                                             if updated_at.tzinfo is None:
@@ -1702,13 +1705,23 @@ class FuturesSignalGenerator:
                                             f"{age:.1f}s" if age is not None else "N/A"
                                         )
                                         extra = (
-                                            f" source={data_snapshot.get('source')}"
+                                            f" source={snapshot_source}"
                                             f" age={age_str}"
                                         )
-                                    logger.warning(
-                                        f"WS_STALE_SIGNAL_BLOCK {symbol}: "
-                                        f"no fresh WS price within {ws_max_age:.1f}s{extra}, skip signals"
-                                    )
+                                    if (
+                                        snapshot_source == "REST"
+                                        and age is not None
+                                        and age <= 10.0
+                                    ):
+                                        logger.info(
+                                            f"WS_STALE_SIGNAL_FALLBACK {symbol}: "
+                                            f"no fresh WS price within {ws_max_age:.1f}s{extra}, continue with REST price"
+                                        )
+                                    else:
+                                        logger.warning(
+                                            f"WS_STALE_SIGNAL_FALLBACK {symbol}: "
+                                            f"no fresh WS price within {ws_max_age:.1f}s{extra}, continue with fallback data"
+                                        )
                                     # return []  # Временно отключено для тестирования
                         except Exception as e:
                             logger.debug(

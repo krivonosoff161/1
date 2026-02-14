@@ -300,8 +300,23 @@ class ExitDecisionCoordinator:
                         float(metadata.pnl) if metadata.pnl is not None else None
                     )
 
+            effective_price = float(current_price or 0.0)
+            if effective_price <= 0 and isinstance(position, dict):
+                effective_price = float(
+                    position.get("markPx")
+                    or position.get("mark_price")
+                    or position.get("current_price")
+                    or position.get("last")
+                    or 0.0
+                )
+            if effective_price <= 0:
+                logger.warning(
+                    f"⚠️ ExitDecisionCoordinator: пропуск TSL для {symbol} из-за невалидной цены (current_price={current_price})"
+                )
+                return None
+
             should_close, reason = trailing_stop.should_close_position(
-                current_price,
+                effective_price,
                 margin_used=margin_used,
                 unrealized_pnl=unrealized_pnl,
             )
@@ -310,7 +325,7 @@ class ExitDecisionCoordinator:
                     "action": "close",
                     "reason": "trailing_stop",
                     "detail_reason": reason,  # ✅ НОВОЕ: Сохраняем детальную причину
-                    "current_price": current_price,
+                    "current_price": effective_price,
                     "trailing_stop_price": trailing_stop.get_stop_loss(),
                 }
 

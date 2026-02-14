@@ -1173,11 +1173,12 @@ class ExitAnalyzer:
                         )
                     # ✅ НОВОЕ (03.01.2026): Детальное логирование источников TP параметров
                     if (
-                        tp_percent is not None
-                        and tp_atr_multiplier is not None
+                        tp_atr_multiplier is not None
                         and tp_min_percent is not None
                         and tp_max_percent is not None
                     ):
+                        if tp_percent is None:
+                            tp_percent = tp_min_percent
                         logger.info(
                             f"📊 [PARAMS] {symbol} ({regime}): TP параметры "
                             f"tp_percent={tp_percent:.2f}%, tp_atr_multiplier={tp_atr_multiplier:.2f}, "

@@ -187,6 +187,12 @@ class TSLManager:
         if not tsl:
             return (False, None)
 
+        if current_price is None or float(current_price) <= 0:
+            logger.warning(
+                f"⚠️ TSLManager: пропуск проверки закрытия для {symbol} из-за невалидной цены ({current_price})"
+            )
+            return (False, None)
+
         # Вызов асинхронной логики TrailingStopLoss
         if hasattr(tsl, "should_close_position"):
             # Если should_close_position асинхронная

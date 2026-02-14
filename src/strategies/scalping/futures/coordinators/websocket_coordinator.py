@@ -866,6 +866,20 @@ class WebSocketCoordinator:
                         await self.force_reconnect(
                             symbol=symbol, reason="ws_stale_watchdog"
                         )
+                        if (
+                            hasattr(self, "sync_positions_with_exchange")
+                            and self.sync_positions_with_exchange
+                            and symbol in self.active_positions_ref
+                        ):
+                            try:
+                                await self.sync_positions_with_exchange(force=True)
+                                logger.info(
+                                    f"WS_STALE_WATCHDOG {symbol}: position sync forced after reconnect trigger"
+                                )
+                            except Exception as sync_error:
+                                logger.warning(
+                                    f"WS_STALE_WATCHDOG {symbol}: position sync failed: {sync_error}"
+                                )
                     except Exception as e:
                         logger.debug(f"WS watchdog error for {symbol}: {e}")
             except Exception as e:

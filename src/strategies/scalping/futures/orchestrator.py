@@ -5136,7 +5136,7 @@ class FuturesScalpingOrchestrator:
                                             trade_result, "exit_price", 0.0
                                         ),
                                         size=getattr(trade_result, "size", 0.0),
-                                        pnl=getattr(trade_result, "net_pnl", 0.0),
+                                        pnl=getattr(trade_result, "gross_pnl", 0.0),
                                         commission=getattr(
                                             trade_result, "commission", 0.0
                                         ),

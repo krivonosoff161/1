@@ -783,10 +783,50 @@ class FuturesPositionManager:
                             market_data = await self.data_registry.get_market_data(
                                 symbol
                             )
-                            if market_data and hasattr(market_data, "current_price"):
-                                current_price = market_data.current_price
+                            if isinstance(market_data, dict):
+                                current_price = float(
+                                    market_data.get("current_price")
+                                    or market_data.get("price")
+                                    or market_data.get("last_price")
+                                    or 0.0
+                                )
+                            elif market_data and hasattr(market_data, "current_price"):
+                                current_price = float(
+                                    getattr(market_data, "current_price", 0.0) or 0.0
+                                )
+
+                            snapshot = await self.data_registry.get_price_snapshot(
+                                symbol
+                            )
+                            if snapshot:
+                                snapshot_price = float(snapshot.get("price") or 0.0)
+                                snapshot_age = snapshot.get("age")
+                                if snapshot_price > 0 and (
+                                    snapshot_age is None or float(snapshot_age) <= 15.0
+                                ):
+                                    current_price = snapshot_price
+
+                            if current_price <= 0 and hasattr(
+                                self.data_registry, "get_fresh_price_for_exit_analyzer"
+                            ):
+                                fresh_price = await self.data_registry.get_fresh_price_for_exit_analyzer(
+                                    symbol,
+                                    client=getattr(self, "client", None),
+                                    max_age=5.0,
+                                )
+                                if fresh_price and float(fresh_price) > 0:
+                                    current_price = float(fresh_price)
                         except Exception:
                             pass
+
+                    if current_price <= 0 and isinstance(position_data, dict):
+                        current_price = float(
+                            position_data.get("markPx")
+                            or position_data.get("mark_price")
+                            or position_data.get("current_price")
+                            or position_data.get("last")
+                            or 0.0
+                        )
 
                     # Получаем режим
                     regime = "ranging"
@@ -6606,6 +6646,30 @@ class FuturesPositionManager:
                         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем TradeResult для записи в CSV
                         entry_price = float(pos_data.get("avgPx", "0"))
                         exit_price = float(pos_data.get("markPx", "0"))
+                        try:
+                            data0 = (
+                                (result.get("data") or [{}])[0]
+                                if isinstance(result.get("data"), list)
+                                else {}
+                            )
+                            for key in (
+                                "avgPx",
+                                "fillPx",
+                                "fillPrice",
+                                "px",
+                            ):
+                                raw = (
+                                    data0.get(key) if isinstance(data0, dict) else None
+                                )
+                                if not raw and isinstance(result, dict):
+                                    raw = result.get(key)
+                                if raw:
+                                    parsed = float(raw)
+                                    if parsed > 0:
+                                        exit_price = parsed
+                                        break
+                        except Exception:
+                            pass
 
                         # Получаем время открытия позиции
                         entry_time = None
