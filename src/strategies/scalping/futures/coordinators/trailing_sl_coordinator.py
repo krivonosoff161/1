@@ -113,8 +113,33 @@ class TrailingSLCoordinator:
 
         # Счетчик логов
         self._tsl_log_count: Dict[str, int] = {}
+        self._latest_price_snapshot: Dict[str, Dict[str, Any]] = {}
 
         logger.info("✅ TrailingSLCoordinator initialized")
+
+    def _remember_price_snapshot(
+        self,
+        symbol: str,
+        price: float,
+        source: str,
+        age: Optional[float],
+    ) -> None:
+        try:
+            self._latest_price_snapshot[symbol] = {
+                "price": float(price),
+                "source": source,
+                "age": age,
+            }
+        except Exception:
+            pass
+
+    def _build_price_payload(self, symbol: str, current_price: float) -> Dict[str, Any]:
+        snapshot = self._latest_price_snapshot.get(symbol, {})
+        return {
+            "price": current_price,
+            "price_source": snapshot.get("source", "TSL"),
+            "price_age": snapshot.get("age"),
+        }
 
     def set_exit_decision_coordinator(self, exit_decision_coordinator):
         """
@@ -385,16 +410,22 @@ class TrailingSLCoordinator:
                             f"⚠️ Не удалось преобразовать {key}={value} в правильный тип: {e}"
                         )
                         # Оставляем значение по умолчанию
-        # ✅ ГРОК ФИКС: TSL aggressive для strong signals (strength > 0.8)
-        # Trail 0.4% после +0.6%, losscut 1.0% для быстрой фиксации профита
+        # Смягченный режим: не зажимаем TSL для максимально сильных сигналов (strength=1.0).
         signal_strength = signal.get("strength", 0.0) if signal else 0.0
-        if signal_strength > 0.8:
-            # Агрессивный TSL для сильных сигналов
-            params["initial_trail"] = 0.004  # 0.4% trail
-            params["loss_cut_percent"] = 0.01  # 1.0% losscut
+        if 0.8 < signal_strength < 1.0:
+            # Умеренное ужесточение, но без "агрессивного" early-stop.
+            base_trail = float(params.get("initial_trail", 0.0) or 0.0)
+            base_loss_cut = float(params.get("loss_cut_percent", 0.0) or 0.0)
+            params["initial_trail"] = max(base_trail, 0.008)  # минимум 0.8%
+            params["loss_cut_percent"] = max(base_loss_cut, 0.015)  # минимум 1.5%
             logger.info(
-                f"🚀 TSL AGGRESSIVE для {symbol}: strength={signal_strength:.2f} > 0.8, "
+                f"⚙️ TSL MODERATE для {symbol}: strength={signal_strength:.2f}, "
                 f"trail={params['initial_trail']:.2%}, losscut={params['loss_cut_percent']:.2%}"
+            )
+        elif signal_strength >= 1.0:
+            logger.info(
+                f"🛡️ TSL AGGRESSIVE отключен для {symbol}: strength={signal_strength:.2f}, "
+                "используем базовые параметры режима"
             )
 
         impulse_trailing = None
@@ -1192,36 +1223,51 @@ class TrailingSLCoordinator:
                         except Exception:
                             pass
 
-                    # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Добавлен price=0 guardrail с retry
-                    current_price = await self.get_current_price_callback(symbol)
-                    if current_price is None or current_price == 0:
-                        logger.warning(
-                            f"⚠️ {symbol}: Получена некорректная цена (price={current_price}), "
-                            f"пытаемся повторно через 1 сек..."
-                        )
-                        await asyncio.sleep(1)
-                        current_price = await self.get_current_price_callback(symbol)
+                    price_snapshot = await self._get_decision_price_snapshot(symbol)
+                    current_price = (
+                        float(price_snapshot.get("price") or 0.0)
+                        if price_snapshot
+                        else 0.0
+                    )
+                    if current_price <= 0:
+                        # Если snapshot недоступен, используем entry_price как fallback.
+                        entry_price_fallback = 0.0
+                        if isinstance(position, dict):
+                            try:
+                                entry_price_fallback = float(
+                                    position.get("entry_price")
+                                    or position.get("avgPx")
+                                    or 0.0
+                                )
+                            except (TypeError, ValueError):
+                                entry_price_fallback = 0.0
+                        elif position and hasattr(position, "entry_price"):
+                            try:
+                                entry_price_fallback = float(
+                                    position.entry_price or 0.0
+                                )
+                            except (TypeError, ValueError):
+                                entry_price_fallback = 0.0
 
-                        if current_price is None or current_price == 0:
-                            # Если снова price=0, используем entry_price как fallback
-                            if (
-                                position
-                                and hasattr(position, "entry_price")
-                                and position.entry_price > 0
-                            ):
-                                logger.error(
-                                    f"❌ {symbol}: Получена некорректная цена после повторной попытки "
-                                    f"(price={current_price}), используем entry_price={position.entry_price} как fallback"
-                                )
-                                current_price = position.entry_price
-                            else:
-                                logger.error(
-                                    f"❌ {symbol}: Критическая ошибка - не удалось получить валидную цену "
-                                    f"(price={current_price}, entry_price недоступен), пропускаем проверку ExitDecisionCoordinator"
-                                )
-                                # ❌ НЕ ИСПОЛЬЗУЕМ current_price = 0.0 - это приводит к profit=-100%
-                                # Вместо этого - пропускаем проверку ExitDecisionCoordinator и используем базовый TSL
-                                exit_decision = None
+                        if entry_price_fallback > 0:
+                            logger.error(
+                                f"❌ {symbol}: Snapshot цены недоступен, используем entry_price={entry_price_fallback} как fallback"
+                            )
+                            current_price = entry_price_fallback
+                            self._remember_price_snapshot(
+                                symbol=symbol,
+                                price=current_price,
+                                source="ENTRY_FALLBACK",
+                                age=None,
+                            )
+                        else:
+                            logger.error(
+                                f"❌ {symbol}: Критическая ошибка - не удалось получить валидную цену "
+                                "(snapshot и entry_price недоступны), пропускаем проверку ExitDecisionCoordinator"
+                            )
+                            # ❌ НЕ ИСПОЛЬЗУЕМ current_price = 0.0 - это приводит к profit=-100%
+                            # Вместо этого - пропускаем проверку ExitDecisionCoordinator и используем базовый TSL
+                            exit_decision = None
 
                     # Получаем режим
                     regime = "ranging"
@@ -1278,9 +1324,7 @@ class TrailingSLCoordinator:
                             )
                             if self._has_position(symbol):
                                 decision_payload = {
-                                    "price": current_price,
-                                    "price_source": "TSL",
-                                    "price_age": None,
+                                    **self._build_price_payload(symbol, current_price),
                                     "position_data": position,
                                     "decision": exit_decision,
                                 }
@@ -1525,9 +1569,7 @@ class TrailingSLCoordinator:
                         )
                     if self._has_position(symbol):
                         decision_payload = {
-                            "price": current_price,
-                            "price_source": "TSL",
-                            "price_age": None,
+                            **self._build_price_payload(symbol, current_price),
                             "position_data": position,
                         }
 
@@ -1698,9 +1740,7 @@ class TrailingSLCoordinator:
                     )
                 if self._has_position(symbol):
                     decision_payload = {
-                        "price": current_price,
-                        "price_source": "TSL",
-                        "price_age": None,
+                        **self._build_price_payload(symbol, current_price),
                         "position_data": position,
                     }
 
@@ -1752,9 +1792,7 @@ class TrailingSLCoordinator:
                             f"💰 PH сработал для {symbol} - закрываем позицию немедленно!"
                         )
                         decision_payload = {
-                            "price": current_price,
-                            "price_source": "TSL",
-                            "price_age": None,
+                            **self._build_price_payload(symbol, current_price),
                             "position_data": position,
                         }
 
@@ -1769,6 +1807,50 @@ class TrailingSLCoordinator:
 
         except Exception as e:
             logger.error(f"Ошибка обновления трейлинг стоп-лосса: {e}")
+
+    async def _get_decision_price_snapshot(
+        self, symbol: str
+    ) -> Optional[Dict[str, Any]]:
+        """Получить единый snapshot цены (price/source/age) для TSL decision-пайплайна."""
+        data_registry = None
+        if hasattr(self, "position_registry") and self.position_registry:
+            data_registry = getattr(self.position_registry, "data_registry", None)
+
+        if data_registry and hasattr(data_registry, "get_decision_price_snapshot"):
+            try:
+                snapshot = await data_registry.get_decision_price_snapshot(
+                    symbol=symbol,
+                    client=self.client,
+                    max_age=15.0,
+                    allow_rest_fallback=True,
+                )
+                if snapshot and float(snapshot.get("price") or 0) > 0:
+                    self._remember_price_snapshot(
+                        symbol=symbol,
+                        price=float(snapshot["price"]),
+                        source=str(snapshot.get("source") or "UNKNOWN"),
+                        age=snapshot.get("age"),
+                    )
+                    return snapshot
+            except Exception as e:
+                logger.debug(f"TSL snapshot fallback error for {symbol}: {e}")
+
+        current_price = await self._get_current_price(symbol)
+        if current_price and current_price > 0:
+            self._remember_price_snapshot(
+                symbol=symbol,
+                price=float(current_price),
+                source="TSL_FALLBACK",
+                age=None,
+            )
+            return {
+                "price": float(current_price),
+                "source": "TSL_FALLBACK",
+                "age": None,
+                "stale": False,
+                "rest_fallback": False,
+            }
+        return None
 
     async def periodic_check(self):
         """
@@ -1838,64 +1920,54 @@ class TrailingSLCoordinator:
                         continue
                     self._last_tsl_check_time[symbol] = current_time
 
-                    # ✅ ИСПРАВЛЕНИЕ (09.01.2026): Добавлен price=0 guardrail с retry
-                    current_price = await self._get_current_price(symbol)
-                    if current_price is None or current_price == 0:
-                        logger.warning(
-                            f"⚠️ {symbol}: Получена некорректная цена при проверке TSL (price={current_price}), "
-                            f"пытаемся повторно через 1 сек..."
+                    snapshot = await self._get_decision_price_snapshot(symbol)
+                    if not snapshot:
+                        logger.error(
+                            f"❌ {symbol}: Не удалось получить price snapshot, пропускаем проверку TSL"
                         )
-                        await asyncio.sleep(1)
-                        current_price = await self._get_current_price(symbol)
-
-                        if current_price is None or current_price == 0:
-                            # Если снова price=0 — проверяем возраст данных для CRITICAL алерта
-                            logger.error(
-                                f"❌ {symbol}: Не удалось получить валидную цену после повторной попытки "
-                                f"(price={current_price}), пропускаем проверку TSL"
+                        # ✅ FIX 3 (13.02.2026): CRITICAL алерт если позиция открыта при мертвом WS
+                        try:
+                            has_position = (
+                                self.active_positions_ref
+                                and symbol in self.active_positions_ref
                             )
-                            # ✅ FIX 3 (13.02.2026): CRITICAL алерт если позиция открыта при мертвом WS
-                            try:
-                                has_position = (
-                                    self.active_positions_ref
-                                    and symbol in self.active_positions_ref
+                            if (
+                                has_position
+                                and hasattr(self, "position_registry")
+                                and self.position_registry
+                            ):
+                                dr = getattr(
+                                    self.position_registry, "data_registry", None
                                 )
-                                if (
-                                    has_position
-                                    and hasattr(self, "position_registry")
-                                    and self.position_registry
-                                ):
-                                    dr = getattr(
-                                        self.position_registry, "data_registry", None
-                                    )
-                                    if dr:
-                                        md = await dr.get_market_data(symbol)
-                                        if md:
-                                            updated_at = getattr(
-                                                md, "updated_at", None
-                                            ) or (
-                                                md.get("updated_at")
-                                                if isinstance(md, dict)
-                                                else None
-                                            )
-                                            if updated_at:
-                                                from datetime import datetime
+                                if dr:
+                                    md = await dr.get_market_data(symbol)
+                                    if md:
+                                        updated_at = getattr(
+                                            md, "updated_at", None
+                                        ) or (
+                                            md.get("updated_at")
+                                            if isinstance(md, dict)
+                                            else None
+                                        )
+                                        if updated_at:
+                                            from datetime import datetime
 
-                                                data_age = (
-                                                    datetime.now() - updated_at
-                                                ).total_seconds()
-                                                if data_age > 45:
-                                                    logger.critical(
-                                                        f"🚨 STALE DATA ALERT {symbol}: открытая позиция, "
-                                                        f"данные устарели на {data_age:.0f}с! "
-                                                        f"WS watchdog должен сделать реконнект. "
-                                                        f"Проверьте логи watchdog."
-                                                    )
-                            except Exception:
-                                pass
-                            continue
+                                            data_age = (
+                                                datetime.now() - updated_at
+                                            ).total_seconds()
+                                            if data_age > 45:
+                                                logger.critical(
+                                                    f"🚨 STALE DATA ALERT {symbol}: открытая позиция, "
+                                                    f"данные устарели на {data_age:.0f}с! "
+                                                    f"WS watchdog должен сделать реконнект. "
+                                                    f"Проверьте логи watchdog."
+                                                )
+                        except Exception:
+                            pass
+                        continue
 
-                    if current_price and current_price > 0:
+                    current_price = float(snapshot.get("price") or 0.0)
+                    if current_price > 0:
                         await self.update_trailing_stop_loss(symbol, current_price)
                     else:
                         logger.debug(
@@ -1947,6 +2019,12 @@ class TrailingSLCoordinator:
                             logger.debug(
                                 f"✅ TSL: WebSocket real-time price for {symbol}: {float(tick_price):.8f}"
                             )
+                            self._remember_price_snapshot(
+                                symbol=symbol,
+                                price=float(tick_price),
+                                source="WEBSOCKET",
+                                age=0.0,
+                            )
                             return float(tick_price)
         except Exception as e:
             logger.debug(f"⚠️ TSL: Failed to get DataRegistry market_data: {e}")
@@ -1970,6 +2048,12 @@ class TrailingSLCoordinator:
                     logger.debug(
                         f"⚠️ TSL: Using last candle (DataRegistry) for {symbol}: {last_candle_price:.8f}"
                     )
+                    self._remember_price_snapshot(
+                        symbol=symbol,
+                        price=float(last_candle_price),
+                        source="CANDLE_FALLBACK",
+                        age=None,
+                    )
                     return last_candle_price
         except Exception as e:
             logger.debug(f"⚠️ TSL: Failed to get last candle from DataRegistry: {e}")
@@ -1989,6 +2073,12 @@ class TrailingSLCoordinator:
                         logger.debug(
                             f"✅ TSL: Using markPx from position for {symbol}: {mark_px:.8f}"
                         )
+                        self._remember_price_snapshot(
+                            symbol=symbol,
+                            price=float(mark_px),
+                            source="POSITION_MARKPX",
+                            age=None,
+                        )
                         return mark_px
         except Exception as e:
             logger.debug(f"⚠️ TSL: Failed to get markPx from position: {e}")
@@ -2001,6 +2091,12 @@ class TrailingSLCoordinator:
                     logger.debug(
                         f"⚠️ TSL: Using REST API callback for {symbol}: {price:.8f}"
                     )
+                    self._remember_price_snapshot(
+                        symbol=symbol,
+                        price=float(price),
+                        source="CALLBACK",
+                        age=0.0,
+                    )
                     return price
             except TypeError:
                 # На случай если передана синхронная функция
@@ -2009,6 +2105,12 @@ class TrailingSLCoordinator:
                     if price and price > 0:
                         logger.debug(
                             f"⚠️ TSL: Using sync REST API callback for {symbol}: {price:.8f}"
+                        )
+                        self._remember_price_snapshot(
+                            symbol=symbol,
+                            price=float(price),
+                            source="CALLBACK_SYNC",
+                            age=0.0,
                         )
                         return price
                 except Exception as e:
@@ -2020,6 +2122,12 @@ class TrailingSLCoordinator:
         logger.warning(f"🔴 TSL: Falling back to REST API client for {symbol}")
         client_price = await self._fetch_price_via_client(symbol)
         if client_price and client_price > 0:
+            self._remember_price_snapshot(
+                symbol=symbol,
+                price=float(client_price),
+                source="REST_CLIENT",
+                age=0.0,
+            )
             return client_price
 
         # ✅ ПРИОРИТЕТ 5: ФИНАЛЬНЫЙ FALLBACK - Используем entry_price из позиции
@@ -2037,6 +2145,12 @@ class TrailingSLCoordinator:
                     logger.error(
                         f"🔴 TSL: КРИТИЧЕСКИЙ FALLBACK - Используем entry_price={entry_price:.8f} для {symbol} "
                         f"(WebSocket, REST API и client недоступны!)"
+                    )
+                    self._remember_price_snapshot(
+                        symbol=symbol,
+                        price=float(entry_price),
+                        source="ENTRY_FALLBACK",
+                        age=None,
                     )
                     return entry_price
         except Exception as e:
@@ -2303,9 +2417,7 @@ class TrailingSLCoordinator:
                         f"прибыль {profit_pct:.2%} < {min_profit_for_extension_frac:.2%} (min для продления), закрываем по времени"
                     )
                     decision_payload = {
-                        "price": current_price,
-                        "price_source": "TSL",
-                        "price_age": None,
+                        **self._build_price_payload(symbol, current_price),
                         "position_data": position,
                     }
 

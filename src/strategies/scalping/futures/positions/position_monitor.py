@@ -32,7 +32,7 @@ class PositionMonitor:
         client=None,  # ✅ Клиент для REST (опционально)
         exit_analyzer=None,  # ExitAnalyzer (будет создан позже)
         exit_decision_coordinator=None,  # ✅ НОВОЕ (26.12.2025): ExitDecisionCoordinator
-        check_interval: float = 5.0,  # Интервал проверки в секундах
+        check_interval: float = 1.0,  # Интервал проверки в секундах
         close_position_callback=None,  # ✅ НОВОЕ: Callback для закрытия позиций
         position_manager=None,  # ✅ НОВОЕ: PositionManager для частичного закрытия
         allow_rest_fallback: bool = True,  # ✅ Разрешить REST fallback для цены
@@ -197,51 +197,28 @@ class PositionMonitor:
                 metadata = await self.position_registry.get_metadata(symbol)
                 market_data = await self.data_registry.get_market_data(symbol)
                 if market_data is None:
-                    if not self.allow_rest_fallback:
-                        # Для входов REST fallback может быть запрещен, но для exit-пайплайна
-                        # нельзя глушить анализ полностью: пробуем получить свежую цену через
-                        # специализированный exit-fallback.
-                        rest_exit_price = None
-                        if self.data_registry and self.client:
-                            try:
-                                rest_exit_price = await self.data_registry.get_fresh_price_for_exit_analyzer(
-                                    symbol=symbol,
-                                    client=self.client,
-                                    max_age=15.0,
-                                )
-                            except Exception as e:
-                                logger.debug(
-                                    f"⚠️ PositionMonitor: exit REST fallback error for {symbol}: {e}"
-                                )
-                        if rest_exit_price and rest_exit_price > 0:
-                            market_data = {
-                                "price": float(rest_exit_price),
-                                "source": "REST_EXIT_FALLBACK",
-                            }
-                            logger.warning(
-                                f"⚠️ PositionMonitor: Нет свежих WS данных для {symbol}, "
-                                f"используем REST_EXIT_FALLBACK={rest_exit_price:.6f} для exit-анализа"
-                            )
-                        else:
-                            logger.warning(
-                                f"⚠️ PositionMonitor: Нет свежих рыночных данных для {symbol} (market_data is None), "
-                                f"fallback запрещен и REST exit fallback недоступен — пропускаем анализ позиции"
-                            )
-                            return None
-                    if market_data is None:
-                        logger.warning(
-                            f"⚠️ PositionMonitor: Нет свежих рыночных данных для {symbol} (market_data is None), "
-                            f"продолжаем с fallback ценой"
-                        )
-                        market_data = {}
-                # 🔴 BUG #10 FIX: 4-уровневый fallback для current_price
-                (
-                    current_price,
-                    price_source,
-                    price_age,
-                ) = await self._get_current_price_with_fallback(
-                    symbol=symbol, market_data=market_data, position=position
+                    market_data = {}
+
+                # Единый источник цены для всех decision-пайплайнов.
+                price_snapshot = await self.data_registry.get_decision_price_snapshot(
+                    symbol=symbol,
+                    client=self.client,
+                    max_age=15.0,
+                    allow_rest_fallback=True,
                 )
+                if price_snapshot:
+                    current_price = float(price_snapshot.get("price") or 0.0)
+                    price_source = price_snapshot.get("source")
+                    price_age = price_snapshot.get("age")
+                else:
+                    # Резервный путь на случай деградации snapshot API.
+                    (
+                        current_price,
+                        price_source,
+                        price_age,
+                    ) = await self._get_current_price_with_fallback(
+                        symbol=symbol, market_data=market_data, position=position
+                    )
                 if not isinstance(current_price, (int, float)) or current_price <= 0:
                     # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (11.02.2026): Даже без цены проверяем timeout
                     # Проблема: WebSocket staleness → price=0 → return None → позиция висит вечно

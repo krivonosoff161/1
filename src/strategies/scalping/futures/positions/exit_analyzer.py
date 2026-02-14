@@ -584,29 +584,47 @@ class ExitAnalyzer:
                     f"⚠️ ExitAnalyzer: Ошибка pre-price max_holding check для {symbol}: {_e}"
                 )
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (24.01.2026): Используем СТРОГИЙ TTL для ExitAnalyzer
-            # Решение: get_fresh_price_for_exit_analyzer() с TTL=15s + REST fallback
-
             # Получаем client для REST fallback
             client = None
             if self.orchestrator and hasattr(self.orchestrator, "position_manager"):
                 client = getattr(self.orchestrator.position_manager, "client", None)
 
-            current_price = await self.data_registry.get_fresh_price_for_exit_analyzer(
-                symbol, client=client
+            price_snapshot = await self.data_registry.get_decision_price_snapshot(
+                symbol=symbol,
+                client=client,
+                max_age=15.0,
+                allow_rest_fallback=True,
             )
-            price_source = "data_registry_fresh"
-
-            if current_price is None or current_price <= 0:
+            if not price_snapshot:
                 logger.warning(
-                    f"⚠️ ExitAnalyzer: Нет свежей цены для {symbol} (WebSocket устарел >{self.data_registry._ws_fresh_max_age_exit if hasattr(self.data_registry, '_ws_fresh_max_age_exit') else 15}s, REST fallback failed). "
-                    f"Пропускаем детальный анализ."
+                    f"⚠️ ExitAnalyzer: Нет валидного price snapshot для {symbol}, пропускаем детальный анализ."
+                )
+                analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
+                return None
+
+            current_price = float(price_snapshot.get("price") or 0.0)
+            price_source = str(price_snapshot.get("source") or "UNKNOWN")
+            price_age = price_snapshot.get("age")
+            is_stale = bool(price_snapshot.get("stale"))
+
+            if current_price <= 0:
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: price snapshot невалиден для {symbol} (price={current_price}, source={price_source})"
+                )
+                analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
+                return None
+
+            if is_stale:
+                logger.warning(
+                    f"⚠️ ExitAnalyzer: stale snapshot для {symbol} (age={price_age}, source={price_source}), "
+                    "блокируем анализ."
                 )
                 analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
                 return None
 
             logger.debug(
-                f"✅ ExitAnalyzer: Получена СВЕЖАЯ цена для {symbol}: ${current_price:.8f} (source={price_source}, TTL<=2s)"
+                f"✅ ExitAnalyzer: Получена цена для {symbol}: ${current_price:.8f} "
+                f"(source={price_source}, age={price_age})"
             )
 
             # Получаем рыночные данные для анализа

@@ -47,7 +47,7 @@ def load_yaml_strict(stream) -> Dict[str, Any]:
         data = yaml.load(raw_yaml, Loader=_UniqueKeyLoader)  # nosec B506
         return data or {}
     except ValueError as dup_error:
-        strict_mode = os.getenv("YAML_DUPLICATE_KEYS_STRICT", "0").strip().lower() in {
+        strict_mode = os.getenv("YAML_DUPLICATE_KEYS_STRICT", "1").strip().lower() in {
             "1",
             "true",
             "yes",
@@ -59,7 +59,7 @@ def load_yaml_strict(stream) -> Dict[str, Any]:
         logger.warning(
             f"⚠️ Duplicate YAML keys detected ({dup_error}). "
             "Continuing with yaml.safe_load() fallback (last key wins). "
-            "Set YAML_DUPLICATE_KEYS_STRICT=1 to fail-fast."
+            "Set YAML_DUPLICATE_KEYS_STRICT=0 to disable fail-fast."
         )
         data = yaml.safe_load(raw_yaml)
         return data or {}

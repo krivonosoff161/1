@@ -32,6 +32,9 @@ class ExitGuard:
         "margin_call",
         "emergency_loss_protection",
     }
+    DEFAULT_FEE_RATE_ROUND_TRIP = 0.001  # 0.10% round-trip
+    DEFAULT_MIN_GROSS_EDGE = 0.0002  # 0.02% edge above fees
+    DEFAULT_MIN_NET_PROFIT = 0.0  # block positive exits if net<=0
 
     def __init__(
         self,
@@ -49,6 +52,9 @@ class ExitGuard:
         self.stale_thresholds = dict(self.DEFAULT_STALE_THRESHOLDS)
         self.critical_exceptions = set(self.DEFAULT_CRITICAL_EXCEPTIONS)
         self.min_hold_bypass_mult = 1.2
+        self.fee_rate_round_trip = self.DEFAULT_FEE_RATE_ROUND_TRIP
+        self.min_gross_edge = self.DEFAULT_MIN_GROSS_EDGE
+        self.min_net_profit = self.DEFAULT_MIN_NET_PROFIT
 
         self._load_config(config)
 
@@ -85,6 +91,26 @@ class ExitGuard:
         except (TypeError, ValueError):
             self.min_hold_bypass_mult = 1.2
 
+        fee_rate = _get(guard_cfg, "fee_rate_round_trip")
+        min_gross_edge = _get(guard_cfg, "min_gross_edge")
+        min_net_profit = _get(guard_cfg, "min_net_profit")
+
+        futures_modules = _get(config, "futures_modules")
+        trailing_cfg = _get(futures_modules, "trailing_sl")
+        if fee_rate is None:
+            fee_rate = _get(trailing_cfg, "trading_fee_rate")
+
+        for attr, value, fallback in (
+            ("fee_rate_round_trip", fee_rate, self.DEFAULT_FEE_RATE_ROUND_TRIP),
+            ("min_gross_edge", min_gross_edge, self.DEFAULT_MIN_GROSS_EDGE),
+            ("min_net_profit", min_net_profit, self.DEFAULT_MIN_NET_PROFIT),
+        ):
+            try:
+                if value is not None:
+                    setattr(self, attr, float(value))
+            except (TypeError, ValueError):
+                setattr(self, attr, fallback)
+
     async def check(
         self, symbol: str, reason: str, payload: Optional[Dict[str, Any]] = None
     ) -> Tuple[bool, Optional[str]]:
@@ -106,6 +132,10 @@ class ExitGuard:
             if not allowed:
                 return False, block
 
+            allowed, block = self._check_fee_edge(reason, payload)
+            if not allowed:
+                return False, block
+
             return True, None
         except Exception as exc:
             logger.error(f"ExitGuard: error for {symbol}: {exc}")
@@ -124,6 +154,84 @@ class ExitGuard:
             return True
         return False
 
+    @staticmethod
+    def _normalize_percent_fraction(value: Any) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        # В проекте встречаются оба формата:
+        # - доли: 0.012 = 1.2%
+        # - проценты: 1.2 = 1.2%
+        # Порог 0.03 снижает риск неверной трактовки значений вроде 0.10 (обычно 0.10%).
+        if abs(parsed) > 0.03:
+            return parsed / 100.0
+        return parsed
+
+    def _extract_profit_fraction(
+        self, payload: Dict[str, Any], key: str
+    ) -> Optional[float]:
+        value = payload.get(key)
+        if value is not None:
+            return self._normalize_percent_fraction(value)
+
+        decision = payload.get("decision")
+        if isinstance(decision, dict):
+            return self._normalize_percent_fraction(decision.get(key))
+        return None
+
+    @staticmethod
+    def _is_protective_reason(reason: str) -> bool:
+        if not reason:
+            return False
+        reason_l = reason.lower()
+        protective_tokens = (
+            "sl_",
+            "loss",
+            "liquidation",
+            "margin",
+            "emergency",
+            "timeout",
+            "risk",
+        )
+        return any(token in reason_l for token in protective_tokens)
+
+    def _check_fee_edge(
+        self, reason: str, payload: Dict[str, Any]
+    ) -> Tuple[bool, Optional[str]]:
+        # Критические/защитные выходы не блокируем комиссионным guard.
+        if self._is_critical_reason(reason) or self._is_protective_reason(reason):
+            return True, None
+
+        gross_frac = self._extract_profit_fraction(payload, "pnl_pct")
+        if gross_frac is None:
+            gross_frac = self._extract_profit_fraction(payload, "gross_pnl_pct")
+
+        net_frac = self._extract_profit_fraction(payload, "net_pnl_pct")
+        if net_frac is None and gross_frac is not None:
+            net_frac = gross_frac - self.fee_rate_round_trip
+
+        # Guard только для прибыльных/около-нулевых выходов, чтобы не фиксировать
+        # микроприбыль, которую съест комиссия.
+        if gross_frac is not None and gross_frac > 0:
+            min_gross_required = self.fee_rate_round_trip + self.min_gross_edge
+            if gross_frac < min_gross_required:
+                return (
+                    False,
+                    f"fee_guard_gross_{gross_frac:.4%}<{min_gross_required:.4%}",
+                )
+
+        if net_frac is not None and net_frac > 0 and net_frac <= self.min_net_profit:
+            return (
+                False,
+                f"fee_guard_net_{net_frac:.4%}<={self.min_net_profit:.4%}",
+            )
+
+        if net_frac is not None and net_frac <= 0 and (gross_frac or 0) > 0:
+            return False, f"fee_guard_net_nonpositive_{net_frac:.4%}"
+
+        return True, None
+
     async def _check_stale(
         self, symbol: str, reason: str, payload: Dict[str, Any]
     ) -> Tuple[bool, Optional[str]]:
@@ -141,7 +249,12 @@ class ExitGuard:
 
         if price_age is None and self.data_registry:
             try:
-                snapshot = await self.data_registry.get_price_snapshot(symbol)
+                snapshot = await self.data_registry.get_decision_price_snapshot(
+                    symbol=symbol,
+                    client=self.client,
+                    max_age=threshold,
+                    allow_rest_fallback=True,
+                )
                 if snapshot:
                     if payload.get("price") in (None, 0):
                         payload["price"] = snapshot.get("price")

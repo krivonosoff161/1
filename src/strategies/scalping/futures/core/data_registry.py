@@ -275,6 +275,150 @@ class DataRegistry:
             "updated_at": updated_at,
         }
 
+    @staticmethod
+    def _to_positive_float(value: Any) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0:
+            return None
+        return parsed
+
+    @staticmethod
+    def _extract_ticker_price(ticker: Dict[str, Any]) -> Optional[float]:
+        if not isinstance(ticker, dict):
+            return None
+        for field in ("markPx", "last", "lastPx"):
+            price = DataRegistry._to_positive_float(ticker.get(field))
+            if price is not None:
+                return price
+        return None
+
+    async def get_decision_price_snapshot(
+        self,
+        symbol: str,
+        client=None,
+        max_age: float = 15.0,
+        allow_rest_fallback: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Единый snapshot цены для decision-пайплайнов (ExitAnalyzer/TSL/PositionMonitor).
+
+        Returns:
+            {
+                "price": float,
+                "source": str,
+                "age": Optional[float],
+                "updated_at": datetime|None,
+                "stale": bool,
+                "rest_fallback": bool,
+            }
+        """
+        snapshot = await self.get_price_snapshot(symbol)
+        if snapshot:
+            price = self._to_positive_float(snapshot.get("price"))
+            source = snapshot.get("source")
+            updated_at = snapshot.get("updated_at")
+            age_raw = snapshot.get("age")
+            try:
+                age = float(age_raw) if age_raw is not None else None
+            except (TypeError, ValueError):
+                age = None
+            stale = bool(age is not None and age > float(max_age))
+            if price is not None and not stale:
+                return {
+                    "price": price,
+                    "source": source or "WEBSOCKET",
+                    "age": age,
+                    "updated_at": updated_at,
+                    "stale": False,
+                    "rest_fallback": False,
+                }
+        else:
+            price = None
+            source = None
+            updated_at = None
+            age = None
+            stale = True
+
+        if not allow_rest_fallback or client is None:
+            if price is None:
+                return None
+            return {
+                "price": price,
+                "source": source or "UNKNOWN",
+                "age": age,
+                "updated_at": updated_at,
+                "stale": stale,
+                "rest_fallback": False,
+            }
+
+        try:
+            cache_key = f"{symbol}_decision_ticker"
+            cached = self._rest_ticker_cache.get(cache_key)
+            if (
+                cached
+                and (datetime.now() - cached["timestamp"]).total_seconds()
+                < self._rest_cache_ttl
+            ):
+                fresh_price = self._to_positive_float(cached.get("price"))
+            else:
+                fresh_price = None
+                async with self._rest_api_semaphore:
+                    await asyncio.sleep(0.1)
+                    ticker = await client.get_ticker(symbol)
+                    fresh_price = self._extract_ticker_price(ticker or {})
+                    if fresh_price is not None:
+                        self._rest_ticker_cache[cache_key] = {
+                            "price": fresh_price,
+                            "timestamp": datetime.now(),
+                        }
+
+            if fresh_price is None:
+                if price is None:
+                    return None
+                return {
+                    "price": price,
+                    "source": source or "UNKNOWN",
+                    "age": age,
+                    "updated_at": updated_at,
+                    "stale": stale,
+                    "rest_fallback": False,
+                }
+
+            try:
+                await self.update_market_data(
+                    symbol,
+                    {
+                        "price": fresh_price,
+                        "source": "REST_FALLBACK",
+                    },
+                )
+            except Exception:
+                pass
+
+            return {
+                "price": fresh_price,
+                "source": "REST_FALLBACK",
+                "age": 0.0,
+                "updated_at": datetime.now(),
+                "stale": False,
+                "rest_fallback": True,
+            }
+        except Exception as e:
+            logger.debug(f"Decision snapshot REST fallback failed for {symbol}: {e}")
+            if price is None:
+                return None
+            return {
+                "price": price,
+                "source": source or "UNKNOWN",
+                "age": age,
+                "updated_at": updated_at,
+                "stale": stale,
+                "rest_fallback": False,
+            }
+
     async def get_price(self, symbol: str) -> Optional[float]:
         """
         Получить текущую цену символа.

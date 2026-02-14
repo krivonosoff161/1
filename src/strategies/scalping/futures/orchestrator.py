@@ -658,13 +658,14 @@ class FuturesScalpingOrchestrator:
         except Exception:
             allow_rest_fallback = True
 
+        position_monitor_interval = 1.0
         self.position_monitor = PositionMonitor(
             position_registry=self.position_registry,
             data_registry=self.data_registry,
             client=self.client,
             exit_analyzer=self.exit_analyzer,  # Fallback
             exit_decision_coordinator=self.exit_decision_coordinator,  # ✅ НОВОЕ (26.12.2025): Используем координатор
-            check_interval=5.0,  # Проверка каждые 5 секунд
+            check_interval=position_monitor_interval,  # Проверка каждую 1 секунду
             close_position_callback=self._close_position,  # ✅ НОВОЕ: Callback для закрытия
             position_manager=self.position_manager,  # ✅ НОВОЕ: PositionManager для частичного закрытия
             allow_rest_fallback=allow_rest_fallback,
@@ -4215,13 +4216,26 @@ class FuturesScalpingOrchestrator:
         Returns:
             Текущая цена или None если не удалось получить
         """
-        # 1. Проверка свежести данных DataRegistry
+        # 1) Единый snapshot (price/source/age) для всех decision-пайплайнов.
         if hasattr(self, "data_registry") and self.data_registry:
+            try:
+                snapshot = await self.data_registry.get_decision_price_snapshot(
+                    symbol=symbol,
+                    client=self.client,
+                    max_age=15.0,
+                    allow_rest_fallback=True,
+                )
+                if snapshot and float(snapshot.get("price") or 0) > 0:
+                    return float(snapshot["price"])
+            except Exception:
+                pass
+
             # Попытка авто-реинициализации если данные устарели
             await self.data_registry.auto_reinit(
                 symbol, fetch_market_data_callback=self._fetch_market_data_rest
             )
-        # 2. Проверка WebSocket и авто-reconnect
+
+        # 2) Проверка WebSocket и авто-reconnect
         if hasattr(self, "websocket_coordinator") and self.websocket_coordinator:
             await self.websocket_coordinator.auto_reconnect()
             return await self.websocket_coordinator.get_current_price_fallback(symbol)
@@ -4366,6 +4380,19 @@ class FuturesScalpingOrchestrator:
         Returns:
             Текущая цена или None если не удалось получить
         """
+        if hasattr(self, "data_registry") and self.data_registry:
+            try:
+                snapshot = await self.data_registry.get_decision_price_snapshot(
+                    symbol=symbol,
+                    client=self.client,
+                    max_age=15.0,
+                    allow_rest_fallback=True,
+                )
+                if snapshot and float(snapshot.get("price") or 0) > 0:
+                    return float(snapshot["price"])
+            except Exception:
+                pass
+
         if hasattr(self, "websocket_coordinator") and self.websocket_coordinator:
             return await self.websocket_coordinator.get_current_price_fallback(symbol)
         # Fallback для случая, когда координатор еще не инициализирован
@@ -4726,7 +4753,12 @@ class FuturesScalpingOrchestrator:
                     or payload.get("price_source") is None
                     or payload.get("price_age") is None
                 ):
-                    snapshot = await self.data_registry.get_price_snapshot(symbol)
+                    snapshot = await self.data_registry.get_decision_price_snapshot(
+                        symbol=symbol,
+                        client=self.client,
+                        max_age=15.0,
+                        allow_rest_fallback=True,
+                    )
                     if snapshot:
                         if payload.get("price") in (None, 0):
                             payload["price"] = snapshot.get("price")
