@@ -40,10 +40,29 @@ def load_yaml_strict(stream) -> Dict[str, Any]:
     Load YAML with duplicate-key protection.
 
     Raises:
-        ValueError: when duplicate keys are found.
+        ValueError: when duplicate keys are found and strict mode is enabled.
     """
-    data = yaml.load(stream, Loader=_UniqueKeyLoader)  # nosec B506
-    return data or {}
+    raw_yaml = stream.read()
+    try:
+        data = yaml.load(raw_yaml, Loader=_UniqueKeyLoader)  # nosec B506
+        return data or {}
+    except ValueError as dup_error:
+        strict_mode = os.getenv("YAML_DUPLICATE_KEYS_STRICT", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if strict_mode:
+            raise
+
+        logger.warning(
+            f"⚠️ Duplicate YAML keys detected ({dup_error}). "
+            "Continuing with yaml.safe_load() fallback (last key wins). "
+            "Set YAML_DUPLICATE_KEYS_STRICT=1 to fail-fast."
+        )
+        data = yaml.safe_load(raw_yaml)
+        return data or {}
 
 
 class APIConfig(BaseModel):
