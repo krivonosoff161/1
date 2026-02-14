@@ -1093,9 +1093,11 @@ class TrailingSLCoordinator:
                 # 2. Order Flow анализ
                 if self.order_flow:
                     try:
-                        current_delta = self.order_flow.get_delta()
-                        avg_delta = self.order_flow.get_avg_delta(periods=10)
-                        delta_trend = self.order_flow.get_delta_trend()
+                        current_delta = self.order_flow.get_delta(symbol=symbol)
+                        avg_delta = self.order_flow.get_avg_delta(
+                            periods=10, symbol=symbol
+                        )
+                        delta_trend = self.order_flow.get_delta_trend(symbol=symbol)
 
                         # Определяем силу тренда по Order Flow
                         if position_side.lower() == "long":
@@ -1424,8 +1426,10 @@ class TrailingSLCoordinator:
                 order_flow_reversal_detected = False
                 if self.order_flow:
                     try:
-                        current_delta = self.order_flow.get_delta()
-                        avg_delta = self.order_flow.get_avg_delta(periods=10)
+                        current_delta = self.order_flow.get_delta(symbol=symbol)
+                        avg_delta = self.order_flow.get_avg_delta(
+                            periods=10, symbol=symbol
+                        )
 
                         # Сохраняем историю delta для анализа разворота
                         if symbol not in self._order_flow_delta_history:

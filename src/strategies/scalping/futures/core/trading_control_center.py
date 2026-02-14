@@ -122,6 +122,20 @@ class TradingControlCenter:
         self._last_metrics_check_time = 0
         self._metrics_check_interval = 600  # 10 минут
 
+        # Fast/slow loop split to keep critical checks responsive under load.
+        cfg_check_interval = float(getattr(self.scalping_config, "check_interval", 1.0))
+        self._fast_loop_interval = max(0.2, cfg_check_interval)
+        self._slow_loop_interval = max(
+            self._fast_loop_interval,
+            float(getattr(self.scalping_config, "tcc_slow_loop_interval", 5.0)),
+        )
+        self._cycle_time_budget_ms = max(
+            500.0,
+            float(getattr(self.scalping_config, "tcc_cycle_budget_ms", 2000.0)),
+        )
+        self._last_slow_loop_time = 0.0
+        self._last_budget_skip_log_time = 0.0
+
         logger.info("✅ TradingControlCenter инициализирован")
 
     async def run_main_loop(self) -> None:
@@ -286,64 +300,65 @@ class TradingControlCenter:
                 if not self.is_running:
                     break
 
+                # Периодическая проверка TSL независимо от тикеров (fast loop, критично для выхода).
+                tsl_start = time.perf_counter()
+                await self.trailing_sl_coordinator.periodic_check()
+                tsl_time = (time.perf_counter() - tsl_start) * 1000  # мс
+
+                if not self.is_running:
+                    break
+
+                # Slow loop: тяжелые REST/sync операции выполняем не в каждом цикле.
+                slow_time = 0.0
+                slow_status = "idle"
+                now_for_slow = time.time()
+                slow_due = (
+                    now_for_slow - self._last_slow_loop_time >= self._slow_loop_interval
+                )
+                if slow_due:
+                    fast_part_ms = (time.perf_counter() - cycle_start_time) * 1000
+                    if fast_part_ms > self._cycle_time_budget_ms:
+                        slow_status = "budget_skip"
+                        if now_for_slow - self._last_budget_skip_log_time >= 30.0:
+                            self._last_budget_skip_log_time = now_for_slow
+                            logger.warning(
+                                f"⚠️ TCC budget guard: fast_part={fast_part_ms:.1f}ms "
+                                f"> budget={self._cycle_time_budget_ms:.1f}ms, "
+                                f"slow loop skipped once"
+                            )
+                    else:
+                        slow_start = time.perf_counter()
+                        await self._run_slow_tasks()
+                        slow_time = (time.perf_counter() - slow_start) * 1000
+                        self._last_slow_loop_time = time.time()
+                        slow_status = "ran"
+
                 # ✅ ПРАВКА #17: Оптимизация времени цикла TCC
-                # ✅ ГРОК ОПТИМИЗАЦИЯ: Логируем только если cycle > 10s (проблема) или раз в 10 циклов
                 cycle_time = (time.perf_counter() - cycle_start_time) * 1000  # мс
                 if not hasattr(self, "_cycle_count"):
                     self._cycle_count = 0
                 self._cycle_count += 1
 
-                # ✅ ПРАВКА #17: Если цикл слишком долгий (>5 сек), логируем предупреждение
                 if cycle_time > 5000:
                     logger.warning(
                         f"⚠️ TCC: Медленный цикл {cycle_time:.1f}ms (порог: 5000ms). "
                         f"Оптимизация необходима!"
                     )
 
-                if cycle_time > 10000 or self._cycle_count % 10 == 0:
-                    logger.info(
-                        f"⏱️ TCC Performance: cycle={cycle_time:.1f}ms, "
-                        f"state={state_time:.1f}ms, signals={signals_time:.1f}ms, "
-                        f"process={process_time:.1f}ms, manage={manage_time:.1f}ms, "
-                        f"monitor={monitor_time:.1f}ms"
-                    )
-                else:
-                    logger.debug(
-                        f"⏱️ TCC Performance: cycle={cycle_time:.1f}ms, "
-                        f"state={state_time:.1f}ms, signals={signals_time:.1f}ms, "
-                        f"process={process_time:.1f}ms, manage={manage_time:.1f}ms, "
-                        f"monitor={monitor_time:.1f}ms"
-                    )
-
-                # Периодически обновляем статус ордеров в кэше
-                await self.order_coordinator.update_orders_cache_status(
-                    self._normalize_symbol
+                perf_message = (
+                    f"⏱️ TCC Performance: cycle={cycle_time:.1f}ms, "
+                    f"state={state_time:.1f}ms, signals={signals_time:.1f}ms, "
+                    f"process={process_time:.1f}ms, manage={manage_time:.1f}ms, "
+                    f"monitor={monitor_time:.1f}ms, tsl={tsl_time:.1f}ms, "
+                    f"slow={slow_status}:{slow_time:.1f}ms"
                 )
+                if cycle_time > 10000 or self._cycle_count % 10 == 0:
+                    logger.info(perf_message)
+                else:
+                    logger.debug(perf_message)
 
-                if not self.is_running:
-                    break
-
-                # Синхронизация локальных позиций с биржей
-                await self._sync_positions_with_exchange()
-
-                if not self.is_running:
-                    break
-
-                # Обновление статистики
-                await self.update_performance()
-
-                if not self.is_running:
-                    break
-
-                # Периодическая проверка TSL независимо от тикеров
-                # Проверяем TSL каждые 1-2 секунды для всех открытых позиций
-                await self.trailing_sl_coordinator.periodic_check()
-
-                if not self.is_running:
-                    break
-
-                # Пауза между итерациями
-                await asyncio.sleep(self.scalping_config.check_interval)
+                # Пауза между итерациями fast-loop
+                await asyncio.sleep(self._fast_loop_interval)
 
             except asyncio.CancelledError:
                 logger.info("🛑 TCC: Торговый цикл отменен")
@@ -358,6 +373,21 @@ class TradingControlCenter:
                     await asyncio.sleep(5)  # Пауза при ошибке
                 else:
                     break
+
+    async def _run_slow_tasks(self) -> None:
+        """Run heavy REST/synchronization tasks on slow-loop cadence."""
+        # Периодически обновляем статус ордеров в кэше.
+        await self.order_coordinator.update_orders_cache_status(self._normalize_symbol)
+        if not self.is_running:
+            return
+
+        # Синхронизация локальных позиций с биржей.
+        await self._sync_positions_with_exchange()
+        if not self.is_running:
+            return
+
+        # Обновление статистики.
+        await self.update_performance()
 
     async def manage_positions(self) -> None:
         """
@@ -420,9 +450,7 @@ class TradingControlCenter:
                             adl_status = (
                                 "🔴 ВЫСОКИЙ"
                                 if adl_rank >= 4
-                                else "🟡 СРЕДНИЙ"
-                                if adl_rank >= 2
-                                else "🟢 НИЗКИЙ"
+                                else "🟡 СРЕДНИЙ" if adl_rank >= 2 else "🟢 НИЗКИЙ"
                             )
                             adl_summary.append(
                                 {
@@ -578,7 +606,7 @@ class TradingControlCenter:
                         f"⚠️ TCC: Пропуск некорректной записи позиции при обновлении: {type(position).__name__} = {position}"
                     )
                     continue
-                
+
                 # ✅ ДОПОЛНИТЕЛЬНАЯ защита: Проверяем что position является dict ПЕРЕД каждым .get()
                 try:
                     symbol = position.get("instId", "").replace("-SWAP", "")
@@ -764,9 +792,11 @@ class TradingControlCenter:
                         new_metadata = PositionMetadata(
                             entry_time=entry_time_for_metadata,  # ✅ КРИТИЧЕСКОЕ: Используем entry_time из API (cTime/uTime)
                             regime=regime,
-                            entry_price=entry_price_from_api
-                            if entry_price_from_api > 0
-                            else None,
+                            entry_price=(
+                                entry_price_from_api
+                                if entry_price_from_api > 0
+                                else None
+                            ),
                             position_side=position_side,
                         )
 
@@ -782,8 +812,10 @@ class TradingControlCenter:
 
             # Проверка здоровья маржи
             try:
-                margin_status = await self.liquidation_guard.get_margin_status(self.client)
-                
+                margin_status = await self.liquidation_guard.get_margin_status(
+                    self.client
+                )
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Валидация payload перед использованием
                 # Защита от краша на 'str' object has no attribute 'get'
                 if not isinstance(margin_status, dict):
@@ -793,7 +825,7 @@ class TradingControlCenter:
                     )
                     # Не обновляем состояние при битых данных
                     return
-                
+
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Строгая валидация margin_status
                 # Проверяем что margin_status это dict ПЕРЕД каждым .get()
                 if not isinstance(margin_status, dict):
@@ -803,7 +835,7 @@ class TradingControlCenter:
                     )
                     # Не обновляем состояние при битых данных
                     return
-                
+
                 # Валидация вложенной структуры
                 health_status = margin_status.get("health_status")
                 if health_status and not isinstance(health_status, dict):
@@ -834,7 +866,10 @@ class TradingControlCenter:
                     logger.error(
                         f"❌ TCC: Получена строка ошибки вместо dict от LiquidationGuard: {error_msg}"
                     )
-                elif "ssl" in error_msg.lower() or "application_data_after_close_notify" in error_msg.lower():
+                elif (
+                    "ssl" in error_msg.lower()
+                    or "application_data_after_close_notify" in error_msg.lower()
+                ):
                     # ✅ ИСПРАВЛЕНО: SSL ошибки логируем как критические
                     logger.critical(
                         f"🔴 TCC: SSL/Network ошибка при получении margin_status: {e}. "
@@ -860,7 +895,9 @@ class TradingControlCenter:
             if self.is_running:
                 logger.error(f"❌ TCC: Ошибка обновления состояния: {e}")
             else:
-                logger.debug(f"🛑 TCC: Обновление состояния прервано при остановке: {e}")
+                logger.debug(
+                    f"🛑 TCC: Обновление состояния прервано при остановке: {e}"
+                )
 
     async def update_performance(self) -> None:
         """

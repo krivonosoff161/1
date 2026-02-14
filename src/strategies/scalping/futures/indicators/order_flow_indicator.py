@@ -5,7 +5,7 @@ Order Flow Indicator для Futures торговли.
 силы покупателей и продавцов на рынке.
 """
 
-from collections import deque
+from collections import defaultdict, deque
 from typing import Deque, Dict, Optional
 
 from loguru import logger
@@ -49,6 +49,34 @@ class OrderFlowIndicator:
         self.bid_volumes: Deque[float] = deque(maxlen=window)
         self.ask_volumes: Deque[float] = deque(maxlen=window)
         self.deltas: Deque[float] = deque(maxlen=window)
+        self._symbol_bid_volumes: Dict[str, Deque[float]] = defaultdict(
+            lambda: deque(maxlen=window)
+        )
+        self._symbol_ask_volumes: Dict[str, Deque[float]] = defaultdict(
+            lambda: deque(maxlen=window)
+        )
+        self._symbol_deltas: Dict[str, Deque[float]] = defaultdict(
+            lambda: deque(maxlen=window)
+        )
+
+    @staticmethod
+    def _normalize_symbol(symbol: Optional[str]) -> Optional[str]:
+        if not symbol:
+            return None
+        normalized = str(symbol).strip().upper()
+        return normalized or None
+
+    def _append_sample(
+        self,
+        bid_volume: float,
+        ask_volume: float,
+        bid_buffer: Deque[float],
+        ask_buffer: Deque[float],
+        delta_buffer: Deque[float],
+    ) -> None:
+        bid_buffer.append(bid_volume)
+        ask_buffer.append(ask_volume)
+        delta_buffer.append(self._calculate_delta(bid_volume, ask_volume))
 
     def update(self, bid_volume: float, ask_volume: float) -> None:
         """
@@ -62,12 +90,39 @@ class OrderFlowIndicator:
             logger.warning(f"Отрицательные объемы: bid={bid_volume}, ask={ask_volume}")
             return
 
-        self.bid_volumes.append(bid_volume)
-        self.ask_volumes.append(ask_volume)
+        self._append_sample(
+            bid_volume,
+            ask_volume,
+            self.bid_volumes,
+            self.ask_volumes,
+            self.deltas,
+        )
 
-        # Расчет delta всегда
-        delta = self._calculate_delta(bid_volume, ask_volume)
-        self.deltas.append(delta)
+    def update_for_symbol(
+        self, symbol: str, bid_volume: float, ask_volume: float
+    ) -> None:
+        """
+        Обновить order flow для конкретного символа.
+
+        Дополнительно обновляет агрегированный глобальный буфер для backward compatibility.
+        """
+        if bid_volume < 0 or ask_volume < 0:
+            logger.warning(
+                f"Отрицательные объемы для {symbol}: bid={bid_volume}, ask={ask_volume}"
+            )
+            return
+
+        self.update(bid_volume, ask_volume)
+        norm_symbol = self._normalize_symbol(symbol)
+        if not norm_symbol:
+            return
+        self._append_sample(
+            bid_volume,
+            ask_volume,
+            self._symbol_bid_volumes[norm_symbol],
+            self._symbol_ask_volumes[norm_symbol],
+            self._symbol_deltas[norm_symbol],
+        )
 
     def _calculate_delta(self, bid_volume: float, ask_volume: float) -> float:
         """
@@ -87,19 +142,24 @@ class OrderFlowIndicator:
 
         return (bid_volume - ask_volume) / total_volume
 
-    def get_delta(self) -> float:
+    def get_delta(self, symbol: Optional[str] = None) -> float:
         """
         Получение текущего delta.
 
         Returns:
             Текущее значение delta
         """
-        if len(self.deltas) == 0:
+        deltas = self.deltas
+        norm_symbol = self._normalize_symbol(symbol)
+        if norm_symbol and norm_symbol in self._symbol_deltas:
+            deltas = self._symbol_deltas[norm_symbol]
+
+        if len(deltas) == 0:
             return 0.0
 
-        return self.deltas[-1]
+        return deltas[-1]
 
-    def get_avg_delta(self, periods: int = 10) -> float:
+    def get_avg_delta(self, periods: int = 10, symbol: Optional[str] = None) -> float:
         """
         Получение среднего delta за N периодов.
 
@@ -109,16 +169,21 @@ class OrderFlowIndicator:
         Returns:
             Среднее delta за N периодов
         """
-        if len(self.deltas) == 0:
+        deltas = self.deltas
+        norm_symbol = self._normalize_symbol(symbol)
+        if norm_symbol and norm_symbol in self._symbol_deltas:
+            deltas = self._symbol_deltas[norm_symbol]
+
+        if len(deltas) == 0:
             return 0.0
 
-        if len(self.deltas) < periods:
-            periods = len(self.deltas)
+        if len(deltas) < periods:
+            periods = len(deltas)
 
-        recent_deltas = list(self.deltas)[-periods:]
+        recent_deltas = list(deltas)[-periods:]
         return sum(recent_deltas) / len(recent_deltas)
 
-    def get_delta_trend(self) -> str:
+    def get_delta_trend(self, symbol: Optional[str] = None) -> str:
         """
         Определение тренда delta.
 
@@ -127,10 +192,15 @@ class OrderFlowIndicator:
             "short" если delta падает (сила продавцов)
             "neutral" если delta стабильна
         """
-        if len(self.deltas) < 5:
+        deltas = self.deltas
+        norm_symbol = self._normalize_symbol(symbol)
+        if norm_symbol and norm_symbol in self._symbol_deltas:
+            deltas = self._symbol_deltas[norm_symbol]
+
+        if len(deltas) < 5:
             return "neutral"
 
-        recent_deltas = list(self.deltas)[-5:]
+        recent_deltas = list(deltas)[-5:]
 
         # Анализ тренда
         increasing = all(
@@ -149,7 +219,9 @@ class OrderFlowIndicator:
         else:
             return "neutral"
 
-    def is_long_favorable(self, threshold: Optional[float] = None) -> bool:
+    def is_long_favorable(
+        self, threshold: Optional[float] = None, symbol: Optional[str] = None
+    ) -> bool:
         """
         Проверка, благоприятен ли вход в лонг.
 
@@ -159,11 +231,13 @@ class OrderFlowIndicator:
         Returns:
             True если delta > threshold (больше покупателей)
         """
-        delta = self.get_delta()
+        delta = self.get_delta(symbol=symbol)
         threshold = threshold if threshold is not None else self.long_threshold
         return delta > threshold
 
-    def is_short_favorable(self, threshold: Optional[float] = None) -> bool:
+    def is_short_favorable(
+        self, threshold: Optional[float] = None, symbol: Optional[str] = None
+    ) -> bool:
         """
         Проверка, благоприятен ли вход в шорт.
 
@@ -173,11 +247,11 @@ class OrderFlowIndicator:
         Returns:
             True если delta < threshold (больше продавцов)
         """
-        delta = self.get_delta()
+        delta = self.get_delta(symbol=symbol)
         threshold = threshold if threshold is not None else self.short_threshold
         return delta < threshold
 
-    def get_market_pressure(self) -> Dict[str, float]:
+    def get_market_pressure(self, symbol: Optional[str] = None) -> Dict[str, float]:
         """
         Получение данных о рыночном давлении.
 
@@ -188,9 +262,9 @@ class OrderFlowIndicator:
             - trend: Тренд delta
             - strength: Сила давления (0-100%)
         """
-        current_delta = self.get_delta()
-        avg_delta = self.get_avg_delta()
-        trend = self.get_delta_trend()
+        current_delta = self.get_delta(symbol=symbol)
+        avg_delta = self.get_avg_delta(symbol=symbol)
+        trend = self.get_delta_trend(symbol=symbol)
 
         # Расчет силы давления (0-100%)
         strength = abs(avg_delta) * 100
@@ -209,6 +283,9 @@ class OrderFlowIndicator:
         self.bid_volumes.clear()
         self.ask_volumes.clear()
         self.deltas.clear()
+        self._symbol_bid_volumes.clear()
+        self._symbol_ask_volumes.clear()
+        self._symbol_deltas.clear()
         logger.info("Order Flow Indicator сброшен")
 
     def __repr__(self) -> str:

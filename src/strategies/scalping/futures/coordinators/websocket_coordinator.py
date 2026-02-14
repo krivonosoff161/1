@@ -121,6 +121,22 @@ class WebSocketCoordinator:
         self.signal_generator = signal_generator
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Orchestrator для проверки готовности модулей
         self.orchestrator = orchestrator
+        # OrderFlowIndicator source (can be provided directly or resolved via orchestrator).
+        self.order_flow = getattr(orchestrator, "order_flow", None)
+        self._order_flow_from_trades_enabled = True
+        self._last_order_flow_log_ts: Dict[str, float] = {}
+        try:
+            sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+            if isinstance(sg_cfg, dict):
+                self._order_flow_from_trades_enabled = bool(
+                    sg_cfg.get("order_flow_from_trades", True)
+                )
+            else:
+                self._order_flow_from_trades_enabled = bool(
+                    getattr(sg_cfg, "order_flow_from_trades", True)
+                )
+        except Exception:
+            self._order_flow_from_trades_enabled = True
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Callback для синхронизации позиций
         self.sync_positions_with_exchange = None  # Будет установлен из orchestrator
         # ✅ Дедупликация тикеров: кэш последних цен
@@ -168,6 +184,9 @@ class WebSocketCoordinator:
         self._ws_watchdog_max_age = 6.0
         self._ws_watchdog_stale_threshold = 2
         self._ws_watchdog_cooldown = 30.0
+        self._ws_watchdog_global_stale_ratio = 0.6
+        self._ws_watchdog_min_symbols = 2
+        self._last_ws_watchdog_global_trigger = 0.0
         self._last_ws_watchdog_trigger: Dict[str, float] = {}
         self._ws_watchdog_stale_counts: Dict[str, int] = {}
         # Последний обработанный тикер и логи форсированных обходов, чтобы избежать устаревших цен
@@ -217,6 +236,62 @@ class WebSocketCoordinator:
             logger.debug(f"WebSocketCoordinator force_reconnect failed: {e}")
             return False
 
+    def _get_order_flow_indicator(self):
+        if self.order_flow:
+            return self.order_flow
+        if self.orchestrator and hasattr(self.orchestrator, "order_flow"):
+            self.order_flow = self.orchestrator.order_flow
+        return self.order_flow
+
+    async def handle_trades_data(self, symbol: str, data: dict) -> None:
+        """Update OrderFlowIndicator from public trades stream."""
+        indicator = self._get_order_flow_indicator()
+        if not indicator:
+            return
+
+        rows = data.get("data", [])
+        if not rows:
+            return
+
+        buy_volume = 0.0
+        sell_volume = 0.0
+        for row in rows:
+            side = str(row.get("side", "")).strip().lower()
+            try:
+                size = float(row.get("sz", 0) or 0)
+            except (TypeError, ValueError):
+                size = 0.0
+            if size <= 0:
+                continue
+            if side == "buy":
+                buy_volume += size
+            elif side == "sell":
+                sell_volume += size
+
+        if buy_volume <= 0 and sell_volume <= 0:
+            return
+
+        try:
+            if hasattr(indicator, "update_for_symbol"):
+                indicator.update_for_symbol(symbol, buy_volume, sell_volume)
+                delta = indicator.get_delta(symbol=symbol)
+                avg_delta = indicator.get_avg_delta(periods=10, symbol=symbol)
+            else:
+                indicator.update(buy_volume, sell_volume)
+                delta = indicator.get_delta()
+                avg_delta = indicator.get_avg_delta(periods=10)
+
+            now = time.time()
+            last_ts = self._last_order_flow_log_ts.get(symbol, 0.0)
+            if now - last_ts >= 30.0:
+                self._last_order_flow_log_ts[symbol] = now
+                logger.info(
+                    f"ORDER_FLOW_TRADES {symbol}: buy={buy_volume:.4f}, "
+                    f"sell={sell_volume:.4f}, delta={delta:.4f}, avg_delta={avg_delta:.4f}"
+                )
+        except Exception as e:
+            logger.debug(f"Order flow trades update failed for {symbol}: {e}")
+
     async def initialize_websocket(self):
         """
         Инициализация WebSocket для получения рыночных данных.
@@ -245,6 +320,15 @@ class WebSocketCoordinator:
                         if symbol:
                             await self.handle_candle_data(symbol, data)
 
+                async def trades_callback(data):
+                    if "data" in data and len(data["data"]) > 0:
+                        inst_id = data.get("arg", {}).get("instId", "")
+                        if not inst_id:
+                            inst_id = data["data"][0].get("instId", "")
+                        symbol = inst_id.replace("-SWAP", "")
+                        if symbol:
+                            await self.handle_trades_data(symbol, data)
+
                 # Подписка на тикеры для всех символов
                 for symbol in self.scalping_config.symbols:
                     inst_id = f"{symbol}-SWAP"
@@ -263,6 +347,15 @@ class WebSocketCoordinator:
                             channel="candle5m",
                             inst_id=inst_id,
                             callback=kline_callback,
+                        )
+                    if (
+                        self._order_flow_from_trades_enabled
+                        and self._get_order_flow_indicator()
+                    ):
+                        await self.ws_manager.subscribe(
+                            channel="trades",
+                            inst_id=inst_id,
+                            callback=trades_callback,
                         )
 
                 logger.info(
@@ -800,6 +893,15 @@ class WebSocketCoordinator:
                     self._ws_watchdog_stale_threshold = max(
                         1, int(sg_cfg.get("ws_watchdog_consecutive_stale"))
                     )
+                if sg_cfg.get("ws_watchdog_global_stale_ratio") is not None:
+                    self._ws_watchdog_global_stale_ratio = max(
+                        0.1,
+                        min(1.0, float(sg_cfg.get("ws_watchdog_global_stale_ratio"))),
+                    )
+                if sg_cfg.get("ws_watchdog_min_symbols") is not None:
+                    self._ws_watchdog_min_symbols = max(
+                        1, int(sg_cfg.get("ws_watchdog_min_symbols"))
+                    )
             else:
                 # ws_watchdog_max_age приоритетнее ws_fresh_max_age для watchdog
                 watchdog_age = getattr(sg_cfg, "ws_watchdog_max_age", None)
@@ -815,12 +917,28 @@ class WebSocketCoordinator:
                     self._ws_watchdog_stale_threshold,
                 )
                 self._ws_watchdog_stale_threshold = max(1, int(threshold_val))
+                ratio_val = getattr(
+                    sg_cfg,
+                    "ws_watchdog_global_stale_ratio",
+                    self._ws_watchdog_global_stale_ratio,
+                )
+                self._ws_watchdog_global_stale_ratio = max(
+                    0.1, min(1.0, float(ratio_val))
+                )
+                min_symbols_val = getattr(
+                    sg_cfg,
+                    "ws_watchdog_min_symbols",
+                    self._ws_watchdog_min_symbols,
+                )
+                self._ws_watchdog_min_symbols = max(1, int(min_symbols_val))
         except Exception:
             pass
         self._ws_watchdog_task = asyncio.create_task(self._ws_watchdog_loop())
         logger.info(
             f"WS watchdog started (max_age={self._ws_watchdog_max_age:.1f}s, "
-            f"threshold={self._ws_watchdog_stale_threshold})"
+            f"threshold={self._ws_watchdog_stale_threshold}, "
+            f"global_ratio={self._ws_watchdog_global_stale_ratio:.2f}, "
+            f"min_symbols={self._ws_watchdog_min_symbols})"
         )
 
     async def _ws_watchdog_loop(self) -> None:
@@ -831,57 +949,69 @@ class WebSocketCoordinator:
                 except Exception:
                     symbols = []
 
+                stale_ready = []
+                checked_symbols = 0
+
                 for symbol in symbols:
                     try:
                         if not self.data_registry:
                             continue
                         if self._last_ticker_processed_ts.get(symbol) is None:
                             continue
+                        checked_symbols += 1
+
                         is_fresh = await self.data_registry.is_ws_fresh(
                             symbol, max_age=self._ws_watchdog_max_age
                         )
                         if is_fresh:
-                            if symbol in self._ws_watchdog_stale_counts:
-                                self._ws_watchdog_stale_counts.pop(symbol, None)
+                            self._ws_watchdog_stale_counts.pop(symbol, None)
                             continue
+
                         stale_count = self._ws_watchdog_stale_counts.get(symbol, 0) + 1
                         self._ws_watchdog_stale_counts[symbol] = stale_count
-                        if stale_count >= 1:  # Логируем при первом stale
-                            logger.debug(
-                                f"WS_STALE_DETECTED {symbol}: stale_count={stale_count}/{self._ws_watchdog_stale_threshold}, "
-                                f"max_age={self._ws_watchdog_max_age:.1f}s"
-                            )
-                        if stale_count < self._ws_watchdog_stale_threshold:
-                            continue
-                        now = time.time()
-                        last_ts = self._last_ws_watchdog_trigger.get(symbol, 0)
-                        if now - last_ts < self._ws_watchdog_cooldown:
-                            continue
-                        self._last_ws_watchdog_trigger[symbol] = now
-                        self._ws_watchdog_stale_counts[symbol] = 0
-                        logger.warning(
-                            f"WS_STALE_WATCHDOG {symbol}: "
-                            f"{stale_count} consecutive stale checks (max_age={self._ws_watchdog_max_age:.1f}s), forcing reconnect"
+                        logger.debug(
+                            f"WS_STALE_DETECTED {symbol}: stale_count={stale_count}/{self._ws_watchdog_stale_threshold}, "
+                            f"max_age={self._ws_watchdog_max_age:.1f}s"
                         )
-                        await self.force_reconnect(
-                            symbol=symbol, reason="ws_stale_watchdog"
-                        )
-                        if (
-                            hasattr(self, "sync_positions_with_exchange")
-                            and self.sync_positions_with_exchange
-                            and symbol in self.active_positions_ref
-                        ):
-                            try:
-                                await self.sync_positions_with_exchange(force=True)
-                                logger.info(
-                                    f"WS_STALE_WATCHDOG {symbol}: position sync forced after reconnect trigger"
-                                )
-                            except Exception as sync_error:
-                                logger.warning(
-                                    f"WS_STALE_WATCHDOG {symbol}: position sync failed: {sync_error}"
-                                )
+                        if stale_count >= self._ws_watchdog_stale_threshold:
+                            stale_ready.append(symbol)
                     except Exception as e:
                         logger.debug(f"WS watchdog error for {symbol}: {e}")
+
+                if checked_symbols > 0 and stale_ready:
+                    stale_ratio = len(stale_ready) / float(checked_symbols)
+                    now = time.time()
+                    can_trigger = (
+                        now - self._last_ws_watchdog_global_trigger
+                        >= self._ws_watchdog_cooldown
+                    )
+                    global_stale = (
+                        len(stale_ready) >= self._ws_watchdog_min_symbols
+                        and stale_ratio >= self._ws_watchdog_global_stale_ratio
+                    )
+
+                    if global_stale and can_trigger:
+                        self._last_ws_watchdog_global_trigger = now
+                        for stale_symbol in stale_ready:
+                            self._last_ws_watchdog_trigger[stale_symbol] = now
+                            self._ws_watchdog_stale_counts[stale_symbol] = 0
+
+                        stale_symbols_str = ",".join(stale_ready[:5])
+                        logger.warning(
+                            f"WS_STALE_WATCHDOG global: stale={len(stale_ready)}/{checked_symbols} "
+                            f"({stale_ratio:.0%}), symbols={stale_symbols_str}, forcing reconnect"
+                        )
+                        await self.force_reconnect(
+                            reason=(
+                                f"ws_stale_watchdog_global stale={len(stale_ready)}/"
+                                f"{checked_symbols} ratio={stale_ratio:.2f}"
+                            )
+                        )
+                    elif global_stale and not can_trigger:
+                        logger.debug(
+                            f"WS_STALE_WATCHDOG global stale but cooldown active: "
+                            f"stale={len(stale_ready)}/{checked_symbols}"
+                        )
             except Exception as e:
                 logger.debug(f"WS watchdog loop error: {e}")
             await asyncio.sleep(self._ws_watchdog_interval)
@@ -935,9 +1065,9 @@ class WebSocketCoordinator:
                             await self.data_registry.add_candle(
                                 symbol, timeframe, candle
                             )
-                            self._last_candle_timestamps[
-                                f"{symbol}_{timeframe}"
-                            ] = candle.timestamp
+                            self._last_candle_timestamps[f"{symbol}_{timeframe}"] = (
+                                candle.timestamp
+                            )
                             logger.debug(
                                 f"✅ REST: Добавлена новая свеча {symbol} {timeframe} (ts={candle.timestamp})"
                             )
@@ -1298,9 +1428,7 @@ class WebSocketCoordinator:
                         adl_status = (
                             "🔴 ВЫСОКИЙ"
                             if adl_rank >= 4
-                            else "🟡 СРЕДНИЙ"
-                            if adl_rank >= 2
-                            else "🟢 НИЗКИЙ"
+                            else "🟡 СРЕДНИЙ" if adl_rank >= 2 else "🟢 НИЗКИЙ"
                         )
                         logger.debug(
                             f"📊 ADL для {symbol}: rank={adl_rank} ({adl_status}) "
@@ -1461,9 +1589,11 @@ class WebSocketCoordinator:
 
                     self.debug_logger.log_position_close(
                         symbol=symbol,
-                        exit_price=current_price
-                        if "current_price" in locals() and current_price
-                        else 0.0,
+                        exit_price=(
+                            current_price
+                            if "current_price" in locals() and current_price
+                            else 0.0
+                        ),
                         pnl_usd=0.0,  # Не можем рассчитать без размера позиции
                         pnl_pct=profit_pct if "profit_pct" in locals() else 0.0,
                         time_in_position_minutes=minutes_in_position,

@@ -143,6 +143,7 @@ class OKXFuturesClient:
         # ✅ Учитываем режим позиций (net/long_short) для корректного posSide
         self.pos_mode = pos_mode or "net_mode"
         self.session = None
+        self._session_lock = asyncio.Lock()
         self._lot_sizes_cache: dict = {}  # Кэш для lot sizes
         self._instrument_details_cache: dict = (
             {}
@@ -181,27 +182,57 @@ class OKXFuturesClient:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Circuit Breaker для защиты от массовых сбоев API
         self.consecutive_failures = 0  # Счётчик последовательных сбоев
         self.circuit_open = False  # Флаг открытого circuit breaker
-        self.circuit_open_until: Optional[
-            float
-        ] = None  # Время закрытия circuit breaker
+        self.circuit_open_until: Optional[float] = (
+            None  # Время закрытия circuit breaker
+        )
         self.circuit_failure_threshold = (
             5  # Порог для открытия circuit (5 подряд ошибок)
         )
         self.circuit_cooldown_seconds = 120  # Пауза при открытом circuit (2 минуты)
 
     async def close(self):
-        """Корректное закрытие клиента и сессии"""
+        """Graceful client/session shutdown."""
         try:
-            if self.session:
-                if not self.session.closed:
-                    await self.session.close()
-                    # Даем время на корректное закрытие
-                    await asyncio.sleep(0.2)
-                self.session = None
-                logger.debug("✅ OKXFuturesClient сессия закрыта")
+            await self._reset_session()
+            logger.debug("OKXFuturesClient session closed")
         except Exception as e:
-            logger.debug(f"⚠️ Ошибка при закрытии сессии: {e}")
+            logger.debug(f"Session close error: {e}")
             self.session = None
+
+    async def _ensure_monitor_started(self) -> None:
+        if self._monitor_started:
+            return
+        await self.connection_monitor.start()
+        self._monitor_started = True
+        logger.info("ConnectionQualityMonitor started")
+
+    async def _reset_session(self) -> None:
+        """Close current aiohttp session safely."""
+        async with self._session_lock:
+            if self.session and not self.session.closed:
+                try:
+                    await self.session.close()
+                    await asyncio.sleep(0.2)
+                except Exception:
+                    pass
+            self.session = None
+            self._session_created_at = None
+
+    async def _ensure_session(self) -> None:
+        """Ensure a single reusable aiohttp session exists."""
+        if self.session and not self.session.closed:
+            return
+
+        async with self._session_lock:
+            if self.session and not self.session.closed:
+                return
+
+            await self._ensure_monitor_started()
+            connector_params = self.connection_monitor.get_connector_params()
+            self._session_max_age = self.connection_monitor.get_session_max_age()
+            connector = aiohttp.TCPConnector(**connector_params)
+            self.session = aiohttp.ClientSession(connector=connector)
+            self._session_created_at = time.time()
 
     # ---------- HTTP internals ----------
     async def _make_request(
@@ -268,74 +299,14 @@ class OKXFuturesClient:
         }
 
         # ✅ ИСПРАВЛЕНИЕ (07.01.2026): Управление сессией с force_close для предотвращения keep-alive проблем
-        now = time.time()
-        if (
-            not self.session
-            or self.session.closed
-            or (
-                self._session_created_at
-                and now - self._session_created_at > self._session_max_age
-            )
-        ):
-            if self.session and not self.session.closed:
-                await self.session.close()
-                await asyncio.sleep(0.1)  # Даем время на корректное закрытие
+        await self._ensure_session()
 
-            # ✅ НОВОЕ (09.01.2026): Запуск ConnectionQualityMonitor при первом запросе
-            if not self._monitor_started:
-                await self.connection_monitor.start()
-                self._monitor_started = True
-                logger.info("🌐 ConnectionQualityMonitor запущен")
-
-            # ✅ НОВОЕ: Динамические параметры соединения из ConnectionQualityMonitor
-            connector_params = self.connection_monitor.get_connector_params()
-            self._session_max_age = self.connection_monitor.get_session_max_age()
-
-            connector = aiohttp.TCPConnector(**connector_params)
-            self.session = aiohttp.ClientSession(connector=connector)
-            self._session_created_at = now
-
-            profile = self.connection_monitor.get_current_profile()
-            if profile:
-                logger.info(
-                    f"♻️ Переинициализирована aiohttp сессия с профилем '{profile.profile_name}': "
-                    f"force_close={profile.force_close}, timeout={profile.total_timeout}s, "
-                    f"session_max_age={profile.session_max_age}s"
-                )
-            else:
-                logger.debug(
-                    "♻️ Переинициализирована aiohttp сессия (профиль не определен)"
-                )
-
-        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Retry логика для таймаутов и ошибок подключения
         max_retries = 3
         retry_delay = 1.0  # Начальная задержка в секундах
 
         for attempt in range(max_retries):
             try:
-                if not self.session or self.session.closed:
-                    if not self._monitor_started:
-                        await self.connection_monitor.start()
-                        self._monitor_started = True
-                        logger.info("🌐 ConnectionQualityMonitor запущен")
-                    connector_params = self.connection_monitor.get_connector_params()
-                    self._session_max_age = (
-                        self.connection_monitor.get_session_max_age()
-                    )
-                    connector = aiohttp.TCPConnector(**connector_params)
-                    self.session = aiohttp.ClientSession(connector=connector)
-                    self._session_created_at = time.time()
-                    profile = self.connection_monitor.get_current_profile()
-                    if profile:
-                        logger.info(
-                            f"♻️ Переинициализирована aiohttp сессия (retry) с профилем '{profile.profile_name}': "
-                            f"force_close={profile.force_close}, timeout={profile.total_timeout}s, "
-                            f"session_max_age={profile.session_max_age}s"
-                        )
-                    else:
-                        logger.debug(
-                            "♻️ Переинициализирована aiohttp сессия (retry, профиль не определен)"
-                        )
+                await self._ensure_session()
 
                 # ✅ НОВОЕ (09.01.2026): Динамический timeout из ConnectionQualityMonitor
                 timeout = self.connection_monitor.get_timeout_params()
@@ -458,9 +429,7 @@ class OKXFuturesClient:
 
             except (asyncio.TimeoutError, aiohttp.ServerTimeoutError) as e:
                 if attempt < max_retries - 1:
-                    wait_time = retry_delay * (
-                        2**attempt
-                    )  # Экспоненциальная задержка
+                    wait_time = retry_delay * (2**attempt)  # Экспоненциальная задержка
                     logger.warning(
                         f"⏱️ Таймаут при запросе к OKX (попытка {attempt + 1}/{max_retries}): "
                         f"{method} {url}, повтор через {wait_time:.1f}с"
@@ -548,10 +517,7 @@ class OKXFuturesClient:
                         f"{method} {url}, ошибка: {e}, повтор через {wait_time:.1f}с"
                     )
                     # Пересоздаем сессию при SSL ошибке
-                    if self.session and not self.session.closed:
-                        await self.session.close()
-                        await asyncio.sleep(0.1)
-                    self.session = None
+                    await self._reset_session()
                     await asyncio.sleep(wait_time)
                     # Обновляем timestamp и подпись для новой попытки
                     timestamp = (
@@ -625,12 +591,7 @@ class OKXFuturesClient:
                             f"🔌 Connector/Session закрыт при VPN (попытка {attempt + 1}/{max_retries}): "
                             f"{method} {url}, переподключаемся через {wait_time:.1f}с"
                         )
-                        if self.session and not self.session.closed:
-                            try:
-                                await self.session.close()
-                            except Exception:
-                                pass
-                        self.session = None  # Принудительно сбросить session
+                        await self._reset_session()
                         await asyncio.sleep(wait_time)
                         continue
 
@@ -1199,7 +1160,9 @@ class OKXFuturesClient:
                 self._logged_position_fields = set()
             if symbol not in self._logged_position_fields:
                 available_fields = list(pos.keys())
-                logger.debug(f"📋 Доступные поля в позиции {symbol}: {available_fields}")
+                logger.debug(
+                    f"📋 Доступные поля в позиции {symbol}: {available_fields}"
+                )
                 logger.debug(f"📋 Пример позиции {symbol}: {pos}")
                 self._logged_position_fields.add(symbol)
 
@@ -1261,9 +1224,7 @@ class OKXFuturesClient:
                 if "availEq" in pos and pos.get("availEq"):
                     try:
                         equity = float(pos["availEq"])
-                        logger.debug(
-                            f"⚠️ Используем availEq для {symbol}: {equity:.2f}"
-                        )
+                        logger.debug(f"⚠️ Используем availEq для {symbol}: {equity:.2f}")
                     except (ValueError, TypeError):
                         pass
 
@@ -1716,9 +1677,7 @@ class OKXFuturesClient:
             logger.debug(f"Failed to get algo orders for {symbol}: {e}")
             return []
 
-    async def cancel_algo_order(
-        self, symbol: str, algo_id: str
-    ) -> dict:
+    async def cancel_algo_order(self, symbol: str, algo_id: str) -> dict:
         """
         Отмена algo order.
 

@@ -122,9 +122,9 @@ class ExitAnalyzer:
         self._signal_locks_ref = signal_locks_ref or {}
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period для SL при недоступном MTF
-        self._sl_grace_periods: Dict[
-            str, float
-        ] = {}  # {symbol: timestamp последней попытки SL}
+        self._sl_grace_periods: Dict[str, float] = (
+            {}
+        )  # {symbol: timestamp последней попытки SL}
         self._sl_grace_duration = 30.0  # 30 секунд grace period
 
         # Получаем доступ к модулям через orchestrator
@@ -395,9 +395,7 @@ class ExitAnalyzer:
                         pnl=pnl_percent,
                     )
                 except Exception as e:
-                    logger.debug(
-                        f"⚠️ Ошибка записи времени удержания для {symbol}: {e}"
-                    )
+                    logger.debug(f"⚠️ Ошибка записи времени удержания для {symbol}: {e}")
         except Exception as e:
             logger.debug(f"⚠️ Ошибка записи метрик при закрытии {symbol}: {e}")
 
@@ -670,6 +668,41 @@ class ExitAnalyzer:
                 )
 
             # ✅ INFO-логи для отслеживания решений
+
+            # Guard: block auto-exit when model PnL and exchange PnL have opposite signs.
+            if decision and decision.get("action") in {"close", "partial_close"}:
+                try:
+                    (
+                        entry_price_guard,
+                        side_guard,
+                    ) = await self._get_entry_price_and_side(symbol, position, metadata)
+                    if entry_price_guard and side_guard:
+                        model_gross_guard = self._calculate_pnl_percent(
+                            entry_price_guard,
+                            current_price,
+                            side_guard,
+                            include_fees=False,
+                            entry_time=(metadata.entry_time if metadata else None),
+                            position=position,
+                            metadata=metadata,
+                        )
+                        exchange_gross_guard = self._get_exchange_pnl_percent(
+                            position=position, metadata=metadata
+                        )
+                        if self._is_pnl_sign_mismatch(
+                            model_gross_guard, exchange_gross_guard
+                        ):
+                            logger.critical(
+                                f"EXIT_BLOCKED_PNL_MISMATCH {symbol}: "
+                                f"model={model_gross_guard:.4f}% vs exchange={exchange_gross_guard:.4f}%, "
+                                f"action={decision.get('action')}, reason={decision.get('reason')}"
+                            )
+                            return None
+                except Exception as guard_error:
+                    logger.debug(
+                        f"ExitAnalyzer pnl mismatch guard error for {symbol}: {guard_error}"
+                    )
+
             analysis_time = (time.perf_counter() - analysis_start) * 1000  # мс
             if decision:
                 action = decision.get("action", "unknown")
@@ -749,31 +782,86 @@ class ExitAnalyzer:
         position: Optional[Any] = None,
         metadata: Optional[Any] = None,
     ) -> Optional[float]:
-        """
-        Расчет PnL% с учетом комиссии.
-        # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для фьючерсов считаем PnL% от МАРЖИ, а не от цены!
-        # Биржа показывает PnL% от маржи (с учетом плеча), поэтому наш расчет должен совпадать.
+        """Calculate decision PnL% from entry/current/side and leverage.
 
-        Args:
-            entry_price: Цена входа
-            current_price: Текущая цена
-            position_side: Направление позиции ("long" или "short")
-            include_fees: Учитывать комиссию
-            entry_time: Время открытия позиции (опционально, для проверки первых 10 секунд)
-            position: Данные позиции (для получения margin и unrealizedPnl)
-            metadata: Метаданные позиции (для получения margin и unrealizedPnl)
-
-        Returns:
-            PnL% от маржи (с комиссией если include_fees=True и прошло >10 секунд)
+        Exchange upl/margin is used only as a secondary consistency check.
         """
-        if entry_price == 0:
+        try:
+            entry_price = float(entry_price)
+            current_price = float(current_price)
+        except (TypeError, ValueError):
             return 0.0
 
-        # ✅ ПРИОРИТЕТ 1: Пытаемся получить PnL% от маржи (как на бирже)
+        if entry_price <= 0 or current_price <= 0:
+            return 0.0
+
+        side = str(position_side or "").strip().lower()
+        if side == "buy":
+            side = "long"
+        elif side == "sell":
+            side = "short"
+        if side not in ("long", "short"):
+            side = "long"
+
+        if side == "long":
+            base_move_pct = (current_price - entry_price) / entry_price * 100.0
+        else:
+            base_move_pct = (entry_price - current_price) / entry_price * 100.0
+
+        leverage = self._get_effective_leverage(position, metadata)
+        model_gross_pct = base_move_pct * leverage
+
+        exchange_gross_pct = self._get_exchange_pnl_percent(position, metadata)
+        if self._is_pnl_sign_mismatch(model_gross_pct, exchange_gross_pct):
+            logger.critical(
+                "Pnl sign mismatch detected: "
+                f"model={model_gross_pct:.4f}%, exchange={exchange_gross_pct:.4f}%"
+            )
+
+        if not include_fees:
+            return model_gross_pct
+
+        seconds_since_open = 0.0
+        if entry_time:
+            try:
+                if isinstance(entry_time, str):
+                    entry_time = datetime.fromisoformat(
+                        entry_time.replace("Z", "+00:00")
+                    )
+                if isinstance(entry_time, datetime):
+                    if entry_time.tzinfo is None:
+                        entry_time = entry_time.replace(tzinfo=timezone.utc)
+                    else:
+                        entry_time = entry_time.astimezone(timezone.utc)
+                    seconds_since_open = (
+                        datetime.now(timezone.utc) - entry_time
+                    ).total_seconds()
+            except Exception:
+                pass
+
+        # Ignore commissions during opening transient window.
+        if seconds_since_open < 10.0:
+            return model_gross_pct
+
+        entry_order_type = "market"
+        if metadata and getattr(metadata, "order_type", None):
+            entry_order_type = str(metadata.order_type).lower()
+        elif position and isinstance(position, dict) and position.get("order_type"):
+            entry_order_type = str(position.get("order_type")).lower()
+
+        entry_fee_rate = self._get_fee_rate_per_side(entry_order_type)
+        exit_fee_rate = self._get_fee_rate_per_side("market")
+        commission_pct = (entry_fee_rate + exit_fee_rate) * leverage * 100.0
+        return model_gross_pct - commission_pct
+
+    def _get_exchange_pnl_percent(
+        self,
+        position: Optional[Any] = None,
+        metadata: Optional[Any] = None,
+    ) -> Optional[float]:
         margin_used = None
         unrealized_pnl = None
 
-        # Пробуем получить из position
         if position and isinstance(position, dict):
             try:
                 margin_str = position.get("margin") or position.get("imr") or "0"
@@ -782,189 +870,40 @@ class ExitAnalyzer:
                 upl_str = position.get("upl") or position.get("unrealizedPnl") or "0"
                 if upl_str and str(upl_str).strip() and str(upl_str) != "0":
                     unrealized_pnl = float(upl_str)
-            except (ValueError, TypeError) as e:
-                logger.debug(
-                    f"⚠️ ExitAnalyzer: Ошибка получения margin/upl из position: {e}"
-                )
+            except (TypeError, ValueError):
+                pass
 
-        # Пробуем получить из metadata
-        if (margin_used is None or margin_used == 0) and metadata:
+        if (margin_used is None or margin_used <= 0) and metadata:
             try:
                 if hasattr(metadata, "margin") and metadata.margin:
                     margin_used = float(metadata.margin)
                 elif hasattr(metadata, "margin_used") and metadata.margin_used:
                     margin_used = float(metadata.margin_used)
-                if hasattr(metadata, "unrealized_pnl") and metadata.unrealized_pnl:
-                    unrealized_pnl = float(metadata.unrealized_pnl)
-            except (ValueError, TypeError) as e:
-                logger.debug(
-                    f"⚠️ ExitAnalyzer: Ошибка получения margin/upl из metadata: {e}"
-                )
-
-        # Если получили margin и unrealizedPnl - считаем от маржи (как на бирже)
-        if margin_used and margin_used > 0 and unrealized_pnl is not None:
-            gross_pnl_pct = (unrealized_pnl / margin_used) * 100  # В процентах
-
-            # Учитываем комиссию если нужно
-            if include_fees:
-                seconds_since_open = 0.0
-                if entry_time:
-                    try:
-                        if isinstance(entry_time, str):
-                            entry_time = datetime.fromisoformat(
-                                entry_time.replace("Z", "+00:00")
-                            )
-                        # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
-                        if isinstance(entry_time, datetime):
-                            if entry_time.tzinfo is None:
-                                entry_time = entry_time.replace(tzinfo=timezone.utc)
-                            elif entry_time.tzinfo != timezone.utc:
-                                entry_time = entry_time.astimezone(timezone.utc)
-                        seconds_since_open = (
-                            datetime.now(timezone.utc) - entry_time
-                        ).total_seconds()
-                    except Exception:
-                        pass
-
-                if seconds_since_open < 10.0:
-                    # В первые 10 секунд не учитываем комиссию
-                    logger.debug(
-                        f"⏱️ ExitAnalyzer: Позиция открыта {seconds_since_open:.1f} сек назад, "
-                        f"комиссия не учитывается (PnL% от маржи={gross_pnl_pct:.4f}%)"
-                    )
-                    return gross_pnl_pct
-                else:
-                    # ✅ ИСПРАВЛЕНО: После 10 секунд учитываем комиссию с учётом плеча и двух сторон (вход+выход)
-                    # Используем maker_fee_rate (0.02%) для limit ордеров, т.к. бот использует limit ордера
-                    entry_order_type = "market"
-                    if metadata and getattr(metadata, "order_type", None):
-                        entry_order_type = str(metadata.order_type).lower()
-                    elif (
-                        position
-                        and isinstance(position, dict)
-                        and position.get("order_type")
-                    ):
-                        entry_order_type = str(position.get("order_type")).lower()
-                    entry_fee_rate = self._get_fee_rate_per_side(entry_order_type)
-                    exit_fee_rate = self._get_fee_rate_per_side("market")
-
-                    # ✅ ИСПРАВЛЕНО: Комиссия учитывает плечо и две стороны (вход + выход)
-                    # Получаем leverage из metadata/position/конфига (не захардкожен)
-                    _cfg_leverage = (
-                        int(getattr(self.scalping_config, "leverage", 3))
-                        if self.scalping_config
-                        else 3
-                    )
-                    leverage = _cfg_leverage
-                    if metadata and hasattr(metadata, "leverage") and metadata.leverage:
-                        try:
-                            leverage = int(float(metadata.leverage))
-                        except (ValueError, TypeError):
-                            leverage = _cfg_leverage
-                    elif position and isinstance(position, dict):
-                        try:
-                            leverage_val = (
-                                position.get("leverage", _cfg_leverage) or _cfg_leverage
-                            )
-                            leverage = int(float(leverage_val))
-                        except (ValueError, TypeError):
-                            leverage = _cfg_leverage
-
-                    # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
-                    # (т.к. комиссия считается от номинала, а PnL% от маржи)
-                    commission_pct = (
-                        (entry_fee_rate + exit_fee_rate) * leverage * 100
-                    )  # 0.02% × 2 × leverage = 0.2% при leverage=5
-                    net_pnl_pct = gross_pnl_pct - commission_pct
-                    logger.debug(
-                        f"💰 ExitAnalyzer: PnL% от маржи={gross_pnl_pct:.4f}%, "
-                        f"комиссия={commission_pct:.4f}%, Net PnL%={net_pnl_pct:.4f}%"
-                    )
-                    return net_pnl_pct
-            else:
-                return gross_pnl_pct
-
-        # ✅ FALLBACK: Если не получили margin, считаем от цены (старый метод)
-        # Это менее точно, но лучше чем ничего
-        logger.debug(
-            f"⚠️ ExitAnalyzer: margin/unrealizedPnl не найдены, используем расчет от цены (менее точно)"
-        )
-
-        # Базовая прибыль без комиссии (от цены)
-        if position_side.lower() == "long":
-            gross_profit_pct = (current_price - entry_price) / entry_price * 100
-        else:  # short
-            gross_profit_pct = (entry_price - current_price) / entry_price * 100
-
-        leverage = self._get_effective_leverage(position, metadata)
-        gross_profit_pct = gross_profit_pct * leverage
-
-        # Учитываем комиссию если нужно
-        if include_fees:
-            seconds_since_open = 0.0
-            if entry_time:
-                try:
-                    if isinstance(entry_time, str):
-                        entry_time = datetime.fromisoformat(
-                            entry_time.replace("Z", "+00:00")
-                        )
-                    # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
-                    if isinstance(entry_time, datetime):
-                        if entry_time.tzinfo is None:
-                            entry_time = entry_time.replace(tzinfo=timezone.utc)
-                        elif entry_time.tzinfo != timezone.utc:
-                            entry_time = entry_time.astimezone(timezone.utc)
-                    seconds_since_open = (
-                        datetime.now(timezone.utc) - entry_time
-                    ).total_seconds()
-                except Exception:
-                    pass
-
-            if seconds_since_open < 10.0:
-                logger.debug(
-                    f"⏱️ ExitAnalyzer: Позиция открыта {seconds_since_open:.1f} сек назад, "
-                    f"комиссия не учитывается (PnL% от цены={gross_profit_pct:.4f}%)"
-                )
-                return gross_profit_pct
-            else:
-                # ✅ ИСПРАВЛЕНО: Комиссия с учётом плеча и двух сторон (вход+выход)
-                # Используем maker_fee_rate (0.02%) для limit ордеров
-                entry_order_type = "market"
-                if metadata and getattr(metadata, "order_type", None):
-                    entry_order_type = str(metadata.order_type).lower()
-                elif (
-                    position
-                    and isinstance(position, dict)
-                    and position.get("order_type")
+                if (
+                    hasattr(metadata, "unrealized_pnl")
+                    and metadata.unrealized_pnl is not None
                 ):
-                    entry_order_type = str(position.get("order_type")).lower()
-                entry_fee_rate = self._get_fee_rate_per_side(entry_order_type)
-                exit_fee_rate = self._get_fee_rate_per_side("market")
+                    unrealized_pnl = float(metadata.unrealized_pnl)
+            except (TypeError, ValueError):
+                pass
 
-                # Получаем leverage из metadata или position
-                leverage = 5  # Default
-                if metadata and hasattr(metadata, "leverage") and metadata.leverage:
-                    try:
-                        leverage = int(
-                            float(metadata.leverage)
-                        )  # ✅ ФИКС: Конвертируем в float сначала
-                    except (ValueError, TypeError):
-                        leverage = 5
-                elif position and isinstance(position, dict):
-                    try:
-                        leverage_val = position.get("leverage", 5) or 5
-                        leverage = int(
-                            float(leverage_val)
-                        )  # ✅ ФИКС: Конвертируем в float сначала
-                    except (ValueError, TypeError):
-                        leverage = 5
+        if margin_used and margin_used > 0 and unrealized_pnl is not None:
+            return (unrealized_pnl / margin_used) * 100.0
+        return None
 
-                # Комиссия: 0.02% на вход + 0.02% на выход, умноженная на leverage
-                commission_pct = (entry_fee_rate + exit_fee_rate) * leverage * 100
-                net_profit_pct = gross_profit_pct - commission_pct
-                return net_profit_pct
-        else:
-            return gross_profit_pct
+    @staticmethod
+    def _is_pnl_sign_mismatch(
+        model_pnl_pct: Optional[float],
+        exchange_pnl_pct: Optional[float],
+        min_abs_pct: float = 0.15,
+    ) -> bool:
+        if model_pnl_pct is None or exchange_pnl_pct is None:
+            return False
+        if abs(model_pnl_pct) < min_abs_pct or abs(exchange_pnl_pct) < min_abs_pct:
+            return False
+        return (model_pnl_pct > 0 > exchange_pnl_pct) or (
+            model_pnl_pct < 0 < exchange_pnl_pct
+        )
 
     def _get_effective_leverage(
         self, position: Optional[Any] = None, metadata: Optional[Any] = None
@@ -2438,8 +2377,8 @@ class ExitAnalyzer:
         # Проверка Order Flow разворота
         if self.order_flow:
             try:
-                current_delta = self.order_flow.get_delta()
-                avg_delta = self.order_flow.get_avg_delta(periods=10)
+                current_delta = self.order_flow.get_delta(symbol=symbol)
+                avg_delta = self.order_flow.get_avg_delta(periods=10, symbol=symbol)
                 reversal_threshold = 0.15  # 15% изменение delta
 
                 logger.info(
@@ -4696,9 +4635,11 @@ class ExitAnalyzer:
                     "sl_percent": sl_percent,
                     "spread_buffer": spread_buffer,
                     "regime": regime,
-                    "entry_regime": metadata.regime
-                    if metadata and hasattr(metadata, "regime")
-                    else regime,
+                    "entry_regime": (
+                        metadata.regime
+                        if metadata and hasattr(metadata, "regime")
+                        else regime
+                    ),
                     "reversal_detected": False,
                 }
 
@@ -4873,9 +4814,11 @@ class ExitAnalyzer:
                     "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                     "tp_percent": tp_percent,
                     "regime": regime,
-                    "entry_regime": metadata.regime
-                    if metadata and hasattr(metadata, "regime")
-                    else regime,
+                    "entry_regime": (
+                        metadata.regime
+                        if metadata and hasattr(metadata, "regime")
+                        else regime
+                    ),
                 }
 
             # 4. Проверка big_profit_exit
@@ -4913,9 +4856,11 @@ class ExitAnalyzer:
                     "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
                     "big_profit_exit_percent": big_profit_exit_percent,
                     "regime": regime,
-                    "entry_regime": metadata.regime
-                    if metadata and hasattr(metadata, "regime")
-                    else regime,
+                    "entry_regime": (
+                        metadata.regime
+                        if metadata and hasattr(metadata, "regime")
+                        else regime
+                    ),
                 }
 
             # 5. Проверка partial_tp с учетом adaptive_min_holding
@@ -5661,9 +5606,11 @@ class ExitAnalyzer:
                 f"partial_tp={trigger_percent_float:.2f}% (не достигнут)"
                 if trigger_percent_float is not None
                 and net_pnl_percent_float < trigger_percent_float
-                else f"partial_tp={trigger_percent_float:.2f}% (достигнут, но блокируется)"
-                if trigger_percent_float is not None
-                else "partial_tp=disabled"
+                else (
+                    f"partial_tp={trigger_percent_float:.2f}% (достигнут, но блокируется)"
+                    if trigger_percent_float is not None
+                    else "partial_tp=disabled"
+                )
             )
             logger.info(
                 f"🔍 ExitAnalyzer RANGING {symbol}: Нет причин для закрытия - "

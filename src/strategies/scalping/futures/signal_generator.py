@@ -1282,7 +1282,9 @@ class FuturesSignalGenerator:
                     if isinstance(pivot_config_data, dict):
                         # ✅ ИСПРАВЛЕНО: Если "enabled" есть в pivot_config_data - используем его
                         # Если нет - оставляем pivot_enabled из pivot_points_enabled (верхний уровень)
-                        logger.debug(f"📊 pivot_config_data (dict): {pivot_config_data}")
+                        logger.debug(
+                            f"📊 pivot_config_data (dict): {pivot_config_data}"
+                        )
                         if "enabled" in pivot_config_data:
                             old_enabled = pivot_enabled
                             pivot_enabled = pivot_config_data.get(
@@ -1530,9 +1532,7 @@ class FuturesSignalGenerator:
                     )
                     self.volume_filter = None
             except Exception as e:
-                logger.warning(
-                    f"⚠️ Volume Profile Filter инициализация не удалась: {e}"
-                )
+                logger.warning(f"⚠️ Volume Profile Filter инициализация не удалась: {e}")
                 self.volume_filter = None
 
             # ✅ РЕФАКТОРИНГ: Подключаем все фильтры к FilterManager
@@ -1687,64 +1687,31 @@ class FuturesSignalGenerator:
                                 ws_max_age = float(
                                     getattr(sg_cfg, "ws_fresh_max_age", ws_max_age)
                                 )
-                            if hasattr(self.data_registry, "is_ws_fresh"):
-                                is_fresh = await self.data_registry.is_ws_fresh(
-                                    symbol, max_age=ws_max_age
+                            decision_snapshot = (
+                                await self.data_registry.get_decision_price_snapshot(
+                                    symbol=symbol,
+                                    client=self.client,
+                                    max_age=ws_max_age,
+                                    allow_rest_fallback=True,
                                 )
-                                if not is_fresh:
-                                    data_snapshot = (
-                                        await self.data_registry.peek_market_data(
-                                            symbol
-                                        )
-                                    )
-                                    extra = ""
-                                    snapshot_source = None
-                                    age = None
-                                    if data_snapshot:
-                                        snapshot_source = data_snapshot.get("source")
-                                        updated_at = data_snapshot.get("updated_at")
-                                        if isinstance(updated_at, datetime):
-                                            if updated_at.tzinfo is None:
-                                                local_tz = (
-                                                    datetime.now().astimezone().tzinfo
-                                                )
-                                                updated_at = updated_at.replace(
-                                                    tzinfo=local_tz
-                                                ).astimezone(timezone.utc)
-                                            else:
-                                                updated_at = updated_at.astimezone(
-                                                    timezone.utc
-                                                )
-                                            age = (
-                                                datetime.now(timezone.utc) - updated_at
-                                            ).total_seconds()
-                                            if age < 0:
-                                                age = 0.0
-                                        else:
-                                            age = None
-                                        age_str = (
-                                            f"{age:.1f}s" if age is not None else "N/A"
-                                        )
-                                        extra = (
-                                            f" source={snapshot_source}"
-                                            f" age={age_str}"
-                                        )
-                                    if (
-                                        snapshot_source == "REST"
-                                        and age is not None
-                                        and age <= 10.0
-                                        and self._allow_rest_for_ws
-                                    ):
-                                        logger.info(
-                                            f"WS_STALE_SIGNAL_FALLBACK {symbol}: "
-                                            f"no fresh WS price within {ws_max_age:.1f}s{extra}, continue with REST price"
-                                        )
-                                    else:
-                                        logger.warning(
-                                            f"WS_STALE_SIGNAL_FALLBACK {symbol}: "
-                                            f"no fresh WS price within {ws_max_age:.1f}s{extra}, skip signal generation"
-                                        )
-                                        return []
+                            )
+                            if (
+                                not decision_snapshot
+                                or float(decision_snapshot.get("price") or 0.0) <= 0
+                            ):
+                                logger.warning(
+                                    f"WS_STALE_SIGNAL_FALLBACK {symbol}: no valid snapshot for signals, skip generation"
+                                )
+                                return []
+                            if decision_snapshot.get("rest_fallback"):
+                                age = decision_snapshot.get("age")
+                                age_str = (
+                                    f"{float(age):.1f}s" if age is not None else "N/A"
+                                )
+                                logger.info(
+                                    f"WS_STALE_SIGNAL_FALLBACK {symbol}: "
+                                    f"continue with REST_FALLBACK snapshot (age={age_str})"
+                                )
                         except Exception as e:
                             logger.debug(
                                 f"SignalGenerator WS freshness check error for {symbol}: {e}"
@@ -2091,17 +2058,7 @@ class FuturesSignalGenerator:
                         )
                 except Exception:
                     pass
-                client_for_fresh = None
-                if self._allow_rest_for_ws:
-                    client_for_fresh = self.client
-                else:
-                    try:
-                        if await self._should_force_rest_fallback(symbol, ws_max_age):
-                            client_for_fresh = self.client
-                    except Exception as e:
-                        logger.debug(
-                            f"SignalGenerator: force REST fallback check failed for {symbol}: {e}"
-                        )
+                client_for_fresh = self.client
                 price = await self.data_registry.get_fresh_price_for_signals(
                     symbol, client=client_for_fresh, max_age=ws_max_age
                 )
@@ -7746,7 +7703,9 @@ class FuturesSignalGenerator:
                         if not self.pivot_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
-                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован Pivot Points")
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован Pivot Points"
+                            )
                             continue
                     except Exception as e:
                         logger.debug(
@@ -7825,7 +7784,9 @@ class FuturesSignalGenerator:
                         if not self.funding_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
-                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован Funding Rate")
+                            logger.debug(
+                                f"🔍 Сигнал {symbol} отфильтрован Funding Rate"
+                            )
                             continue
                     except Exception as e:
                         logger.debug(
@@ -7876,9 +7837,9 @@ class FuturesSignalGenerator:
             )
 
             # Адаптация размера позиции
-            futures_signal[
-                "max_position_size"
-            ] = await self._calculate_max_position_size(signal)
+            futures_signal["max_position_size"] = (
+                await self._calculate_max_position_size(signal)
+            )
 
             return futures_signal
 
@@ -8041,9 +8002,9 @@ class FuturesSignalGenerator:
                     )
                     orchestrator_min_strength_by_symbol[symbol_val] = None
                     continue
-                orchestrator_min_strength_by_symbol[
-                    symbol_val
-                ] = bundle.signal.min_signal_strength
+                orchestrator_min_strength_by_symbol[symbol_val] = (
+                    bundle.signal.min_signal_strength
+                )
                 source = None
                 if bundle.signal.sources:
                     source = bundle.signal.sources.get("min_signal_strength")
