@@ -1681,9 +1681,10 @@ class TrailingSLCoordinator:
                 )
                 comparison_op = ">=" if position_side.lower() == "short" else "<="
                 entry_time = position.get("entry_time")
-                if isinstance(entry_time, datetime):
+                entry_time_utc = self._normalize_to_utc(entry_time)
+                if isinstance(entry_time_utc, datetime):
                     minutes_in_position = (
-                        datetime.now() - entry_time
+                        datetime.now(timezone.utc) - entry_time_utc
                     ).total_seconds() / 60.0
                 elif tsl.entry_timestamp > 0:
                     minutes_in_position = (time.time() - tsl.entry_timestamp) / 60.0
@@ -1823,11 +1824,50 @@ class TrailingSLCoordinator:
                 "price": float(fallback_price),
                 "source": "TSL_LOCAL_FALLBACK",
                 "age": None,
-                "updated_at": datetime.now(),
+                "updated_at": datetime.now(timezone.utc),
                 "stale": False,
                 "rest_fallback": True,
             }
 
+        return None
+
+    @staticmethod
+    def _normalize_to_utc(value: Any) -> Optional[datetime]:
+        """Normalize datetime-like values to timezone-aware UTC datetime."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
+        if isinstance(value, (int, float)):
+            ts = float(value)
+            if ts > 1e12:
+                ts /= 1000.0
+            try:
+                return datetime.fromtimestamp(ts, tz=timezone.utc)
+            except Exception:
+                return None
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            try:
+                dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            except Exception:
+                try:
+                    ts = float(text)
+                except Exception:
+                    return None
+                if ts > 1e12:
+                    ts /= 1000.0
+                try:
+                    return datetime.fromtimestamp(ts, tz=timezone.utc)
+                except Exception:
+                    return None
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
         return None
 
     async def periodic_check(self):
@@ -1928,10 +1968,14 @@ class TrailingSLCoordinator:
                                             else None
                                         )
                                         if updated_at:
-                                            from datetime import datetime
-
+                                            updated_at_utc = self._normalize_to_utc(
+                                                updated_at
+                                            )
+                                            if not updated_at_utc:
+                                                continue
                                             data_age = (
-                                                datetime.now() - updated_at
+                                                datetime.now(timezone.utc)
+                                                - updated_at_utc
                                             ).total_seconds()
                                             if data_age > 45:
                                                 logger.critical(

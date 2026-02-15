@@ -122,9 +122,9 @@ class ExitAnalyzer:
         self._signal_locks_ref = signal_locks_ref or {}
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Grace period для SL при недоступном MTF
-        self._sl_grace_periods: Dict[str, float] = (
-            {}
-        )  # {symbol: timestamp последней попытки SL}
+        self._sl_grace_periods: Dict[
+            str, float
+        ] = {}  # {symbol: timestamp последней попытки SL}
         self._sl_grace_duration = 30.0  # 30 секунд grace period
 
         # Получаем доступ к модулям через orchestrator
@@ -395,7 +395,9 @@ class ExitAnalyzer:
                         pnl=pnl_percent,
                     )
                 except Exception as e:
-                    logger.debug(f"⚠️ Ошибка записи времени удержания для {symbol}: {e}")
+                    logger.debug(
+                        f"⚠️ Ошибка записи времени удержания для {symbol}: {e}"
+                    )
         except Exception as e:
             logger.debug(f"⚠️ Ошибка записи метрик при закрытии {symbol}: {e}")
 
@@ -672,6 +674,7 @@ class ExitAnalyzer:
             # Guard: block auto-exit when model PnL and exchange PnL have opposite signs.
             if decision and decision.get("action") in {"close", "partial_close"}:
                 try:
+                    decision_reason = str(decision.get("reason") or "").lower()
                     (
                         entry_price_guard,
                         side_guard,
@@ -692,12 +695,18 @@ class ExitAnalyzer:
                         if self._is_pnl_sign_mismatch(
                             model_gross_guard, exchange_gross_guard
                         ):
-                            logger.critical(
-                                f"EXIT_BLOCKED_PNL_MISMATCH {symbol}: "
+                            if self._should_block_on_pnl_mismatch(decision_reason):
+                                logger.critical(
+                                    f"EXIT_BLOCKED_PNL_MISMATCH {symbol}: "
+                                    f"model={model_gross_guard:.4f}% vs exchange={exchange_gross_guard:.4f}%, "
+                                    f"action={decision.get('action')}, reason={decision.get('reason')}"
+                                )
+                                return None
+                            logger.warning(
+                                f"EXIT_PNL_MISMATCH_ALLOWED {symbol}: "
                                 f"model={model_gross_guard:.4f}% vs exchange={exchange_gross_guard:.4f}%, "
                                 f"action={decision.get('action')}, reason={decision.get('reason')}"
                             )
-                            return None
                 except Exception as guard_error:
                     logger.debug(
                         f"ExitAnalyzer pnl mismatch guard error for {symbol}: {guard_error}"
@@ -801,7 +810,9 @@ class ExitAnalyzer:
         elif side == "sell":
             side = "short"
         if side not in ("long", "short"):
-            side = "long"
+            side = self._infer_side_from_position(position, metadata) or "unknown"
+        if side not in ("long", "short"):
+            return 0.0
 
         if side == "long":
             base_move_pct = (current_price - entry_price) / entry_price * 100.0
@@ -904,6 +915,73 @@ class ExitAnalyzer:
         return (model_pnl_pct > 0 > exchange_pnl_pct) or (
             model_pnl_pct < 0 < exchange_pnl_pct
         )
+
+    @staticmethod
+    def _should_block_on_pnl_mismatch(reason: str) -> bool:
+        """
+        Block mismatch only for profit-taking exits.
+
+        For protective exits (SL/loss/timeout/emergency/risk) we should not block close,
+        otherwise positions can hang in drawdown.
+        """
+        reason_l = str(reason or "").lower()
+        if not reason_l:
+            return False
+        protective_tokens = (
+            "sl_",
+            "loss",
+            "timeout",
+            "emergency",
+            "liquidation",
+            "margin",
+            "risk",
+            "trailing_stop",
+            "tsl_hit",
+        )
+        if any(token in reason_l for token in protective_tokens):
+            return False
+        profit_tokens = (
+            "tp",
+            "profit",
+            "harvest",
+            "partial",
+            "big_profit_exit",
+        )
+        return any(token in reason_l for token in profit_tokens)
+
+    @staticmethod
+    def _infer_side_from_position(
+        position: Optional[Any], metadata: Optional[Any] = None
+    ) -> Optional[str]:
+        """Infer long/short from normalized side fields or signed position size."""
+
+        def _norm(raw: Any) -> Optional[str]:
+            value = str(raw or "").strip().lower()
+            if value in {"buy", "long"}:
+                return "long"
+            if value in {"sell", "short"}:
+                return "short"
+            return None
+
+        if metadata:
+            side_meta = _norm(getattr(metadata, "position_side", None))
+            if side_meta:
+                return side_meta
+
+        if isinstance(position, dict):
+            for key in ("position_side", "posSide", "side"):
+                side_val = _norm(position.get(key))
+                if side_val:
+                    return side_val
+            try:
+                raw_size = float(position.get("size", position.get("pos", 0)) or 0.0)
+            except (TypeError, ValueError):
+                raw_size = 0.0
+            if raw_size > 1e-8:
+                return "long"
+            if raw_size < -1e-8:
+                return "short"
+        return None
 
     def _get_effective_leverage(
         self, position: Optional[Any] = None, metadata: Optional[Any] = None
@@ -2635,11 +2713,7 @@ class ExitAnalyzer:
                     entry_price = float(avg_px)
                     # Получаем position_side из position если еще не получен
                     if not position_side:
-                        pos_side_raw = position.get("posSide", "").lower()
-                        if pos_side_raw in ["long", "short"]:
-                            position_side = pos_side_raw
-                        else:
-                            position_side = position.get("position_side")
+                        position_side = self._infer_side_from_position(position)
             except (TypeError, ValueError):
                 pass
 
@@ -2658,32 +2732,11 @@ class ExitAnalyzer:
                 )
 
         # Fallback для position_side
-        original_position_side = position_side
         if not position_side:
-            if (
-                metadata
-                and hasattr(metadata, "position_side")
-                and metadata.position_side
-            ):
-                position_side = metadata.position_side
-            elif isinstance(position, dict):
-                pos_side_raw = position.get("posSide", "").lower()
-                if pos_side_raw in ["long", "short"]:
-                    position_side = pos_side_raw
-                else:
-                    position_side = position.get("position_side", "long")
-                    # ✅ ИСПРАВЛЕНО: Нормализуем position_side перед сравнением
-                    if isinstance(position_side, str):
-                        position_side = position_side.lower()
-                    if position_side == "long":
-                        logger.warning(
-                            f"⚠️ FALLBACK position_side: Используется 'long' для {symbol} "
-                            f"(posSide={pos_side_raw}, position.position_side={position.get('position_side')})"
-                        )
-            else:
-                position_side = "long"  # Последний fallback
+            position_side = self._infer_side_from_position(position, metadata)
+            if not position_side:
                 logger.warning(
-                    f"⚠️ FALLBACK position_side: Используется 'long' для {symbol} "
+                    f"⚠️ FALLBACK position_side: не удалось определить сторону для {symbol} "
                     f"(metadata={metadata is not None}, position={isinstance(position, dict)})"
                 )
 

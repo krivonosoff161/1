@@ -186,6 +186,8 @@ class WebSocketCoordinator:
         self._ws_watchdog_cooldown = 30.0
         self._ws_watchdog_global_stale_ratio = 0.6
         self._ws_watchdog_min_symbols = 2
+        self._ws_watchdog_global_consecutive = 2
+        self._ws_watchdog_global_stale_cycles = 0
         self._last_ws_watchdog_global_trigger = 0.0
         self._last_ws_watchdog_trigger: Dict[str, float] = {}
         self._ws_watchdog_stale_counts: Dict[str, int] = {}
@@ -902,6 +904,10 @@ class WebSocketCoordinator:
                     self._ws_watchdog_min_symbols = max(
                         1, int(sg_cfg.get("ws_watchdog_min_symbols"))
                     )
+                if sg_cfg.get("ws_watchdog_global_consecutive") is not None:
+                    self._ws_watchdog_global_consecutive = max(
+                        1, int(sg_cfg.get("ws_watchdog_global_consecutive"))
+                    )
             else:
                 # ws_watchdog_max_age приоритетнее ws_fresh_max_age для watchdog
                 watchdog_age = getattr(sg_cfg, "ws_watchdog_max_age", None)
@@ -931,6 +937,12 @@ class WebSocketCoordinator:
                     self._ws_watchdog_min_symbols,
                 )
                 self._ws_watchdog_min_symbols = max(1, int(min_symbols_val))
+                global_consecutive = getattr(
+                    sg_cfg,
+                    "ws_watchdog_global_consecutive",
+                    self._ws_watchdog_global_consecutive,
+                )
+                self._ws_watchdog_global_consecutive = max(1, int(global_consecutive))
         except Exception:
             pass
         self._ws_watchdog_task = asyncio.create_task(self._ws_watchdog_loop())
@@ -938,7 +950,8 @@ class WebSocketCoordinator:
             f"WS watchdog started (max_age={self._ws_watchdog_max_age:.1f}s, "
             f"threshold={self._ws_watchdog_stale_threshold}, "
             f"global_ratio={self._ws_watchdog_global_stale_ratio:.2f}, "
-            f"min_symbols={self._ws_watchdog_min_symbols})"
+            f"min_symbols={self._ws_watchdog_min_symbols}, "
+            f"global_consecutive={self._ws_watchdog_global_consecutive})"
         )
 
     async def _ws_watchdog_loop(self) -> None:
@@ -978,20 +991,35 @@ class WebSocketCoordinator:
                     except Exception as e:
                         logger.debug(f"WS watchdog error for {symbol}: {e}")
 
-                if checked_symbols > 0 and stale_ready:
-                    stale_ratio = len(stale_ready) / float(checked_symbols)
-                    now = time.time()
-                    can_trigger = (
-                        now - self._last_ws_watchdog_global_trigger
-                        >= self._ws_watchdog_cooldown
+                if checked_symbols > 0:
+                    stale_ratio = (
+                        len(stale_ready) / float(checked_symbols)
+                        if checked_symbols > 0
+                        else 0.0
                     )
                     global_stale = (
                         len(stale_ready) >= self._ws_watchdog_min_symbols
                         and stale_ratio >= self._ws_watchdog_global_stale_ratio
                     )
+                    if global_stale:
+                        self._ws_watchdog_global_stale_cycles += 1
+                    else:
+                        self._ws_watchdog_global_stale_cycles = 0
 
-                    if global_stale and can_trigger:
+                    now = time.time()
+                    can_trigger = (
+                        now - self._last_ws_watchdog_global_trigger
+                        >= self._ws_watchdog_cooldown
+                    )
+                    ready_by_hysteresis = (
+                        global_stale
+                        and self._ws_watchdog_global_stale_cycles
+                        >= self._ws_watchdog_global_consecutive
+                    )
+
+                    if ready_by_hysteresis and can_trigger:
                         self._last_ws_watchdog_global_trigger = now
+                        self._ws_watchdog_global_stale_cycles = 0
                         for stale_symbol in stale_ready:
                             self._last_ws_watchdog_trigger[stale_symbol] = now
                             self._ws_watchdog_stale_counts[stale_symbol] = 0
@@ -1007,7 +1035,14 @@ class WebSocketCoordinator:
                                 f"{checked_symbols} ratio={stale_ratio:.2f}"
                             )
                         )
-                    elif global_stale and not can_trigger:
+                    elif global_stale and not ready_by_hysteresis:
+                        logger.debug(
+                            f"WS_STALE_WATCHDOG global stale pending hysteresis: "
+                            f"cycle={self._ws_watchdog_global_stale_cycles}/"
+                            f"{self._ws_watchdog_global_consecutive}, "
+                            f"stale={len(stale_ready)}/{checked_symbols}"
+                        )
+                    elif ready_by_hysteresis and not can_trigger:
                         logger.debug(
                             f"WS_STALE_WATCHDOG global stale but cooldown active: "
                             f"stale={len(stale_ready)}/{checked_symbols}"
@@ -1065,9 +1100,9 @@ class WebSocketCoordinator:
                             await self.data_registry.add_candle(
                                 symbol, timeframe, candle
                             )
-                            self._last_candle_timestamps[f"{symbol}_{timeframe}"] = (
-                                candle.timestamp
-                            )
+                            self._last_candle_timestamps[
+                                f"{symbol}_{timeframe}"
+                            ] = candle.timestamp
                             logger.debug(
                                 f"✅ REST: Добавлена новая свеча {symbol} {timeframe} (ts={candle.timestamp})"
                             )
@@ -1428,7 +1463,9 @@ class WebSocketCoordinator:
                         adl_status = (
                             "🔴 ВЫСОКИЙ"
                             if adl_rank >= 4
-                            else "🟡 СРЕДНИЙ" if adl_rank >= 2 else "🟢 НИЗКИЙ"
+                            else "🟡 СРЕДНИЙ"
+                            if adl_rank >= 2
+                            else "🟢 НИЗКИЙ"
                         )
                         logger.debug(
                             f"📊 ADL для {symbol}: rank={adl_rank} ({adl_status}) "

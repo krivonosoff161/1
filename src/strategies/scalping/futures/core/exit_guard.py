@@ -34,7 +34,8 @@ class ExitGuard:
     }
     DEFAULT_FEE_RATE_ROUND_TRIP = 0.001  # 0.10% round-trip
     DEFAULT_MIN_GROSS_EDGE = 0.0002  # 0.02% edge above fees
-    DEFAULT_MIN_NET_PROFIT = 0.0  # block positive exits if net<=0
+    DEFAULT_MIN_NET_PROFIT = 0.0002  # 0.02% minimal net edge after fees
+    POSITION_SIZE_EPS = 1e-8
 
     def __init__(
         self,
@@ -221,14 +222,15 @@ class ExitGuard:
                     f"fee_guard_gross_{gross_frac:.4%}<{min_gross_required:.4%}",
                 )
 
-        if net_frac is not None and net_frac > 0 and net_frac <= self.min_net_profit:
+        if (
+            net_frac is not None
+            and (gross_frac or 0) > 0
+            and net_frac <= self.min_net_profit
+        ):
             return (
                 False,
                 f"fee_guard_net_{net_frac:.4%}<={self.min_net_profit:.4%}",
             )
-
-        if net_frac is not None and net_frac <= 0 and (gross_frac or 0) > 0:
-            return False, f"fee_guard_net_nonpositive_{net_frac:.4%}"
 
         return True, None
 
@@ -333,7 +335,7 @@ class ExitGuard:
                 position_data = None
 
         side, size = self._extract_side_size(position_data)
-        if not position_data or side == "unknown" or size <= 0:
+        if not position_data or side == "unknown" or size <= self.POSITION_SIZE_EPS:
             exchange_position = await self._sync_position_from_exchange(symbol)
             if not exchange_position:
                 if self.position_registry:
@@ -346,7 +348,7 @@ class ExitGuard:
             await self._update_registry_from_exchange(symbol, exchange_position)
             payload["position_data"] = exchange_position
             side, size = self._extract_side_size(exchange_position)
-            if side == "unknown" or size <= 0:
+            if side == "unknown" or size <= self.POSITION_SIZE_EPS:
                 return False, "invalid_position_data"
 
         return True, None
@@ -368,7 +370,7 @@ class ExitGuard:
                     size = float(pos.get("pos", "0"))
                 except (TypeError, ValueError):
                     size = 0.0
-                if size != 0:
+                if abs(size) > self.POSITION_SIZE_EPS:
                     return pos
             return None
         except Exception as exc:
@@ -404,12 +406,28 @@ class ExitGuard:
             or position_data.get("side")
             or "unknown"
         )
-        side = str(side).lower() if side else "unknown"
+        side = str(side).strip().lower() if side else "unknown"
+        if side == "buy":
+            side = "long"
+        elif side == "sell":
+            side = "short"
         try:
-            size = float(position_data.get("size", position_data.get("pos", 0)) or 0)
+            raw_size = float(
+                position_data.get("size", position_data.get("pos", 0)) or 0
+            )
         except (TypeError, ValueError):
-            size = 0.0
-        return side, size
+            raw_size = 0.0
+
+        # OKX net-mode positions may come as posSide=net and signed `pos`.
+        if side in {"unknown", "net"}:
+            if raw_size > self.POSITION_SIZE_EPS:
+                side = "long"
+            elif raw_size < -self.POSITION_SIZE_EPS:
+                side = "short"
+            else:
+                side = "unknown"
+
+        return side, abs(raw_size)
 
     def _check_min_holding(
         self, symbol: str, reason: str, payload: Dict[str, Any]

@@ -4858,13 +4858,8 @@ class FuturesScalpingOrchestrator:
                     entry_price = 0.0
 
                 if entry_price > 0:
-                    side_raw = str(
-                        pos.get("side")
-                        or pos.get("posSide")
-                        or pos.get("position_side")
-                        or "long"
-                    ).lower()
-                    is_short = side_raw in {"short", "sell"}
+                    side_raw = self._infer_position_side(pos)
+                    is_short = side_raw == "short"
 
                     try:
                         leverage = float(
@@ -4927,6 +4922,33 @@ class FuturesScalpingOrchestrator:
         except (TypeError, ValueError):
             return False
 
+    @staticmethod
+    def _infer_position_side(position: Optional[Dict[str, Any]]) -> str:
+        """Infer normalized side for both hedged and net position modes."""
+        if not isinstance(position, dict):
+            return "long"
+        raw_side = (
+            str(
+                position.get("side")
+                or position.get("position_side")
+                or position.get("posSide")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
+        if raw_side in {"buy", "long"}:
+            return "long"
+        if raw_side in {"sell", "short"}:
+            return "short"
+        try:
+            raw_size = float(position.get("size", position.get("pos", 0)) or 0.0)
+        except (TypeError, ValueError):
+            raw_size = 0.0
+        if raw_size < -1e-8:
+            return "short"
+        return "long"
+
     async def _position_exists(
         self, symbol: str, decision_payload: Optional[Dict[str, Any]] = None
     ) -> bool:
@@ -4981,6 +5003,8 @@ class FuturesScalpingOrchestrator:
 
             # TTLCache с TTL 60 секунд - достаточно для закрытия позиции
             self._closing_positions_cache = TTLCache(maxsize=100, ttl=60.0)
+        if not hasattr(self, "_exit_guard_block_log_ts"):
+            self._exit_guard_block_log_ts = {}
 
         # Получаем или создаем Lock для этого символа
         if symbol not in self._closing_locks:
@@ -5012,9 +5036,20 @@ class FuturesScalpingOrchestrator:
                     symbol=symbol, reason=reason, payload=decision_payload
                 )
                 if not can_close:
-                    logger.warning(
-                        f"EXIT_GUARD blocked close: {symbol} reason={reason} block={block_reason}"
-                    )
+                    block_key = f"{symbol}:{reason}:{block_reason}"
+                    now_ts = time.time()
+                    last_ts = self._exit_guard_block_log_ts.get(block_key, 0.0)
+                    self._exit_guard_block_log_ts[block_key] = now_ts
+                    # Throttle repetitive warning spam to keep main loop responsive.
+                    if now_ts - last_ts >= 5.0:
+                        logger.warning(
+                            f"EXIT_GUARD blocked close: {symbol} reason={reason} block={block_reason}"
+                        )
+                    else:
+                        logger.debug(
+                            f"EXIT_GUARD blocked close (throttled): {symbol} "
+                            f"reason={reason} block={block_reason}"
+                        )
                     return
 
             self._closing_positions_cache[symbol] = True

@@ -42,16 +42,22 @@ class FuturesWebSocketManager:
         return False
 
     async def force_reconnect(self, reason: str = "") -> bool:
-        """Force reconnect even if heartbeat is still alive."""
+        """Принудительный reconnect даже если heartbeat жив."""
         now = time.time()
         async with self._reconnect_lock:
+            if self._reconnect_in_flight:
+                logger.debug("Skip force reconnect: reconnect already in flight")
+                return False
             if now - self._last_forced_reconnect_ts < self._force_reconnect_cooldown:
                 logger.debug(
-                    f"Skip force reconnect due cooldown ({self._force_reconnect_cooldown:.1f}s)"
+                    f"Skip force reconnect due cooldown "
+                    f"({self._force_reconnect_cooldown:.1f}s)"
                 )
                 return False
-
+            self._reconnect_in_flight = True
             self._last_forced_reconnect_ts = now
+
+        try:
             if not self.should_reconnect:
                 self.should_reconnect = True
             self.reconnect_attempts = 0
@@ -63,6 +69,9 @@ class FuturesWebSocketManager:
             logger.warning(msg)
             await self._handle_disconnect()
             return True
+        finally:
+            async with self._reconnect_lock:
+                self._reconnect_in_flight = False
 
     def __init__(
         self,
@@ -101,7 +110,9 @@ class FuturesWebSocketManager:
         self.listener_task: Optional[asyncio.Task] = None
         self._receive_lock = asyncio.Lock()
         self._reconnect_lock = asyncio.Lock()
+        self._disconnect_lock = asyncio.Lock()
         self._disconnect_in_progress = False
+        self._reconnect_in_flight = False
         self._last_forced_reconnect_ts = 0.0
         self._force_reconnect_cooldown = 20.0
 
@@ -292,26 +303,27 @@ class FuturesWebSocketManager:
             logger.error(f"Ошибка обработки данных: {e}")
 
     async def _handle_disconnect(self):
-        """Handle websocket disconnect with re-entry protection."""
-        if self._disconnect_in_progress:
-            return
-        self._disconnect_in_progress = True
-        logger.warning("🔌 WebSocket отключен")
-        try:
-            self.connected = False
+        """Обработка отключения."""
+        async with self._disconnect_lock:
+            if self._disconnect_in_progress:
+                return
+            self._disconnect_in_progress = True
+            logger.warning("🔌 WebSocket отключен")
+            try:
+                self.connected = False
 
-            current_task = asyncio.current_task()
-            if self.listener_task and self.listener_task is not current_task:
-                if not self.listener_task.done():
-                    self.listener_task.cancel()
+                current_task = asyncio.current_task()
+                if self.listener_task and self.listener_task is not current_task:
+                    if not self.listener_task.done():
+                        self.listener_task.cancel()
 
-            # Close current ws/session pair to avoid aiohttp leaks.
-            await self._close_ws_session()
+                # Закрываем текущие соединения, чтобы избежать утечек ClientSession
+                await self._close_ws_session()
 
-            if self.should_reconnect:
-                await self._reconnect()
-        finally:
-            self._disconnect_in_progress = False
+                if self.should_reconnect:
+                    await self._reconnect()
+            finally:
+                self._disconnect_in_progress = False
 
     async def _close_ws_session(self):
         """Закрывает текущие ws/session без отключения авто-reconnect."""
