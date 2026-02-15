@@ -57,6 +57,7 @@ class SignalCoordinator:
         initialize_trailing_stop_callback: Optional[
             Callable[[str, float, str, float, Dict[str, Any]], Any]
         ] = None,
+        recent_closes_ref: Optional[Dict[str, Dict[str, Any]]] = None,
         entry_manager=None,  # ✅ НОВОЕ: EntryManager для централизованного открытия позиций
         data_registry=None,  # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
         adaptive_leverage=None,  # ✅ ИСПРАВЛЕНИЕ #3: AdaptiveLeverage для адаптивного левериджа
@@ -116,6 +117,9 @@ class SignalCoordinator:
         self.close_position_callback = close_position_callback
         self.normalize_symbol_callback = normalize_symbol_callback
         self.initialize_trailing_stop_callback = initialize_trailing_stop_callback
+        self.recent_closes_ref = (
+            recent_closes_ref if isinstance(recent_closes_ref, dict) else {}
+        )
         # ✅ НОВОЕ: EntryManager для централизованного открытия позиций
         self.entry_manager = entry_manager
         # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
@@ -138,6 +142,34 @@ class SignalCoordinator:
         ] = {}  # Время последнего предупреждения для каждого символа
         self._warning_throttle_seconds: float = (
             30.0  # Минимум 30 секунд между одинаковыми предупреждениями
+        )
+        self._reentry_guard_last_log: Dict[str, float] = {}
+
+        # Guard against rapid same-side reopen right after close (anti-churn).
+        def _cfg_get(cfg_obj: Any, key: str, default: Any) -> Any:
+            if isinstance(cfg_obj, dict):
+                return cfg_obj.get(key, default)
+            return getattr(cfg_obj, key, default)
+
+        reentry_guard_cfg = _cfg_get(self.scalping_config, "reentry_guard", {}) or {}
+        self._reentry_guard_enabled = bool(_cfg_get(reentry_guard_cfg, "enabled", True))
+        self._reentry_same_side_cooldown_sec = max(
+            0.0, float(_cfg_get(reentry_guard_cfg, "same_side_cooldown_sec", 12.0))
+        )
+        self._reentry_loss_cooldown_sec = max(
+            self._reentry_same_side_cooldown_sec,
+            float(_cfg_get(reentry_guard_cfg, "loss_cooldown_sec", 45.0)),
+        )
+        self._reentry_opposite_side_cooldown_sec = max(
+            0.0,
+            float(_cfg_get(reentry_guard_cfg, "opposite_side_cooldown_sec", 0.0)),
+        )
+        self._reentry_strong_signal_bypass = min(
+            1.0,
+            max(0.0, float(_cfg_get(reentry_guard_cfg, "strong_signal_bypass", 0.95))),
+        )
+        self._reentry_strong_signal_min_age_sec = max(
+            0.0, float(_cfg_get(reentry_guard_cfg, "strong_signal_min_age_sec", 2.0))
         )
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Счетчики блокировок сигналов для диагностики
@@ -695,6 +727,110 @@ class SignalCoordinator:
                 f"   - Other: {self._block_stats['other']}"
             )
 
+    @staticmethod
+    def _normalize_signal_side(side_raw: Any) -> str:
+        side = str(side_raw or "").strip().lower()
+        if side in {"buy", "long"}:
+            return "long"
+        if side in {"sell", "short"}:
+            return "short"
+        return ""
+
+    @staticmethod
+    def _is_protective_exit_reason(reason_raw: Any) -> bool:
+        reason = str(reason_raw or "").strip().lower()
+        if not reason:
+            return False
+        tokens = (
+            "sl",
+            "loss",
+            "stop",
+            "liquid",
+            "margin",
+            "emergency",
+            "risk",
+            "drawdown",
+        )
+        return any(token in reason for token in tokens)
+
+    def _should_block_reentry_after_close(
+        self,
+        symbol: str,
+        signal_side: str,
+        signal_strength: float,
+    ) -> Optional[str]:
+        if not self._reentry_guard_enabled:
+            return None
+        if signal_side not in {"long", "short"}:
+            return None
+        if not self.recent_closes_ref:
+            return None
+
+        recent = self.recent_closes_ref.get(symbol)
+        if recent is None and self.normalize_symbol_callback:
+            try:
+                normalized_symbol = self.normalize_symbol_callback(symbol)
+                recent = self.recent_closes_ref.get(normalized_symbol)
+            except Exception:
+                recent = None
+
+        if not isinstance(recent, dict):
+            return None
+
+        close_side = self._normalize_signal_side(recent.get("side"))
+        if close_side not in {"long", "short"}:
+            return None
+
+        try:
+            close_ts = float(recent.get("ts", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            close_ts = 0.0
+        if close_ts <= 0:
+            return None
+
+        age_sec = max(0.0, time.time() - close_ts)
+
+        close_reason = str(recent.get("reason") or "").strip().lower()
+        try:
+            close_net_pnl = float(recent.get("net_pnl", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            close_net_pnl = 0.0
+
+        if close_side == signal_side:
+            cooldown_sec = self._reentry_same_side_cooldown_sec
+            if close_net_pnl < 0 or self._is_protective_exit_reason(close_reason):
+                cooldown_sec = max(cooldown_sec, self._reentry_loss_cooldown_sec)
+        else:
+            cooldown_sec = self._reentry_opposite_side_cooldown_sec
+
+        if cooldown_sec <= 0 or age_sec >= cooldown_sec:
+            return None
+
+        if (
+            signal_strength >= self._reentry_strong_signal_bypass
+            and age_sec >= self._reentry_strong_signal_min_age_sec
+        ):
+            return None
+
+        return (
+            f"recent_close side={close_side} age={age_sec:.1f}s < {cooldown_sec:.1f}s, "
+            f"reason={close_reason or 'unknown'}, net_pnl={close_net_pnl:+.2f}"
+        )
+
+    def _log_reentry_block(self, symbol: str, signal_side: str, detail: str) -> None:
+        key = f"{symbol}:{signal_side}:{detail}"
+        now_ts = time.time()
+        last_ts = float(self._reentry_guard_last_log.get(key, 0.0) or 0.0)
+        self._reentry_guard_last_log[key] = now_ts
+        if now_ts - last_ts >= 3.0:
+            logger.warning(
+                f"REENTRY_GUARD blocked entry: {symbol} {signal_side.upper()} ({detail})"
+            )
+        else:
+            logger.debug(
+                f"REENTRY_GUARD blocked entry (throttled): {symbol} {signal_side.upper()} ({detail})"
+            )
+
     async def validate_signal(self, signal: Dict[str, Any]) -> bool:
         """Валидация торгового сигнала"""
         try:
@@ -802,6 +938,20 @@ class SignalCoordinator:
                     # записываем время попытки входа
             except Exception as e:
                 logger.debug(f"⚠️ Не удалось применить cooldown для {symbol}: {e}")
+
+            signal_side_norm = self._normalize_signal_side(side)
+            try:
+                signal_strength = float(str(strength).strip())
+            except (TypeError, ValueError):
+                signal_strength = 0.0
+            block_detail = self._should_block_reentry_after_close(
+                symbol, signal_side_norm, signal_strength
+            )
+            if block_detail:
+                self._log_reentry_block(
+                    symbol, signal_side_norm or "unknown", block_detail
+                )
+                return
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #7: Улучшенная логика замены позиций
             # Проверяем позиции на бирже и определяем, нужно ли заменять
@@ -2196,6 +2346,20 @@ class SignalCoordinator:
                         return False
             except Exception as e:
                 logger.debug(f"⚠️ Не удалось применить cooldown для {symbol}: {e}")
+            signal_side_raw = signal.get("side", "") if signal else "buy"
+            signal_side_norm = self._normalize_signal_side(signal_side_raw)
+            try:
+                signal_strength = float((signal or {}).get("strength", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                signal_strength = 0.0
+            block_detail = self._should_block_reentry_after_close(
+                symbol, signal_side_norm, signal_strength
+            )
+            if block_detail:
+                self._log_reentry_block(
+                    symbol, signal_side_norm or "unknown", block_detail
+                )
+                return False
 
             # 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем РЕАЛЬНЫЕ позиции на бирже ПЕРЕД открытием новой
             # Это предотвращает дубликаты даже при race condition или перезапуске бота

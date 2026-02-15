@@ -856,6 +856,8 @@ class FuturesScalpingOrchestrator:
 
         # Время последнего сигнала по символу: {symbol: timestamp}
         self.last_signal_time = {}
+        # Недавние закрытия позиций для anti-churn gate на входе.
+        self.recent_closes: Dict[str, Dict[str, Any]] = {}
         # Минимальная задержка между сигналами для одного символа (секунды)
         self.signal_cooldown_seconds = float(
             getattr(self.scalping_config, "signal_cooldown_seconds", 0.0) or 0.0
@@ -934,6 +936,7 @@ class FuturesScalpingOrchestrator:
             close_position_callback=_close_position_for_tsl_callback,
             normalize_symbol_callback=self.config_manager.normalize_symbol,
             initialize_trailing_stop_callback=self.trailing_sl_coordinator.initialize_trailing_stop,
+            recent_closes_ref=self.recent_closes,
             entry_manager=self.entry_manager,  # ✅ НОВОЕ: EntryManager для централизованного открытия
             data_registry=self.data_registry,  # ✅ НОВОЕ: DataRegistry для централизованного чтения данных
             position_scaling_manager=self.position_scaling_manager,  # ✅ НОВОЕ: PositionScalingManager для лестничного добавления
@@ -4949,6 +4952,51 @@ class FuturesScalpingOrchestrator:
             return "short"
         return "long"
 
+    def _register_recent_close_event(
+        self,
+        symbol: str,
+        side: Optional[str],
+        reason: Optional[str],
+        net_pnl: Optional[float],
+    ) -> None:
+        """Store compact close event snapshot for entry anti-churn gate."""
+        side_norm = str(side or "").strip().lower()
+        if side_norm not in {"long", "short"}:
+            return
+        try:
+            pnl_val = float(net_pnl or 0.0)
+        except (TypeError, ValueError):
+            pnl_val = 0.0
+        event = {
+            "ts": time.time(),
+            "side": side_norm,
+            "reason": str(reason or "").strip().lower(),
+            "net_pnl": pnl_val,
+        }
+        if not hasattr(self, "recent_closes") or not isinstance(
+            self.recent_closes, dict
+        ):
+            self.recent_closes = {}
+        self.recent_closes[symbol] = event
+        try:
+            normalized_symbol = self.config_manager.normalize_symbol(symbol)
+            if normalized_symbol and normalized_symbol != symbol:
+                self.recent_closes[normalized_symbol] = dict(event)
+        except Exception:
+            pass
+
+        # Keep map bounded and drop stale snapshots to avoid unbounded growth.
+        if len(self.recent_closes) > 500:
+            cutoff = time.time() - 3600.0
+            stale_keys = [
+                key
+                for key, value in self.recent_closes.items()
+                if not isinstance(value, dict)
+                or float(value.get("ts", 0.0) or 0.0) < cutoff
+            ]
+            for key in stale_keys:
+                self.recent_closes.pop(key, None)
+
     async def _position_exists(
         self, symbol: str, decision_payload: Optional[Dict[str, Any]] = None
     ) -> bool:
@@ -5245,6 +5293,22 @@ class FuturesScalpingOrchestrator:
                         f"Позиция останется открытой до следующего цикла."
                     )
                     return  # Не записываем в CSV, позиция не закрыта
+
+                if trade_result and not isinstance(trade_result, dict):
+                    try:
+                        close_side = getattr(trade_result, "side", None) or side
+                        close_reason = getattr(trade_result, "reason", None) or reason
+                        close_net_pnl = getattr(trade_result, "net_pnl", 0.0)
+                        self._register_recent_close_event(
+                            symbol=symbol,
+                            side=close_side,
+                            reason=close_reason,
+                            net_pnl=close_net_pnl,
+                        )
+                    except Exception as close_event_err:
+                        logger.debug(
+                            f"Failed to register close event for {symbol}: {close_event_err}"
+                        )
 
                 if trade_result and hasattr(self, "performance_tracker"):
                     try:
