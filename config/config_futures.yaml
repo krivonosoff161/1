@@ -353,6 +353,19 @@ scalping:
       required_count: 2
       window_seconds: 3.0
 
+  slo_monitor:
+    enabled: true
+    window_sec: 3600
+    alert_cooldown_sec: 300
+    thresholds:
+      ws_stale_signal_fallback_per_hour: 5
+      ws_stale_watchdog_per_hour: 2
+      close_pipeline_errors_per_hour: 0
+      pnl_mismatch_per_hour: 10
+      ws_parse_errors_per_hour: 10
+      same_side_reentry_count_per_hour: 20
+      stale_ratio_max: 0.15
+
   # ✅ НОВОЕ: Profit Drawdown Protection - защита от отката прибыли
   profit_drawdown:
     enabled: true
@@ -1706,6 +1719,8 @@ futures_modules:
       high_profit_multiplier: 2.0  # ✅ ГРОК: Уменьшено с 3.0 до 2.0 (было 2.5x)
     trading_fee_rate: 0.0010  # ✅ ОБНОВЛЕНО: 0.10% на круг (0.05% вход + 0.05% выход для taker на OKX, проверено по реальным сделкам)
     loss_cut_percent: 1.5  # ✅ Жёсткое закрытие, если убыток достигает -1.5% (net, с учётом комиссии)
+    loss_cut_confirmation_required: 2  # two-step confirmation for non-critical loss_cut
+    loss_cut_confirmation_window_sec: 5.0  # second confirmation must arrive inside this window
     timeout_loss_percent: 1.0  # ✅ ИСПРАВЛЕНО: Закрывать, если позиция остаётся в убытке -1.0% после таймаута (было -0.5%)
     timeout_minutes: 5  # ✅ ИСПРАВЛЕНО: Таймаут (в минутах) перед принудительным закрытием убыточной позиции (было 3)
     min_holding_minutes: 1.0  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.5 до 1.0 мин - больше времени для роста

@@ -437,13 +437,19 @@ class FuturesScalpingOrchestrator:
         from .metrics.alert_manager import AlertManager
         from .metrics.conversion_metrics import ConversionMetrics
         from .metrics.holding_time_metrics import HoldingTimeMetrics
+        from .metrics.slo_monitor import SLOMonitor
 
         self.conversion_metrics = ConversionMetrics()
         self.holding_time_metrics = HoldingTimeMetrics()
         self.alert_manager = AlertManager()
-        logger.info(
-            "✅ Метрики инициализированы: ConversionMetrics, HoldingTimeMetrics, AlertManager"
+        self.slo_monitor = SLOMonitor(
+            config=self.scalping_config, alert_manager=self.alert_manager
         )
+        logger.info(
+            "✅ Метрики инициализированы: ConversionMetrics, HoldingTimeMetrics, AlertManager, SLOMonitor"
+        )
+        if hasattr(self.data_registry, "set_slo_monitor"):
+            self.data_registry.set_slo_monitor(self.slo_monitor)
 
         # ✅ НОВОЕ (26.12.2025): Передаем метрики в модули (после их создания)
         # Метрики будут переданы после создания entry_manager и exit_analyzer
@@ -983,8 +989,12 @@ class FuturesScalpingOrchestrator:
             self.exit_analyzer.set_holding_time_metrics(self.holding_time_metrics)
         if hasattr(self.exit_analyzer, "set_alert_manager"):
             self.exit_analyzer.set_alert_manager(self.alert_manager)
+        if hasattr(self.exit_analyzer, "set_slo_monitor"):
+            self.exit_analyzer.set_slo_monitor(self.slo_monitor)
         if hasattr(self.signal_coordinator, "set_conversion_metrics"):
             self.signal_coordinator.set_conversion_metrics(self.conversion_metrics)
+        if hasattr(self.signal_coordinator, "set_slo_monitor"):
+            self.signal_coordinator.set_slo_monitor(self.slo_monitor)
         logger.info("✅ Метрики переданы в модули")
 
         # Callback для обновления кэша ордеров из WebSocket
@@ -1032,6 +1042,7 @@ class FuturesScalpingOrchestrator:
             conversion_metrics=self.conversion_metrics,  # ✅ НОВОЕ (26.12.2025): Метрики конверсии
             holding_time_metrics=self.holding_time_metrics,  # ✅ НОВОЕ (26.12.2025): Метрики времени удержания
             alert_manager=self.alert_manager,  # ✅ НОВОЕ (26.12.2025): Менеджер алертов
+            slo_monitor=self.slo_monitor,
         )
         logger.info("✅ TradingControlCenter инициализирован в orchestrator")
 
@@ -1077,6 +1088,7 @@ class FuturesScalpingOrchestrator:
             performance_tracker=self.performance_tracker,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
             signal_generator=self.signal_generator,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Для проверки готовности перед обработкой тикеров
             orchestrator=self,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Передаем orchestrator для проверки готовности
+            slo_monitor=self.slo_monitor,
         )
         if self.data_registry:
             self.data_registry.set_ws_reconnect_callback(
@@ -5663,6 +5675,11 @@ class FuturesScalpingOrchestrator:
                     await self._sync_positions_with_exchange(force=True)
             except Exception as e:
                 logger.error(f"Ошибка закрытия позиции {symbol}: {e}")
+                if hasattr(self, "slo_monitor") and self.slo_monitor:
+                    try:
+                        self.slo_monitor.record_event("close_pipeline_errors")
+                    except Exception:
+                        pass
             finally:
                 # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): НЕ удаляем из TTLCache здесь!
                 # Символ должен остаться в cache до синхронизации с биржей в _sync_positions_with_exchange()

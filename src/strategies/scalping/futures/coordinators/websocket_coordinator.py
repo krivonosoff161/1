@@ -63,6 +63,7 @@ class WebSocketCoordinator:
         performance_tracker=None,  # ✅ НОВОЕ: PerformanceTracker для записи в CSV
         signal_generator=None,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): SignalGenerator для проверки готовности
         orchestrator=None,  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Orchestrator для проверки готовности модулей
+        slo_monitor=None,  # Optional runtime SLO monitor
     ):
         """
         Инициализация WebSocketCoordinator.
@@ -121,6 +122,7 @@ class WebSocketCoordinator:
         self.signal_generator = signal_generator
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Orchestrator для проверки готовности модулей
         self.orchestrator = orchestrator
+        self.slo_monitor = slo_monitor
         # OrderFlowIndicator source (can be provided directly or resolved via orchestrator).
         self.order_flow = getattr(orchestrator, "order_flow", None)
         self._order_flow_from_trades_enabled = True
@@ -262,6 +264,39 @@ class WebSocketCoordinator:
             return float(text)
         except (TypeError, ValueError):
             return default
+
+    def _safe_float_ws(
+        self, value: Any, default: float = 0.0, field_name: str = ""
+    ) -> float:
+        """Safe float parsing + ws_parse_errors metric."""
+        parsed = self._safe_float(value, default)
+        if self.slo_monitor is None:
+            return parsed
+        if value is None:
+            return parsed
+        if isinstance(value, (int, float)):
+            return parsed
+        try:
+            text = str(value).strip()
+        except Exception:
+            text = ""
+        if text == "":
+            try:
+                self.slo_monitor.record_event("ws_parse_errors")
+            except Exception:
+                pass
+            return parsed
+        # Value was non-empty but parsed to default due invalid numeric string.
+        try:
+            float(text)
+        except Exception:
+            try:
+                self.slo_monitor.record_event("ws_parse_errors")
+            except Exception:
+                pass
+            if field_name:
+                logger.debug(f"WS parse fallback for {field_name}: raw={value!r}")
+        return parsed
 
     async def handle_trades_data(self, symbol: str, data: dict) -> None:
         """Update OrderFlowIndicator from public trades stream."""
@@ -1047,6 +1082,11 @@ class WebSocketCoordinator:
                             f"WS_STALE_WATCHDOG global: stale={len(stale_ready)}/{checked_symbols} "
                             f"({stale_ratio:.0%}), symbols={stale_symbols_str}, forcing reconnect"
                         )
+                        if self.slo_monitor:
+                            try:
+                                self.slo_monitor.record_event("ws_stale_watchdog")
+                            except Exception:
+                                pass
                         await self.force_reconnect(
                             reason=(
                                 f"ws_stale_watchdog_global stale={len(stale_ready)}/"
@@ -1390,7 +1430,9 @@ class WebSocketCoordinator:
 
             for position_data in positions_data:
                 symbol = position_data.get("instId", "").replace("-SWAP", "")
-                pos_size = self._safe_float(position_data.get("pos"), 0.0)
+                pos_size = self._safe_float_ws(
+                    position_data.get("pos"), 0.0, "positions.pos"
+                )
 
                 if abs(pos_size) < 1e-8:
                     # Позиция закрыта - удаляем из active_positions
@@ -1402,15 +1444,23 @@ class WebSocketCoordinator:
                 # Обновляем позицию в active_positions
                 if symbol in self.active_positions_ref:
                     # Обновляем данные позиции
-                    avg_px = self._safe_float(position_data.get("avgPx"), 0.0)
+                    avg_px = self._safe_float_ws(
+                        position_data.get("avgPx"), 0.0, "positions.avgPx"
+                    )
                     update_data = {
                         "size": pos_size,
-                        "margin": self._safe_float(position_data.get("margin"), 0.0),
+                        "margin": self._safe_float_ws(
+                            position_data.get("margin"), 0.0, "positions.margin"
+                        ),
                         "avgPx": avg_px,
-                        "markPx": self._safe_float(position_data.get("markPx"), 0.0),
-                        "upl": self._safe_float(position_data.get("upl"), 0.0),
-                        "uplRatio": self._safe_float(
-                            position_data.get("uplRatio"), 0.0
+                        "markPx": self._safe_float_ws(
+                            position_data.get("markPx"), 0.0, "positions.markPx"
+                        ),
+                        "upl": self._safe_float_ws(
+                            position_data.get("upl"), 0.0, "positions.upl"
+                        ),
+                        "uplRatio": self._safe_float_ws(
+                            position_data.get("uplRatio"), 0.0, "positions.uplRatio"
                         ),
                     }
                     # ✅ НОВОЕ: Сохраняем ADL данные (если доступны)

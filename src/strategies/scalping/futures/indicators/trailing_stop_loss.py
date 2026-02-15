@@ -60,6 +60,8 @@ class TrailingStopLoss:
         trail_growth_low_multiplier: float = 1.5,  # ✅ НОВОЕ: Множитель трейлинга для низкой прибыли (<0.5%)
         trail_growth_medium_multiplier: float = 2.0,  # ✅ НОВОЕ: Множитель трейлинга для средней прибыли (0.5-1.5%)
         trail_growth_high_multiplier: float = 3.0,  # ✅ НОВОЕ: Множитель трейлинга для высокой прибыли (>1.5%)
+        loss_cut_confirmation_required: int = 2,
+        loss_cut_confirmation_window_sec: float = 5.0,
         debug_logger=None,  # ✅ DEBUG LOGGER для логирования
     ):
         """
@@ -160,6 +162,21 @@ class TrailingStopLoss:
         self._next_trail_profit_target: Optional[float] = None
         self.debug_logger = debug_logger  # ✅ DEBUG LOGGER для логирования
         self._symbol: Optional[str] = None  # ✅ Сохраняем символ для логирования
+        # Non-critical loss_cut confirmation to reduce noise-triggered exits.
+        try:
+            self.loss_cut_confirmation_required = max(
+                1, int(loss_cut_confirmation_required)
+            )
+        except (TypeError, ValueError):
+            self.loss_cut_confirmation_required = 2
+        try:
+            self.loss_cut_confirmation_window_sec = max(
+                0.0, float(loss_cut_confirmation_window_sec)
+            )
+        except (TypeError, ValueError):
+            self.loss_cut_confirmation_window_sec = 5.0
+        self._loss_cut_breach_count = 0
+        self._loss_cut_breach_last_ts = 0.0
 
     @staticmethod
     def _normalize_fee_rate(value: Optional[float], default: float) -> float:
@@ -789,6 +806,8 @@ class TrailingStopLoss:
                         loss_cut_from_price=critical_loss_cut_from_price,
                         will_close=True,
                     )
+                self._loss_cut_breach_count = 0
+                self._loss_cut_breach_last_ts = 0.0
                 return True, "critical_loss_cut_2x"
 
             # ✅ 2. Обычный loss_cut - приоритет #2 (ПЕРЕД MIN_HOLDING!)
@@ -807,6 +826,28 @@ class TrailingStopLoss:
                 min_loss_cut_hold_seconds = 90.0  # ✅ ИСПРАВЛЕНО: Увеличено с 30 до 90 секунд для защиты от преждевременного закрытия
 
                 if seconds_in_position >= min_loss_cut_hold_seconds:
+                    now_ts = time.time()
+                    if (
+                        now_ts - self._loss_cut_breach_last_ts
+                        <= self.loss_cut_confirmation_window_sec
+                    ):
+                        self._loss_cut_breach_count += 1
+                    else:
+                        self._loss_cut_breach_count = 1
+                    self._loss_cut_breach_last_ts = now_ts
+
+                    if (
+                        self._loss_cut_breach_count
+                        < self.loss_cut_confirmation_required
+                    ):
+                        logger.debug(
+                            f"⏳ Loss-cut confirmation pending: "
+                            f"{self._loss_cut_breach_count}/{self.loss_cut_confirmation_required} "
+                            f"(window={self.loss_cut_confirmation_window_sec:.1f}s, "
+                            f"profit={profit_pct:.2%}, threshold=-{loss_cut_from_price:.2%})"
+                        )
+                        return False, None
+
                     # ✅ Закрываем по loss_cut, независимо от MIN_HOLDING
                     loss_from_margin = abs(profit_pct) * self.leverage
                     logger.warning(
@@ -823,8 +864,12 @@ class TrailingStopLoss:
                             loss_cut_from_price=loss_cut_from_price,
                             will_close=True,
                         )
+                    self._loss_cut_breach_count = 0
+                    self._loss_cut_breach_last_ts = 0.0
                     return True, "loss_cut"
                 else:
+                    self._loss_cut_breach_count = 0
+                    self._loss_cut_breach_last_ts = 0.0
                     # ✅ Минимальная задержка для loss_cut (30 сек)
                     logger.debug(
                         f"⏱️ Loss-cut заблокирован минимальной задержкой: "
@@ -840,6 +885,9 @@ class TrailingStopLoss:
                             will_close=False,  # Блокировано минимальной задержкой
                         )
                     return False, None
+            else:
+                self._loss_cut_breach_count = 0
+                self._loss_cut_breach_last_ts = 0.0
 
         # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (10.02.2026): Убрана проверка min_holding ЗДЕСЬ
         # Она блокировала закрытие по TSL даже для убыточных позиций

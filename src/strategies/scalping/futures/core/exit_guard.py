@@ -264,14 +264,26 @@ class ExitGuard:
         if not reason:
             return False
         reason_l = reason.lower()
+        # Keep normal loss_cut in non-critical flow (confirmation applies),
+        # while preserving fast bypass for truly critical protection reasons.
+        non_critical_exact = {
+            "loss_cut",
+            "loss_cut_priority",
+            "tsl_hit",
+            "trailing_stop",
+            "trailing_stop_loss",
+        }
+        if reason_l in non_critical_exact:
+            return False
         protective_tokens = (
             "sl_",
-            "loss",
+            "critical_loss_cut",
             "liquidation",
             "margin",
             "emergency",
             "timeout",
             "risk",
+            "force_close",
         )
         return any(token in reason_l for token in protective_tokens)
 

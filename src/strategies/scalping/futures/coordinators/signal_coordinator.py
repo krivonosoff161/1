@@ -133,6 +133,7 @@ class SignalCoordinator:
 
         # ✅ НОВОЕ (26.12.2025): ConversionMetrics для отслеживания конверсии
         self.conversion_metrics = None
+        self.slo_monitor = None
 
         # Время последнего сигнала по символу: {symbol: timestamp}
         self._last_signal_time: Dict[str, float] = {}
@@ -222,6 +223,11 @@ class SignalCoordinator:
         """
         self.conversion_metrics = conversion_metrics
         logger.debug("✅ SignalCoordinator: ConversionMetrics установлен")
+
+    def set_slo_monitor(self, slo_monitor) -> None:
+        """Attach optional SLO monitor for runtime counters."""
+        self.slo_monitor = slo_monitor
+        logger.debug("✅ SignalCoordinator: SLOMonitor установлен")
 
     async def process_signals(self, signals: List[Dict[str, Any]]):
         """Обработка торговых сигналов"""
@@ -847,6 +853,11 @@ class SignalCoordinator:
         now_ts = time.time()
         last_ts = float(self._reentry_guard_last_log.get(key, 0.0) or 0.0)
         self._reentry_guard_last_log[key] = now_ts
+        if self.slo_monitor:
+            try:
+                self.slo_monitor.record_event("same_side_reentry_count")
+            except Exception:
+                pass
         if now_ts - last_ts >= 3.0:
             logger.warning(
                 f"REENTRY_GUARD blocked entry: {symbol} {signal_side.upper()} ({detail})"

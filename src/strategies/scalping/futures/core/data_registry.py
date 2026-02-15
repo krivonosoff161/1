@@ -105,6 +105,7 @@ class DataRegistry:
         self._last_ws_reconnect_global_ts: float = 0.0
         self._ws_reconnect_cooldown = 30.0
         self._require_ws_source_for_fresh = True
+        self._slo_monitor = None
         self._decision_max_age: Dict[str, float] = {
             "entry": 3.0,
             "exit_normal": 5.0,
@@ -112,6 +113,10 @@ class DataRegistry:
             "orders": 1.0,
             "monitoring": 15.0,
         }
+
+    def set_slo_monitor(self, slo_monitor: Any) -> None:
+        """Attach optional SLO monitor for runtime counters."""
+        self._slo_monitor = slo_monitor
 
     def set_ws_reconnect_callback(self, callback) -> None:
         """Установить async callback для инициирования WS reconnect."""
@@ -353,6 +358,21 @@ class DataRegistry:
                 "rest_fallback": bool,
             }
         """
+
+        def _finalize_snapshot(
+            result: Optional[Dict[str, Any]]
+        ) -> Optional[Dict[str, Any]]:
+            if not self._slo_monitor:
+                return result
+            try:
+                rest_fallback = bool(result and result.get("rest_fallback"))
+                self._slo_monitor.record_decision_snapshot(rest_fallback=rest_fallback)
+                if rest_fallback and str(context or "").lower() == "entry":
+                    self._slo_monitor.record_event("ws_stale_signal_fallback")
+            except Exception:
+                pass
+            return result
+
         if max_age is not None:
             try:
                 resolved_max_age = float(max_age)
@@ -375,16 +395,18 @@ class DataRegistry:
                 age = None
             stale = bool(age is not None and age > resolved_max_age)
             if price is not None and not stale:
-                return {
-                    "price": price,
-                    "source": source or "WEBSOCKET",
-                    "age": age,
-                    "updated_at": updated_at,
-                    "stale": False,
-                    "rest_fallback": False,
-                    "context": context,
-                    "max_age": resolved_max_age,
-                }
+                return _finalize_snapshot(
+                    {
+                        "price": price,
+                        "source": source or "WEBSOCKET",
+                        "age": age,
+                        "updated_at": updated_at,
+                        "stale": False,
+                        "rest_fallback": False,
+                        "context": context,
+                        "max_age": resolved_max_age,
+                    }
+                )
         else:
             price = None
             source = None
@@ -394,17 +416,19 @@ class DataRegistry:
 
         if not allow_rest_fallback or client is None:
             if price is None:
-                return None
-            return {
-                "price": price,
-                "source": source or "UNKNOWN",
-                "age": age,
-                "updated_at": updated_at,
-                "stale": stale,
-                "rest_fallback": False,
-                "context": context,
-                "max_age": resolved_max_age,
-            }
+                return _finalize_snapshot(None)
+            return _finalize_snapshot(
+                {
+                    "price": price,
+                    "source": source or "UNKNOWN",
+                    "age": age,
+                    "updated_at": updated_at,
+                    "stale": stale,
+                    "rest_fallback": False,
+                    "context": context,
+                    "max_age": resolved_max_age,
+                }
+            )
 
         try:
             cache_key = f"{symbol}_decision_ticker"
@@ -429,17 +453,19 @@ class DataRegistry:
 
             if fresh_price is None:
                 if price is None:
-                    return None
-                return {
-                    "price": price,
-                    "source": source or "UNKNOWN",
-                    "age": age,
-                    "updated_at": updated_at,
-                    "stale": stale,
-                    "rest_fallback": False,
-                    "context": context,
-                    "max_age": resolved_max_age,
-                }
+                    return _finalize_snapshot(None)
+                return _finalize_snapshot(
+                    {
+                        "price": price,
+                        "source": source or "UNKNOWN",
+                        "age": age,
+                        "updated_at": updated_at,
+                        "stale": stale,
+                        "rest_fallback": False,
+                        "context": context,
+                        "max_age": resolved_max_age,
+                    }
+                )
 
             # Keep WS freshness semantics stable: REST fallback must not overwrite
             # WS source/updated_at used by watchdog and freshness gates.
@@ -461,30 +487,34 @@ class DataRegistry:
                     reason="decision_snapshot",
                 )
 
-            return {
-                "price": fresh_price,
-                "source": "REST_FALLBACK",
-                "age": 0.0,
-                "updated_at": datetime.now(),
-                "stale": False,
-                "rest_fallback": True,
-                "context": context,
-                "max_age": resolved_max_age,
-            }
+            return _finalize_snapshot(
+                {
+                    "price": fresh_price,
+                    "source": "REST_FALLBACK",
+                    "age": 0.0,
+                    "updated_at": datetime.now(),
+                    "stale": False,
+                    "rest_fallback": True,
+                    "context": context,
+                    "max_age": resolved_max_age,
+                }
+            )
         except Exception as e:
             logger.debug(f"Decision snapshot REST fallback failed for {symbol}: {e}")
             if price is None:
-                return None
-            return {
-                "price": price,
-                "source": source or "UNKNOWN",
-                "age": age,
-                "updated_at": updated_at,
-                "stale": stale,
-                "rest_fallback": False,
-                "context": context,
-                "max_age": resolved_max_age,
-            }
+                return _finalize_snapshot(None)
+            return _finalize_snapshot(
+                {
+                    "price": price,
+                    "source": source or "UNKNOWN",
+                    "age": age,
+                    "updated_at": updated_at,
+                    "stale": stale,
+                    "rest_fallback": False,
+                    "context": context,
+                    "max_age": resolved_max_age,
+                }
+            )
 
     async def get_price(self, symbol: str) -> Optional[float]:
         """

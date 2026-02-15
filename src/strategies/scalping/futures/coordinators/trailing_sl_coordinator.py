@@ -338,6 +338,8 @@ class TrailingSLCoordinator:
         params.setdefault("extend_time_on_profit", False)
         params.setdefault("extend_time_multiplier", 1.0)
         params.setdefault("min_critical_hold_seconds", 30.0)
+        params.setdefault("loss_cut_confirmation_required", 2)
+        params.setdefault("loss_cut_confirmation_window_sec", 5.0)
         params.setdefault("trail_growth_low_multiplier", 1.5)
         params.setdefault("trail_growth_medium_multiplier", 2.0)
         params.setdefault("trail_growth_high_multiplier", 3.0)
@@ -530,6 +532,12 @@ class TrailingSLCoordinator:
             ),
             trail_growth_high_multiplier=params.get(
                 "trail_growth_high_multiplier", 3.0
+            ),
+            loss_cut_confirmation_required=params.get(
+                "loss_cut_confirmation_required", 2
+            ),
+            loss_cut_confirmation_window_sec=params.get(
+                "loss_cut_confirmation_window_sec", 5.0
             ),
             debug_logger=self.debug_logger,  # ✅ DEBUG LOGGER для логирования
         )

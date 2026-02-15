@@ -117,6 +117,7 @@ class ExitAnalyzer:
         self.conversion_metrics = None
         self.holding_time_metrics = None
         self.alert_manager = None
+        self.slo_monitor = None
 
         # ✅ FIX: Используем существующие locks для предотвращения race condition
         self._signal_locks_ref = signal_locks_ref or {}
@@ -193,6 +194,11 @@ class ExitAnalyzer:
         """Установить ExitDecisionLogger"""
         self.exit_decision_logger = exit_decision_logger
         logger.debug("✅ ExitAnalyzer: ExitDecisionLogger установлен")
+
+    def set_slo_monitor(self, slo_monitor) -> None:
+        """Attach optional SLO monitor for runtime counters."""
+        self.slo_monitor = slo_monitor
+        logger.debug("✅ ExitAnalyzer: SLOMonitor установлен")
 
     def _get_mtf_filter(self):
         """
@@ -703,6 +709,11 @@ class ExitAnalyzer:
                             model_gross_guard, exchange_gross_guard
                         )
                         if mismatch_detected:
+                            if self.slo_monitor:
+                                try:
+                                    self.slo_monitor.record_event("pnl_mismatch")
+                                except Exception:
+                                    pass
                             mismatch_count = self._register_pnl_mismatch(
                                 symbol=symbol,
                                 model_gross_pct=model_gross_guard,

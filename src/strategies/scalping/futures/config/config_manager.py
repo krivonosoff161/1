@@ -629,6 +629,8 @@ class ConfigManager:
             "min_profit_for_extension": None,  # ✅ ЭТАП 4.3
             "extend_time_on_profit": True,  # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.02.2026): False → True, продлевать прибыльные позиции
             "extend_time_multiplier": 1.0,  # ✅ ЭТАП 4.3
+            "loss_cut_confirmation_required": 2,
+            "loss_cut_confirmation_window_sec": 5.0,
             "regime_multiplier": 1.0,  # ✅ НОВОЕ: Множитель режима (из конфига, fallback)
             "trend_strength_boost": 1.0,  # ✅ НОВОЕ: Буст при сильном тренде (из конфига, fallback)
             "check_interval_seconds": 1.5,  # ✅ АДАПТИВНО: Интервал проверки TSL (fallback)
@@ -700,6 +702,16 @@ class ConfigManager:
                 trailing_sl_config,
                 "extend_time_multiplier",
                 params["extend_time_multiplier"],
+            )
+            params["loss_cut_confirmation_required"] = self.get_config_value(
+                trailing_sl_config,
+                "loss_cut_confirmation_required",
+                params["loss_cut_confirmation_required"],
+            )
+            params["loss_cut_confirmation_window_sec"] = self.get_config_value(
+                trailing_sl_config,
+                "loss_cut_confirmation_window_sec",
+                params["loss_cut_confirmation_window_sec"],
             )
 
             # ✅ АДАПТИВНО: Short reversal protection параметры из общего конфига
@@ -809,6 +821,14 @@ class ConfigManager:
                             params["extend_time_on_profit"] = regime_params_dict[
                                 "extend_time_on_profit"
                             ]
+                        if "loss_cut_confirmation_required" in regime_params_dict:
+                            params[
+                                "loss_cut_confirmation_required"
+                            ] = regime_params_dict["loss_cut_confirmation_required"]
+                        if "loss_cut_confirmation_window_sec" in regime_params_dict:
+                            params[
+                                "loss_cut_confirmation_window_sec"
+                            ] = regime_params_dict["loss_cut_confirmation_window_sec"]
                         # ✅ НОВОЕ: Множители режимов для trailing stop (из конфига)
                         if "regime_multiplier" in regime_params_dict:
                             params["regime_multiplier"] = regime_params_dict[

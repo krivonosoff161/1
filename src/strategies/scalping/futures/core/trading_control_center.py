@@ -63,6 +63,7 @@ class TradingControlCenter:
         conversion_metrics: Any = None,  # ✅ НОВОЕ (26.12.2025): Метрики конверсии
         holding_time_metrics: Any = None,  # ✅ НОВОЕ (26.12.2025): Метрики времени удержания
         alert_manager: Any = None,  # ✅ НОВОЕ (26.12.2025): Менеджер алертов
+        slo_monitor: Any = None,  # Runtime SLO monitor
     ):
         """
         Инициализация TradingControlCenter.
@@ -109,6 +110,7 @@ class TradingControlCenter:
         self.conversion_metrics = conversion_metrics
         self.holding_time_metrics = holding_time_metrics
         self.alert_manager = alert_manager
+        self.slo_monitor = slo_monitor
 
         self.is_running = False
 
@@ -450,7 +452,9 @@ class TradingControlCenter:
                             adl_status = (
                                 "🔴 ВЫСОКИЙ"
                                 if adl_rank >= 4
-                                else "🟡 СРЕДНИЙ" if adl_rank >= 2 else "🟢 НИЗКИЙ"
+                                else "🟡 СРЕДНИЙ"
+                                if adl_rank >= 2
+                                else "🟢 НИЗКИЙ"
                             )
                             adl_summary.append(
                                 {
@@ -895,9 +899,7 @@ class TradingControlCenter:
             if self.is_running:
                 logger.error(f"❌ TCC: Ошибка обновления состояния: {e}")
             else:
-                logger.debug(
-                    f"🛑 TCC: Обновление состояния прервано при остановке: {e}"
-                )
+                logger.debug(f"🛑 TCC: Обновление состояния прервано при остановке: {e}")
 
     async def update_performance(self) -> None:
         """
@@ -975,6 +977,9 @@ class TradingControlCenter:
         """
         try:
             if not self.conversion_metrics or not self.alert_manager:
+                # SLO monitor can work even when conversion metrics are disabled.
+                if self.slo_monitor:
+                    self.slo_monitor.emit_alerts()
                 return
 
             # Получаем метрики конверсии
@@ -1027,6 +1032,20 @@ class TradingControlCenter:
                         f"прибыльные={avg_holding_time.get('profitable', 0):.1f}с, "
                         f"убыточные={avg_holding_time.get('losing', 0):.1f}с"
                     )
+
+            if self.slo_monitor:
+                snapshot = self.slo_monitor.get_snapshot()
+                logger.info(
+                    "📈 SLO snapshot: "
+                    f"stale_fallback/h={snapshot.get('ws_stale_signal_fallback_per_hour', 0):.2f}, "
+                    f"watchdog/h={snapshot.get('ws_stale_watchdog_per_hour', 0):.2f}, "
+                    f"close_errors/h={snapshot.get('close_pipeline_errors_per_hour', 0):.2f}, "
+                    f"pnl_mismatch/h={snapshot.get('pnl_mismatch_per_hour', 0):.2f}, "
+                    f"ws_parse/h={snapshot.get('ws_parse_errors_per_hour', 0):.2f}, "
+                    f"same_side_reentry/h={snapshot.get('same_side_reentry_count_per_hour', 0):.2f}, "
+                    f"stale_ratio={snapshot.get('stale_ratio', 0):.2%}"
+                )
+                self.slo_monitor.emit_alerts()
 
         except Exception as e:
             logger.debug(f"⚠️ TCC: Ошибка проверки метрик и алертов: {e}")
