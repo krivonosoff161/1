@@ -772,6 +772,7 @@ class TrailingStopLoss:
                         f"profit_pct={profit_pct:.4f}, critical={critical_loss_cut_from_price:.4f}, "
                         f"разница={abs(profit_pct + critical_loss_cut_from_price):.4f} < {commission_threshold:.4f}"
                     )
+                    return False, None
 
                 loss_from_margin = abs(profit_pct) * self.leverage
                 logger.warning(
@@ -795,6 +796,14 @@ class TrailingStopLoss:
             # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличена минимальная задержка с 30 до 90 секунд
             # Это предотвращает преждевременное закрытие из-за спреда/комиссии и дает время на восстановление
             if profit_pct <= -loss_cut_from_price:
+                commission_threshold = self.trading_fee_rate * 1.5
+                if abs(profit_pct + loss_cut_from_price) < commission_threshold:
+                    logger.debug(
+                        f"⚠️ Loss-cut может быть из-за комиссии: "
+                        f"profit_pct={profit_pct:.4f}, loss_cut={loss_cut_from_price:.4f}, "
+                        f"разница={abs(profit_pct + loss_cut_from_price):.4f} < {commission_threshold:.4f}"
+                    )
+                    return False, None
                 min_loss_cut_hold_seconds = 90.0  # ✅ ИСПРАВЛЕНО: Увеличено с 30 до 90 секунд для защиты от преждевременного закрытия
 
                 if seconds_in_position >= min_loss_cut_hold_seconds:

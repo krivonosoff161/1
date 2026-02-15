@@ -5138,9 +5138,6 @@ class FuturesScalpingOrchestrator:
                 entry_time = position.get("entry_time")
 
                 # Вычисляем время в позиции
-                import time
-                from datetime import datetime
-
                 if isinstance(entry_time, datetime):
                     # ✅ ИСПРАВЛЕНИЕ: Убеждаемся, что entry_time в UTC
                     if entry_time.tzinfo is None:

@@ -182,6 +182,34 @@ class ExitGuard:
         return None
 
     @staticmethod
+    def _extract_leverage(payload: Dict[str, Any]) -> float:
+        position_data = payload.get("position_data")
+        raw_values = []
+        if isinstance(position_data, dict):
+            raw_values.extend(
+                [
+                    position_data.get("lever"),
+                    position_data.get("leverage"),
+                    position_data.get("effective_leverage"),
+                ]
+            )
+        decision = payload.get("decision")
+        if isinstance(decision, dict):
+            raw_values.extend(
+                [decision.get("leverage"), decision.get("effective_leverage")]
+            )
+        for raw in raw_values:
+            try:
+                if raw is None:
+                    continue
+                lev = float(str(raw).strip().replace("x", ""))
+                if lev > 0:
+                    return lev
+            except (TypeError, ValueError):
+                continue
+        return 1.0
+
+    @staticmethod
     def _is_protective_reason(reason: str) -> bool:
         if not reason:
             return False
@@ -209,13 +237,15 @@ class ExitGuard:
             gross_frac = self._extract_profit_fraction(payload, "gross_pnl_pct")
 
         net_frac = self._extract_profit_fraction(payload, "net_pnl_pct")
+        leverage = self._extract_leverage(payload)
+        effective_fee = self.fee_rate_round_trip * max(1.0, leverage)
         if net_frac is None and gross_frac is not None:
-            net_frac = gross_frac - self.fee_rate_round_trip
+            net_frac = gross_frac - effective_fee
 
         # Guard только для прибыльных/около-нулевых выходов, чтобы не фиксировать
         # микроприбыль, которую съест комиссия.
         if gross_frac is not None and gross_frac > 0:
-            min_gross_required = self.fee_rate_round_trip + self.min_gross_edge
+            min_gross_required = effective_fee + self.min_gross_edge
             if gross_frac < min_gross_required:
                 return (
                     False,

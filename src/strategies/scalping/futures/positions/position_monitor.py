@@ -406,9 +406,16 @@ class PositionMonitor:
                         logger.info(
                             f"✅ PositionMonitor: Закрываем {symbol} (reason={reason})"
                         )
-                        await self.close_position_callback(
-                            symbol, reason, decision_payload
-                        )
+                        try:
+                            await self.close_position_callback(
+                                symbol, reason, decision_payload
+                            )
+                        except Exception as close_err:
+                            logger.error(
+                                f"❌ PositionMonitor: Ошибка close callback для {symbol} "
+                                f"(reason={reason}): {close_err}",
+                                exc_info=True,
+                            )
                     else:
                         logger.warning(
                             f"⚠️ PositionMonitor: Решение закрыть {symbol}, но close_position_callback не установлен"

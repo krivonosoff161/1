@@ -245,6 +245,24 @@ class WebSocketCoordinator:
             self.order_flow = self.orchestrator.order_flow
         return self.order_flow
 
+    @staticmethod
+    def _safe_float(value: Any, default: float = 0.0) -> float:
+        """Best-effort float parser for noisy WS payloads."""
+        if value is None:
+            return default
+        if isinstance(value, (int, float)):
+            return float(value)
+        try:
+            text = str(value).strip()
+        except Exception:
+            return default
+        if not text:
+            return default
+        try:
+            return float(text)
+        except (TypeError, ValueError):
+            return default
+
     async def handle_trades_data(self, symbol: str, data: dict) -> None:
         """Update OrderFlowIndicator from public trades stream."""
         indicator = self._get_order_flow_indicator()
@@ -1372,7 +1390,7 @@ class WebSocketCoordinator:
 
             for position_data in positions_data:
                 symbol = position_data.get("instId", "").replace("-SWAP", "")
-                pos_size = float(position_data.get("pos", "0"))
+                pos_size = self._safe_float(position_data.get("pos"), 0.0)
 
                 if abs(pos_size) < 1e-8:
                     # Позиция закрыта - удаляем из active_positions
@@ -1384,14 +1402,16 @@ class WebSocketCoordinator:
                 # Обновляем позицию в active_positions
                 if symbol in self.active_positions_ref:
                     # Обновляем данные позиции
-                    avg_px = float(position_data.get("avgPx", "0"))
+                    avg_px = self._safe_float(position_data.get("avgPx"), 0.0)
                     update_data = {
                         "size": pos_size,
-                        "margin": float(position_data.get("margin", "0")),
+                        "margin": self._safe_float(position_data.get("margin"), 0.0),
                         "avgPx": avg_px,
-                        "markPx": float(position_data.get("markPx", "0")),
-                        "upl": float(position_data.get("upl", "0")),
-                        "uplRatio": float(position_data.get("uplRatio", "0")),
+                        "markPx": self._safe_float(position_data.get("markPx"), 0.0),
+                        "upl": self._safe_float(position_data.get("upl"), 0.0),
+                        "uplRatio": self._safe_float(
+                            position_data.get("uplRatio"), 0.0
+                        ),
                     }
                     # ✅ НОВОЕ: Сохраняем ADL данные (если доступны)
                     # OKX API может возвращать adlRank или другие поля ADL

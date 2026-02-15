@@ -126,6 +126,11 @@ class ExitAnalyzer:
             str, float
         ] = {}  # {symbol: timestamp последней попытки SL}
         self._sl_grace_duration = 30.0  # 30 секунд grace period
+        # Debounce for PnL sign mismatch to avoid close-block storms on transient desync.
+        self._pnl_mismatch_state: Dict[str, Dict[str, Any]] = {}
+        self._pnl_mismatch_window_sec = 12.0
+        self._pnl_mismatch_block_threshold = 3
+        self._pnl_mismatch_log_cooldown_sec = 5.0
 
         # Получаем доступ к модулям через orchestrator
         self.fast_adx = None
@@ -675,6 +680,7 @@ class ExitAnalyzer:
             if decision and decision.get("action") in {"close", "partial_close"}:
                 try:
                     decision_reason = str(decision.get("reason") or "").lower()
+                    mismatch_detected = False
                     (
                         entry_price_guard,
                         side_guard,
@@ -692,21 +698,35 @@ class ExitAnalyzer:
                         exchange_gross_guard = self._get_exchange_pnl_percent(
                             position=position, metadata=metadata
                         )
-                        if self._is_pnl_sign_mismatch(
+                        mismatch_detected = self._is_pnl_sign_mismatch(
                             model_gross_guard, exchange_gross_guard
-                        ):
-                            if self._should_block_on_pnl_mismatch(decision_reason):
-                                logger.critical(
-                                    f"EXIT_BLOCKED_PNL_MISMATCH {symbol}: "
-                                    f"model={model_gross_guard:.4f}% vs exchange={exchange_gross_guard:.4f}%, "
-                                    f"action={decision.get('action')}, reason={decision.get('reason')}"
-                                )
-                                return None
-                            logger.warning(
-                                f"EXIT_PNL_MISMATCH_ALLOWED {symbol}: "
-                                f"model={model_gross_guard:.4f}% vs exchange={exchange_gross_guard:.4f}%, "
-                                f"action={decision.get('action')}, reason={decision.get('reason')}"
+                        )
+                        if mismatch_detected:
+                            mismatch_count = self._register_pnl_mismatch(
+                                symbol=symbol,
+                                model_gross_pct=model_gross_guard,
+                                exchange_gross_pct=exchange_gross_guard,
+                                action=str(decision.get("action") or ""),
+                                reason=str(decision.get("reason") or ""),
                             )
+                            if self._should_block_on_pnl_mismatch(decision_reason):
+                                if mismatch_count < self._pnl_mismatch_block_threshold:
+                                    logger.warning(
+                                        f"EXIT_DEFERRED_PNL_MISMATCH {symbol}: "
+                                        f"count={mismatch_count}/{self._pnl_mismatch_block_threshold}, "
+                                        f"model={model_gross_guard:.4f}% vs exchange={exchange_gross_guard:.4f}%, "
+                                        f"reason={decision.get('reason')}"
+                                    )
+                                else:
+                                    logger.critical(
+                                        f"EXIT_BLOCKED_PNL_MISMATCH {symbol}: "
+                                        f"count={mismatch_count}, "
+                                        f"model={model_gross_guard:.4f}% vs exchange={exchange_gross_guard:.4f}%, "
+                                        f"action={decision.get('action')}, reason={decision.get('reason')}"
+                                    )
+                                return None
+                        if not mismatch_detected:
+                            self._clear_pnl_mismatch_state(symbol)
                 except Exception as guard_error:
                     logger.debug(
                         f"ExitAnalyzer pnl mismatch guard error for {symbol}: {guard_error}"
@@ -822,12 +842,8 @@ class ExitAnalyzer:
         leverage = self._get_effective_leverage(position, metadata)
         model_gross_pct = base_move_pct * leverage
 
-        exchange_gross_pct = self._get_exchange_pnl_percent(position, metadata)
-        if self._is_pnl_sign_mismatch(model_gross_pct, exchange_gross_pct):
-            logger.critical(
-                "Pnl sign mismatch detected: "
-                f"model={model_gross_pct:.4f}%, exchange={exchange_gross_pct:.4f}%"
-            )
+        # NOTE: sign mismatch is evaluated in decision guard with debounce
+        # to avoid log storms and repetitive block/unblock oscillations.
 
         if not include_fees:
             return model_gross_pct
@@ -948,6 +964,42 @@ class ExitAnalyzer:
             "big_profit_exit",
         )
         return any(token in reason_l for token in profit_tokens)
+
+    def _register_pnl_mismatch(
+        self,
+        symbol: str,
+        model_gross_pct: Optional[float],
+        exchange_gross_pct: Optional[float],
+        action: str,
+        reason: str,
+    ) -> int:
+        """Register mismatch burst and throttle repetitive logs."""
+        now_ts = time.time()
+        state = self._pnl_mismatch_state.get(symbol, {})
+        last_ts = float(state.get("last_ts", 0.0) or 0.0)
+        count = int(state.get("count", 0) or 0)
+        if now_ts - last_ts > self._pnl_mismatch_window_sec:
+            count = 0
+        count += 1
+        last_log_ts = float(state.get("last_log_ts", 0.0) or 0.0)
+        if now_ts - last_log_ts >= self._pnl_mismatch_log_cooldown_sec:
+            model_val = float(model_gross_pct or 0.0)
+            exchange_val = float(exchange_gross_pct or 0.0)
+            logger.critical(
+                f"Pnl sign mismatch detected: {symbol}, count={count}, "
+                f"model={model_val:.4f}%, exchange={exchange_val:.4f}%, "
+                f"action={action}, reason={reason}"
+            )
+            last_log_ts = now_ts
+        self._pnl_mismatch_state[symbol] = {
+            "count": count,
+            "last_ts": now_ts,
+            "last_log_ts": last_log_ts,
+        }
+        return count
+
+    def _clear_pnl_mismatch_state(self, symbol: str) -> None:
+        self._pnl_mismatch_state.pop(symbol, None)
 
     @staticmethod
     def _infer_side_from_position(
