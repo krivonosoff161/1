@@ -131,6 +131,7 @@ class ExitAnalyzer:
         self._pnl_mismatch_window_sec = 12.0
         self._pnl_mismatch_block_threshold = 3
         self._pnl_mismatch_log_cooldown_sec = 5.0
+        self._pnl_mismatch_resync_cooldown_sec = 3.0
 
         # Получаем доступ к модулям через orchestrator
         self.fast_adx = None
@@ -709,6 +710,7 @@ class ExitAnalyzer:
                                 action=str(decision.get("action") or ""),
                                 reason=str(decision.get("reason") or ""),
                             )
+                            await self._force_resync_on_pnl_mismatch(symbol)
                             if self._should_block_on_pnl_mismatch(decision_reason):
                                 if mismatch_count < self._pnl_mismatch_block_threshold:
                                     logger.warning(
@@ -724,7 +726,20 @@ class ExitAnalyzer:
                                         f"model={model_gross_guard:.4f}% vs exchange={exchange_gross_guard:.4f}%, "
                                         f"action={decision.get('action')}, reason={decision.get('reason')}"
                                     )
-                                return None
+                                return {
+                                    "action": "hold",
+                                    "reason": "pnl_mismatch_hold_resync",
+                                    "symbol": symbol,
+                                    "pnl_pct": float(model_gross_guard or 0.0),
+                                    "net_pnl_pct": float(model_gross_guard or 0.0),
+                                    "mismatch_count": mismatch_count,
+                                    "mismatch_model_pct": float(
+                                        model_gross_guard or 0.0
+                                    ),
+                                    "mismatch_exchange_pct": float(
+                                        exchange_gross_guard or 0.0
+                                    ),
+                                }
                         if not mismatch_detected:
                             self._clear_pnl_mismatch_state(symbol)
                 except Exception as guard_error:
@@ -1000,6 +1015,61 @@ class ExitAnalyzer:
 
     def _clear_pnl_mismatch_state(self, symbol: str) -> None:
         self._pnl_mismatch_state.pop(symbol, None)
+
+    async def _force_resync_on_pnl_mismatch(self, symbol: str) -> None:
+        """
+        Force a fast position resync when model/exchange PnL signs diverge.
+        """
+        if not self.client or not self.position_registry:
+            return
+
+        now_ts = time.time()
+        state = self._pnl_mismatch_state.get(symbol, {})
+        last_resync_ts = float(state.get("last_resync_ts", 0.0) or 0.0)
+        if now_ts - last_resync_ts < float(
+            self._pnl_mismatch_resync_cooldown_sec or 0.0
+        ):
+            return
+
+        state["last_resync_ts"] = now_ts
+        self._pnl_mismatch_state[symbol] = state
+
+        try:
+            positions = await self.client.get_positions(symbol)
+        except Exception as exc:
+            logger.debug(f"Pnl mismatch resync failed for {symbol}: {exc}")
+            return
+
+        matched_position = None
+        for pos in positions or []:
+            inst_id = str(pos.get("instId", "")).replace("-SWAP", "")
+            if inst_id != symbol:
+                continue
+            try:
+                size = float(pos.get("pos", "0") or 0.0)
+            except (TypeError, ValueError):
+                size = 0.0
+            if abs(size) > 1e-8:
+                matched_position = pos
+                break
+
+        try:
+            if matched_position:
+                if await self.position_registry.has_position(symbol):
+                    await self.position_registry.update_position(
+                        symbol, position_updates=matched_position
+                    )
+                else:
+                    metadata = await self.position_registry.get_metadata(symbol)
+                    await self.position_registry.register_position(
+                        symbol=symbol,
+                        position_data=matched_position,
+                        metadata=metadata,
+                    )
+            else:
+                await self.position_registry.unregister_position(symbol)
+        except Exception as exc:
+            logger.debug(f"Pnl mismatch registry sync failed for {symbol}: {exc}")
 
     @staticmethod
     def _infer_side_from_position(

@@ -171,6 +171,31 @@ class SignalCoordinator:
         self._reentry_strong_signal_min_age_sec = max(
             0.0, float(_cfg_get(reentry_guard_cfg, "strong_signal_min_age_sec", 2.0))
         )
+        # Direction saturation limiter: prevents repeated same-side entries in churn.
+        saturation_cfg = (
+            _cfg_get(self.scalping_config, "direction_saturation", {}) or {}
+        )
+        self._direction_saturation_enabled = bool(
+            _cfg_get(saturation_cfg, "enabled", True)
+        )
+        self._direction_saturation_window_sec = max(
+            10.0, float(_cfg_get(saturation_cfg, "window_seconds", 180.0))
+        )
+        self._direction_saturation_min_signals = max(
+            3, int(_cfg_get(saturation_cfg, "min_signals", 6))
+        )
+        self._direction_saturation_same_side_ratio = min(
+            1.0, max(0.5, float(_cfg_get(saturation_cfg, "same_side_ratio", 0.85)))
+        )
+        self._direction_saturation_cooldown_sec = max(
+            0.0, float(_cfg_get(saturation_cfg, "cooldown_seconds", 60.0))
+        )
+        self._direction_saturation_strong_signal_bypass = min(
+            1.0, max(0.0, float(_cfg_get(saturation_cfg, "strong_signal_bypass", 0.98)))
+        )
+        self._direction_saturation_history: Dict[str, List[Dict[str, Any]]] = {}
+        self._direction_saturation_block_until: Dict[str, float] = {}
+        self._direction_saturation_last_log: Dict[str, float] = {}
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Счетчики блокировок сигналов для диагностики
         self._block_stats = {
@@ -831,6 +856,85 @@ class SignalCoordinator:
                 f"REENTRY_GUARD blocked entry (throttled): {symbol} {signal_side.upper()} ({detail})"
             )
 
+    def _record_direction_signal(self, symbol: str, signal_side: str) -> None:
+        if signal_side not in {"long", "short"}:
+            return
+        now_ts = time.time()
+        history = self._direction_saturation_history.setdefault(symbol, [])
+        history.append({"ts": now_ts, "side": signal_side})
+        cutoff_ts = now_ts - self._direction_saturation_window_sec
+        self._direction_saturation_history[symbol] = [
+            item
+            for item in history
+            if isinstance(item, dict) and float(item.get("ts", 0.0) or 0.0) >= cutoff_ts
+        ]
+
+    def _should_block_direction_saturation(
+        self, symbol: str, signal_side: str, signal_strength: float
+    ) -> Optional[str]:
+        if not self._direction_saturation_enabled:
+            return None
+        if signal_side not in {"long", "short"}:
+            return None
+
+        now_ts = time.time()
+        block_until = float(
+            self._direction_saturation_block_until.get(symbol, 0.0) or 0.0
+        )
+        if block_until > now_ts:
+            if signal_strength >= self._direction_saturation_strong_signal_bypass:
+                return None
+            wait_left = block_until - now_ts
+            return f"cooldown_active {wait_left:.1f}s"
+
+        history = self._direction_saturation_history.get(symbol, [])
+        if not history:
+            return None
+
+        cutoff_ts = now_ts - self._direction_saturation_window_sec
+        trimmed = [
+            item
+            for item in history
+            if isinstance(item, dict) and float(item.get("ts", 0.0) or 0.0) >= cutoff_ts
+        ]
+        self._direction_saturation_history[symbol] = trimmed
+
+        total = len(trimmed)
+        if total < self._direction_saturation_min_signals:
+            return None
+
+        same_side_count = sum(
+            1 for item in trimmed if str(item.get("side", "")).lower() == signal_side
+        )
+        ratio = (same_side_count / total) if total > 0 else 0.0
+        if ratio < self._direction_saturation_same_side_ratio:
+            return None
+
+        self._direction_saturation_block_until[symbol] = (
+            now_ts + self._direction_saturation_cooldown_sec
+        )
+        return (
+            f"same_side_ratio={ratio:.2f} ({same_side_count}/{total}) "
+            f">= {self._direction_saturation_same_side_ratio:.2f}"
+        )
+
+    def _log_direction_saturation_block(
+        self, symbol: str, signal_side: str, detail: str
+    ) -> None:
+        key = f"{symbol}:{signal_side}:{detail}"
+        now_ts = time.time()
+        last_ts = float(self._direction_saturation_last_log.get(key, 0.0) or 0.0)
+        self._direction_saturation_last_log[key] = now_ts
+        if now_ts - last_ts >= 3.0:
+            logger.warning(
+                f"DIRECTION_SATURATION blocked entry: {symbol} {signal_side.upper()} ({detail})"
+            )
+        else:
+            logger.debug(
+                f"DIRECTION_SATURATION blocked entry (throttled): "
+                f"{symbol} {signal_side.upper()} ({detail})"
+            )
+
     async def validate_signal(self, signal: Dict[str, Any]) -> bool:
         """Валидация торгового сигнала"""
         try:
@@ -905,7 +1009,8 @@ class SignalCoordinator:
 
         except Exception as e:
             logger.error(
-                f"❌ [VALIDATION] {symbol}: Ошибка валидации сигнала: {e}", exc_info=True
+                f"❌ [VALIDATION] {symbol}: Ошибка валидации сигнала: {e}",
+                exc_info=True,
             )
             return False
 
@@ -950,6 +1055,16 @@ class SignalCoordinator:
             if block_detail:
                 self._log_reentry_block(
                     symbol, signal_side_norm or "unknown", block_detail
+                )
+                return
+            saturation_block = self._should_block_direction_saturation(
+                symbol=symbol,
+                signal_side=signal_side_norm,
+                signal_strength=signal_strength,
+            )
+            if saturation_block:
+                self._log_direction_saturation_block(
+                    symbol, signal_side_norm or "unknown", saturation_block
                 )
                 return
 
@@ -1096,9 +1211,11 @@ class SignalCoordinator:
                     self._orders_pending_block_cycles[symbol] = 2
                     self._orders_pending_skip_until[symbol] = time.time() + 10
                     cached_orders = self.active_orders_cache_ref.get(
-                        normalized_symbol
-                        if "normalized_symbol" in locals()
-                        else symbol,
+                        (
+                            normalized_symbol
+                            if "normalized_symbol" in locals()
+                            else symbol
+                        ),
                         {},
                     )
                     cached_ts = float(cached_orders.get("timestamp", 0) or 0)
@@ -1194,9 +1311,11 @@ class SignalCoordinator:
                 risk_percentage,
                 leverage=None,
                 regime=current_regime,
-                trading_statistics=self.trading_statistics
-                if hasattr(self, "trading_statistics")
-                else None,
+                trading_statistics=(
+                    self.trading_statistics
+                    if hasattr(self, "trading_statistics")
+                    else None
+                ),
             )
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #2: Дополнительная проверка позиций перед открытием
@@ -1345,6 +1464,12 @@ class SignalCoordinator:
                 logger.info(f"✅ Сигнал {symbol} {side} успешно исполнен")
                 try:
                     self._last_signal_time[symbol] = datetime.utcnow().timestamp()
+                except Exception:
+                    pass
+                try:
+                    self._record_direction_signal(
+                        symbol, self._normalize_signal_side(side)
+                    )
                 except Exception:
                     pass
             else:
@@ -2358,6 +2483,16 @@ class SignalCoordinator:
             if block_detail:
                 self._log_reentry_block(
                     symbol, signal_side_norm or "unknown", block_detail
+                )
+                return False
+            saturation_block = self._should_block_direction_saturation(
+                symbol=symbol,
+                signal_side=signal_side_norm,
+                signal_strength=signal_strength,
+            )
+            if saturation_block:
+                self._log_direction_saturation_block(
+                    symbol, signal_side_norm or "unknown", saturation_block
                 )
                 return False
 
@@ -4213,6 +4348,10 @@ class SignalCoordinator:
                 # ✅ FIX: обновляем время последнего сигнала только после успешного открытия
                 try:
                     self._last_signal_time[symbol] = datetime.utcnow().timestamp()
+                except Exception:
+                    pass
+                try:
+                    self._record_direction_signal(symbol, position_side_for_storage)
                 except Exception:
                     pass
 

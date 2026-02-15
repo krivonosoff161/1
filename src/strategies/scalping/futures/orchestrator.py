@@ -18,6 +18,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from loguru import logger
 
@@ -218,6 +219,31 @@ class FuturesScalpingOrchestrator:
         except Exception as exc:
             logger.warning(
                 f"⚠️ DataRegistry: не удалось установить market_data_ttl: {exc}"
+            )
+
+        # Unify decision snapshot thresholds for entry/exit/order contexts.
+        try:
+            exit_guard_cfg = getattr(self.scalping_config, "exit_guard", {}) or {}
+            stale_thresholds = None
+            if isinstance(exit_guard_cfg, dict):
+                stale_thresholds = exit_guard_cfg.get("stale_thresholds")
+            else:
+                stale_thresholds = getattr(exit_guard_cfg, "stale_thresholds", None)
+            if stale_thresholds:
+                decision_thresholds = {
+                    "entry": stale_thresholds.get("entry", 3.0),
+                    "exit_normal": stale_thresholds.get("exit_normal", 5.0),
+                    "exit_critical": stale_thresholds.get("exit_critical", 10.0),
+                    "monitoring": stale_thresholds.get("monitoring", 15.0),
+                    "orders": 1.0,
+                }
+                self.data_registry.configure_decision_max_age(decision_thresholds)
+                logger.info(
+                    "✅ DataRegistry: decision max-age policy configured from exit_guard"
+                )
+        except Exception as exc:
+            logger.warning(
+                f"⚠️ DataRegistry: failed to configure decision max-age policy: {exc}"
             )
 
         # 🛡️ Защиты риска
@@ -1769,7 +1795,8 @@ class FuturesScalpingOrchestrator:
 
         except Exception as e:
             logger.error(
-                f"❌ Критическая ошибка инициализации буферов свечей: {e}", exc_info=True
+                f"❌ Критическая ошибка инициализации буферов свечей: {e}",
+                exc_info=True,
             )
 
     def _reset_all_states(self):
@@ -2627,9 +2654,9 @@ class FuturesScalpingOrchestrator:
                     entry_price=effective_price,
                     side=trailing_side,  # "long" или "short", а не "buy"/"sell"
                     current_price=mark_price,
-                    signal=signal_with_regime
-                    if signal_with_regime
-                    else None,  # ✅ КРИТИЧЕСКОЕ: Передаем режим, strength и entry_time через signal
+                    signal=(
+                        signal_with_regime if signal_with_regime else None
+                    ),  # ✅ КРИТИЧЕСКОЕ: Передаем режим, strength и entry_time через signal
                 )
                 if not tsl:
                     logger.warning(
@@ -2827,10 +2854,10 @@ class FuturesScalpingOrchestrator:
                         "side": side.upper(),
                         "size": size,
                         "entry_price": entry_price,
-                        "entry_time": entry_time.isoformat()
-                        if isinstance(entry_time, datetime)
-                        else (
-                            None if entry_time is None else str(entry_time)
+                        "entry_time": (
+                            entry_time.isoformat()
+                            if isinstance(entry_time, datetime)
+                            else (None if entry_time is None else str(entry_time))
                         ),  # ✅ ИСПРАВЛЕНО: null вместо "None"
                         "duration_sec": duration_sec,
                         "reason": "exchange_side",
@@ -3270,9 +3297,11 @@ class FuturesScalpingOrchestrator:
                         new_metadata = PositionMetadata(
                             entry_time=entry_time_for_metadata,  # ✅ КРИТИЧЕСКОЕ: Используем entry_time из API (cTime/uTime)
                             regime=regime,
-                            entry_price=entry_price_from_api
-                            if entry_price_from_api > 0
-                            else None,
+                            entry_price=(
+                                entry_price_from_api
+                                if entry_price_from_api > 0
+                                else None
+                            ),
                             position_side=position_side,
                         )
 
@@ -4748,6 +4777,11 @@ class FuturesScalpingOrchestrator:
         decision_payload: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         payload = dict(decision_payload) if isinstance(decision_payload, dict) else {}
+        attempt_id = payload.get("close_attempt_id")
+        if attempt_id is None or str(attempt_id).strip() == "":
+            payload["close_attempt_id"] = uuid4().hex
+        else:
+            payload["close_attempt_id"] = str(attempt_id).strip()
 
         if self.data_registry:
             try:
@@ -4756,10 +4790,23 @@ class FuturesScalpingOrchestrator:
                     or payload.get("price_source") is None
                     or payload.get("price_age") is None
                 ):
+                    reason_l = str(reason or "").lower()
+                    is_critical_reason = any(
+                        token in reason_l
+                        for token in (
+                            "critical",
+                            "emergency",
+                            "liquidation",
+                            "margin_call",
+                            "loss_cut",
+                        )
+                    )
                     snapshot = await self.data_registry.get_decision_price_snapshot(
                         symbol=symbol,
                         client=self.client,
-                        max_age=15.0,
+                        context=(
+                            "exit_critical" if is_critical_reason else "exit_normal"
+                        ),
                         allow_rest_fallback=True,
                     )
                     if snapshot:
@@ -5051,6 +5098,11 @@ class FuturesScalpingOrchestrator:
 
             # TTLCache с TTL 60 секунд - достаточно для закрытия позиции
             self._closing_positions_cache = TTLCache(maxsize=100, ttl=60.0)
+        if not hasattr(self, "_close_attempt_cache"):
+            from cachetools import TTLCache
+
+            # Idempotency by close attempt id to prevent duplicate close execution.
+            self._close_attempt_cache = TTLCache(maxsize=2000, ttl=300.0)
         if not hasattr(self, "_exit_guard_block_log_ts"):
             self._exit_guard_block_log_ts = {}
 
@@ -5070,6 +5122,21 @@ class FuturesScalpingOrchestrator:
             decision_payload = await self._build_exit_payload(
                 symbol, reason, decision_payload
             )
+            attempt_id = str(decision_payload.get("close_attempt_id") or "").strip()
+            if not attempt_id:
+                attempt_id = uuid4().hex
+                decision_payload["close_attempt_id"] = attempt_id
+            attempt_key = f"{symbol}:{attempt_id}"
+            if attempt_key in self._close_attempt_cache:
+                logger.debug(
+                    f"Close attempt already processed, skip: {symbol} "
+                    f"reason={reason} close_attempt_id={attempt_id}"
+                )
+                return
+            self._close_attempt_cache[attempt_key] = {
+                "ts": time.time(),
+                "reason": reason,
+            }
             # Важный момент: existence-check не блокирует close до ExitGuard.
             # Иначе ложные отрицания (рассинхрон/формат size vs pos/short size<0)
             # приводят к "подвисшим" позициям.

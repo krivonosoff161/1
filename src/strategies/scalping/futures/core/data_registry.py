@@ -105,6 +105,13 @@ class DataRegistry:
         self._last_ws_reconnect_global_ts: float = 0.0
         self._ws_reconnect_cooldown = 30.0
         self._require_ws_source_for_fresh = True
+        self._decision_max_age: Dict[str, float] = {
+            "entry": 3.0,
+            "exit_normal": 5.0,
+            "exit_critical": 10.0,
+            "orders": 1.0,
+            "monitoring": 15.0,
+        }
 
     def set_ws_reconnect_callback(self, callback) -> None:
         """Установить async callback для инициирования WS reconnect."""
@@ -172,6 +179,31 @@ class DataRegistry:
     def set_require_ws_source_for_fresh(self, required: bool) -> None:
         """Настроить, требует ли is_ws_fresh источник WEBSOCKET."""
         self._require_ws_source_for_fresh = bool(required)
+
+    def configure_decision_max_age(self, mapping: Optional[Dict[str, Any]]) -> None:
+        """Override decision max-age thresholds for entry/exit/order contexts."""
+        if not isinstance(mapping, dict):
+            return
+        for key, value in mapping.items():
+            try:
+                parsed = float(value)
+            except (TypeError, ValueError):
+                continue
+            if parsed <= 0:
+                continue
+            self._decision_max_age[str(key)] = parsed
+
+    def get_decision_max_age(
+        self, context: Optional[str], fallback: float = 15.0
+    ) -> float:
+        if context:
+            try:
+                ctx_value = self._decision_max_age.get(str(context))
+                if ctx_value is not None:
+                    return float(ctx_value)
+            except (TypeError, ValueError):
+                pass
+        return float(fallback)
 
     async def auto_reinit(self, symbol: str, fetch_market_data_callback=None):
         """Автоматически реинициализирует данные, если они устарели"""
@@ -304,7 +336,8 @@ class DataRegistry:
         self,
         symbol: str,
         client=None,
-        max_age: float = 15.0,
+        max_age: Optional[float] = None,
+        context: Optional[str] = None,
         allow_rest_fallback: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """
@@ -320,6 +353,16 @@ class DataRegistry:
                 "rest_fallback": bool,
             }
         """
+        if max_age is not None:
+            try:
+                resolved_max_age = float(max_age)
+            except (TypeError, ValueError):
+                resolved_max_age = self.get_decision_max_age(context, fallback=15.0)
+        else:
+            resolved_max_age = self.get_decision_max_age(context, fallback=15.0)
+        if resolved_max_age <= 0:
+            resolved_max_age = self.get_decision_max_age(context, fallback=15.0)
+
         snapshot = await self.get_price_snapshot(symbol)
         if snapshot:
             price = self._to_positive_float(snapshot.get("price"))
@@ -330,7 +373,7 @@ class DataRegistry:
                 age = float(age_raw) if age_raw is not None else None
             except (TypeError, ValueError):
                 age = None
-            stale = bool(age is not None and age > float(max_age))
+            stale = bool(age is not None and age > resolved_max_age)
             if price is not None and not stale:
                 return {
                     "price": price,
@@ -339,6 +382,8 @@ class DataRegistry:
                     "updated_at": updated_at,
                     "stale": False,
                     "rest_fallback": False,
+                    "context": context,
+                    "max_age": resolved_max_age,
                 }
         else:
             price = None
@@ -357,6 +402,8 @@ class DataRegistry:
                 "updated_at": updated_at,
                 "stale": stale,
                 "rest_fallback": False,
+                "context": context,
+                "max_age": resolved_max_age,
             }
 
         try:
@@ -390,6 +437,8 @@ class DataRegistry:
                     "updated_at": updated_at,
                     "stale": stale,
                     "rest_fallback": False,
+                    "context": context,
+                    "max_age": resolved_max_age,
                 }
 
             # Keep WS freshness semantics stable: REST fallback must not overwrite
@@ -419,6 +468,8 @@ class DataRegistry:
                 "updated_at": datetime.now(),
                 "stale": False,
                 "rest_fallback": True,
+                "context": context,
+                "max_age": resolved_max_age,
             }
         except Exception as e:
             logger.debug(f"Decision snapshot REST fallback failed for {symbol}: {e}")
@@ -431,6 +482,8 @@ class DataRegistry:
                 "updated_at": updated_at,
                 "stale": stale,
                 "rest_fallback": False,
+                "context": context,
+                "max_age": resolved_max_age,
             }
 
     async def get_price(self, symbol: str) -> Optional[float]:
@@ -454,7 +507,7 @@ class DataRegistry:
             return market_data.get("price") or market_data.get("last_price")
 
     async def get_fresh_price_for_exit_analyzer(
-        self, symbol: str, client=None, max_age: float = 15.0
+        self, symbol: str, client=None, max_age: Optional[float] = None
     ) -> Optional[float]:
         """
         Get fresh price for ExitAnalyzer via unified decision snapshot.
@@ -462,6 +515,7 @@ class DataRegistry:
         snapshot = await self.get_decision_price_snapshot(
             symbol=symbol,
             client=client,
+            context="exit_normal",
             max_age=max_age,
             allow_rest_fallback=True,
         )
@@ -479,7 +533,7 @@ class DataRegistry:
         snapshot = await self.get_decision_price_snapshot(
             symbol=symbol,
             client=client,
-            max_age=1.0,
+            context="orders",
             allow_rest_fallback=True,
         )
         if not snapshot:
@@ -488,16 +542,15 @@ class DataRegistry:
         return self._to_positive_float(snapshot.get("price"))
 
     async def get_fresh_price_for_signals(
-        self, symbol: str, client=None, max_age: float = 3.0
+        self, symbol: str, client=None, max_age: Optional[float] = None
     ) -> Optional[float]:
         """
         Get fresh price for SignalGenerator via unified decision snapshot.
         """
-        if max_age is None or max_age <= 0:
-            max_age = 15.0
         snapshot = await self.get_decision_price_snapshot(
             symbol=symbol,
             client=client,
+            context="entry",
             max_age=max_age,
             allow_rest_fallback=True,
         )

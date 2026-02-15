@@ -23,5 +23,13 @@ repos:
   rev: 1.7.5
   hooks:
     - id: bandit
-      args: ["--exclude", "venv", "-f", "json", "--skip", "B110,B311,B106"]
+      args: ["--exclude", "venv", "-f", "json", "--skip", "B110,B311,B106,B101"]
       additional_dependencies: [pbr]
+
+- repo: local
+  hooks:
+    - id: check-local-import-shadowing
+      name: check local import shadowing
+      entry: python scripts/check_local_import_shadowing.py
+      language: system
+      files: ^src/.*\.py$

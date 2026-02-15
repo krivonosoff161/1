@@ -170,6 +170,13 @@ scalping:
   base_risk_percentage: 0.01  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Снижено с 3% до 1% (используется только как fallback)
   min_position_size: 0.001  # Минимальный размер позиции
   signal_cooldown_seconds: 3.0  # ✅ LIVE: Минимальная задержка между сигналами для максимальной скорости входа
+  direction_saturation:
+    enabled: true
+    window_seconds: 180.0
+    min_signals: 6
+    same_side_ratio: 0.85
+    cooldown_seconds: 60.0
+    strong_signal_bypass: 0.98
   # Порог быстрого выхода по крупной чистой прибыли (net, после комиссий)
   big_profit_exit_percent_majors: 2.5   # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Увеличено с 1.5% до 2.5% (ближе к TP, было 62% от TP 2.4%)
   big_profit_exit_percent_alts: 3.0     # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Увеличено с 2.0% до 3.0% (ближе к TP, было 83% от TP 2.4%)
@@ -341,6 +348,10 @@ scalping:
     fee_rate_round_trip: 0.0010
     min_gross_edge: 0.0003
     min_net_profit: 0.0005
+    non_critical_confirmation:
+      enabled: true
+      required_count: 2
+      window_seconds: 3.0
 
   # ✅ НОВОЕ: Profit Drawdown Protection - защита от отката прибыли
   profit_drawdown:

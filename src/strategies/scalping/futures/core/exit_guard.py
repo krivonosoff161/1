@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -35,6 +36,8 @@ class ExitGuard:
     DEFAULT_FEE_RATE_ROUND_TRIP = 0.001  # 0.10% round-trip
     DEFAULT_MIN_GROSS_EDGE = 0.0002  # 0.02% edge above fees
     DEFAULT_MIN_NET_PROFIT = 0.0002  # 0.02% minimal net edge after fees
+    DEFAULT_NON_CRITICAL_CONFIRMATIONS = 2
+    DEFAULT_NON_CRITICAL_CONFIRM_WINDOW_SEC = 3.0
     POSITION_SIZE_EPS = 1e-8
 
     def __init__(
@@ -56,6 +59,12 @@ class ExitGuard:
         self.fee_rate_round_trip = self.DEFAULT_FEE_RATE_ROUND_TRIP
         self.min_gross_edge = self.DEFAULT_MIN_GROSS_EDGE
         self.min_net_profit = self.DEFAULT_MIN_NET_PROFIT
+        self.non_critical_confirmations = self.DEFAULT_NON_CRITICAL_CONFIRMATIONS
+        self.non_critical_confirm_window_sec = (
+            self.DEFAULT_NON_CRITICAL_CONFIRM_WINDOW_SEC
+        )
+        self.non_critical_confirmation_enabled = True
+        self._non_critical_exit_state: Dict[str, Dict[str, Any]] = {}
 
         self._load_config(config)
 
@@ -112,6 +121,41 @@ class ExitGuard:
             except (TypeError, ValueError):
                 setattr(self, attr, fallback)
 
+        confirm_cfg = _get(guard_cfg, "non_critical_confirmation")
+        if not isinstance(confirm_cfg, dict):
+            confirm_cfg = {}
+        self.non_critical_confirmation_enabled = bool(
+            _get(confirm_cfg, "enabled", self.non_critical_confirmation_enabled)
+        )
+        try:
+            self.non_critical_confirmations = max(
+                1,
+                int(
+                    _get(
+                        confirm_cfg,
+                        "required_count",
+                        self.non_critical_confirmations,
+                    )
+                ),
+            )
+        except (TypeError, ValueError):
+            self.non_critical_confirmations = self.DEFAULT_NON_CRITICAL_CONFIRMATIONS
+        try:
+            self.non_critical_confirm_window_sec = max(
+                0.0,
+                float(
+                    _get(
+                        confirm_cfg,
+                        "window_seconds",
+                        self.non_critical_confirm_window_sec,
+                    )
+                ),
+            )
+        except (TypeError, ValueError):
+            self.non_critical_confirm_window_sec = (
+                self.DEFAULT_NON_CRITICAL_CONFIRM_WINDOW_SEC
+            )
+
     async def check(
         self, symbol: str, reason: str, payload: Optional[Dict[str, Any]] = None
     ) -> Tuple[bool, Optional[str]]:
@@ -134,6 +178,12 @@ class ExitGuard:
                 return False, block
 
             allowed, block = self._check_fee_edge(reason, payload)
+            if not allowed:
+                return False, block
+
+            allowed, block = self._check_non_critical_confirmation(
+                symbol, reason, payload
+            )
             if not allowed:
                 return False, block
 
@@ -267,6 +317,7 @@ class ExitGuard:
     async def _check_stale(
         self, symbol: str, reason: str, payload: Dict[str, Any]
     ) -> Tuple[bool, Optional[str]]:
+        context = "exit_critical" if self._is_critical_reason(reason) else "exit_normal"
         threshold = (
             self.stale_thresholds.get("exit_critical")
             if self._is_critical_reason(reason)
@@ -284,6 +335,7 @@ class ExitGuard:
                 snapshot = await self.data_registry.get_decision_price_snapshot(
                     symbol=symbol,
                     client=self.client,
+                    context=context,
                     max_age=threshold,
                     allow_rest_fallback=True,
                 )
@@ -326,6 +378,54 @@ class ExitGuard:
             return True, None
 
         return False, f"stale_data_{price_age:.1f}s"
+
+    def _check_non_critical_confirmation(
+        self, symbol: str, reason: str, payload: Dict[str, Any]
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Require repeated confirmation for non-critical exits to reduce one-tick noise.
+        """
+        if not self.non_critical_confirmation_enabled:
+            return True, None
+        if self._is_critical_reason(reason) or self._is_protective_reason(reason):
+            self._non_critical_exit_state.pop(symbol, None)
+            return True, None
+        if payload.get("skip_non_critical_confirmation"):
+            self._non_critical_exit_state.pop(symbol, None)
+            return True, None
+
+        now_ts = time.time()
+        reason_norm = str(reason or "").strip().lower() or "unknown"
+        side = self._extract_side_size(payload.get("position_data"))[0]
+        state_key = f"{reason_norm}:{side}"
+        state = self._non_critical_exit_state.get(symbol, {})
+
+        prev_key = str(state.get("key") or "")
+        prev_ts = float(state.get("last_ts") or 0.0)
+        count = int(state.get("count") or 0)
+        if (
+            prev_key == state_key
+            and self.non_critical_confirm_window_sec > 0
+            and (now_ts - prev_ts) <= self.non_critical_confirm_window_sec
+        ):
+            count += 1
+        else:
+            count = 1
+
+        self._non_critical_exit_state[symbol] = {
+            "key": state_key,
+            "count": count,
+            "last_ts": now_ts,
+        }
+
+        if count < self.non_critical_confirmations:
+            return (
+                False,
+                f"non_critical_confirm_{count}/{self.non_critical_confirmations}",
+            )
+
+        self._non_critical_exit_state.pop(symbol, None)
+        return True, None
 
     async def _refresh_via_rest(self, symbol: str) -> Optional[float]:
         if not self.client:
