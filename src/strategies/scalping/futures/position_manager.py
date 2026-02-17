@@ -1537,6 +1537,24 @@ class FuturesPositionManager:
         except Exception as e:
             logger.error(f"Ошибка проверки безопасности позиции: {e}")
 
+    async def _emergency_close_position(self, position: Dict[str, Any]) -> None:
+        """
+        ✅ ДОБАВЛЕНО (13.02.2026): Аварийное закрытие позиции при критически низкой марже.
+        Делегирует в _close_position_by_reason с причиной 'emergency_margin_protection'.
+        """
+        symbol = position.get("instId", "").replace("-SWAP", "")
+        try:
+            logger.critical(
+                f"🚨 EMERGENCY CLOSE {symbol}: критически низкая маржа, принудительное закрытие"
+            )
+            await self._close_position_by_reason(
+                position, "emergency_margin_protection"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ _emergency_close_position {symbol}: ошибка при аварийном закрытии: {e}"
+            )
+
     async def _check_sl(self, position: Dict[str, Any]) -> bool:
         """
         ✅ НОВОЕ: Проверка адаптивного Stop Loss (SL)

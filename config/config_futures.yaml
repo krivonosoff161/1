@@ -1593,7 +1593,7 @@ exit_params_legacy:
 signal_generator:
     # Базовые параметры
     price_change_threshold: 0.0005  # Порог изменения цены 0.05%
-    strength_multiplier: 2000.0  # Множитель для strength (histogram / 200.0)
+    strength_multiplier: 200.0  # 🔥 ИСПРАВЛЕНО 13.02.2026: было 2000 → 88.6% сигналов имели strength=1.0! 0.1%→0.2, 0.25%→0.5, 0.5%→1.0
     strength_reduction_neutral: 0.9  # Снижение strength для neutral направления
     base_signal_strength: 0.001  # Базовый размер сигнала
     ws_fresh_max_age: 30.0  # Для проверки входов

@@ -559,6 +559,40 @@ class TrailingSLCoordinator:
             position_side = "long"
         elif side_lower in ["sell", "short"]:
             position_side = "short"
+        elif side_lower == "net":
+            # ✅ FIX (13.02.2026): OKX one-way mode возвращает side='net'
+            # Определяем реальную сторону по размеру позиции (pos > 0 = long, pos < 0 = short)
+            pos_size = 0.0
+            if signal:
+                pos_size = float(
+                    signal.get(
+                        "pos", signal.get("size", signal.get("position_size", 0))
+                    )
+                    or 0
+                )
+            if pos_size > 0:
+                position_side = "long"
+            elif pos_size < 0:
+                position_side = "short"
+            else:
+                # Fallback: смотрим на активную позицию в реестре
+                try:
+                    active_pos = (self.active_positions_ref or {}).get(symbol, {})
+                    raw_side = active_pos.get("posSide", active_pos.get("side", ""))
+                    if raw_side.lower() in ["long", "buy"]:
+                        position_side = "long"
+                    elif raw_side.lower() in ["short", "sell"]:
+                        position_side = "short"
+                    else:
+                        position_side = "long"
+                        logger.warning(
+                            f"⚠️ {symbol}: side='net', pos=0, не можем определить сторону — defaulting long"
+                        )
+                except Exception:
+                    position_side = "long"
+            logger.debug(
+                f"✅ {symbol}: side='net' → определён как '{position_side}' (pos_size={pos_size})"
+            )
         else:
             logger.error(
                 f"❌ Неизвестная сторона позиции: {side} для {symbol}. Используем 'long' по умолчанию."
@@ -767,9 +801,6 @@ class TrailingSLCoordinator:
                             if entry_time_str:
                                 try:
                                     entry_timestamp = int(entry_time_str) / 1000
-                                    # ✅ ИСПРАВЛЕНО: Добавляем timezone.utc
-                                    from datetime import timezone
-
                                     position["entry_time"] = datetime.fromtimestamp(
                                         entry_timestamp, tz=timezone.utc
                                     )
@@ -781,13 +812,9 @@ class TrailingSLCoordinator:
                                     logger.warning(
                                         f"⚠️ Не удалось распарсить cTime/uTime для {symbol}: {e}, используем текущее время"
                                     )
-                                    from datetime import timezone
-
                                     position["entry_time"] = datetime.now(timezone.utc)
                                     position["timestamp"] = position["entry_time"]
                             else:
-                                from datetime import timezone
-
                                 position["entry_time"] = datetime.now(timezone.utc)
                                 position["timestamp"] = position["entry_time"]
                                 logger.debug(

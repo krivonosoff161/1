@@ -2242,35 +2242,31 @@ class FuturesScalpingOrchestrator:
             ):
                 regime = self.signal_generator.regime_manager.get_current_regime()
 
-            # ✅ НОВОЕ: Читаем баланс из DataRegistry
+            # ✅ ИСПРАВЛЕНО (13.02.2026): Всегда получаем свежий баланс из API
+            # БЫЛО: читали из DataRegistry → $1072.78 замораживался на весь сеанс (8.5 часов!)
+            # ТЕПЕРЬ: каждый sync = свежий API запрос + обновление DataRegistry
             balance = None
-            if self.data_registry:
-                try:
-                    balance_data = await self.data_registry.get_balance()
-                    if balance_data:
-                        balance = balance_data.get("balance")
-                        profile_name = balance_data.get("profile")
-                        logger.debug(
-                            f"📊 Баланс получен из DataRegistry: ${balance:.2f} (profile={profile_name})"
-                        )
-                except Exception as e:
-                    logger.debug(f"⚠️ Ошибка получения баланса из DataRegistry: {e}")
-
-            # Fallback на прямой запрос к API
-            if balance is None:
+            profile_name = "small"
+            try:
                 balance = await self.client.get_balance()
                 balance_profile = self.config_manager.get_balance_profile(balance)
                 profile_name = balance_profile.get("name", "small")
-
-            # ✅ НОВОЕ: Обновляем баланс в DataRegistry (если получили из API)
-            if self.data_registry:
-                try:
+                if self.data_registry:
                     await self.data_registry.update_balance(balance, profile_name)
                     logger.debug(
                         f"✅ DataRegistry: Обновлен баланс: ${balance:.2f} USDT (profile={profile_name})"
                     )
-                except Exception as e:
-                    logger.warning(f"⚠️ Ошибка обновления баланса в DataRegistry: {e}")
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка получения баланса из API: {e}")
+                # Fallback: читаем из DataRegistry если API недоступен
+                if self.data_registry and balance is None:
+                    try:
+                        balance_data = await self.data_registry.get_balance()
+                        if balance_data:
+                            balance = balance_data.get("balance")
+                            profile_name = balance_data.get("profile", "small")
+                    except Exception:
+                        pass
 
             # Получаем множитель интервала по режиму (ПРИОРИТЕТ 1)
             by_regime = self.config_manager.to_dict(
