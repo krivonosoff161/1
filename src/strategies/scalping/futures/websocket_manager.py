@@ -78,7 +78,7 @@ class FuturesWebSocketManager:
         ws_url: str = "wss://ws.okx.com:8443/ws/v5/public",
         max_reconnect_attempts: int = 10,
         reconnect_delay: float = 5.0,
-        heartbeat_interval: float = 30.0,
+        heartbeat_interval: float = 25.0,
     ):
         """
         Инициализация WebSocket Manager.
@@ -87,7 +87,7 @@ class FuturesWebSocketManager:
             ws_url: URL WebSocket
             max_reconnect_attempts: Максимум попыток переподключения
             reconnect_delay: Задержка между попытками (сек)
-            heartbeat_interval: Интервал heartbeat (сек)
+            heartbeat_interval: Интервал ping к OKX (сек). OKX закрывает соединение после 30s без ping.
         """
         self.ws_url = ws_url
         self.ws: Optional[aiohttp.ClientWebSocketResponse] = None
@@ -383,9 +383,22 @@ class FuturesWebSocketManager:
                 await self.subscribe(channel, inst_id, callback)
 
     async def _heartbeat_loop(self):
-        """Heartbeat мониторинг."""
+        """Heartbeat мониторинг + отправка ping на OKX каждые 25s.
+
+        OKX требует: клиент должен слать "ping" каждые 25s.
+        Если сервер не получил ping за 30s — закрывает соединение.
+        БЕЗ этого WS молча умирает → данные становятся stale → reconnect storm.
+        """
         while self.should_reconnect:
             await asyncio.sleep(self.heartbeat_interval)
+
+            # ✅ FIX (2026-02-18): Отправляем ping на OKX для поддержания соединения
+            if self.connected and self.ws and not self.ws.closed:
+                try:
+                    await self.ws.send_str("ping")
+                    logger.debug("💓 WS ping отправлен на OKX")
+                except Exception as e:
+                    logger.debug(f"⚠️ Ошибка отправки WS ping: {e}")
 
             # Проверяем последний heartbeat
             time_since_heartbeat = time.time() - self.last_heartbeat
