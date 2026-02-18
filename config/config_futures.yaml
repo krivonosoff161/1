@@ -53,13 +53,13 @@ scalping:
       max_position_percent: 25.0  # 25% от баланса = маржа
       min_position_usd: 15.0      # мин номинал (защита от слишком маленьких позиций)
       max_position_usd: 450.0     # макс номинал (защита при высоком плече)
-      max_open_positions: 3       # FIX 2026-02-18: BTC+XRP отключены → 3 активных пары (ETH,SOL,DOGE)
+      max_open_positions: 5       # Лимит позиций (BTC/XRP заблокированы через enabled=false)
     small:
       threshold: 1500.0
       max_position_percent: 15.0  # 15% от баланса = маржа
       min_position_usd: 50.0      # мин номинал
       max_position_usd: 1350.0    # макс номинал (=300$ маржа × leverage 4.5x)
-      max_open_positions: 3       # FIX 2026-02-18: 3 активных пары → 3 слота
+      max_open_positions: 5       # Лимит позиций
     medium:
       threshold: 3000.0
       max_position_percent: 10.0  # 10% от баланса = маржа
