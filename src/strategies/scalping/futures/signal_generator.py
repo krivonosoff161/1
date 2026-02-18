@@ -4390,10 +4390,27 @@ class FuturesSignalGenerator:
         Bullish divergence: цена делает lower low, RSI делает higher low → BUY
         Bearish divergence: цена делает higher high, RSI делает lower high → SELL
 
-        В отличие от EMA crossover (lagging), это опережающий сигнал.
+        Адаптация по режиму:
+        - ranging:  сила +20% (дивергенции наиболее надёжны в боковике)
+        - choppy:   сила -20%, более мягкий порог (больше шума)
+        - trending: сила -40% (дивергенция = коррекция, не разворот)
         """
         signals = []
         try:
+            # Получаем текущий режим для адаптации
+            current_regime = "ranging"  # fallback
+            try:
+                if hasattr(self, "regime_manager") and self.regime_manager:
+                    regime_obj = self.regime_manager.get_current_regime()
+                    if regime_obj:
+                        current_regime = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except Exception:
+                pass
+
             candles = getattr(market_data, "ohlcv_data", None)
             if not candles or len(candles) < 30:
                 return []
@@ -4440,7 +4457,15 @@ class FuturesSignalGenerator:
                     abs(rsi_low_early), 1e-9
                 )
                 strength = min(0.82, (price_drop * 10 + rsi_recovery) * 2)
-                if strength >= 0.15:
+                # Адаптация по режиму
+                regime_multiplier = {
+                    "ranging": 1.2,
+                    "choppy": 0.8,
+                    "trending": 0.6,
+                }.get(current_regime, 1.0)
+                strength = min(0.82, strength * regime_multiplier)
+                min_strength_threshold = 0.12 if current_regime == "trending" else 0.15
+                if strength >= min_strength_threshold:
                     signals.append(
                         {
                             "symbol": symbol,
@@ -4458,15 +4483,16 @@ class FuturesSignalGenerator:
                             "source": "rsi_bullish_divergence",
                             "rsi": current_rsi,
                             "divergence_type": "bullish",
+                            "regime": current_regime,
                             "price_drop_pct": round(price_drop * 100, 3),
                             "rsi_recovery_pct": round(rsi_recovery * 100, 3),
                         }
                     )
                     logger.debug(
-                        f"📐 {symbol}: Bullish RSI divergence: "
+                        f"📐 {symbol}: Bullish RSI divergence [{current_regime}]: "
                         f"price {price_low_early:.4f}→{price_low_late:.4f} (↓), "
                         f"RSI {rsi_low_early:.1f}→{rsi_low_late:.1f} (↑), "
-                        f"strength={strength:.3f}"
+                        f"strength={strength:.3f} (x{regime_multiplier})"
                     )
 
             # --- Bearish divergence ---
@@ -4488,7 +4514,15 @@ class FuturesSignalGenerator:
                     abs(rsi_high_early), 1e-9
                 )
                 strength = min(0.82, (price_rise * 10 + rsi_weakness) * 2)
-                if strength >= 0.15:
+                # Адаптация по режиму
+                regime_multiplier = {
+                    "ranging": 1.2,
+                    "choppy": 0.8,
+                    "trending": 0.6,
+                }.get(current_regime, 1.0)
+                strength = min(0.82, strength * regime_multiplier)
+                min_strength_threshold = 0.12 if current_regime == "trending" else 0.15
+                if strength >= min_strength_threshold:
                     signals.append(
                         {
                             "symbol": symbol,
@@ -4506,15 +4540,16 @@ class FuturesSignalGenerator:
                             "source": "rsi_bearish_divergence",
                             "rsi": current_rsi,
                             "divergence_type": "bearish",
+                            "regime": current_regime,
                             "price_rise_pct": round(price_rise * 100, 3),
                             "rsi_weakness_pct": round(rsi_weakness * 100, 3),
                         }
                     )
                     logger.debug(
-                        f"📐 {symbol}: Bearish RSI divergence: "
+                        f"📐 {symbol}: Bearish RSI divergence [{current_regime}]: "
                         f"price {price_high_early:.4f}→{price_high_late:.4f} (↑), "
                         f"RSI {rsi_high_early:.1f}→{rsi_high_late:.1f} (↓), "
-                        f"strength={strength:.3f}"
+                        f"strength={strength:.3f} (x{regime_multiplier})"
                     )
 
         except Exception as exc:
@@ -4532,10 +4567,37 @@ class FuturesSignalGenerator:
         BUY:  цена опустилась >1.5σ ниже VWAP → ждём возврата вверх
         SELL: цена поднялась >1.5σ выше VWAP → ждём возврата вниз
 
-        Сигнал усиливается чем дальше цена от VWAP.
+        Адаптация по режиму:
+        - trending: ЗАБЛОКИРОВАН — в тренде цена уходит от VWAP надолго,
+                    mean-reversion будет торговать против тренда
+        - ranging:  основной режим, порог 1.5σ, confidence 0.65
+        - choppy:   порог выше (2.0σ), меньше confidence (0.55), слабее сила
         """
         signals = []
         try:
+            # Получаем текущий режим
+            current_regime = "ranging"  # fallback
+            try:
+                if hasattr(self, "regime_manager") and self.regime_manager:
+                    regime_obj = self.regime_manager.get_current_regime()
+                    if regime_obj:
+                        current_regime = (
+                            regime_obj.lower()
+                            if isinstance(regime_obj, str)
+                            else str(regime_obj).lower()
+                        )
+            except Exception:
+                pass
+
+            # VWAP mean-reversion не работает в trending — цена может
+            # находиться далеко от VWAP часами без возврата
+            if current_regime == "trending":
+                logger.debug(
+                    f"📊 {symbol}: VWAP заблокирован в trending режиме "
+                    f"(mean-reversion неэффективен против тренда)"
+                )
+                return []
+
             candles = getattr(market_data, "ohlcv_data", None)
             if not candles or len(candles) < 10:
                 return []
@@ -4570,9 +4632,16 @@ class FuturesSignalGenerator:
 
             std_bands = (current_price - vwap) / std_dev
 
-            # BUY: цена ниже VWAP на >1.5σ
-            if std_bands < -1.5 and adx_trend != "bearish":
-                strength = min(0.80, abs(std_bands) / 3.5)
+            # Параметры зависят от режима
+            # ranging: стандартный порог 1.5σ, хорошая надёжность
+            # choppy:  порог 2.0σ (больше шума → ждём сильного отклонения)
+            entry_threshold = 2.0 if current_regime == "choppy" else 1.5
+            confidence_val = 0.55 if current_regime == "choppy" else 0.62
+            strength_divisor = 4.0 if current_regime == "choppy" else 3.5
+
+            # BUY: цена ниже VWAP
+            if std_bands < -entry_threshold and adx_trend != "bearish":
+                strength = min(0.78, abs(std_bands) / strength_divisor)
                 if strength >= 0.15:
                     signals.append(
                         {
@@ -4586,24 +4655,27 @@ class FuturesSignalGenerator:
                             "timestamp": __import__("datetime").datetime.now(
                                 __import__("datetime").timezone.utc
                             ),
-                            "confidence": 0.60,
+                            "confidence": confidence_val,
                             "has_conflict": False,
                             "source": "vwap_below",
                             "vwap": round(vwap, 6),
                             "std_bands": round(std_bands, 3),
+                            "regime": current_regime,
                             "deviation_pct": round(
                                 (current_price - vwap) / vwap * 100, 3
                             ),
                         }
                     )
                     logger.debug(
-                        f"📊 {symbol}: VWAP BUY: price={current_price:.4f}, "
-                        f"vwap={vwap:.4f}, bands={std_bands:.2f}σ, strength={strength:.3f}"
+                        f"📊 {symbol}: VWAP BUY [{current_regime}]: "
+                        f"price={current_price:.4f}, vwap={vwap:.4f}, "
+                        f"bands={std_bands:.2f}σ (threshold={entry_threshold}σ), "
+                        f"strength={strength:.3f}"
                     )
 
-            # SELL: цена выше VWAP на >1.5σ
-            elif std_bands > 1.5 and adx_trend != "bullish":
-                strength = min(0.80, abs(std_bands) / 3.5)
+            # SELL: цена выше VWAP
+            elif std_bands > entry_threshold and adx_trend != "bullish":
+                strength = min(0.78, abs(std_bands) / strength_divisor)
                 if strength >= 0.15:
                     signals.append(
                         {
@@ -4617,19 +4689,22 @@ class FuturesSignalGenerator:
                             "timestamp": __import__("datetime").datetime.now(
                                 __import__("datetime").timezone.utc
                             ),
-                            "confidence": 0.60,
+                            "confidence": confidence_val,
                             "has_conflict": False,
                             "source": "vwap_above",
                             "vwap": round(vwap, 6),
                             "std_bands": round(std_bands, 3),
+                            "regime": current_regime,
                             "deviation_pct": round(
                                 (current_price - vwap) / vwap * 100, 3
                             ),
                         }
                     )
                     logger.debug(
-                        f"📊 {symbol}: VWAP SELL: price={current_price:.4f}, "
-                        f"vwap={vwap:.4f}, bands={std_bands:.2f}σ, strength={strength:.3f}"
+                        f"📊 {symbol}: VWAP SELL [{current_regime}]: "
+                        f"price={current_price:.4f}, vwap={vwap:.4f}, "
+                        f"bands={std_bands:.2f}σ (threshold={entry_threshold}σ), "
+                        f"strength={strength:.3f}"
                     )
 
         except Exception as exc:
