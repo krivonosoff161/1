@@ -133,6 +133,28 @@ class PositionSync:
                     break
 
         self._last_positions_sync = now
+
+        # ✅ FIX (2026-02-18): Обновляем баланс из API при каждой синхронизации
+        # БЫЛО: Fix 4 был применён к orchestrator._sync_positions_with_exchange (устаревшая, не вызывается)
+        # ТЕПЕРЬ: Реальная синхронизация идёт через PositionSync → обновляем баланс здесь
+        if self.client and self.data_registry:
+            try:
+                balance = await self.client.get_balance()
+                if balance and balance > 0:
+                    profile_name = "small"
+                    if self.config_manager:
+                        try:
+                            balance_profile = self.config_manager.get_balance_profile(
+                                balance
+                            )
+                            if balance_profile:
+                                profile_name = balance_profile.get("name", "small")
+                        except Exception:
+                            pass
+                    await self.data_registry.update_balance(balance, profile_name)
+            except Exception as e:
+                logger.debug(f"⚠️ PositionSync: Не удалось получить баланс из API: {e}")
+
         seen_symbols: set[str] = set()
         total_margin = 0.0
 
