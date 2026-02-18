@@ -90,8 +90,6 @@ class FuturesSignalGenerator:
         from src.indicators import TALIB_AVAILABLE
 
         if TALIB_AVAILABLE:
-            from loguru import logger
-
             from src.indicators import (
                 TALibATR,
                 TALibBollingerBands,
@@ -106,8 +104,6 @@ class FuturesSignalGenerator:
             )
         else:
             # Fallback на обычные индикаторы
-            from loguru import logger
-
             logger.warning(
                 "⚠️ TA-Lib недоступен - используется fallback на обычные индикаторы. "
                 "Производительность может быть ниже на 70-85%. "
@@ -1282,9 +1278,7 @@ class FuturesSignalGenerator:
                     if isinstance(pivot_config_data, dict):
                         # ✅ ИСПРАВЛЕНО: Если "enabled" есть в pivot_config_data - используем его
                         # Если нет - оставляем pivot_enabled из pivot_points_enabled (верхний уровень)
-                        logger.debug(
-                            f"📊 pivot_config_data (dict): {pivot_config_data}"
-                        )
+                        logger.debug(f"📊 pivot_config_data (dict): {pivot_config_data}")
                         if "enabled" in pivot_config_data:
                             old_enabled = pivot_enabled
                             pivot_enabled = pivot_config_data.get(
@@ -1532,7 +1526,9 @@ class FuturesSignalGenerator:
                     )
                     self.volume_filter = None
             except Exception as e:
-                logger.warning(f"⚠️ Volume Profile Filter инициализация не удалась: {e}")
+                logger.warning(
+                    f"⚠️ Volume Profile Filter инициализация не удалась: {e}"
+                )
                 self.volume_filter = None
 
             # ✅ РЕФАКТОРИНГ: Подключаем все фильтры к FilterManager
@@ -1943,6 +1939,31 @@ class FuturesSignalGenerator:
             regime: Режим рынка (trending/ranging/choppy) - если не передан, определяется автоматически
         """
         try:
+            # ✅ FIX (2026-02-18): Проверяем by_symbol.enabled = false → блокируем пару
+            # enabled: false в scalping.by_symbol.<SYMBOL> отключает торговлю по этой паре
+            # БЕЗ этого XRP-USDT с enabled:false продолжал торговать (11.9% WR, убытки)
+            try:
+                by_symbol_cfg = getattr(self.scalping_config, "by_symbol", None)
+                if by_symbol_cfg:
+                    sym_cfg = (
+                        by_symbol_cfg.get(symbol)
+                        if isinstance(by_symbol_cfg, dict)
+                        else getattr(by_symbol_cfg, symbol.replace("-", "_"), None)
+                    )
+                    if sym_cfg is not None:
+                        sym_enabled = (
+                            sym_cfg.get("enabled", True)
+                            if isinstance(sym_cfg, dict)
+                            else getattr(sym_cfg, "enabled", True)
+                        )
+                        if sym_enabled is False:
+                            logger.debug(
+                                f"⛔ {symbol}: торговля отключена (by_symbol.enabled=false)"
+                            )
+                            return []
+            except Exception:
+                pass
+
             # Получение рыночных данных (если не переданы)
             if not market_data:
                 market_data = await self._get_market_data(symbol)
@@ -7703,9 +7724,7 @@ class FuturesSignalGenerator:
                         if not self.pivot_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
-                            logger.debug(
-                                f"🔍 Сигнал {symbol} отфильтрован Pivot Points"
-                            )
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован Pivot Points")
                             continue
                     except Exception as e:
                         logger.debug(
@@ -7784,9 +7803,7 @@ class FuturesSignalGenerator:
                         if not self.funding_filter.check_entry(
                             symbol, signal.get("side", "").lower(), signal.get("price")
                         ):
-                            logger.debug(
-                                f"🔍 Сигнал {symbol} отфильтрован Funding Rate"
-                            )
+                            logger.debug(f"🔍 Сигнал {symbol} отфильтрован Funding Rate")
                             continue
                     except Exception as e:
                         logger.debug(
@@ -7837,9 +7854,9 @@ class FuturesSignalGenerator:
             )
 
             # Адаптация размера позиции
-            futures_signal["max_position_size"] = (
-                await self._calculate_max_position_size(signal)
-            )
+            futures_signal[
+                "max_position_size"
+            ] = await self._calculate_max_position_size(signal)
 
             return futures_signal
 
@@ -8002,9 +8019,9 @@ class FuturesSignalGenerator:
                     )
                     orchestrator_min_strength_by_symbol[symbol_val] = None
                     continue
-                orchestrator_min_strength_by_symbol[symbol_val] = (
-                    bundle.signal.min_signal_strength
-                )
+                orchestrator_min_strength_by_symbol[
+                    symbol_val
+                ] = bundle.signal.min_signal_strength
                 source = None
                 if bundle.signal.sources:
                     source = bundle.signal.sources.get("min_signal_strength")
