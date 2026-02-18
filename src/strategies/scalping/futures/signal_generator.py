@@ -3126,6 +3126,29 @@ class FuturesSignalGenerator:
             signal_stats["bb"]["generated"] = len(bb_signals)
             signals.extend(bb_signals)
 
+            # ✅ NEW (2026-02-18): RSI Divergence — ловит развороты ДО пробоя уровней
+            rsi_div_signals = await self._generate_rsi_divergence_signals(
+                symbol, indicators, market_data, adx_trend, adx_value
+            )
+            signal_stats["rsi_divergence"] = {
+                "generated": len(rsi_div_signals),
+                "filtered": 0,
+            }
+            signals.extend(rsi_div_signals)
+            if rsi_div_signals:
+                logger.info(
+                    f"📐 {symbol}: RSI Divergence добавил {len(rsi_div_signals)} сигналов"
+                )
+
+            # ✅ NEW (2026-02-18): VWAP mean-reversion — возврат к VWAP при отклонении >1.5σ
+            vwap_signals = await self._generate_vwap_signals(
+                symbol, market_data, adx_trend
+            )
+            signal_stats["vwap"] = {"generated": len(vwap_signals), "filtered": 0}
+            signals.extend(vwap_signals)
+            if vwap_signals:
+                logger.info(f"📊 {symbol}: VWAP добавил {len(vwap_signals)} сигналов")
+
             # Moving Average сигналы
             ma_signals = await self._generate_ma_signals(
                 symbol, indicators, market_data, adx_trend, adx_value, adx_threshold
@@ -4328,6 +4351,290 @@ class FuturesSignalGenerator:
             "macd_slow": 26,
             "macd_signal": 9,
         }
+
+    # =========================================================================
+    # ✅ NEW (2026-02-18): RSI Divergence + VWAP Signal Generators
+    # =========================================================================
+
+    def _compute_rsi_series(self, closes: list, period: int = 14) -> list:
+        """Вычисляет RSI для каждой свечи (Wilder's EMA smoothing).
+        Возвращает список [None]*period + [float, ...]"""
+        result = [None] * period
+        if len(closes) < period + 1:
+            return result
+        deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+        gains = [max(d, 0.0) for d in deltas]
+        losses = [max(-d, 0.0) for d in deltas]
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        for i in range(period, len(closes)):
+            avg_gain = (avg_gain * (period - 1) + gains[i - 1]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i - 1]) / period
+            if avg_loss == 0:
+                result.append(100.0)
+            else:
+                rs = avg_gain / avg_loss
+                result.append(100.0 - 100.0 / (1.0 + rs))
+        return result
+
+    async def _generate_rsi_divergence_signals(
+        self,
+        symbol: str,
+        indicators: dict,
+        market_data,
+        adx_trend: str,
+        adx_value: float,
+    ) -> list:
+        """RSI Divergence — ловит развороты ДО пробоя уровней (leading indicator).
+
+        Bullish divergence: цена делает lower low, RSI делает higher low → BUY
+        Bearish divergence: цена делает higher high, RSI делает lower high → SELL
+
+        В отличие от EMA crossover (lagging), это опережающий сигнал.
+        """
+        signals = []
+        try:
+            candles = getattr(market_data, "ohlcv_data", None)
+            if not candles or len(candles) < 30:
+                return []
+
+            lookback = min(40, len(candles))
+            recent = candles[-lookback:]
+            closes = [float(c.close) for c in recent]
+
+            rsi_series = self._compute_rsi_series(closes, period=14)
+            valid_rsi = [v for v in rsi_series if v is not None]
+            if len(valid_rsi) < 12:
+                return []
+
+            # Анализируем последние 20 свечей (2 половины по 10)
+            window = min(20, len(valid_rsi))
+            price_vals = closes[-window:]
+            rsi_vals = valid_rsi[-window:]
+            mid = window // 2
+
+            current_price = float(candles[-1].close)
+            current_rsi = rsi_vals[-1]
+
+            price_early = price_vals[:mid]
+            price_late = price_vals[mid:]
+            rsi_early = rsi_vals[:mid]
+            rsi_late = rsi_vals[mid:]
+
+            # --- Bullish divergence ---
+            price_low_early = min(price_early)
+            price_low_late = min(price_late)
+            rsi_low_early = min(rsi_early)
+            rsi_low_late = min(rsi_late)
+
+            if (
+                price_low_late < price_low_early  # цена: lower low
+                and rsi_low_late > rsi_low_early  # RSI: higher low
+                and current_rsi < 55  # не перекуплено
+                and adx_trend != "bearish"  # нет сильного медвежьего тренда
+            ):
+                price_drop = (price_low_early - price_low_late) / max(
+                    price_low_early, 1e-9
+                )
+                rsi_recovery = (rsi_low_late - rsi_low_early) / max(
+                    abs(rsi_low_early), 1e-9
+                )
+                strength = min(0.82, (price_drop * 10 + rsi_recovery) * 2)
+                if strength >= 0.15:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "buy",
+                            "type": "rsi_divergence",
+                            "strength": strength,
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "buy"
+                            ),
+                            "timestamp": __import__("datetime").datetime.now(
+                                __import__("datetime").timezone.utc
+                            ),
+                            "confidence": 0.65,
+                            "has_conflict": False,
+                            "source": "rsi_bullish_divergence",
+                            "rsi": current_rsi,
+                            "divergence_type": "bullish",
+                            "price_drop_pct": round(price_drop * 100, 3),
+                            "rsi_recovery_pct": round(rsi_recovery * 100, 3),
+                        }
+                    )
+                    logger.debug(
+                        f"📐 {symbol}: Bullish RSI divergence: "
+                        f"price {price_low_early:.4f}→{price_low_late:.4f} (↓), "
+                        f"RSI {rsi_low_early:.1f}→{rsi_low_late:.1f} (↑), "
+                        f"strength={strength:.3f}"
+                    )
+
+            # --- Bearish divergence ---
+            price_high_early = max(price_early)
+            price_high_late = max(price_late)
+            rsi_high_early = max(rsi_early)
+            rsi_high_late = max(rsi_late)
+
+            if (
+                price_high_late > price_high_early  # цена: higher high
+                and rsi_high_late < rsi_high_early  # RSI: lower high
+                and current_rsi > 45  # не перепродано
+                and adx_trend != "bullish"  # нет сильного бычьего тренда
+            ):
+                price_rise = (price_high_late - price_high_early) / max(
+                    price_high_early, 1e-9
+                )
+                rsi_weakness = (rsi_high_early - rsi_high_late) / max(
+                    abs(rsi_high_early), 1e-9
+                )
+                strength = min(0.82, (price_rise * 10 + rsi_weakness) * 2)
+                if strength >= 0.15:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "sell",
+                            "type": "rsi_divergence",
+                            "strength": strength,
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "sell"
+                            ),
+                            "timestamp": __import__("datetime").datetime.now(
+                                __import__("datetime").timezone.utc
+                            ),
+                            "confidence": 0.65,
+                            "has_conflict": False,
+                            "source": "rsi_bearish_divergence",
+                            "rsi": current_rsi,
+                            "divergence_type": "bearish",
+                            "price_rise_pct": round(price_rise * 100, 3),
+                            "rsi_weakness_pct": round(rsi_weakness * 100, 3),
+                        }
+                    )
+                    logger.debug(
+                        f"📐 {symbol}: Bearish RSI divergence: "
+                        f"price {price_high_early:.4f}→{price_high_late:.4f} (↑), "
+                        f"RSI {rsi_high_early:.1f}→{rsi_high_late:.1f} (↓), "
+                        f"strength={strength:.3f}"
+                    )
+
+        except Exception as exc:
+            logger.debug(f"⚠️ RSI divergence error for {symbol}: {exc}")
+        return signals
+
+    async def _generate_vwap_signals(
+        self,
+        symbol: str,
+        market_data,
+        adx_trend: str,
+    ) -> list:
+        """VWAP mean-reversion — динамический S/R уровень.
+
+        BUY:  цена опустилась >1.5σ ниже VWAP → ждём возврата вверх
+        SELL: цена поднялась >1.5σ выше VWAP → ждём возврата вниз
+
+        Сигнал усиливается чем дальше цена от VWAP.
+        """
+        signals = []
+        try:
+            candles = getattr(market_data, "ohlcv_data", None)
+            if not candles or len(candles) < 10:
+                return []
+
+            # Вычисляем VWAP (Volume Weighted Average Price)
+            cum_tp_vol = 0.0
+            cum_vol = 0.0
+            for c in candles:
+                tp = (float(c.high) + float(c.low) + float(c.close)) / 3.0
+                vol = float(c.volume)
+                cum_tp_vol += tp * vol
+                cum_vol += vol
+
+            if cum_vol == 0:
+                return []
+
+            vwap = cum_tp_vol / cum_vol
+            current_price = float(candles[-1].close)
+
+            # Вычисляем стандартное отклонение типичных цен от VWAP (взвешенное по объёму)
+            tp_list = [
+                (float(c.high) + float(c.low) + float(c.close)) / 3.0 for c in candles
+            ]
+            vols = [float(c.volume) for c in candles]
+            variance = (
+                sum((tp - vwap) ** 2 * vol for tp, vol in zip(tp_list, vols)) / cum_vol
+            )
+            std_dev = variance**0.5
+
+            if std_dev < 1e-9:
+                return []
+
+            std_bands = (current_price - vwap) / std_dev
+
+            # BUY: цена ниже VWAP на >1.5σ
+            if std_bands < -1.5 and adx_trend != "bearish":
+                strength = min(0.80, abs(std_bands) / 3.5)
+                if strength >= 0.15:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "buy",
+                            "type": "vwap_mean_reversion",
+                            "strength": strength,
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "buy"
+                            ),
+                            "timestamp": __import__("datetime").datetime.now(
+                                __import__("datetime").timezone.utc
+                            ),
+                            "confidence": 0.60,
+                            "has_conflict": False,
+                            "source": "vwap_below",
+                            "vwap": round(vwap, 6),
+                            "std_bands": round(std_bands, 3),
+                            "deviation_pct": round(
+                                (current_price - vwap) / vwap * 100, 3
+                            ),
+                        }
+                    )
+                    logger.debug(
+                        f"📊 {symbol}: VWAP BUY: price={current_price:.4f}, "
+                        f"vwap={vwap:.4f}, bands={std_bands:.2f}σ, strength={strength:.3f}"
+                    )
+
+            # SELL: цена выше VWAP на >1.5σ
+            elif std_bands > 1.5 and adx_trend != "bullish":
+                strength = min(0.80, abs(std_bands) / 3.5)
+                if strength >= 0.15:
+                    signals.append(
+                        {
+                            "symbol": symbol,
+                            "side": "sell",
+                            "type": "vwap_mean_reversion",
+                            "strength": strength,
+                            "price": self._adjust_price_for_slippage(
+                                symbol, current_price, "sell"
+                            ),
+                            "timestamp": __import__("datetime").datetime.now(
+                                __import__("datetime").timezone.utc
+                            ),
+                            "confidence": 0.60,
+                            "has_conflict": False,
+                            "source": "vwap_above",
+                            "vwap": round(vwap, 6),
+                            "std_bands": round(std_bands, 3),
+                            "deviation_pct": round(
+                                (current_price - vwap) / vwap * 100, 3
+                            ),
+                        }
+                    )
+                    logger.debug(
+                        f"📊 {symbol}: VWAP SELL: price={current_price:.4f}, "
+                        f"vwap={vwap:.4f}, bands={std_bands:.2f}σ, strength={strength:.3f}"
+                    )
+
+        except Exception as exc:
+            logger.debug(f"⚠️ VWAP error for {symbol}: {exc}")
+        return signals
 
     async def _generate_rsi_signals(
         self,
@@ -8008,16 +8315,25 @@ class FuturesSignalGenerator:
                     include_patterns=True,
                 )
                 if not bundle.status.valid or not bundle.signal:
-                    logger.error(
-                        f"PARAM_ORCH invalid for {symbol_val}: status.valid={bundle.status.valid}, signal={bundle.signal is not None}, errors={bundle.status.errors}"
+                    logger.warning(
+                        f"PARAM_ORCH invalid for {symbol_val}: {bundle.status.errors} — используем fallback threshold"
                     )
-                    orchestrator_min_strength_by_symbol[symbol_val] = None
+                    # FIX (2026-02-18): вместо None (→ блокировка всех сигналов) — используем fallback
+                    _fallback = getattr(
+                        self.scalping_config, "min_signal_strength", 0.08
+                    )
+                    orchestrator_min_strength_by_symbol[symbol_val] = float(_fallback)
+                    orchestrator_source_by_symbol[symbol_val] = "fallback_config"
                     continue
                 if bundle.signal.min_signal_strength is None:
-                    logger.error(
-                        f"PARAM_ORCH: min_signal_strength missing for {symbol_val}"
+                    logger.warning(
+                        f"PARAM_ORCH: min_signal_strength missing for {symbol_val} — используем fallback"
                     )
-                    orchestrator_min_strength_by_symbol[symbol_val] = None
+                    _fallback = getattr(
+                        self.scalping_config, "min_signal_strength", 0.08
+                    )
+                    orchestrator_min_strength_by_symbol[symbol_val] = float(_fallback)
+                    orchestrator_source_by_symbol[symbol_val] = "fallback_config"
                     continue
                 orchestrator_min_strength_by_symbol[
                     symbol_val
