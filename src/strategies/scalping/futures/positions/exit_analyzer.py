@@ -3934,7 +3934,11 @@ class ExitAnalyzer:
             reversal_detected = await self._check_reversal_signals(
                 symbol, position_side
             )
-            if reversal_detected:
+            # FIX (2026-02-19): Добавлен PnL guard — не закрываем убыточные позиции по reversal.
+            # Без этого: 9/11 выходов по reversal = убытки (WR=18%). Reversal срабатывал на шум
+            # при откатах в тренде, закрывая позиции раньше TP при PnL < 0.
+            # Аналог ranging секции (line ~5196): if reversal_detected and net_pnl_percent > 0.3
+            if reversal_detected and pnl_percent > 0.3:
                 logger.info(
                     f"🔄 ExitAnalyzer TRENDING: Разворот обнаружен для {symbol}, закрываем позицию "
                     f"(profit={pnl_percent:.2f}%)"
@@ -3946,6 +3950,11 @@ class ExitAnalyzer:
                     "reversal_signal": "order_flow_or_mtf",
                     "regime": regime,
                 }
+            elif reversal_detected and pnl_percent <= 0.3:
+                logger.debug(
+                    f"⏭️ ExitAnalyzer TRENDING: Разворот для {symbol} проигнорирован — "
+                    f"PnL={pnl_percent:.2f}% < 0.3% (guard активен, ждём TP/SL)"
+                )
 
             # 8. Если прибыль > 0.5% и тренд сильный - продлеваем TP
             if pnl_percent > 0.5:
@@ -6550,7 +6559,10 @@ class ExitAnalyzer:
             reversal_detected = await self._check_reversal_signals(
                 symbol, position_side
             )
-            if reversal_detected:
+            # FIX (2026-02-19): PnL guard для choppy. Порог 0.2% (ниже чем trending 0.3%
+            # потому что choppy позиции короче и быстрее достигают целей).
+            # Было: всегда закрываем → 82% ложных reversal при убытке.
+            if reversal_detected and pnl_percent > 0.2:
                 logger.info(
                     f"🔄 ExitAnalyzer CHOPPY: Разворот обнаружен для {symbol}, закрываем позицию "
                     f"(profit={pnl_percent:.2f}%)"
@@ -6562,6 +6574,11 @@ class ExitAnalyzer:
                     "reversal_signal": "order_flow_or_mtf",
                     "regime": regime,
                 }
+            elif reversal_detected and pnl_percent <= 0.2:
+                logger.debug(
+                    f"⏭️ ExitAnalyzer CHOPPY: Разворот для {symbol} проигнорирован — "
+                    f"PnL={pnl_percent:.2f}% < 0.2% (guard активен, ждём TP/SL)"
+                )
 
             # 7. ✅ НОВОЕ: Проверка Max Holding - учитываем время в позиции как фактор анализа
             minutes_in_position = self._get_time_in_position_minutes(metadata, position)

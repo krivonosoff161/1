@@ -1198,6 +1198,15 @@ class FilterManager:
         if not self.funding_rate_filter:
             return True
 
-        # Логика проверки funding rate
-        # TODO: Реализовать после изучения FundingRateFilter
-        return True
+        # FIX (2026-02-19): Убираем заглушку TODO — вызываем реальный FundingRateFilter.
+        # FundingRateFilter.is_signal_valid(symbol, side, overrides) уже полностью реализован
+        # в src/strategies/scalping/futures/filters/funding_rate_filter.py.
+        # Блокирует BUY при высоком +funding (лонги переплачивают) и SELL при высоком -funding.
+        try:
+            side = signal.get("side", "buy")
+            return await self.funding_rate_filter.is_signal_valid(
+                symbol, side, overrides=params if params else None
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ FundingRate фильтр ошибка для {symbol}: {e}")
+            return True  # fail-open при ошибке API

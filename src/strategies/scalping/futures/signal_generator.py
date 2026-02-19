@@ -1985,6 +1985,77 @@ class FuturesSignalGenerator:
                     f"📊 {symbol}: Базовые сигналы не сгенерированы (см. детали в _generate_base_signals)"
                 )
 
+            # FIX (2026-02-19): В choppy блокируем lagging индикаторы (MACD/BB/RSI classic).
+            # Данные из сессии 2026-02-19: 64% сделок в choppy, WR=30%, PnL=-$37.70.
+            # EMA crossover / MACD / BB в choppy = шум. Оставляем только:
+            # - rsi_divergence (leading сигнал разворота)
+            # - vwap_mean_reversion (mean-reversion, создан именно для ranging/choppy)
+            if base_signals:
+                _current_regime = regime or (
+                    base_signals[0].get("regime") if base_signals else None
+                )
+                if _current_regime == "choppy":
+                    _CHOPPY_BLOCKED_TYPES = {
+                        "macd_bullish",
+                        "macd_bearish",
+                        "bb_oversold",
+                        "bb_overbought",
+                        "rsi_oversold",  # классический RSI — ненадёжен в choppy
+                        "rsi_overbought",  # классический RSI — ненадёжен в choppy
+                    }
+                    _before = len(base_signals)
+                    base_signals = [
+                        s
+                        for s in base_signals
+                        if s.get("type") not in _CHOPPY_BLOCKED_TYPES
+                    ]
+                    _blocked = _before - len(base_signals)
+                    if _blocked:
+                        logger.debug(
+                            f"⛔ {symbol}: choppy lagging-фильтр убрал {_blocked} сигналов "
+                            f"(MACD/BB/RSI_classic заблокированы, остались RSI_Div + VWAP)"
+                        )
+                    # Дополнительно: min_signal_strength для choppy (конфиг 0.15, но в коде не проверялся)
+                    _min_strength_choppy = 0.15
+                    try:
+                        _sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+                        _thr = (
+                            _sg_cfg.get("thresholds", {})
+                            if isinstance(_sg_cfg, dict)
+                            else getattr(_sg_cfg, "thresholds", {})
+                        )
+                        _by_regime = (
+                            _thr.get("by_regime", {})
+                            if isinstance(_thr, dict)
+                            else getattr(_thr, "by_regime", {})
+                        )
+                        _choppy_thr = (
+                            _by_regime.get("choppy", {})
+                            if isinstance(_by_regime, dict)
+                            else getattr(_by_regime, "choppy", {})
+                        )
+                        _min_strength_choppy = float(
+                            _choppy_thr.get("min_signal_strength", _min_strength_choppy)
+                            if isinstance(_choppy_thr, dict)
+                            else getattr(
+                                _choppy_thr, "min_signal_strength", _min_strength_choppy
+                            )
+                        )
+                    except Exception:
+                        pass
+                    _before_str = len(base_signals)
+                    base_signals = [
+                        s
+                        for s in base_signals
+                        if s.get("strength", 0) >= _min_strength_choppy
+                    ]
+                    _blocked_str = _before_str - len(base_signals)
+                    if _blocked_str:
+                        logger.debug(
+                            f"⛔ {symbol}: choppy strength-фильтр убрал {_blocked_str} сигналов "
+                            f"(strength < {_min_strength_choppy:.2f})"
+                        )
+
             # ✅ ИСПРАВЛЕНИЕ (13.02.2026): Дедупликация конфликтующих BUY+SELL сигналов
             # Проблема: RSI генерирует SELL, MACD генерирует BUY на одном тике → downstream выбирает случайно
             # Решение: если есть и buy и sell → оставляем более сильный; при равной силе (±0.05) → убираем оба
