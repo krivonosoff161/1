@@ -93,7 +93,7 @@ class DataRegistry:
 
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (25.01.2026): Кэширование REST API для предотвращения спама
         self._rest_ticker_cache: Dict[str, Dict[str, Any]] = {}
-        self._rest_cache_ttl = 1.0  # Кэш REST ответов на 1 секунду
+        self._rest_cache_ttl = 3.0  # FIX (2026-02-19): Кэш REST ответов 1.0→3.0 (снижаем REST спам при stale WS)
         self._rest_api_semaphore = asyncio.Semaphore(
             5
         )  # Max 5 concurrent REST requests

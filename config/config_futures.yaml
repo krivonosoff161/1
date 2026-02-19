@@ -114,6 +114,7 @@ scalping:
     base_signal_strength: 0.001
     # WebSocket watchdog параметры для предотвращения ложных reconnect
     ws_fresh_max_age: 30.0  # Для проверки входов: OKX шлет тикеры каждые 7-20 сек, 30s = достаточно
+    exit_price_max_age: 20.0  # FIX (2026-02-19): max_age для exit price snapshot (было hardcode 15.0 → 20.0 с per-symbol override)
     ws_watchdog_max_age: 12.0  # ОТДЕЛЬНЫЙ порог для watchdog reconnect (агрессивнее чем ws_fresh_max_age)
     ws_watchdog_consecutive_stale: 2  # FIX 13.02.2026: было 5 (55s до reconnect!), теперь 2 (10s max)
     adx_blocking:
@@ -191,6 +192,7 @@ scalping:
   # ✅ НОВОЕ (28.12.2025): Adaptive по паре (ETH volatile — looser)
   by_symbol:
     ETH-USDT:
+      ws_fresh_max_age: 15.0  # FIX (2026-02-19): ETH высоколиквиден, тикеры каждые 2-5s → жёсткий лимит
       min_signal_strength: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.55→0.35 (реальная сила 0.00)
       sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Увеличено с 3.0 до 3.5 ATR для предотвращения ложных SL (Grok рекомендация)
       tp_atr_multiplier: 4.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Per-symbol tp_atr_multiplier для ETH
@@ -209,6 +211,7 @@ scalping:
         macd_slow: 22  # ✅ Более быстрый MACD для ETH
         bb_std_multiplier: 2.1  # ✅ Шире полосы для волатильности ETH
     SOL-USDT:
+      ws_fresh_max_age: 25.0  # FIX (2026-02-19): SOL средняя ликвидность, тикеры каждые 5-15s
       min_adx: 15.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 20.0→15.0
       min_signal_strength: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.58→0.35
       min_position_usd: 40.0  # ✅ ИСПРАВЛЕНО (08.01.2026): Снижено с 50.0
@@ -239,6 +242,7 @@ scalping:
         reversal_score_threshold:
           ranging: 5  # ✅ XRP часто показывает ложные развороты в ranging - требуется больше подтверждений (5 вместо 4)
     DOGE-USDT:
+      ws_fresh_max_age: 45.0  # FIX (2026-02-19): DOGE низкая ликвидность, тикеры могут задерживаться 30-60s
       # ✅ НОВОЕ (06.01.2026): Специальные параметры для ультра-низковолатильной пары
       min_adx: 8.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 10.0→8.0
       min_signal_strength: 0.08  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.50→0.30 (реальная сила 0.00-0.11)

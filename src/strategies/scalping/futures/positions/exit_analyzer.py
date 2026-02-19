@@ -601,10 +601,39 @@ class ExitAnalyzer:
             if self.orchestrator and hasattr(self.orchestrator, "position_manager"):
                 client = getattr(self.orchestrator.position_manager, "client", None)
 
+            # FIX (2026-02-19): Читаем exit_price_max_age из конфига вместо hardcoded 15.0
+            # Global default из signal_generator.exit_price_max_age → 20.0
+            # Per-symbol override из by_symbol.{symbol}.ws_fresh_max_age (ETH=15, SOL=25, DOGE=45)
+            _exit_max_age = 20.0  # fallback если конфиг недоступен
+            try:
+                if self.scalping_config:
+                    _sg_cfg = getattr(self.scalping_config, "signal_generator", {})
+                    if isinstance(_sg_cfg, dict):
+                        _exit_max_age = float(
+                            _sg_cfg.get("exit_price_max_age", _exit_max_age)
+                        )
+                    else:
+                        _exit_max_age = float(
+                            getattr(_sg_cfg, "exit_price_max_age", _exit_max_age)
+                        )
+                    # Per-symbol override (DOGE медленнее, ETH быстрее)
+                    _by_sym = getattr(self.scalping_config, "by_symbol", {})
+                    if isinstance(_by_sym, dict):
+                        _sym_cfg = _by_sym.get(symbol, {})
+                        _sym_max_age = (
+                            _sym_cfg.get("ws_fresh_max_age")
+                            if isinstance(_sym_cfg, dict)
+                            else getattr(_sym_cfg, "ws_fresh_max_age", None)
+                        )
+                        if _sym_max_age is not None:
+                            _exit_max_age = float(_sym_max_age)
+            except Exception:
+                pass  # Используем fallback
+
             price_snapshot = await self.data_registry.get_decision_price_snapshot(
                 symbol=symbol,
                 client=client,
-                max_age=15.0,
+                max_age=_exit_max_age,
                 allow_rest_fallback=True,
             )
             if not price_snapshot:
@@ -705,8 +734,19 @@ class ExitAnalyzer:
                         exchange_gross_guard = self._get_exchange_pnl_percent(
                             position=position, metadata=metadata
                         )
+                        # FIX (2026-02-19): Адаптивный порог mismatch по leverage.
+                        # Проблема: stale data (30-79 сек) при плече 10x даёт noise ~0.3% PnL —
+                        # что больше старого порога 0.15%, вызывая ложные EXIT_BLOCKED.
+                        # Формула: noise = price_move_per_30s * leverage ≈ 0.03% * leverage
+                        # Порог: max(0.20%, leverage * 0.03%) — не меньше 0.20%, не больше 0.80%
+                        _eff_leverage = self._get_effective_leverage(position, metadata)
+                        _adaptive_min_abs_pct = max(
+                            0.20, min(0.80, _eff_leverage * 0.03)
+                        )
                         mismatch_detected = self._is_pnl_sign_mismatch(
-                            model_gross_guard, exchange_gross_guard
+                            model_gross_guard,
+                            exchange_gross_guard,
+                            min_abs_pct=_adaptive_min_abs_pct,
                         )
                         if mismatch_detected:
                             if self.slo_monitor:
