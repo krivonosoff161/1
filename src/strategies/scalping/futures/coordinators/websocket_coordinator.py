@@ -184,6 +184,9 @@ class WebSocketCoordinator:
         self._ws_watchdog_task: Optional[asyncio.Task] = None
         self._ws_watchdog_interval = 5.0
         self._ws_watchdog_max_age = 6.0
+        self._ws_watchdog_max_age_by_symbol: dict = (
+            {}
+        )  # FIX (2026-02-20): per-symbol staleness threshold
         self._ws_watchdog_stale_threshold = 2
         self._ws_watchdog_cooldown = 30.0
         self._ws_watchdog_global_stale_ratio = 0.6
@@ -384,8 +387,38 @@ class WebSocketCoordinator:
                         if symbol:
                             await self.handle_trades_data(symbol, data)
 
-                # Подписка на тикеры для всех символов
+                # FIX (2026-02-20): подписываемся только на АКТИВНЫЕ символы
+                # by_symbol.enabled=false → не подписываемся на WS (раньше BTC/XRP получали данные вхолостую)
+                active_symbols = []
                 for symbol in self.scalping_config.symbols:
+                    try:
+                        by_symbol_cfg = getattr(self.scalping_config, "by_symbol", None)
+                        sym_enabled = True
+                        if by_symbol_cfg:
+                            sym_cfg = (
+                                by_symbol_cfg.get(symbol)
+                                if isinstance(by_symbol_cfg, dict)
+                                else getattr(
+                                    by_symbol_cfg, symbol.replace("-", "_"), None
+                                )
+                            )
+                            if sym_cfg is not None:
+                                sym_enabled = (
+                                    sym_cfg.get("enabled", True)
+                                    if isinstance(sym_cfg, dict)
+                                    else getattr(sym_cfg, "enabled", True)
+                                )
+                        if sym_enabled is False:
+                            logger.info(
+                                f"⛔ WS: пропускаем {symbol} (by_symbol.enabled=false)"
+                            )
+                            continue
+                    except Exception:
+                        pass
+                    active_symbols.append(symbol)
+
+                # Подписка на тикеры только для активных символов
+                for symbol in active_symbols:
                     inst_id = f"{symbol}-SWAP"
                     await self.ws_manager.subscribe(
                         channel="tickers",
@@ -414,7 +447,8 @@ class WebSocketCoordinator:
                         )
 
                 logger.info(
-                    f"📊 Подписка на тикеры для {len(self.scalping_config.symbols)} пар"
+                    f"📊 Подписка на тикеры для {len(active_symbols)}/{len(self.scalping_config.symbols)} пар "
+                    f"(активные: {', '.join(active_symbols)})"
                 )
                 if not self._use_kline_candles:
                     self._ensure_rest_candle_polling()
@@ -998,10 +1032,41 @@ class WebSocketCoordinator:
                 self._ws_watchdog_global_consecutive = max(1, int(global_consecutive))
         except Exception:
             pass
+
+        # FIX (2026-02-20): загружаем per-symbol ws_fresh_max_age для watchdog
+        # DOGE-USDT: 45s, SOL-USDT: 25s, ETH-USDT: 15s (из by_symbol конфига)
+        # Watchdog использует global threshold для reconnect, но per-symbol для stale detection
+        try:
+            by_symbol_cfg = getattr(self.scalping_config, "by_symbol", None)
+            if by_symbol_cfg:
+                symbols = getattr(self.scalping_config, "symbols", [])
+                for sym in symbols:
+                    sym_cfg = (
+                        by_symbol_cfg.get(sym)
+                        if isinstance(by_symbol_cfg, dict)
+                        else getattr(by_symbol_cfg, sym.replace("-", "_"), None)
+                    )
+                    if sym_cfg is None:
+                        continue
+                    age = (
+                        sym_cfg.get("ws_fresh_max_age")
+                        if isinstance(sym_cfg, dict)
+                        else getattr(sym_cfg, "ws_fresh_max_age", None)
+                    )
+                    if age is not None:
+                        # Watchdog порог = ws_fresh_max_age * 2 (менее агрессивен чем entry check)
+                        self._ws_watchdog_max_age_by_symbol[sym] = float(age) * 2.0
+        except Exception:
+            pass
+
         self._ws_watchdog_task = asyncio.create_task(self._ws_watchdog_loop())
+        per_sym_info = ", ".join(
+            f"{s}={v:.0f}s" for s, v in self._ws_watchdog_max_age_by_symbol.items()
+        )
         logger.info(
-            f"WS watchdog started (max_age={self._ws_watchdog_max_age:.1f}s, "
-            f"threshold={self._ws_watchdog_stale_threshold}, "
+            f"WS watchdog started (max_age={self._ws_watchdog_max_age:.1f}s"
+            + (f", per_symbol=[{per_sym_info}]" if per_sym_info else "")
+            + f", threshold={self._ws_watchdog_stale_threshold}, "
             f"global_ratio={self._ws_watchdog_global_stale_ratio:.2f}, "
             f"min_symbols={self._ws_watchdog_min_symbols}, "
             f"global_consecutive={self._ws_watchdog_global_consecutive})"
@@ -1026,8 +1091,13 @@ class WebSocketCoordinator:
                             continue
                         checked_symbols += 1
 
+                        # FIX (2026-02-20): per-symbol max_age (DOGE=90s, SOL=50s, ETH=30s)
+                        # Без этого DOGE (OKX шлёт ~30-60s) всегда stale при global=12s
+                        symbol_max_age = self._ws_watchdog_max_age_by_symbol.get(
+                            symbol, self._ws_watchdog_max_age
+                        )
                         is_fresh = await self.data_registry.is_ws_fresh(
-                            symbol, max_age=self._ws_watchdog_max_age
+                            symbol, max_age=symbol_max_age
                         )
                         if is_fresh:
                             self._ws_watchdog_stale_counts.pop(symbol, None)
@@ -1037,7 +1107,7 @@ class WebSocketCoordinator:
                         self._ws_watchdog_stale_counts[symbol] = stale_count
                         logger.debug(
                             f"WS_STALE_DETECTED {symbol}: stale_count={stale_count}/{self._ws_watchdog_stale_threshold}, "
-                            f"max_age={self._ws_watchdog_max_age:.1f}s"
+                            f"max_age={symbol_max_age:.1f}s"
                         )
                         if stale_count >= self._ws_watchdog_stale_threshold:
                             stale_ready.append(symbol)
