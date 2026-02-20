@@ -2421,7 +2421,17 @@ class FuturesSignalGenerator:
                 )
                 return []
 
-            candles = market_data.ohlcv_data
+            # FIX (2026-02-20): Исключаем текущую НЕЗАКРЫТУЮ свечу из индикаторов.
+            # Проблема: бот входил по каждому тику, индикаторы считались на незакрытой свече.
+            # ATR незакрытой свечи = недостоверен (прошло 20-40 сек из 60).
+            # Результат: EMA/RSI/MACD реагировали на внутрисвечный шум → ложные сигналы →
+            # вход в середину свечи → SL hit на нормальном откате → цена потом шла куда надо.
+            # Гибрид: индикаторы на ЗАКРЫТЫХ свечах, вход по следующему тику (быстро + точно).
+            candles = (
+                market_data.ohlcv_data[:-1]
+                if len(market_data.ohlcv_data) > 1
+                else market_data.ohlcv_data
+            )
             min_candles_required = 15  # period=14 + 1 для ATR
             if len(candles) < min_candles_required:
                 logger.error(
