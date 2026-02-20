@@ -8457,8 +8457,17 @@ class FuturesSignalGenerator:
             for symbol_val in symbols_in_signals:
                 market_data = await self._get_market_data(symbol_val)
                 if not market_data or not getattr(market_data, "ohlcv_data", None):
-                    logger.error(f"PARAM_ORCH: market_data missing for {symbol_val}")
-                    orchestrator_min_strength_by_symbol[symbol_val] = None
+                    logger.warning(
+                        f"PARAM_ORCH: market_data missing for {symbol_val}, using fallback threshold"
+                    )
+                    # FIX (2026-02-20): use fallback instead of None → None causes empty min_strength_by_symbol → blocks ALL signals
+                    _fallback = getattr(
+                        self.scalping_config, "min_signal_strength", 0.08
+                    )
+                    orchestrator_min_strength_by_symbol[symbol_val] = float(_fallback)
+                    orchestrator_source_by_symbol[
+                        symbol_val
+                    ] = "fallback_no_market_data"
                     continue
                 bundle = self.parameter_orchestrator.resolve_bundle(
                     symbol=symbol_val,

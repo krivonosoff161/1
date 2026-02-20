@@ -544,7 +544,7 @@ scalping:
       volume_profile_bonus_multiplier: 1.0
       ph_enabled: true
       ph_threshold_type: "margin_percent"  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (21.12.2025): Адаптивный PH от маржи
-      ph_threshold_percent: 1.2  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличено с 0.9% до 1.2% для менее агрессивного PH
+      ph_threshold_percent: 2.5  # FIX (2026-02-20): 1.2% → 2.5% — нужен буфер на slippage при execution (3/4 PH-выходов были убыточны)
       ph_min_absolute_usd: 0.10  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Увеличено с 0.05 до 0.10 USD для защиты от микро-прибылей
       ph_threshold: 0.10  # ✅ Fallback для обратной совместимости
       ph_time_limit: 600  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Уменьшено с 1200 до 600 секунд (10 минут) для более быстрого PH
@@ -623,7 +623,7 @@ scalping:
       volume_profile_bonus_multiplier: 0.9
       ph_enabled: true
       ph_threshold_type: "margin_percent"  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (21.12.2025): Адаптивный PH от маржи
-      ph_threshold_percent: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (21.12.2025): 1.0% от маржи для choppy
+      ph_threshold_percent: 2.0  # FIX (2026-02-20): 1.0% → 2.0% — буфер на slippage в choppy (волатильный режим)
       ph_threshold: 0.1  # ✅ Fallback для обратной совместимости
       ph_time_limit: 60
 
@@ -1753,6 +1753,7 @@ futures_modules:
     by_regime:
       trending:
         # ✅ ОПТИМИЗАЦИЯ ДЛЯ КАЧЕСТВЕННЫХ СДЕЛОК: Базовые параметры TSL
+        tp_atr_multiplier: 5.0  # FIX (2026-02-20): добавлено для log_config_loaded (берём из exit_params trending)
         initial_trail: 0.020  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.012 до 0.020 (2.0%, было 1.2%) - не закрывать слишком рано
         max_trail: 0.050  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.040 до 0.050 (5.0%, было 4.0%) - больше места для роста
         min_trail: 0.010  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.005 до 0.010 (1.0%, было 0.5%) - защита от ранних закрытий
@@ -1783,6 +1784,7 @@ futures_modules:
           high_profit_multiplier: 3.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Стандартное значение (было 3.5, но используем 3.0 для баланса)
 
       ranging:
+        tp_atr_multiplier: 5.0  # FIX (2026-02-20): добавлено для log_config_loaded (берём из exit_params ranging)
         # FIX (2026-02-19): Пересмотр TSL для ranging
         # Диагноз: initial_trail=3% + timeout=120min = позиции живут 2 мин, TSL бьёт раньше TP.
         # 10/10 TSL-закрытий = убытки. avg позиция = 2 мин, ATR движение ~0.6% за 2 мин.
@@ -1817,6 +1819,7 @@ futures_modules:
           high_profit_multiplier: 2.5  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Уменьшено с 3.0 до 2.5 (-17%) - более плавный трейлинг
 
       choppy:
+        tp_atr_multiplier: 5.0  # FIX (2026-02-20): добавлено для log_config_loaded (берём из exit_params choppy)
         # FIX (2026-02-19): Choppy TSL — те же проблемы что и ranging (initial_trail=3%)
         initial_trail: 0.010  # FIX: 3.0% → 1.0% — choppy движения ещё меньше (~0.3%/мин)
         max_trail: 0.030  # снижено с 0.045 — в хаосе цена не ходит далеко

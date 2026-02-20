@@ -1797,6 +1797,21 @@ class FuturesPositionManager:
             entry_price = float(position.get("avgPx", "0"))
             current_price = float(position.get("markPx", "0"))
 
+            # FIX (2026-02-20): UPL guard — if exchange reports negative UPL, skip PH immediately
+            # Root cause: 3/4 profit_harvest exits were losses because PH fired during a micro-spike
+            # and by close execution, price had retraced below entry. Exchange UPL is always up-to-date.
+            upl_raw = position.get("upl")
+            if upl_raw is not None:
+                try:
+                    upl_val = float(upl_raw)
+                    if upl_val <= 0:
+                        logger.debug(
+                            f"⏭️ PH {symbol}: UPL={upl_val:.4f}$ ≤ 0 (позиция в убытке по данным биржи), пропускаем PH"
+                        )
+                        return False
+                except (ValueError, TypeError):
+                    pass
+
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ #1: Начало проверки
             logger.debug(
                 f"🔍 PH проверка для {symbol}: начало | "
