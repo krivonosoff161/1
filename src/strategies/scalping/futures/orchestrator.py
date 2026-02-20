@@ -4138,6 +4138,11 @@ class FuturesScalpingOrchestrator:
             )  # Конвертируем в доли
 
             if drawdown > max_drawdown_percent:
+                # FIX (2026-02-20): debounce — если emergency уже активен, не спамим CRITICAL
+                # Без этого _check_drawdown_protection логировала CRITICAL каждые ~6.8с (4492 раз за 8.5ч)
+                if getattr(self, "_emergency_stop_active", False):
+                    return False
+
                 logger.critical(
                     f"🚨 DRAWDOWN ЗАЩИТА! "
                     f"Просадка: {drawdown*100:.2f}% > {max_drawdown_percent*100:.1f}% "
@@ -4389,6 +4394,20 @@ class FuturesScalpingOrchestrator:
                 self._emergency_stop_active = False
                 self._emergency_stop_time = 0.0
                 self._emergency_stop_balance = 0.0
+
+            # FIX (2026-02-20): time-based deadlock resolver
+            # Если баланс не восстановился (нет сделок), бот будет заблокирован ВЕЧНО.
+            # После 120 мин без открытых позиций сбрасываем initial_balance на текущий → разблокируем.
+            elif time_since_emergency > 120 * 60 and not self.active_positions:
+                logger.warning(
+                    f"⏱️ Emergency Stop авто-сброс (deadlock resolver): "
+                    f"заблокирован {time_since_emergency/60:.1f} мин, нет открытых позиций. "
+                    f"initial_balance: ${self.initial_balance:.2f} → ${current_balance:.2f}"
+                )
+                self.initial_balance = current_balance
+                self._emergency_stop_active = False
+                self._emergency_stop_time = 0.0
+                self._emergency_stop_balance = 0.0
             else:
                 logger.debug(
                     f"⏸️ Emergency Stop все еще активен: "
@@ -4542,6 +4561,20 @@ class FuturesScalpingOrchestrator:
                     f"(лимит: {max_drawdown_percent*100:.1f}%), "
                     f"время блокировки: {time_since_emergency/60:.1f} мин"
                 )
+                self._emergency_stop_active = False
+                self._emergency_stop_time = 0.0
+                self._emergency_stop_balance = 0.0
+
+            # FIX (2026-02-20): time-based deadlock resolver
+            # Если баланс не восстановился (нет сделок), бот будет заблокирован ВЕЧНО.
+            # После 120 мин без открытых позиций сбрасываем initial_balance на текущий → разблокируем.
+            elif time_since_emergency > 120 * 60 and not self.active_positions:
+                logger.warning(
+                    f"⏱️ Emergency Stop авто-сброс (deadlock resolver): "
+                    f"заблокирован {time_since_emergency/60:.1f} мин, нет открытых позиций. "
+                    f"initial_balance: ${self.initial_balance:.2f} → ${current_balance:.2f}"
+                )
+                self.initial_balance = current_balance
                 self._emergency_stop_active = False
                 self._emergency_stop_time = 0.0
                 self._emergency_stop_balance = 0.0
