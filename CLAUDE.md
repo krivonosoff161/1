@@ -11,6 +11,12 @@ Project operating instructions for AI coding agents working on this repository.
   2. Deterministic entry/exit decisions.
   3. Performance and optimization.
 
+## 1.1) Communication language
+
+- The user is Russian-speaking.
+- All discussion, analysis reports, and explanations must be in Russian by default.
+- Switch language only if user explicitly requests another language.
+
 ## 2) Non-negotiable invariants
 
 - Single close entrypoint: all position closes must go through orchestrator close pipeline.
