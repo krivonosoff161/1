@@ -1608,14 +1608,10 @@ class FuturesRiskManager:
                     f"position_size={position_size:.6f} монет"
                 )
 
-            # 10. 🛡️ ЗАЩИТА: Проверяем drawdown перед открытием
-            if not await self._check_drawdown_protection():
-                logger.warning(
-                    "⚠️ Drawdown protection активирован - пропускаем позицию"
-                )
-                return 0.0
-
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #3: Проверяем emergency stop перед открытием
+            # 10. 🛡️ ЗАЩИТА: Проверяем emergency stop И drawdown перед открытием
+            # FIX (2026-02-21): emergency unlock check ОБЯЗАТЕЛЬНО ДО drawdown check!
+            # Без этого: drawdown returns False (emergency active) → return 0.0 → unlock НИКОГДА не вызывается
+            # → бот заблокирован навечно (7.5ч простоя в сессии 2026-02-20)
             if (
                 self.orchestrator
                 and hasattr(self.orchestrator, "_emergency_stop_active")
@@ -1627,6 +1623,12 @@ class FuturesRiskManager:
                         "⚠️ Emergency stop активен - пропускаем позицию (торговля заблокирована)"
                     )
                     return 0.0
+
+            if not await self._check_drawdown_protection():
+                logger.warning(
+                    "⚠️ Drawdown protection активирован - пропускаем позицию"
+                )
+                return 0.0
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #5: Проверка минимального размера перед возвратом
             if symbol and price > 0:
