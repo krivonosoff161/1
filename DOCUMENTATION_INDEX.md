@@ -1,0 +1,1635 @@
+# DOCUMENTATION INDEX
+
+Автогенерация полного оглавления документации проекта.
+
+- Total files: **1465**
+
+## Быстрые входы
+- `docs/README.md`
+- `docs/PROJECT_ROADMAP.md`
+- `docs/development/DOCUMENTATION_STANDARDS.md`
+- `docs/DOCUMENTATION_AUDIT_2026-02-21.md`
+
+## Разделы верхнего уровня (`docs/*`)
+- `<root>`: 4 files
+- `ai_analysis`: 20 files
+- `analysis`: 528 files
+- `architecture`: 15 files
+- `archive`: 312 files
+- `audit`: 23 files
+- `current`: 283 files
+- `development`: 4 files
+- `fixes`: 228 files
+- `guides`: 5 files
+- `plans`: 16 files
+- `recommendations`: 4 files
+- `reference`: 2 files
+- `reports`: 18 files
+- `specifications`: 3 files
+
+## Типы файлов
+- `.md`: 1417
+- `.txt`: 21
+- `.json`: 10
+- `.py`: 6
+- `.csv`: 4
+- `.png`: 4
+- `<none>`: 2
+- `.patch`: 1
+
+## Полное оглавление по каталогам
+
+### `docs` (4)
+- `docs/DOCUMENTATION_AUDIT_2026-02-21.json`
+- `docs/DOCUMENTATION_AUDIT_2026-02-21.md`
+- `docs/PROJECT_ROADMAP.md`
+- `docs/README.md`
+
+### `docs/ai_analysis` (3)
+- `docs/ai_analysis/ответы ии .txt`
+- `docs/ai_analysis/ПОЛНАЯ_ЛОГИКА_БОТА_И_МАТЕМАТИКА.md`
+- `docs/ai_analysis/ПРОМПТ_ДЛЯ_AI_АНАЛИЗА_И_УЛУЧШЕНИЯ.md`
+
+### `docs/ai_analysis/archive` (17)
+- `docs/ai_analysis/archive/АНАЛИЗ_ПРОБЛЕМЫ_ADX_19_10_2025.md`
+- `docs/ai_analysis/archive/ИЗМЕНЕНИЯ_ОПТИМИЗАЦИЯ_19_10_2025.md`
+- `docs/ai_analysis/archive/КОНСЕНСУС_AI_АНАЛИЗА.md`
+- `docs/ai_analysis/archive/математика ии.txt`
+- `docs/ai_analysis/archive/МАТЕМАТИКА_И_ЛОГИКА_БОТА.md`
+- `docs/ai_analysis/archive/ответы ии гибрид.txt`
+- `docs/ai_analysis/archive/ответы ии основа.txt`
+- `docs/ai_analysis/archive/ответы параметры.txt`
+- `docs/ai_analysis/archive/ПРОВЕРКА_ПАРАМЕТРОВ_ГОТОВО.md`
+- `docs/ai_analysis/archive/ПРОМПТ_ДЛЯ_НЕЙРОСЕТЕЙ_ГИБРИД_ОПТИМИЗАЦИЯ.md`
+- `docs/ai_analysis/archive/ПРОМПТ_ДЛЯ_НЕЙРОСЕТЕЙ_ОПТИМИЗАЦИЯ_ПАРАМЕТРОВ.md`
+- `docs/ai_analysis/archive/ПРОМТ_ДЛЯ_AI_АНАЛИЗА.txt`
+- `docs/ai_analysis/archive/СВОДКА_СЕССИИ_19_10_2025.md`
+- `docs/ai_analysis/archive/СВОДКА_ФИНАЛЬНАЯ_19_10_2025.md`
+- `docs/ai_analysis/archive/ТАБЛИЦА_ПРОФИЛЕЙ_БАЛАНСА.md`
+- `docs/ai_analysis/archive/✅_ADAPTIVE_BALANCE_ИНТЕГРАЦИЯ_ЗАВЕРШЕНА.md`
+- `docs/ai_analysis/archive/📊_ФИНАЛЬНЫЕ_ПАРАМЕТРЫ_ПОСЛЕ_AI_АНАЛИЗА.md`
+
+### `docs/analysis` (73)
+- `docs/analysis/ANALYSIS_5_POSITIONS.md`
+- `docs/analysis/ANALYSIS_ADAPTIVE_SYSTEM_XRP.md`
+- `docs/analysis/ANALYSIS_AND_RECOMMENDATIONS.md`
+- `docs/analysis/ANALYSIS_NEW_LOGS_2025-12-07.md`
+- `docs/analysis/CHECKLIST_VALIDATION_TSL_FIXES_10JAN.md`
+- `docs/analysis/COMPARISON_EXCHANGE_VS_BOT.md`
+- `docs/analysis/complete_log_audit_2026-01-08_08-49.json`
+- `docs/analysis/EARLY_CLOSE_AND_REOPEN_ISSUE.md`
+- `docs/analysis/exchange_trades_analysis_report.md`
+- `docs/analysis/exit_mechanisms_report.md`
+- `docs/analysis/FINAL_REPORT_TSL_FIXES_10JAN.md`
+- `docs/analysis/FULL_DEBUG_ERRORS_AUDIT.txt`
+- `docs/analysis/INDEX_TSL_FIXES_10JAN_2026.md`
+- `docs/analysis/INSTRUCTIONS_FOR_NEXT_SESSION_10JAN.md`
+- `docs/analysis/LOG_ANALYSIS_2025-12-07.md`
+- `docs/analysis/MASTER_AUDIT_REPORT_2026-01-08.txt`
+- `docs/analysis/mathematical_expectancy.png`
+- `docs/analysis/missing_parameters_audit_2026-01-08.json`
+- `docs/analysis/MISSING_PARAMETERS_REPORT.md`
+- `docs/analysis/pairs_comparison.png`
+- `docs/analysis/PARAMETRY_DETAILED_ANALYSIS.md`
+- `docs/analysis/POLNYY_AUDIT_LOGOV_2026-01-08.md`
+- `docs/analysis/problems_analysis.png`
+- `docs/analysis/QUICK_REFERENCE_TSL_FIXES.txt`
+- `docs/analysis/QUICK_SUMMARY_TSL_FIXES_10JAN.md`
+- `docs/analysis/REPORT_BLOCKERS_2026-01-09_10.csv`
+- `docs/analysis/REPORT_BLOCKERS_2026-01-09_10.md`
+- `docs/analysis/REPORT_SESSION_2026-01-10_11-04-01.csv`
+- `docs/analysis/REPORT_SESSION_2026-01-10_11-04-01.md`
+- `docs/analysis/REPORT_SYMBOLS_2026-01-09.csv`
+- `docs/analysis/REPORT_SYMBOLS_2026-01-09.md`
+- `docs/analysis/REPORT_WS_REST_SSL_2026-01-10.md`
+- `docs/analysis/risk_analysis.png`
+- `docs/analysis/SUMMARY_ISSUES_2026-01-08.txt`
+- `docs/analysis/SUMMARY_PARAMETERS_ISSUES.txt`
+- `docs/analysis/TRADES_QUALITY_ANALYSIS_REPORT.md`
+- `docs/analysis/VISUAL_COMPARISON_TSL_BEFORE_AFTER.md`
+- `docs/analysis/АНАЛИЗ_SOVERYN_ПРОЕКТА.md`
+- `docs/analysis/АНАЛИЗ_ЗАКРЫТИЯ_SOL_02_12_2025.md`
+- `docs/analysis/АНАЛИЗ_ЗАКРЫТИЯ_SOL_02_12_2025_ПРИБЫЛЬНАЯ.md`
+- `docs/analysis/АНАЛИЗ_ЗАКРЫТИЯ_XRP_02_12_2025.md`
+- `docs/analysis/АНАЛИЗ_ЛОГОВ_02_12_2025.md`
+- `docs/analysis/АНАЛИЗ_ЛОГОВ_02_12_2025_ЧИСТЫЙ_ЗАПУСК.md`
+- `docs/analysis/АНАЛИЗ_ПОЧЕМУ_4_ПОЗИЦИИ_НЕ_ЗАКРЫВАЮТСЯ.md`
+- `docs/analysis/АНАЛИЗ_ПРАВОК_02_12_2025.md`
+- `docs/analysis/АНАЛИЗ_ПРОБЛЕМ_АНАЛИЗАТОРА_ЛОГОВ.md`
+- `docs/analysis/БЛОК_1_ГОТОВ.txt`
+- `docs/analysis/БЛОК_2_ЗАВЕРШЕН.txt`
+- `docs/analysis/БЛОК_2_ПЛАН_ДЕЙСТВИЙ.txt`
+- `docs/analysis/ГОТОВНОСТЬ_К_ЗАПУСКУ.txt`
+- `docs/analysis/ГОТОВЫЙ_ТЕКСТ_ДЛЯ_CODEX.txt`
+- `docs/analysis/ЗАДАНИЕ_АУДИТ_ДЛЯ_CODEX.md`
+- `docs/analysis/ЗАДАНИЕ_НА_КОМПЛЕКСНЫЙ_АУДИТ_ПРОЕКТА.md`
+- `docs/analysis/ИНСТРУКЦИЯ_ОТПРАВКИ_АУДИТА_CODEX.md`
+- `docs/analysis/ИНТЕРАКТИВНЫЙ_ВЫБОР_СЕССИЙ.md`
+- `docs/analysis/ИСПРАВЛЕНИЕ_CLEAN_LOGS_BAT.md`
+- `docs/analysis/ИСПРАВЛЕНИЯ_TSL_PRICE_0_10-01-2026.md`
+- `docs/analysis/ИСПРАВЛЕНИЯ_БЛОК_1_ЗАВЕРШЕНЫ.md`
+- `docs/analysis/ИТОГОВАЯ_СВОДКА_10JAN_2026.md`
+- `docs/analysis/ИТОГОВЫЙ_АНАЛИЗ_АРХИВАЦИИ.md`
+- `docs/analysis/ИТОГОВЫЙ_АНАЛИЗ_ТОРГОВОЙ_СЕССИИ_10-01-2026.md`
+- `docs/analysis/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЯ.txt`
+- `docs/analysis/КРИТИЧЕСКАЯ_ПРОБЛЕМА_TSL_PRICE_0.md`
+- `docs/analysis/ПОЛНЫЙ_СПИСОК_ВСЕХ_МОДУЛЕЙ_ДЛЯ_АУДИТА.md`
+- `docs/analysis/ПРОВЕРКА_ИСПРАВЛЕНИЙ_COPILOT_10JAN.md`
+- `docs/analysis/ПРОВЕРКА_ПОСЛЕ_ПЕРЕЗАПУСКА_02_12_2025.md`
+- `docs/analysis/ПРОВЕРКА_РАСЧЕТА_ЦЕНЫ_ОРДЕРА.md`
+- `docs/analysis/СПИСОК_ДОКУМЕНТОВ_10JAN.md`
+- `docs/analysis/СПИСОК_ФАЙЛОВ_ДЛЯ_АУДИТА.md`
+- `docs/analysis/СРАВНИТЕЛЬНЫЙ_АНАЛИЗ_С_ОТКРЫТЫМИ_ПРОЕКТАМИ.md`
+- `docs/analysis/ФИНАЛ_БЛОК_1_И_2_ГОТОВО.md`
+- `docs/analysis/ФИНАЛЬНАЯ_СВОДКА_ВСЕХ_ПРОБЛЕМ.md`
+- `docs/analysis/ФОКУС_НА_ЯДРЕ.md`
+
+### `docs/analysis/archive` (1)
+- `docs/analysis/archive/README.md`
+
+### `docs/analysis/archive/fixes` (15)
+- `docs/analysis/archive/fixes/АУДИТ_ЗАХАРДКОЖЕННЫХ_ПАРАМЕТРОВ.md`
+- `docs/analysis/archive/fixes/ИСПРАВЛЕНИЕ_ЛОГИКИ_КОНФИГА.md`
+- `docs/analysis/archive/fixes/ИСПРАВЛЕНИЯ_ВЫПОЛНЕНЫ.md`
+- `docs/analysis/archive/fixes/ИТОГОВАЯ_СВОДКА_ГИБРИДНОГО_ПОДХОДА.md`
+- `docs/analysis/archive/fixes/ИТОГОВАЯ_СВОДКА_ИСПРАВЛЕНИЙ.md`
+- `docs/analysis/archive/fixes/ИТОГОВЫЙ_ОТЧЕТ_10_ИСПРАВЛЕНИЙ.md`
+- `docs/analysis/archive/fixes/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЙ.md`
+- `docs/analysis/archive/fixes/ИТОГОВЫЙ_ОТЧЕТ_ОПТИМИЗАЦИИ_TSL.md`
+- `docs/analysis/archive/fixes/ИТОГОВЫЙ_ОТЧЕТ_УЛУЧШЕНИЙ.md`
+- `docs/analysis/archive/fixes/ОТЧЕТ_О_ВЫПОЛНЕННЫХ_ИЗМЕНЕНИЯХ.md`
+- `docs/analysis/archive/fixes/ОТЧЕТ_О_РЕАЛИЗАЦИИ_УЛУЧШЕНИЙ.md`
+- `docs/analysis/archive/fixes/ПРОВЕРКА_ВСЕХ_ИСПРАВЛЕНИЙ.md`
+- `docs/analysis/archive/fixes/ПРОВЕРКА_ИСПРАВЛЕНИЙ_ПОСЛЕ_КОММИТОВ.md`
+- `docs/analysis/archive/fixes/ПРОВЕРКА_РАБОТЫ_БОТА_ПОСЛЕ_ИСПРАВЛЕНИЙ.md`
+- `docs/analysis/archive/fixes/ФИНАЛЬНАЯ_ПРОВЕРКА_ИСПРАВЛЕНИЙ.md`
+
+### `docs/analysis/archive/logs` (25)
+- `docs/analysis/archive/logs/АНАЛИЗ_ВСЕХ_31_АРХИВОВ.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_ДВУХ_ПОЗИЦИЙ_ETH_DOGE.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_ЗАКРЫТИЙ_ПОЗИЦИЙ.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_10_ИСПРАВЛЕНИЙ.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИЗМЕНЕНИЙ.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_ОРКЕСТРАТОРА.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_ОТКРЫТОЙ_ПОЗИЦИИ_XRP.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_ОТМЕНЫ_ОРДЕРОВ.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_РАБОТЫ_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_РЕАЛЬНЫХ_СДЕЛОК_БЕЗ_КОДИНГА.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_СЕССИИ_2025-11-18.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_СТРУКТУРЫ_И_АРХИТЕКТУРЫ.md`
+- `docs/analysis/archive/logs/АНАЛИЗ_ТОРГОВЛИ_16_22_28.md`
+- `docs/analysis/archive/logs/ГЛУБОКИЙ_АНАЛИЗ_ВСЕЙ_ЛОГИКИ_БОТА.md`
+- `docs/analysis/archive/logs/ГЛУБОКИЙ_АНАЛИЗ_ЛОГОВ_КАК_ТРЕЙДЕР.md`
+- `docs/analysis/archive/logs/ДЕТАЛЬНЫЙ_АНАЛИЗ_ВСЕХ_ПРОБЛЕМ_18_11_2025.md`
+- `docs/analysis/archive/logs/ДЕТАЛЬНЫЙ_АНАЛИЗ_ЛОГОВ_И_АРХИВОВ.md`
+- `docs/analysis/archive/logs/ИТОГОВЫЙ_АНАЛИЗ_XRP_И_ИСПРАВЛЕНИЯ.md`
+- `docs/analysis/archive/logs/ИТОГОВЫЙ_АНАЛИЗ_ВСЕХ_ЛОГОВ_И_АРХИВОВ.md`
+- `docs/analysis/archive/logs/КРИТИЧЕСКИЙ_АНАЛИЗ_ПРОТИВОПОЛОЖНЫХ_ПОЗИЦИЙ.md`
+- `docs/analysis/archive/logs/КРИТИЧЕСКИЙ_АНАЛИЗ_СЕССИИ.md`
+- `docs/analysis/archive/logs/КРИТИЧЕСКИЙ_АНАЛИЗ_УБЫТОЧНЫХ_СДЕЛОК.md`
+- `docs/analysis/archive/logs/ПОЛНЫЙ_АНАЛИЗ_КОДА_И_ЛОГОВ_С_АДАПТАЦИЕЙ.md`
+- `docs/analysis/archive/logs/ПОЛНЫЙ_АНАЛИЗ_ЛОГОВ_СЕССИИ_19_11_2025.md`
+- `docs/analysis/archive/logs/ПРАВИЛЬНЫЙ_АНАЛИЗ_КАЧЕСТВЕННОЙ_ТОРГОВЛИ.md`
+
+### `docs/analysis/archive/parameters` (8)
+- `docs/analysis/archive/parameters/АНАЛИЗ_АДАПТИВНОСТИ_ПАРАМЕТРОВ.md`
+- `docs/analysis/archive/parameters/АНАЛИЗ_ПАРАМЕТРОВ_ВСЕХ_РЕЖИМОВ.md`
+- `docs/analysis/archive/parameters/КОМПЛЕКСНЫЙ_АНАЛИЗ_ПАРАМЕТРОВ_И_ОПТИМИЗАЦИЯ.md`
+- `docs/analysis/archive/parameters/ПЛАН_РЕСТРУКТУРИЗАЦИИ_ПРОЕКТА.md`
+- `docs/analysis/archive/parameters/ПЛАН_РЕФАКТОРИНГА_ОРКЕСТРАТОРА.md`
+- `docs/analysis/archive/parameters/ПОЛНЫЙ_АНАЛИЗ_ВСЕХ_ПАРАМЕТРОВ.md`
+- `docs/analysis/archive/parameters/ПОЛНЫЙ_ПЛАН_ИЗМЕНЕНИЙ_С_ВРЕМЕНЕМ_И_ЗАХАРДКОЖЕННОСТЬЮ.md`
+- `docs/analysis/archive/parameters/СИМУЛЯЦИЯ_АДАПТИВНЫХ_ПАРАМЕТРОВ.md`
+
+### `docs/analysis/archive/problems` (18)
+- `docs/analysis/archive/problems/АНАЛИЗ_ПРЕДУПРЕЖДЕНИЙ.md`
+- `docs/analysis/archive/problems/АНАЛИЗ_ПРОБЛЕМ_ЛИМИТНЫХ_ОРДЕРОВ_И_TSL.md`
+- `docs/analysis/archive/problems/АНАЛИЗ_ПРОБЛЕМЫ_ЗАКРЫТИЯ_ПО_ВРЕМЕНИ.md`
+- `docs/analysis/archive/problems/АНАЛИЗ_ПРОБЛЕМЫ_МИКРО_ПРИБЫЛИ_И_TSL.md`
+- `docs/analysis/archive/problems/АНАЛИЗ_ПРОБЛЕМЫ_РАЗВОРОТА_И_РЕШЕНИЯ.md`
+- `docs/analysis/archive/problems/АНАЛИЗ_ПРОБЛЕМЫ_РАЗМЕРА_ПОЗИЦИЙ.md`
+- `docs/analysis/archive/problems/АНАЛИЗ_ЭФФЕКТИВНОСТИ_КРИТИЧЕСКИХ_УЛУЧШЕНИЙ.md`
+- `docs/analysis/archive/problems/ДЕТАЛЬНЫЙ_АНАЛИЗ_ПРОБЛЕМ.md`
+- `docs/analysis/archive/problems/ИСПРАВЛЕНИЕ_ПРЕДУПРЕЖДЕНИЙ_SafetyThreshold_Equity.md`
+- `docs/analysis/archive/problems/ИТОГОВЫЙ_СПИСОК_ВСЕХ_ПРОБЛЕМ.md`
+- `docs/analysis/archive/problems/КОМПЛЕКСНЫЙ_АНАЛИЗ_ВСЕХ_ПРОБЛЕМ_ОБСУЖДЕНИЕ.md`
+- `docs/analysis/archive/problems/КОНКРЕТНЫЕ_ПРОБЛЕМЫ_И_ИСПРАВЛЕНИЯ.md`
+- `docs/analysis/archive/problems/ОБСУЖДЕНИЕ_TP_SL_СТРАТЕГИИ.md`
+- `docs/analysis/archive/problems/ПЕРЕХОД_НА_КАЧЕСТВЕННУЮ_ТОРГОВЛЮ.md`
+- `docs/analysis/archive/problems/ПОЛНЫЙ_АНАЛИЗ_ВСЕХ_ПРЕДУПРЕЖДЕНИЙ.md`
+- `docs/analysis/archive/problems/ПОЛНЫЙ_АНАЛИЗ_ПРОБЛЕМ_И_ИСПРАВЛЕНИЯ.md`
+- `docs/analysis/archive/problems/ПРОБЛЕМА_ЛИМИТНОЙ_ЦЕНЫ_SELL.md`
+- `docs/analysis/archive/problems/ЧТО_РЕШАТ_ИСПРАВЛЕНИЯ_АНАЛИЗ.md`
+
+### `docs/analysis/archive/reports` (12)
+- `docs/analysis/archive/reports/ИТОГОВАЯ_ПРОВЕРКА_ЛОГИКИ_КОНФИГА.md`
+- `docs/analysis/archive/reports/ИТОГОВАЯ_ПРОВЕРКА_ПЕРЕД_ЗАПУСКОМ.md`
+- `docs/analysis/archive/reports/ИТОГОВАЯ_ПРОВЕРКА_ПЕРЕЗАПУСКА.md`
+- `docs/analysis/archive/reports/ИТОГОВАЯ_ПРОВЕРКА_ПОЗИЦИИ.md`
+- `docs/analysis/archive/reports/ПОЛНЫЙ_АУДИТ_ЗАХАРДКОЖЕННЫХ_ПАРАМЕТРОВ.md`
+- `docs/analysis/archive/reports/ПРОВЕРКА_АДАПТИВНОСТИ_ПО_ПАРАМ_И_РЕЖИМАМ.md`
+- `docs/analysis/archive/reports/ПРОВЕРКА_ВСЕХ_ПАР_И_КОНФИГА.md`
+- `docs/analysis/archive/reports/ПРОВЕРКА_ЛОГИКИ_БОТА.md`
+- `docs/analysis/archive/reports/ПРОВЕРКА_ПЕРЕЗАПУСКА.md`
+- `docs/analysis/archive/reports/ПРОВЕРКА_ПОЗИЦИИ_ПОСЛЕ_ОТКРЫТИЯ.md`
+- `docs/analysis/archive/reports/ПРОВЕРКА_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/analysis/archive/reports/СРАВНИТЕЛЬНЫЙ_АНАЛИЗ_АДАПТИВНОСТИ.md`
+
+### `docs/analysis/current` (15)
+- `docs/analysis/current/PHASE_1_ИЗМЕНЕНИЯ_ПРИМЕНЕНЫ.md`
+- `docs/analysis/current/АНАЛИЗ_TP_И_TRAILING_SL_ПО_РЕЖИМАМ.md`
+- `docs/analysis/current/АНАЛИЗ_АДАПТИВНОСТИ_TP_И_TRAILING_SL.md`
+- `docs/analysis/current/АНАЛИЗ_БЛОКИРОВОК_ПОЛНЫЙ.md`
+- `docs/analysis/current/АНАЛИЗ_ЛОГИКИ_SHORT_И_LONG.md`
+- `docs/analysis/current/АНАЛИЗ_ЛОГИКИ_ЛИМИТНЫХ_ОРДЕРОВ.md`
+- `docs/analysis/current/АНАЛИЗ_ПРИМЕНЕНИЯ_ИЗМЕНЕНИЙ_КО_ВСЕМ_ПАРАМ.md`
+- `docs/analysis/current/АНАЛИЗ_СТАТЬИ_MOMENTUM_TRADING.md`
+- `docs/analysis/current/АНАЛИЗ_СТРАТЕГИИ_И_РЕКОМЕНДАЦИИ.md`
+- `docs/analysis/current/АНАЛИЗ_ЦЕПОЧКИ_ОРДЕРОВ_И_ОКРУГЛЕНИЯ.md`
+- `docs/analysis/current/ГЛУБОКИЙ_АНАЛИЗ_ПАРАМЕТРОВ_И_ФИЛЬТРОВ.md`
+- `docs/analysis/current/ОБЪЯСНЕНИЕ_КОМИССИЙ_ФЬЮЧЕРСЫ.md`
+- `docs/analysis/current/ОТЧЕТ_РЕСТРУКТУРИЗАЦИИ.md`
+- `docs/analysis/current/ПОЛНЫЙ_АНАЛИЗ_И_ПЛАН_УЛУЧШЕНИЙ.md`
+- `docs/analysis/current/ПОЛНЫЙ_АНАЛИЗ_ЦЕПОЧКИ_ОРДЕРОВ.md`
+
+### `docs/analysis/fixes` (20)
+- `docs/analysis/fixes/АНАЛИЗ_И_ИСПРАВЛЕНИЕ_ОШИБОК.md`
+- `docs/analysis/fixes/АНАЛИЗ_И_РЕАЛИЗАЦИЯ_PER_SYMBOL_TP.md`
+- `docs/analysis/fixes/ИСПРАВЛЕНИЕ_LEVERAGE_SANDBOX.md`
+- `docs/analysis/fixes/ИСПРАВЛЕНИЕ_LEVERAGE_И_РАЗМЕРА_ПОЗИЦИЙ.md`
+- `docs/analysis/fixes/ИСПРАВЛЕНИЕ_LEVERAGE_ИЗ_ПОЗИЦИИ.md`
+- `docs/analysis/fixes/ИСПРАВЛЕНИЕ_RATE_LIMIT_429.md`
+- `docs/analysis/fixes/ИСПРАВЛЕНИЕ_ЗАХАРДКОЖЕННЫХ_ПАРАМЕТРОВ_MAXSIZELIMITER.md`
+- `docs/analysis/fixes/ИСПРАВЛЕНИЕ_ЛОГИКИ_SHORT.md`
+- `docs/analysis/fixes/ИСПРАВЛЕНИЕ_МАЛОЙ_МАРЖИ.md`
+- `docs/analysis/fixes/ИСПРАВЛЕНИЕ_ПРОБЛЕМЫ_ЛИМИТОВ_ЦЕНЫ.md`
+- `docs/analysis/fixes/ИСПРАВЛЕНИЕ_СИНХРОНИЗАЦИИ_ПОЗИЦИЙ.md`
+- `docs/analysis/fixes/ИТОГОВОЕ_ИСПРАВЛЕНИЕ_LEVERAGE.md`
+- `docs/analysis/fixes/ИТОГОВЫЕ_ИСПРАВЛЕНИЯ_TP_И_ТРЕЙЛИНГА.md`
+- `docs/analysis/fixes/ИТОГОВЫЕ_ИСПРАВЛЕНИЯ_ОКРУГЛЕНИЯ_ПОЗИЦИЙ.md`
+- `docs/analysis/fixes/ИТОГОВЫЕ_ИСПРАВЛЕНИЯ_ПОЗИЦИИ_И_PNL.md`
+- `docs/analysis/fixes/РЕШЕНИЕ_LEVERAGE_3X.md`
+- `docs/analysis/fixes/РЕШЕНИЕ_ПРОБЛЕМ_TP_И_ТРЕЙЛИНГА.md`
+- `docs/analysis/fixes/РЕШЕНИЕ_ПРОБЛЕМЫ_МАЛОЙ_МАРЖИ.md`
+- `docs/analysis/fixes/ФИНАЛЬНОЕ_РЕШЕНИЕ_ПРОБЛЕМ_TP_И_ТРЕЙЛИНГА.md`
+- `docs/analysis/fixes/ФИНАЛЬНЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЯ_SHORT.md`
+
+### `docs/analysis/leverage` (4)
+- `docs/analysis/leverage/LEVERAGE_SELECTION_MATH_AND_LOGGING.md`
+- `docs/analysis/leverage/LEVERAGE_UNIFICATION_AND_POSITION_SCALING.md`
+- `docs/analysis/leverage/LEVERAGE_VALIDATION_AND_ROUNDING.md`
+- `docs/analysis/leverage/PROBLEMS_ANALYSIS_LEVERAGE_DRIFT.md`
+
+### `docs/analysis/logs` (12)
+- `docs/analysis/logs/АНАЛИЗ_ЛОГОВ_07_11_2025.md`
+- `docs/analysis/logs/АНАЛИЗ_ЛОГОВ_11_11_2025.md`
+- `docs/analysis/logs/АНАЛИЗ_ЛОГОВ_ЗА_ПЕРИОД_11-14_НОЯБРЯ.md`
+- `docs/analysis/logs/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ЗАПУСКА_12_11.md`
+- `docs/analysis/logs/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИСПРАВЛЕНИЙ_TP.md`
+- `docs/analysis/logs/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИСПРАВЛЕНИЯ.md`
+- `docs/analysis/logs/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_МОДЕРНИЗАЦИИ.md`
+- `docs/analysis/logs/АНАЛИЗ_СЕССИИ_10_11_2025.md`
+- `docs/analysis/logs/ИТОГОВЫЙ_АНАЛИЗ_ЛОГОВ_11_11_2025.md`
+- `docs/analysis/logs/ИТОГОВЫЙ_АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИСПРАВЛЕНИЙ.md`
+- `docs/analysis/logs/ИТОГОВЫЙ_АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИСПРАВЛЕНИЯ.md`
+- `docs/analysis/logs/КРАТКАЯ_СВОДКА_АНАЛИЗА_ЛОГОВ.md`
+
+### `docs/analysis/logs/2025-12` (3)
+- `docs/analysis/logs/2025-12/ЛОГИ_ДЛЯ_ГРОКА_2025-12-21.md`
+- `docs/analysis/logs/2025-12/ЛОГИ_ПОСЛЕДНИЙ_ЧАС_ДЛЯ_КИМИ.md`
+- `docs/analysis/logs/2025-12/ЛОГИРОВАНИЕ_TA_LIB_2025-12-21.md`
+
+### `docs/analysis/other` (19)
+- `docs/analysis/other/ANALYSIS_BOT_LOGIC_AND_DATA_FLOW.md`
+- `docs/analysis/other/DETAILED_ANALYSIS_POSITION_SCALING_AND_FIXES.md`
+- `docs/analysis/other/STRENGTH_CALCULATIONS_FIX.md`
+- `docs/analysis/other/АНАЛИЗ_СИМУЛЯЦИИ_УЛУЧШЕНИЙ.md`
+- `docs/analysis/other/ИЗМЕНЕНИЯ_ОПТИМИЗАЦИИ_БАЛАНСА.md`
+- `docs/analysis/other/ИТОГОВЫЙ_АНАЛИЗ_ЗАХАРДКОЖЕННЫХ_ПАРАМЕТРОВ.md`
+- `docs/analysis/other/ОБСУЖДЕНИЕ_ОПТИМИЗАЦИИ_БАЛАНСА.md`
+- `docs/analysis/other/ОБЪЯСНЕНИЕ_ПРЕДУПРЕЖДЕНИЙ.md`
+- `docs/analysis/other/ОБЪЯСНЕНИЕ_ПРОБЛЕМ_И_РЕШЕНИЯ.md`
+- `docs/analysis/other/ПОЛНЫЙ_АУДИТ_БОТА_12_11.md`
+- `docs/analysis/other/ПОЛНЫЙ_АУДИТ_ЗАХАРДКОЖЕННЫХ_ПАРАМЕТРОВ.md`
+- `docs/analysis/other/ПОЛНЫЙ_СПИСОК_ЗАХАРДКОЖЕННЫХ_ПАРАМЕТРОВ.md`
+- `docs/analysis/other/РАСЧЕТ_ОПТИМИЗАЦИИ_БАЛАНСА.md`
+- `docs/analysis/other/СВОДКА_ИЗМЕНЕНИЙ_ЧАСТОТНЫЙ_СКАЛЬПИНГ.md`
+- `docs/analysis/other/СИМУЛЯЦИЯ_И_АНАЛИЗ_УЛУЧШЕНИЙ.md`
+- `docs/analysis/other/СПИСОК_ИЗМЕНЕНИЙ_ПРОСТЫМИ_СЛОВАМИ.md`
+- `docs/analysis/other/УТОЧНЕНИЯ_И_ПЛАН_ИСПРАВЛЕНИЙ.md`
+- `docs/analysis/other/УТОЧНЕНИЯ_ПО_ОРДЕРАМ_И_КОМИССИЯМ.md`
+- `docs/analysis/other/ФИНАЛЬНЫЙ_ОТВЕТ_PER_REGIME_TP_И_TRAILING_SL.md`
+
+### `docs/analysis/plans` (16)
+- `docs/analysis/plans/ВАРИАНТ_B_ДЕТАЛЬНЫЙ_ПЛАН.md`
+- `docs/analysis/plans/ВАРИАНТ_B_РЕАЛИЗОВАН.md`
+- `docs/analysis/plans/ИТОГОВОЕ_ПРЕДЛОЖЕНИЕ_БАЛАНС.md`
+- `docs/analysis/plans/ИТОГОВОЕ_РЕШЕНИЕ_ПРОБЛЕМ_TP_И_ТРЕЙЛИНГА.md`
+- `docs/analysis/plans/ИТОГОВОЕ_РЕШЕНИЕ_ПРОБЛЕМ_ВЫСОКОЧАСТОТНЫЙ_СКАЛЬПИНГ.md`
+- `docs/analysis/plans/ИТОГОВЫЙ_ПЛАН_АДАПТИВНЫХ_ПАРАМЕТРОВ.md`
+- `docs/analysis/plans/ИТОГОВЫЙ_ПЛАН_МОДЕРНИЗАЦИИ.md`
+- `docs/analysis/plans/ОБЪЕДИНЕННЫЙ_ПЛАН_УЛУЧШЕНИЙ.md`
+- `docs/analysis/plans/ПЛАН_АДАПТИВНЫХ_ПАРАМЕТРОВ_TP_SL.md`
+- `docs/analysis/plans/ПЛАН_АДАПТИВНЫХ_ПАРАМЕТРОВ_РИСКА.md`
+- `docs/analysis/plans/ПЛАН_ВНЕДРЕНИЯ_ЧАСТОТНОГО_СКАЛЬПИНГА.md`
+- `docs/analysis/plans/ПЛАН_МОДЕРНИЗАЦИИ_БАЛАНСА.md`
+- `docs/analysis/plans/ПЛАН_МОДЕРНИЗАЦИИ_БОТА_ПОЛНЫЙ.md`
+- `docs/analysis/plans/ПЛАН_УВЕЛИЧЕНИЯ_ПРИБЫЛЬНОСТИ_СКАЛЬПИНГ.md`
+- `docs/analysis/plans/ФИНАЛЬНЫЙ_ПЛАН_ВНЕДРЕНИЯ.md`
+- `docs/analysis/plans/ФИНАЛЬНЫЙ_ПЛАН_УЛУЧШЕНИЙ_С_ЛИМИТНЫМИ_ОРДЕРАМИ.md`
+
+### `docs/analysis/problems` (17)
+- `docs/analysis/problems/АНАЛИЗ_ПРОБЛЕМ_ПО_РЕАЛЬНЫМ_СДЕЛКАМ.md`
+- `docs/analysis/problems/АНАЛИЗ_ПРОБЛЕМЫ_LEVERAGE.md`
+- `docs/analysis/problems/АНАЛИЗ_ПРОБЛЕМЫ_LEVERAGE_И_РЕЖИМОВ.md`
+- `docs/analysis/problems/АНАЛИЗ_ПРОБЛЕМЫ_ЗАКРЫТИЯ_ПОЗИЦИИ.md`
+- `docs/analysis/problems/АНАЛИЗ_ПРОБЛЕМЫ_ЗАКРЫТИЯ_С_МИНУСОМ.md`
+- `docs/analysis/problems/АНАЛИЗ_ПРОБЛЕМЫ_ЛИМИТНЫХ_ОРДЕРОВ.md`
+- `docs/analysis/problems/АНАЛИЗ_ПРОБЛЕМЫ_НАПРАВЛЕНИЯ_ПОЗИЦИЙ.md`
+- `docs/analysis/problems/АНАЛИЗ_РАСХОЖДЕНИЙ_ЛОГИ_РЕАЛЬНОСТЬ.md`
+- `docs/analysis/problems/ДЕТАЛЬНЫЙ_РАЗБОР_ПРОБЛЕМ_БЕЗ_КОДА.md`
+- `docs/analysis/problems/ИТОГОВЫЙ_АНАЛИЗ_ПРОБЛЕМ_БЕЗ_КОДА.md`
+- `docs/analysis/problems/КРАТКАЯ_СВОДКА_ПРОБЛЕМ.md`
+- `docs/analysis/problems/ПОДРОБНЫЙ_РАЗБОР_ПРОБЛЕМ_БЕЗ_КОДИНГА.md`
+- `docs/analysis/problems/ПОЛНЫЙ_АНАЛИЗ_ПРОБЛЕМ_ПО_РЕАЛЬНЫМ_СДЕЛКАМ.md`
+- `docs/analysis/problems/ПРОБЛЕМА_LEVERAGE_3X_В_SANDBOX.md`
+- `docs/analysis/problems/ПРОБЛЕМА_ЛИМИТОВ_ЦЕНЫ_OKX.md`
+- `docs/analysis/problems/ПРОБЛЕМА_МАЛОЙ_МАРЖИ_АНАЛИЗ.md`
+- `docs/analysis/problems/УТОЧНЕННЫЙ_АНАЛИЗ_ПРОБЛЕМ.md`
+
+### `docs/analysis/qa` (3)
+- `docs/analysis/qa/ВОПРОСЫ_ПО_РЕКОМЕНДАЦИЯМ.md`
+- `docs/analysis/qa/ОТВЕТ_НА_ДОПОЛНЕНИЕ_ГРОКА_ЛЕСТНИЦА.md`
+- `docs/analysis/qa/ОТВЕТ_НА_ФИНАЛЬНЫЙ_АНАЛИЗ_ГРОКА.md`
+
+### `docs/analysis/reports` (93)
+- `docs/analysis/reports/ADAPTIVE_CALCULATIONS_AUDIT_30_11_2025.md`
+- `docs/analysis/reports/analiz_arhitektury_sistemy_zakrytiya_29_11_2025.md`
+- `docs/analysis/reports/analiz_ispolzovaniya_dannyh_dlya_adx.md`
+- `docs/analysis/reports/analiz_logov_29_11_2025_16_51.md`
+- `docs/analysis/reports/analiz_napravleniya_signalov_i_trenda.md`
+- `docs/analysis/reports/ANALIZ_NECAKRITIYA_POZITSIY_30_11_2025.md`
+- `docs/analysis/reports/analiz_problemy_btc_pozicii_29_11_2025.md`
+- `docs/analysis/reports/analiz_problemy_doge_pozicii_29_11_2025.md`
+- `docs/analysis/reports/analiz_problemy_otkrytiya_poziciy.md`
+- `docs/analysis/reports/analiz_problemy_xrp_pozicii_29_11_2025.md`
+- `docs/analysis/reports/analiz_raboty_bota_s_poziciyami.md`
+- `docs/analysis/reports/analiz_razmesheniya_ordero_btc_29_11_2025.md`
+- `docs/analysis/reports/analiz_sistemy_zakrytiya_poziciy.md`
+- `docs/analysis/reports/analiz_umnyh_resheniy_bota_29_11_2025.md`
+- `docs/analysis/reports/analiz_xrp_usdt_loss_30_11_2025.md`
+- `docs/analysis/reports/analiz_zakrytiya_poziciy_29_11_2025.md`
+- `docs/analysis/reports/ANALYSIS_FREQUENCY_30_11_2025.md`
+- `docs/analysis/reports/ANALYSIS_FREQUENCY_CHECK_30_11_2025.md`
+- `docs/analysis/reports/arhitektura_umnogo_filtra_29_11_2025.md`
+- `docs/analysis/reports/arhitektura_umnogo_filtra_realtime_29_11_2025.md`
+- `docs/analysis/reports/COMPLETE_STOP_LOSS_AUDIT_30_11_2025.md`
+- `docs/analysis/reports/detalnoe_logirovanie_sistemy_zakrytiya_29_11_2025.md`
+- `docs/analysis/reports/detalnyy_analiz_profit_harvesting_29_11_2025.md`
+- `docs/analysis/reports/FALLBACK_VALUES_ANALYSIS_30_11_2025.md`
+- `docs/analysis/reports/FINAL_AUDIT_VERDICT_30_11_2025.md`
+- `docs/analysis/reports/FINAL_PRE_PRODUCTION_CHECK_30_11_2025.md`
+- `docs/analysis/reports/FINAL_REGIME_AUDIT_30_11_2025.md`
+- `docs/analysis/reports/finalnyy_spisok_izmeneniy_29_11_2025.md`
+- `docs/analysis/reports/ispravlenie_agressivnogo_zakrytiya_30_11_2025.md`
+- `docs/analysis/reports/ispravlenie_ceny_zakrytiya_pozicii_29_11_2025.md`
+- `docs/analysis/reports/ispravlenie_datetime_profit_drawdown_30_11_2025.md`
+- `docs/analysis/reports/ispravlenie_oshibok_datetime_30_11_2025.md`
+- `docs/analysis/reports/ispravleniya_adaptive_regime_i_logirovanie_29_11_2025.md`
+- `docs/analysis/reports/ispravleniya_kriticheskih_problem_29_11_2025.md`
+- `docs/analysis/reports/ispravleniya_min_holding_ph_29_11_2025.md`
+- `docs/analysis/reports/ispravleniya_profit_harvesting_29_11_2025.md`
+- `docs/analysis/reports/ispravleniya_sistemy_zakrytiya_29_11_2025.md`
+- `docs/analysis/reports/itogovyy_analiz_i_prognoz_29_11_2025.md`
+- `docs/analysis/reports/LOG_CHECK_AFTER_RESTART_30_11_2025.md`
+- `docs/analysis/reports/LOGGING_ADDED_30_11_2025.md`
+- `docs/analysis/reports/LOGGING_AUDIT_30_11_2025.md`
+- `docs/analysis/reports/obyasnenie_predprezhdeniya_entry_manager_30_11_2025.md`
+- `docs/analysis/reports/otchet_refaktoringa_30_11_2025.md`
+- `docs/analysis/reports/plan_ispravleniy_sistemy_zakrytiya.md`
+- `docs/analysis/reports/podrobnyy_analiz_logiki_generacii_signalov.md`
+- `docs/analysis/reports/polnyy_analiz_logov_29_11_2025.md`
+- `docs/analysis/reports/polnyy_analiz_sessii_28_11_2025.md`
+- `docs/analysis/reports/polnyy_analiz_sessii_29_11_2025.md`
+- `docs/analysis/reports/polnyy_analiz_sistemy_zakrytiya_poziciy.md`
+- `docs/analysis/reports/polnyy_analiz_vsekh_logov_29_11_2025.md`
+- `docs/analysis/reports/polnyy_analiz_zakrytiya_poziciy_iz_arhiva_29_11_2025.md`
+- `docs/analysis/reports/POSITION_CLOSURES_ANALYSIS_30_11_2025.md`
+- `docs/analysis/reports/POSITIONS_VISIBILITY_CHECK_30_11_2025.md`
+- `docs/analysis/reports/problema_razmesheniya_limit_ordero_29_11_2025.md`
+- `docs/analysis/reports/proverka_chistogo_perezapuska_29_11_2025.md`
+- `docs/analysis/reports/proverka_chistogo_perezapuska_30_11_2025.md`
+- `docs/analysis/reports/proverka_chistogo_perezapuska_posle_ispravleniy_29_11_2025.md`
+- `docs/analysis/reports/proverka_chistogo_zapuska_razmeshenie_ordero_29_11_2025.md`
+- `docs/analysis/reports/proverka_i_ispravlenie_ceny_zakrytiya_i_profit_drawdown_29_11_2025.md`
+- `docs/analysis/reports/proverka_ispravleniy_28_11_2025.md`
+- `docs/analysis/reports/proverka_ispravleniy_adx_28_11_2025.md`
+- `docs/analysis/reports/proverka_mehanizmov_zashchity_29_11_2025.md`
+- `docs/analysis/reports/proverka_perezapuska_30_11_2025_v2.md`
+- `docs/analysis/reports/proverka_perezapuska_30_11_2025_v3.md`
+- `docs/analysis/reports/proverka_signala_i_profit_drawdown_xrp_30_11_2025.md`
+- `docs/analysis/reports/proverka_sostoyaniya_bota_29_11_2025.md`
+- `docs/analysis/reports/realizaciya_umnogo_filtra_29_11_2025.md`
+- `docs/analysis/reports/REGIME_PARAMETERS_AUDIT_30_11_2025.md`
+- `docs/analysis/reports/spisok_izmeneniy_dlya_ispravleniya_problem_29_11_2025.md`
+- `docs/analysis/reports/STOP_LOSS_ANALYSIS_30_11_2025.md`
+- `docs/analysis/reports/STOP_LOSS_FIX_30_11_2025.md`
+- `docs/analysis/reports/vzaimosvyazi_problem_i_rekomendacii.md`
+- `docs/analysis/reports/zashchita_ot_proskalzyvaniya_30_11_2025.md`
+- `docs/analysis/reports/ИТОГОВАЯ_ПРОВЕРКА_ГОТОВНОСТИ.md`
+- `docs/analysis/reports/ИТОГОВАЯ_ПРОВЕРКА_ПАРАМЕТРОВ_ИЗ_КОНФИГА.md`
+- `docs/analysis/reports/ИТОГОВАЯ_СВОДКА_ЗАДАЧ_МОДЕРНИЗАЦИИ.md`
+- `docs/analysis/reports/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЙ.md`
+- `docs/analysis/reports/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЙ_ЛИМИТОВ_И_НАПРАВЛЕНИЯ.md`
+- `docs/analysis/reports/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЯ_ЛИМИТОВ.md`
+- `docs/analysis/reports/ИТОГОВЫЙ_ОТЧЕТ_МОДЕРНИЗАЦИИ.md`
+- `docs/analysis/reports/ИТОГОВЫЙ_ОТЧЕТ_ПРОВЕРКИ_НАПРАВЛЕНИЯ_И_РАЗМЕРА.md`
+- `docs/analysis/reports/ИТОГОВЫЙ_СТАТУС_PER_REGIME_TP.md`
+- `docs/analysis/reports/ИТОГОВЫЙ_СТАТУС_ВАРИАНТ_B.md`
+- `docs/analysis/reports/КРАТКАЯ_СВОДКА_26_ЗАДАЧ.md`
+- `docs/analysis/reports/ПОЛНАЯ_ПРОВЕРКА_ПАРАМЕТРОВ_ИЗ_КОНФИГА.md`
+- `docs/analysis/reports/ПРОВЕРКА_КОД_И_КОНФИГ.md`
+- `docs/analysis/reports/ПРОВЕРКА_ЛИМИТОВ_БИРЖИ_OKX.md`
+- `docs/analysis/reports/ПРОВЕРКА_НАПРАВЛЕНИЯ_ПОЗИЦИЙ_И_РАЗМЕРА.md`
+- `docs/analysis/reports/ПРОВЕРКА_ПАРАМЕТРОВ_ИЗ_КОНФИГА.md`
+- `docs/analysis/reports/ПРОВЕРКА_ЧТЕНИЯ_ПАРАМЕТРОВ.md`
+- `docs/analysis/reports/СТАТУС_БОТА_ГОТОВ_К_РАБОТЕ.md`
+- `docs/analysis/reports/СТАТУС_ВАРИАНТ_B.md`
+- `docs/analysis/reports/ФИНАЛЬНАЯ_ПРОВЕРКА_ПАРАМЕТРОВ.md`
+
+### `docs/analysis/reports/2025-12` (127)
+- `docs/analysis/reports/2025-12/FULL_ADAPTIVITY_ANALYSIS_29_12_2025.md`
+- `docs/analysis/reports/2025-12/FULL_BOT_INITIALIZATION_SEQUENCE_28_12_2025.md`
+- `docs/analysis/reports/2025-12/FULL_LOGGING_ANALYSIS_29_12_2025.md`
+- `docs/analysis/reports/2025-12/FULL_TRADING_PARAMS_ANALYSIS_28_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_6_ЧАСОВ_РАБОТЫ_2025-12-21.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ADX_FILTER.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_FALLBACK_ЗНАЧЕНИЙ_25_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_PnL_ПОЗИЦИЙ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_RSI_ATR_АДАПТАЦИИ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_SMART_CLOSE_RANGING.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_SMART_CLOSE_АДАПТИВНОСТИ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_TA_LIB_2025-12-21.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_АДАПТИВНОСТИ_ПАРАМЕТРОВ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_АКТУАЛЬНОСТИ_ДОПОЛНЕНИЙ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_БЛОКИРОВКИ_СИГНАЛОВ_27_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ДВИЖЕНИЯ_ЦЕНЫ_ПОСЛЕ_ЗАКРЫТИЯ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ДВИЖЕНИЯ_ЦЕНЫ_ПОСЛЕ_ЗАКРЫТИЯ_ДЕТАЛЬНЫЙ.json`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ДВИЖЕНИЯ_ЦЕНЫ_ПОСЛЕ_ЗАКРЫТИЯ_ДЕТАЛЬНЫЙ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ДВИЖЕНИЯ_ЦЕНЫ_ПОСЛЕ_ЗАКРЫТИЯ_ФИНАЛЬНЫЙ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ДЛЯ_КИМИ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЗАКРЫТИЯ_DOGE_21_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЗАКРЫТИЯ_XRP_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЗАКРЫТИЯ_XRP_И_SOL.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЗАКРЫТИЯ_И_LEVERAGE.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЗАМЕЧАНИЙ_SONNET.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_КОМИССИИ_И_SHORT_СИГНАЛОВ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_2025-12-23.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_29_12_2025_23-27-20.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_29_12_2025_ПОСЛЕ_ПАТЧЕЙ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ЗАПУСКА_26_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ЗАПУСКА_26_12_2025_15_40.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ЗАПУСКА_26_12_2025_16_51.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_И_ДОХОДНОСТИ_26_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_SMART_CLOSE_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ЗАПУСКА.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИСПРАВЛЕНИЙ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИСПРАВЛЕНИЙ_ПОРЯДКА_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ОТКРЫТИЯ_ПОЗИЦИИ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ПЕРЕЗАПУСКА_23_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_МЕДЛЕННОЙ_ГЕНЕРАЦИИ_СИГНАЛОВ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_НЕПРАВИЛЬНОГО_ЛОГИРОВАНИЯ_SHORT.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ОТВЕТА_SONNET.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ОТСУТСТВИЯ_СИГНАЛОВ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПОЗИЦИИ_SOL_USDT_26_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРЕЖДЕВРЕМЕННОГО_ЗАКРЫТИЯ_ETH_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРЕОБРАЗОВАНИЯ_SIDE.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРИЧИН_УБЫТОЧНОСТИ_26_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРОБЛЕМ_ЗАКРЫТИЯ_ПОЗИЦИЙ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРОБЛЕМ_И_ПРЕДУПРЕЖДЕНИЙ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРОБЛЕМ_ИНИЦИАЛИЗАЦИИ_И_РЕЖИМОВ_26_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРОБЛЕМ_ОТ_ГРОКА_2025-12-21.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРОБЛЕМ_ПРИ_ЗАПУСКЕ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРОБЛЕМ_ФИЛЬТРОВ_26_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРОБЛЕМНЫХ_УЧАСТКОВ_КОДА_28_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРОБЛЕМЫ_ЧАСТИЧНОГО_ЗАКРЫТИЯ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ПРОИЗВОДИТЕЛЬНОСТИ_ПОСЛЕ_ОПТИМИЗАЦИЙ_2025-12-21.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_РАБОТЫ_БОТА_С_ПОЗИЦИЕЙ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_РЕКОМЕНДАЦИЙ_ГРОКА_2025-12-21.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_РЕКОМЕНДАЦИЙ_КИМИ_26_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_СИСТЕМЫ_SCORE.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_СИСТЕМЫ_SCORE_ОБНОВЛЕНО.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_СИСТЕМЫ_ЛОГИРОВАНИЯ_26_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_СОВМЕСТИМОСТИ_ПАТЧЕЙ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ТОРГОВЛИ_24Ч_2025-12-21.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ТОРГОВОГО_БОТА_OKX.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_УСПЕШНОГО_ЗАКРЫТИЯ_DOGE_ОТ_ГРОКА.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ФИЛЬТРОВ_И_ЗАХАРДКОЖЕННЫХ_ПАРАМЕТРОВ.md`
+- `docs/analysis/reports/2025-12/АНАЛИЗ_ЦЕПОЧЕК_FALLBACK_25_12_2025.md`
+- `docs/analysis/reports/2025-12/ГЛУБОКИЙ_АНАЛИЗ_ПЕРВОПРИЧИН.md`
+- `docs/analysis/reports/2025-12/ГОТОВНОСТЬ_БОТА_К_РАБОТЕ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ДЕТАЛЬНЫЙ_АНАЛИЗ_РЕКОМЕНДАЦИЙ_27_12_2025.md`
+- `docs/analysis/reports/2025-12/ДИАГНОСТИКА_ПРОБЛЕМЫ_API.md`
+- `docs/analysis/reports/2025-12/ДОПОЛНИТЕЛЬНЫЕ_НАХОДКИ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ЕДИНЫЙ_ПОЛНЫЙ_АНАЛИЗ_И_ПЛАН_ИСПРАВЛЕНИЙ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ИДЕЯ_КООРДИНАТОРА_БАТНИКОВ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ИНСТРУКЦИЯ_ПО_АНАЛИЗУ_ЦЕН.md`
+- `docs/analysis/reports/2025-12/ИСПРАВЛЕНИЕ_ПОРЯДКА_СВЕЧЕЙ.md`
+- `docs/analysis/reports/2025-12/ИСПРАВЛЕНИЕ_СКРИПТА_АНАЛИЗА_ЦЕН.md`
+- `docs/analysis/reports/2025-12/ИСПРАВЛЕНИЕ_ФИЛЬТРАЦИИ_СВЕЧЕЙ.md`
+- `docs/analysis/reports/2025-12/ИТОГ_ИСПРАВЛЕНИЙ_НАПРАВЛЕНИЯ_СИГНАЛОВ.md`
+- `docs/analysis/reports/2025-12/КРИТИЧЕСКИЙ_АНАЛИЗ_ЛОГОВ_26_12_2025.md`
+- `docs/analysis/reports/2025-12/КРИТИЧЕСКОЕ_ИСПРАВЛЕНИЕ_API.md`
+- `docs/analysis/reports/2025-12/НАПОМИНАНИЕ_ЦЕЛЬ_АНАЛИЗА.md`
+- `docs/analysis/reports/2025-12/ОБЪЯСНЕНИЕ_ПРОПУСКА_ТИКЕРОВ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ОТЧЕТ_RSI_ATR_ЛОГИРОВАНИЕ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ОТЧЕТ_ВЫПОЛНЕННЫХ_ИСПРАВЛЕНИЙ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ОЦЕНКА_АНАЛИЗА_И_ДОПОЛНЕНИЯ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ОШИБКА_DIVISION_BY_ZERO_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ПЛАН_АДАПТИВНОГО_ATR_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ПЛАН_ИСПРАВЛЕНИЙ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_БОТА_ПО_ГРОКУ_2025-12-21.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_БОТА_ТРЕЙДЕР_ПРОГРАММИСТ.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_И_ИСПРАВЛЕНИЯ.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_ЛОГОВ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_ПАРАМЕТРОВ_27_12_2025.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_ПОЗИЦИЙ_30_12_2025.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_ПОЗИЦИЙ_30_12_2025_ВЕЧЕР.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_ПРАВОК_GROK_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_ПРОБЛЕМЫ_SHORT_ПОЗИЦИЙ.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_ПРОЕКТА_26_12_2025.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_СИСТЕМЫ_SCORE.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_АНАЛИЗ_ТОРГОВЛИ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_КОД_ПРОЕКТА_26_12_2025.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_ПЛАН_ИСПРАВЛЕНИЙ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ПОЛНЫЙ_ПЛАН_ИСПРАВЛЕНИЙ_ПО_АНАЛИЗУ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ПРИМЕНЕНИЕ_ПАТЧЕЙ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ПРИМЕНЕНИЕ_ПАТЧЕЙ_АДАПТИВНОСТИ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ПРОБЛЕМА_SHORT_ПРОСТОЕ_ОБЪЯСНЕНИЕ.md`
+- `docs/analysis/reports/2025-12/ПРОБЛЕМА_ОПРЕДЕЛЕНИЯ_НАПРАВЛЕНИЯ_СИГНАЛА.md`
+- `docs/analysis/reports/2025-12/ПРОБЛЕМА_ПРЕЖДЕВРЕМЕННОГО_ЗАКРЫТИЯ_SOL_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ПРОБЛЕМА_СКРИПТА_АНАЛИЗА_ЦЕН.md`
+- `docs/analysis/reports/2025-12/ПРОВЕРКА_ЛОГИРОВАНИЯ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ПРОВЕРКА_ЛОГОВ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ПРОВЕРКА_РЕКОМЕНДАЦИЙ_GROK.md`
+- `docs/analysis/reports/2025-12/ПУТИ_К_ФАЙЛАМ_ДЛЯ_ПАТЧЕЙ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/РЕШЕНИЕ_ПРОБЛЕМЫ_API.md`
+- `docs/analysis/reports/2025-12/СВЯЗЬ_ДОКУМЕНТАЦИИ_И_КОДА_PnL_28_12_2025.md`
+- `docs/analysis/reports/2025-12/СТАТУС_ИСПРАВЛЕНИЙ_API.md`
+- `docs/analysis/reports/2025-12/ТОЧНЫЕ_ПУТИ_К_ФАЙЛАМ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/УГЛУБЛЕННЫЙ_АНАЛИЗ_ВСЕХ_ВОПРОСОВ_26_12_2025.md`
+- `docs/analysis/reports/2025-12/ФИНАЛЬНОЕ_ИСПРАВЛЕНИЕ_API.md`
+- `docs/analysis/reports/2025-12/ФИНАЛЬНЫЕ_ИСПРАВЛЕНИЯ_SMART_CLOSE_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ФИНАЛЬНЫЙ_АНАЛИЗ_И_ИСПРАВЛЕНИЯ.md`
+- `docs/analysis/reports/2025-12/ФИНАЛЬНЫЙ_ПЛАН_ИСПРАВЛЕНИЙ_28_12_2025.md`
+- `docs/analysis/reports/2025-12/ФИНАЛЬНЫЙ_ПЛАН_ИСПРАВЛЕНИЙ_29_12_2025.md`
+- `docs/analysis/reports/2025-12/ЧТО_МЫ_ДЕЛАЕМ.md`
+
+### `docs/analysis/reports/2026-01` (47)
+- `docs/analysis/reports/2026-01/АНАЛИЗ_КОНСИСТЕНТНОСТИ_ИНДИКАТОРОВ.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ЛОГИРОВАНИЯ_БЛОКИРОВОК_И_ФИЛЬТРОВ.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ЛОГИРОВАНИЯ_РАСЧЕТА_РАЗМЕРА_ПОЗИЦИИ.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ЛОГОВ_2026-01-05_05-01-06.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ЛОГОВ_ПЕРЕЗАПУСКА.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ОТСУТСТВИЯ_ЛОГИРОВАНИЯ_ПРИ_ОТКРЫТИИ.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ПАРАМЕТРОВ_РАБОТЫ_БОТА_2026-01-03_16-54-12.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ПОЗИЦИЙ_2026-01-03_13-12-04.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ПРИНЯТИЯ_РЕШЕНИЙ_ТРЕЙДЕРА_2026-01-03_16-54-12.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ПРОБЛЕМ_2026-01-04_14-37-47.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ПРОБЛЕМ_И_РЕШЕНИЙ.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ПРОБЛЕМЫ_ЛОЖНОГО_ОБНАРУЖЕНИЯ_ЗАКРЫТИЯ.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_ПРОБЛЕМЫ_УБЫТОЧНЫХ_ПОЗИЦИЙ_2026-01-06.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_С_ТОЧКИ_ЗРЕНИЯ_ТРЕЙДЕРА.md`
+- `docs/analysis/reports/2026-01/АНАЛИЗ_СОЛАНЫ_ОТКРЫТИЕ_ПОЗИЦИИ.md`
+- `docs/analysis/reports/2026-01/ДЕТАЛЬНЫЙ_АНАЛИЗ_ЛОГИКИ_И_ПРОБЛЕМ.md`
+- `docs/analysis/reports/2026-01/ИСПРАВЛЕНИЕ_ЛОГИРОВАНИЯ_ПАРАМЕТРОВ.md`
+- `docs/analysis/reports/2026-01/ИСПРАВЛЕНИЯ_LOSS_CUT_2026-01-06.md`
+- `docs/analysis/reports/2026-01/ИСПРАВЛЕНИЯ_MACD_КОНСИСТЕНТНОСТЬ_2026-01-06.md`
+- `docs/analysis/reports/2026-01/ИСПРАВЛЕНИЯ_TSL_И_POST_ONLY.md`
+- `docs/analysis/reports/2026-01/ИТОГ_ВЫПОЛНЕННЫХ_ИЗМЕНЕНИЙ_03-01-2026.md`
+- `docs/analysis/reports/2026-01/ИТОГОВАЯ_ПРОВЕРКА_ИНДИКАТОРОВ_2026-01-06.md`
+- `docs/analysis/reports/2026-01/ИТОГОВЫЙ_ОТВЕТ_НА_ЗАПРОС.md`
+- `docs/analysis/reports/2026-01/КОМПЛЕКСНЫЙ_АНАЛИЗ_СЕССИИ_2026-01-04_16-37-49.md`
+- `docs/analysis/reports/2026-01/КОМПЛЕКСНЫЙ_АНАЛИЗ_ТОРГОВОЙ_СЕССИИ_2026-01-02.md`
+- `docs/analysis/reports/2026-01/КОМПЛЕКСНЫЙ_АНАЛИЗ_ТОРГОВОЙ_СЕССИИ_2026-01-03.md`
+- `docs/analysis/reports/2026-01/КРИТИЧЕСКИЙ_АНАЛИЗ_ПРОБЛЕМ_2026-01-04.md`
+- `docs/analysis/reports/2026-01/КРИТИЧЕСКИЙ_АНАЛИЗ_ПРОБЛЕМ_2026-01-04_22-41-29.md`
+- `docs/analysis/reports/2026-01/ОБЪЯСНЕНИЕ_КОНВЕРСИИ_СИГНАЛОВ.md`
+- `docs/analysis/reports/2026-01/ОТВЕТЫ_НА_ВОПРОСЫ_COPILOT_2026-01-06.md`
+- `docs/analysis/reports/2026-01/ПОЛНАЯ_ПРОВЕРКА_ИНДИКАТОРОВ_2026-01-06.md`
+- `docs/analysis/reports/2026-01/ПОЛНЫЙ_АНАЛИЗ_ЛОГОВ_2026-01-05_РАЗВЕРНУТЫЙ_ОТЧЕТ.md`
+- `docs/analysis/reports/2026-01/ПОЛНЫЙ_АНАЛИЗ_ЛОГОВ_2026-01-05_ФАКТИЧЕСКИЙ_ОТЧЕТ.md`
+- `docs/analysis/reports/2026-01/ПОЛНЫЙ_АНАЛИЗ_РАБОТЫ_БОТА_2026-01-04.md`
+- `docs/analysis/reports/2026-01/ПОЛНЫЙ_СПИСОК_ИСПРАВЛЕНИЙ_2026-01-04.md`
+- `docs/analysis/reports/2026-01/ПРИМЕНЕННЫЕ_ИСПРАВЛЕНИЯ_2026-01-06.md`
+- `docs/analysis/reports/2026-01/ПРИМЕНЕНЫ_ИСПРАВЛЕНИЯ_COPILOT_2026-01-06.md`
+- `docs/analysis/reports/2026-01/ПРОБЛЕМЫ_TSL_И_POST_ONLY.md`
+- `docs/analysis/reports/2026-01/ПРОВЕРКА_АДАПТИВНОСТИ_ПЕРЕД_ЗАПУСКОМ.md`
+- `docs/analysis/reports/2026-01/ПРОВЕРКА_ОБМЕНА_ДАННЫМИ_С_БИРЖЕЙ.md`
+- `docs/analysis/reports/2026-01/ПРОВЕРКА_ПЕРЕЗАПУСКА.md`
+- `docs/analysis/reports/2026-01/ПРОВЕРКА_СИСТЕМЫ_ПАРАМЕТРОВ_И_ЛОГИРОВАНИЯ.md`
+- `docs/analysis/reports/2026-01/РЕШЕНИЕ_ПЕРЕКЛЮЧЕНИЯ_НА_MARKET_ОРДЕРА.md`
+- `docs/analysis/reports/2026-01/СПИСОК_ИСПРАВЛЕНИЙ_2026-01-03.md`
+- `docs/analysis/reports/2026-01/СТАТУС_ГОТОВНОСТИ_БОТА_2026-01-06.md`
+- `docs/analysis/reports/2026-01/ФИНАЛЬНАЯ_ПРОВЕРКА_ПЕРЕД_ЗАПУСКОМ.md`
+- `docs/analysis/reports/2026-01/ЧТО_ИЗМЕНИЛ_COPILOT_2026-01-06.md`
+
+### `docs/architecture` (9)
+- `docs/architecture/bot-logic.md`
+- `docs/architecture/project-structure.md`
+- `docs/architecture/PROJECT_MAP.md`
+- `docs/architecture/project_structure.txt`
+- `docs/architecture/TECHNICAL_SPECIFICATION.md`
+- `docs/architecture/АРХИТЕКТУРА_АДАПТИВНОЙ_СИСТЕМЫ_ФИЛЬТРОВ.md`
+- `docs/architecture/АРХИТЕКТУРА_АДАПТИВНОЙ_СИСТЕМЫ_ФИЛЬТРОВ_V2.md`
+- `docs/architecture/СХЕМА_АРХИТЕКТУРНЫХ_ИЗМЕНЕНИЙ_26_12_2025.md`
+- `docs/architecture/СХЕМА_СТРУКТУРЫ_ЛОГОВ.md`
+
+### `docs/architecture/decisions` (3)
+- `docs/architecture/decisions/intelligent-exit.md`
+- `docs/architecture/decisions/profit-reversal.md`
+- `docs/architecture/decisions/unified-center.md`
+
+### `docs/architecture/faq` (2)
+- `docs/architecture/faq/database-ml-discussion.md`
+- `docs/architecture/faq/implementation.md`
+
+### `docs/architecture/modules` (1)
+- `docs/architecture/modules/exit-manager.md`
+
+### `docs/archive` (2)
+- `docs/archive/README_НОВАЯ_АРХИТЕКТУРА.md`
+- `docs/archive/АРХИВ_ПЛАНОВ_И_ИДЕЙ.md`
+
+### `docs/archive/deduplicated` (4)
+- `docs/archive/deduplicated/manifest_2026-02-21_07-11-14.json`
+- `docs/archive/deduplicated/manifest_2026-02-21_07-11-14.md`
+- `docs/archive/deduplicated/manifest_2026-02-21_07-15-27_aggressive.json`
+- `docs/archive/deduplicated/manifest_2026-02-21_07-15-27_aggressive.md`
+
+### `docs/archive/deduplicated/near/archive/root/analysis` (6)
+- `docs/archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_ЗАКРЫТИЙ_ПОЗИЦИЙ.md`
+- `docs/archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИЗМЕНЕНИЙ.md`
+- `docs/archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_ОРКЕСТРАТОРА.md`
+- `docs/archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_ПРЕДУПРЕЖДЕНИЙ.md`
+- `docs/archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_СТРУКТУРЫ_И_АРХИТЕКТУРЫ.md`
+- `docs/archive/deduplicated/near/archive/root/analysis/ПОЛНЫЙ_АНАЛИЗ_ВСЕХ_ПРЕДУПРЕЖДЕНИЙ.md`
+
+### `docs/archive/deduplicated/near/archive/root/fixes` (2)
+- `docs/archive/deduplicated/near/archive/root/fixes/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЙ.md`
+- `docs/archive/deduplicated/near/archive/root/fixes/ПРОВЕРКА_ВСЕХ_ИСПРАВЛЕНИЙ.md`
+
+### `docs/archive/deduplicated/near/archive/root/misc` (1)
+- `docs/archive/deduplicated/near/archive/root/misc/ПРОВЕРКА_ПОЗИЦИИ_ПОСЛЕ_ОТКРЫТИЯ.md`
+
+### `docs/archive/deduplicated/near/archive/root/plans` (1)
+- `docs/archive/deduplicated/near/archive/root/plans/ПЛАН_РЕФАКТОРИНГА_ОРКЕСТРАТОРА.md`
+
+### `docs/archive/deduplicated/near/archive/root/reports` (1)
+- `docs/archive/deduplicated/near/archive/root/reports/ИТОГОВАЯ_ПРОВЕРКА_ПОЗИЦИИ.md`
+
+### `docs/archive/deduplicated/near/current` (1)
+- `docs/archive/deduplicated/near/current/✅_ФИНАЛЬНОЕ_РЕШЕНИЕ_МАРЖИ.md`
+
+### `docs/archive/old_files` (5)
+- `docs/archive/old_files/fix_oco_sign.patch`
+- `docs/archive/old_files/indicators.py`
+- `docs/archive/old_files/main.py`
+- `docs/archive/old_files/run_bot.py`
+- `docs/archive/old_files/scalping_old.py`
+
+### `docs/archive/reference` (6)
+- `docs/archive/reference/enhanced-scalping-strategy.py`
+- `docs/archive/reference/enhanced-trading-system.md`
+- `docs/archive/reference/implementation-roadmap.md`
+- `docs/archive/reference/installation-guide.md`
+- `docs/archive/reference/security-system.md`
+- `docs/archive/reference/strategy-documentation.md`
+
+### `docs/archive/root` (5)
+- `docs/archive/root/README.md`
+- `docs/archive/root/REORGANIZATION_VISUAL_GUIDE.md`
+- `docs/archive/root/ROOT_AUDIT_AND_REORGANIZATION_PLAN.md`
+- `docs/archive/root/ИНСТРУКЦИЯ_РЕОРГАНИЗАЦИЯ.md`
+- `docs/archive/root/КАК_ИСПОЛЬЗОВАТЬ_РЕОРГАНИЗАЦИЮ.md`
+
+### `docs/archive/root/analysis` (49)
+- `docs/archive/root/analysis/ANALYSIS_2026-02-03_SESSION_DEEP_DIVE.md`
+- `docs/archive/root/analysis/ANALYSIS_CLOSING_PRICE.md`
+- `docs/archive/root/analysis/ANALYSIS_DATA_FOR_KIMI.md`
+- `docs/archive/root/analysis/ANALYSIS_EXITANALYZER_PARAMETERS.md`
+- `docs/archive/root/analysis/ANALYSIS_LIMIT_ORDER_PRICE_PROBLEM.md`
+- `docs/archive/root/analysis/ANALYSIS_NEGATIVE_CLOSES_END_SESSION.md`
+- `docs/archive/root/analysis/ANALYSIS_REPORT_2025-12-08.md`
+- `docs/archive/root/analysis/ANALYSIS_SIGNATURES_INTERPRETATIONS.md`
+- `docs/archive/root/analysis/ANALYSIS_SMALL_PROFIT_EARLY_EXIT.md`
+- `docs/archive/root/analysis/ANALYSIS_STAGE2_FOR_KIMI.md`
+- `docs/archive/root/analysis/ANALYSIS_STRATEGY_PLACEMENT_CLOSING.md`
+- `docs/archive/root/analysis/ANALYSIS_TIMEOUT_VS_EXITANALYZER.md`
+- `docs/archive/root/analysis/BOT_ARCHITECTURE_FULL_ANALYSIS.md`
+- `docs/archive/root/analysis/COMPREHENSIVE_ANALYSIS_BROKER_MATH.md`
+- `docs/archive/root/analysis/COMPREHENSIVE_ARCHIVE_ANALYSIS.md`
+- `docs/archive/root/analysis/COMPREHENSIVE_BOT_ANALYSIS.md`
+- `docs/archive/root/analysis/CURSOR_AUDIT_BUNDLE_TASK.md`
+- `docs/archive/root/analysis/FINAL_COMPREHENSIVE_ANALYSIS.md`
+- `docs/archive/root/analysis/GET_CURRENT_PRICE_CALLBACK_ANALYSIS.md`
+- `docs/archive/root/analysis/MANIFEST_PRICE_ZERO_ANALYSIS.md`
+- `docs/archive/root/analysis/PARAMETER_HIERARCHY_AUDIT.md`
+- `docs/archive/root/analysis/PEAK_PROFIT_USD_ANALYSIS.md`
+- `docs/archive/root/analysis/PHASE_3_ANALYSIS.md`
+- `docs/archive/root/analysis/PROBLEM_CYCLE_TIME_26SEC.md`
+- `docs/archive/root/analysis/README_PRICE_ZERO_ANALYSIS.md`
+- `docs/archive/root/analysis/SCALPING_STRATEGIES_ANALYSIS.md`
+- `docs/archive/root/analysis/TRADING_EXPERT_ANALYSIS.md`
+- `docs/archive/root/analysis/TRENDS_METRICS_ECONOMY_2025-12-08.md`
+- `docs/archive/root/analysis/АНАЛИЗ_FUTURES_СТРУКТУРЫ.md`
+- `docs/archive/root/analysis/АНАЛИЗ_SIGNAL_GENERATOR_ПРОБЛЕМЫ.md`
+- `docs/archive/root/analysis/АНАЛИЗ_TIMEOUT_30-60_МИНУТ.md`
+- `docs/archive/root/analysis/АНАЛИЗ_ЛОГОВ_FUTURES_СЕЙЧАС.md`
+- `docs/archive/root/analysis/АНАЛИЗ_ПРОБЛЕМ_2_И_3_BUY_COMMISSION.md`
+- `docs/archive/root/analysis/АНАЛИЗ_СДЕЛКИ_BTC_00-01.md`
+- `docs/archive/root/analysis/АНАЛИЗ_СУЩЕСТВУЮЩИХ_ЛОГОВ.md`
+- `docs/archive/root/analysis/АНАЛИЗ_ТОРГОВОЙ_КАТАСТРОФЫ_2026-01-06.md`
+- `docs/archive/root/analysis/АНАЛИЗ_ТОРГОВОЙ_СЕССИИ_2026-01-06-07.md`
+- `docs/archive/root/analysis/АУДИТ_ПРОБЛЕМЫ_ЗАКРЫТИЯ_3-5МИН.md`
+- `docs/archive/root/analysis/ДИАГНОСТИКА_СИСТЕМЫ_ДАННЫХ.md`
+- `docs/archive/root/analysis/ИСТИННАЯ_ПРИЧИНА_API_ПРОБЛЕМ.md`
+- `docs/archive/root/analysis/КОМПЛЕКСНЫЙ_АНАЛИЗ_СЕССИИ_2026-01-06.md`
+- `docs/archive/root/analysis/ОКОНЧАТЕЛЬНЫЙ_АНАЛИЗ_НАПРАВЛЕНИЙ.md`
+- `docs/archive/root/analysis/ПОЛНЫЙ_POST-MORTEM_09-01-2026.md`
+- `docs/archive/root/analysis/ПОЛНЫЙ_АНАЛИЗ_ЛОГОВ_07JAN2026.md`
+- `docs/archive/root/analysis/ПРОБЛЕМА_MARGIN_RATIO_ОБЪЯСНЕНИЕ.md`
+- `docs/archive/root/analysis/ПРОБЛЕМА_TP_И_TSL_BTC.md`
+- `docs/archive/root/analysis/⚠️_ПРОБЛЕМА_НАПРАВЛЕНИЙ.md`
+- `docs/archive/root/analysis/✅_АНАЛИЗ_SHORT_LONG_ПРОБЛЕМЫ.md`
+- `docs/archive/root/analysis/✅_АНАЛИЗ_SOL_ПОЗИЦИИ.md`
+
+### `docs/archive/root/audits` (6)
+- `docs/archive/root/audits/AUDIT_SUMMARY_2025-12-08.md`
+- `docs/archive/root/audits/DETAILED_MARKPX_ANALYSIS_2025-12-08.md`
+- `docs/archive/root/audits/FULL_AUDIT_REPORT_2025-12-08.md`
+- `docs/archive/root/audits/PROJECT_ROOT_AUDIT_REPORT.md`
+- `docs/archive/root/audits/UNINITIALIZED_MODULES_REPORT.md`
+- `docs/archive/root/audits/VERIFICATION_REPORT.md`
+
+### `docs/archive/root/fixes` (58)
+- `docs/archive/root/fixes/ALL_FIXES_COMPLETED_REPORT.md`
+- `docs/archive/root/fixes/CHECKLIST_09-01-2026_БЫСТРАЯ_ПРОВЕРКА.md`
+- `docs/archive/root/fixes/COMMIT_CHECKLIST.md`
+- `docs/archive/root/fixes/CORRECTION_SELL_LOGIC.md`
+- `docs/archive/root/fixes/CRITICAL_FIXES_REQUIRED.md`
+- `docs/archive/root/fixes/FIX_ATR_ZERO_ISSUE_06JAN2026.md`
+- `docs/archive/root/fixes/FIX_CHECKLIST_PRICE_ZERO.md`
+- `docs/archive/root/fixes/FIXES_2025-12-18.md`
+- `docs/archive/root/fixes/FIXES_2026-01-23_FINAL_CORRECT_SOLUTIONS.md`
+- `docs/archive/root/fixes/FIXES_2026-01-23_RACE_CONDITION_AND_TP_ISSUE.md`
+- `docs/archive/root/fixes/FIXES_2026-01-23_SL_TSL_INVESTIGATION.md`
+- `docs/archive/root/fixes/FIXES_2026-01-24_CATASTROPHIC_LOSS_FINAL_ROOT_CAUSE.md`
+- `docs/archive/root/fixes/FIXES_2026-01-24_CRITICAL_XRP_CATASTROPHIC_LOSS.md`
+- `docs/archive/root/fixes/FIXES_2026-01-25_APPLIED_CRITICAL_FIXES.md`
+- `docs/archive/root/fixes/FIXES_2026-01-25_FALLBACK_ANALYSIS_COMPLETE.md`
+- `docs/archive/root/fixes/FIXES_2026-01-25_FINAL_SUMMARY.md`
+- `docs/archive/root/fixes/FIXES_2026-01-25_MARGIN_CALCULATION_ISSUE.md`
+- `docs/archive/root/fixes/FIXES_2026-01-25_TP_SL_IMBALANCE_CRITICAL.md`
+- `docs/archive/root/fixes/FIXES_SMALL_PROFIT_EARLY_EXIT.md`
+- `docs/archive/root/fixes/FIXES_STRATEGY_OPTIMIZATION.md`
+- `docs/archive/root/fixes/FUTURES_РЕФАКТОРИНГ_ЗАВЕРШЕН.md`
+- `docs/archive/root/fixes/FUTURES_ЭТАП_2_ЗАВЕРШЕН.md`
+- `docs/archive/root/fixes/PHASE_1_FIXES_COMPLETE.md`
+- `docs/archive/root/fixes/PHASE_2_FIXES_COMPLETE.md`
+- `docs/archive/root/fixes/QUICKFIX_ATR_ISSUE.md`
+- `docs/archive/root/fixes/SOLUTION_SIGNAL_PRICE_FROM_ORDERBOOK.md`
+- `docs/archive/root/fixes/STATUS_ANALYZER.md`
+- `docs/archive/root/fixes/SUMMARY_CLOSING_FIXES_APPLIED.md`
+- `docs/archive/root/fixes/SUMMARY_EXITANALYZER_FIXES.md`
+- `docs/archive/root/fixes/SUMMARY_FIXES_APPLIED.md`
+- `docs/archive/root/fixes/SUMMARY_FIXES_INDENTATION.md`
+- `docs/archive/root/fixes/SUMMARY_NEGATIVE_CLOSES_FIX.md`
+- `docs/archive/root/fixes/SUMMARY_SIGNAL_PRICE_FIX.md`
+- `docs/archive/root/fixes/SUMMARY_SYNTAX_FIXES.md`
+- `docs/archive/root/fixes/SUMMARY_TRAILING_STOP_LOSS_FIX.md`
+- `docs/archive/root/fixes/АРХИТЕКТУРА_ДАННЫХ_ИСПРАВЛЕНИЯ_09-01-2026.md`
+- `docs/archive/root/fixes/ГОТОВО_CPU_100_ИСПРАВЛЕНИЕ.md`
+- `docs/archive/root/fixes/ИСПРАВЛЕНИЕ_ADX_ЛОГИРОВАНИЕ_8_ЯНВАРЯ.md`
+- `docs/archive/root/fixes/ИСПРАВЛЕНИЕ_CPU_100_ДРОССЕЛИРОВАНИЕ_ТИКЕРОВ.md`
+- `docs/archive/root/fixes/ИСПРАВЛЕНИЕ_SSL_И_TCC_8_ЯНВАРЯ.md`
+- `docs/archive/root/fixes/ИСПРАВЛЕНИЕ_ЛОГИРОВАНИЕ_ПРИЧИН_8_ЯНВАРЯ.md`
+- `docs/archive/root/fixes/ИСПРАВЛЕНИЯ_ВЫПОЛНЕНЫ_07JAN.md`
+- `docs/archive/root/fixes/ИСПРАВЛЕНИЯ_ЗАВЕРШЕНЫ_07JAN2026.md`
+- `docs/archive/root/fixes/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЯ_8_ЯНВАРЯ.md`
+- `docs/archive/root/fixes/КОДЫ_ИСПРАВЛЕНИЯ.md`
+- `docs/archive/root/fixes/КРИТИЧЕСКИЙ_FIX_10_JAN_TSL_PRICE_ZERO.md`
+- `docs/archive/root/fixes/ОТЧЕТ_О_ЗАВЕРШЕНИИ.md`
+- `docs/archive/root/fixes/ПОЛНЫЕ_ИСПРАВЛЕНИЯ_10_JAN_ФИНАЛ.md`
+- `docs/archive/root/fixes/ПОЛНЫЙ_ОТЧЕТ_О_ИСПРАВЛЕНИЯХ_6ЯНВ2026.md`
+- `docs/archive/root/fixes/ПОЛНЫЙ_ЧЕКЛИСТ_ЛОГИРОВАНИЯ.md`
+- `docs/archive/root/fixes/РЕЗЮМЕ_ИСПРАВЛЕНИЙ.md`
+- `docs/archive/root/fixes/СТАТУС_ИСПРАВЛЕНИЙ_07JAN.md`
+- `docs/archive/root/fixes/ФИНАЛЬНЫЙ_ЧЕКЛИСТ.md`
+- `docs/archive/root/fixes/ЧЕКЛИСТ_АРХИТЕКТУРЫ_ДАННЫХ.md`
+- `docs/archive/root/fixes/✅_ВЫПОЛНЕНО_09-01-2026_АНАЛИЗ_И_ИСПРАВЛЕНИЯ.md`
+- `docs/archive/root/fixes/✅_ВЫПОЛНЕНО_09-01-2026_ВСЕ_ИСПРАВЛЕНИЯ.md`
+- `docs/archive/root/fixes/✅_КОММИТ_ВЫПОЛНЕН.md`
+- `docs/archive/root/fixes/📊_CHECKLIST_ЗАПУСКА_09JAN.md`
+
+### `docs/archive/root/misc` (55)
+- `docs/archive/root/misc/ARCHITECTURE_CPU_VS_GPU.md`
+- `docs/archive/root/misc/archive_analysis_output.txt`
+- `docs/archive/root/misc/backtest_data_2025-12-17.json`
+- `docs/archive/root/misc/backtest_vs_reality_comparison.json`
+- `docs/archive/root/misc/BUG_EXECUTED_FLAG.md`
+- `docs/archive/root/misc/CPU_100_DIAGNOSIS.md`
+- `docs/archive/root/misc/DIAGNOSIS_PRICE_ZERO_ROOT_CAUSE.md`
+- `docs/archive/root/misc/FINAL_CORRECTIONS_2025-12-08.json`
+- `docs/archive/root/misc/FUTURES_ПОЛНЫЙ_АУДИТ.md`
+- `docs/archive/root/misc/improved_backtest_results.json`
+- `docs/archive/root/misc/INDEX_PRICE_ZERO_DOCS.md`
+- `docs/archive/root/misc/KRITICHESKOE_OTKRYITIE_SIGNALS.md`
+- `docs/archive/root/misc/LOG_ANALYZER_GUIDE.md`
+- `docs/archive/root/misc/PHASE_2_PLAN.md`
+- `docs/archive/root/misc/README_ANALYZER.md`
+- `docs/archive/root/misc/README_CLEANUP.md`
+- `docs/archive/root/misc/README_ЛОГИРОВАНИЕ.md`
+- `docs/archive/root/misc/SIGNAL_EXECUTION_BLOCKING_ANALYSIS.md`
+- `docs/archive/root/misc/signals_sample_50.csv`
+- `docs/archive/root/misc/tatus`
+- `docs/archive/root/misc/tatus --short`
+- `docs/archive/root/misc/АУДИТ_ПАРАМЕТРОВ_СИСТЕМА.md`
+- `docs/archive/root/misc/ГЛАВНОЕ.md`
+- `docs/archive/root/misc/ГЛУБОКИЙ_ТЕХНИЧЕСКИЙ_АУДИТ.md`
+- `docs/archive/root/misc/ДЕЙСТВИЯ_НЕМЕДЛЕННО.md`
+- `docs/archive/root/misc/ИНДЕКС_ДОКУМЕНТАЦИИ.md`
+- `docs/archive/root/misc/ИНДЕКС_ДОКУМЕНТОВ.md`
+- `docs/archive/root/misc/ИНСТРУКЦИЯ_ТЕСТИРОВАНИЯ_09-01-2026.md`
+- `docs/archive/root/misc/КРИТИЧЕСКАЯ_НАХОДКА_ADX_8_ЯНВАРЯ.md`
+- `docs/archive/root/misc/КРИТИЧЕСКАЯ_ОШИБКА_SHORT_ЛИМИТ_8_ЯНВАРЯ.md`
+- `docs/archive/root/misc/КРИТИЧЕСКОЕ_ОТКРЫТИЕ_TP_ПАРАМЕТРЫ.md`
+- `docs/archive/root/misc/НАЧНИТЕ_ОТСЮДА.md`
+- `docs/archive/root/misc/ОПТИМИЗАЦИЯ_ДЛЯ_КАЧЕСТВЕННЫХ_СДЕЛОК.md`
+- `docs/archive/root/misc/ПАРАМЕТРЫ_РЕКОМЕНДУЕМЫЕ_ИЗМЕНЕНИЯ.md`
+- `docs/archive/root/misc/ПОЛНАЯ_ИСТОРИЯ.md`
+- `docs/archive/root/misc/ПОЛНАЯ_СТРАТЕГИЯ_И_ЛОГИКА_ТОРГОВЛИ.md`
+- `docs/archive/root/misc/ПРАВИЛЬНЫЙ_ПОДХОД_К_ОТЛАДКЕ.md`
+- `docs/archive/root/misc/ПРИМЕРЫ_КОНКРЕТНЫХ_ОШИБОК.md`
+- `docs/archive/root/misc/ПРОВЕРКА_ВСЕХ_10_ФИКСОВ.md`
+- `docs/archive/root/misc/ПРОВЕРКА_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/archive/root/misc/РАСЧЕТ_УВЕЛИЧЕНИЯ_TP.md`
+- `docs/archive/root/misc/РЕАЛИСТИЧНЫЙ_ПРОГНОЗ_10_СДЕЛОК.md`
+- `docs/archive/root/misc/РЕАЛЬНЫЙ_РАСЧЕТ_КОЛИЧЕСТВА_СДЕЛОК.md`
+- `docs/archive/root/misc/РЕАЛЬНЫЙ_РАСЧЕТ_ПРИБЫЛИ_BTC.md`
+- `docs/archive/root/misc/РЕШЕНИЕ_78_ПРОЦЕНТОВ_УБЫТКОВ.md`
+- `docs/archive/root/misc/СПИСОК_ИЗМЕНЕНИЙ_09-01-2026.md`
+- `docs/archive/root/misc/СПРАВКА.md`
+- `docs/archive/root/misc/СЦЕНАРИЙ_TP_5_ПРОЦЕНТОВ.md`
+- `docs/archive/root/misc/ТАБЛИЦА_ВСЕХ_27_СДЕЛОК.md`
+- `docs/archive/root/misc/УЛУЧШЕНИЕ_ПОЗИЦИЙ_07JAN2026.md`
+- `docs/archive/root/misc/✅_ПАРАМЕТРЫ_ПРИМЕНЕНЫ.md`
+- `docs/archive/root/misc/✅_ПРОВЕРКА_ЗАПУСКА.md`
+- `docs/archive/root/misc/✅_ПРОЕКТ_ГОТОВ.md`
+- `docs/archive/root/misc/✅_ФИНАЛЬНАЯ_ПРОВЕРКА.md`
+- `docs/archive/root/misc/🔴_КРИТИЧНО_REST_API_ВЕЗДЕ.md`
+
+### `docs/archive/root/plans` (14)
+- `docs/archive/root/plans/ACTION_ITEMS_ЧТО_ДЕЛАТЬ.md`
+- `docs/archive/root/plans/FUTURES_РЕФАКТОРИНГ_ПЛАН.md`
+- `docs/archive/root/plans/MASTER_PLAN_FIXES.md`
+- `docs/archive/root/plans/MASTER_TODO_ALL_PROBLEMS.md`
+- `docs/archive/root/plans/QUESTIONS_AND_PLAN.md`
+- `docs/archive/root/plans/QUICK_START_CPU_100.md`
+- `docs/archive/root/plans/RECOMMENDATION_TIMEOUT_REMOVAL.md`
+- `docs/archive/root/plans/TODO_MASTER_PLAN.md`
+- `docs/archive/root/plans/АНАЛИЗ_ПОКРЫТИЯ_ПЛАНА.md`
+- `docs/archive/root/plans/БЫСТРЫЙ_СТАРТ.md`
+- `docs/archive/root/plans/КРИТИЧЕСКИЕ_ИСПРАВЛЕНИЯ_8_ЯНВАРЯ_ПЛАН.md`
+- `docs/archive/root/plans/ПЛАН_ИСПРАВЛЕНИЙ_ПАРАМЕТРЫ.md`
+- `docs/archive/root/plans/ПЛАН_ЭКСТРЕННОГО_ВОССТАНОВЛЕНИЯ.md`
+- `docs/archive/root/plans/ПРАКТИЧЕСКИЙ_ПЛАН_ОТЛАДКИ.md`
+
+### `docs/archive/root/reports` (47)
+- `docs/archive/root/reports/ALL_ERRORS_SUMMARY.md`
+- `docs/archive/root/reports/COMPLETION_REPORT_PRICE_ZERO.md`
+- `docs/archive/root/reports/COMPREHENSIVE_ANALYSIS_REPORT.md`
+- `docs/archive/root/reports/CURSOR_REPORT.md`
+- `docs/archive/root/reports/FINAL_AUDIT_DATA_FOR_KIMI.md`
+- `docs/archive/root/reports/FINAL_EXITANALYZER_ANALYSIS.md`
+- `docs/archive/root/reports/FINAL_INTEGRATION_REPORT.md`
+- `docs/archive/root/reports/FINAL_MASTER_PLAN.md`
+- `docs/archive/root/reports/FINAL_REPORT_11JAN.py`
+- `docs/archive/root/reports/FINAL_REPORT_PRICE_ZERO.md`
+- `docs/archive/root/reports/FINAL_SOLUTIONS_PLAN.md`
+- `docs/archive/root/reports/FINAL_SUMMARY_ALL_FIXES.md`
+- `docs/archive/root/reports/FUTURES_РЕФАКТОРИНГ_ОТЧЕТ.md`
+- `docs/archive/root/reports/LOG_CHECK_2025-12-18_23-00.md`
+- `docs/archive/root/reports/PARAMETERS_UPDATE_SUMMARY.md`
+- `docs/archive/root/reports/QUICK_SUMMARY_PRICE_ZERO.md`
+- `docs/archive/root/reports/REFACTORING_COMPLETE_REPORT.md`
+- `docs/archive/root/reports/REORGANIZATION_COMPLETED.md`
+- `docs/archive/root/reports/REST_API_DIAGNOSTICS_REPORT.md`
+- `docs/archive/root/reports/SUMMARY_CHANGES_07JAN.md`
+- `docs/archive/root/reports/SUMMARY_CLOSING_PRICE_ANALYSIS.md`
+- `docs/archive/root/reports/SUMMARY_EXITANALYZER_CHECK.md`
+- `docs/archive/root/reports/АУДИТ_ФИНАЛЬНЫЙ_ВЫВОД_И_РЕШЕНИЕ.md`
+- `docs/archive/root/reports/ИТОГИ_И_СПАСИБО.md`
+- `docs/archive/root/reports/ИТОГИ_СЕССИЯ_7JAN2026.md`
+- `docs/archive/root/reports/ИТОГОВЫЙ_АУДИТ_ПРОЕКТА.md`
+- `docs/archive/root/reports/ИТОГОВЫЙ_ОТЧЕТ_АРХИТЕКТУРА_ДАННЫХ.md`
+- `docs/archive/root/reports/КРАТКАЯ_СВОДКА_АУДИТА.md`
+- `docs/archive/root/reports/КРАТКАЯ_СВОДКА_ПРОБЛЕМ.md`
+- `docs/archive/root/reports/ОТЧЕТ_АУДИТ_MD_ФАЙЛОВ.md`
+- `docs/archive/root/reports/ОТЧЕТ_АУДИТ_КОДА.md`
+- `docs/archive/root/reports/ОТЧЕТ_ИТОГОВЫЙ_РЕФАКТОРИНГ.md`
+- `docs/archive/root/reports/ОТЧЕТ_ОЧИСТКА_ВЫПОЛНЕНА.md`
+- `docs/archive/root/reports/ОТЧЕТ_ЭТАП_1_РЕФАКТОРИНГ.md`
+- `docs/archive/root/reports/ОТЧЕТ_ЭТАП_2_РЕФАКТОРИНГ.md`
+- `docs/archive/root/reports/ОТЧЕТ_ЭТАП_4_РЕФАКТОРИНГ.md`
+- `docs/archive/root/reports/ПОЛНЫЙ_ОТЧЕТ_БЛОКИ_1-12_10_ЯНВАРЯ_2026.md`
+- `docs/archive/root/reports/ПРОБЛЕМА_И_РЕШЕНИЕ_SUMMARY.txt`
+- `docs/archive/root/reports/РЕЗЮМЕ_ТОРГОВОЙ_КАТАСТРОФЫ_2026-01-07.md`
+- `docs/archive/root/reports/СВОДКА_СЕССИИ_2026-01-06-07.md`
+- `docs/archive/root/reports/СЕССИЯ_06_ЯНВАРЯ_2026_ОТЧЕТ.md`
+- `docs/archive/root/reports/ФИНАЛЬНОЕ_РЕЗЮМЕ_АНАЛИЗ_СЕССИИ.md`
+- `docs/archive/root/reports/ФИНАЛЬНЫЙ_ОТЧЕТ_09-01-2026.md`
+- `docs/archive/root/reports/ФИНАЛЬНЫЙ_ОТЧЕТ_ПРОБЛЕМЫ_И_РЕШЕНИЯ.md`
+- `docs/archive/root/reports/ЧЕСТНЫЙ_ПОСТРЕВЬЮ_ОТЧЕТ_11_ЯНВАРЯ_2026.md`
+- `docs/archive/root/reports/✅_ИТОГОВАЯ_СВОДКА.md`
+- `docs/archive/root/reports/🎯_ФИНАЛЬНЫЙ_ОТЧЕТ_ПРОВЕРОК.md`
+
+### `docs/archive/statuses` (49)
+- `docs/archive/statuses/FUTURES_АРХИТЕКТУРА_НОВАЯ.md`
+- `docs/archive/statuses/FUTURES_СТАТУС.md`
+- `docs/archive/statuses/PHASE_1_COMPLETE.md`
+- `docs/archive/statuses/PHASE_1_FINAL_REPORT.md`
+- `docs/archive/statuses/PHASE_2_COMPLETE.md`
+- `docs/archive/statuses/STATUS.md`
+- `docs/archive/statuses/STATUS_FUTURES_BOT.md`
+- `docs/archive/statuses/TODO_FUTURES_BOT.md`
+- `docs/archive/statuses/АДАПТИВНЫЕ_СИСТЕМЫ_НЕ_ИСПОЛЬЗУЮТСЯ.md`
+- `docs/archive/statuses/АНАЛИЗ_АДАПТАЦИИ_FUTURES.md`
+- `docs/archive/statuses/АНАЛИЗ_АУДИТА_KIMMIE.md`
+- `docs/archive/statuses/АНАЛИЗ_БАЛАНСА_И_РИСКОВ.md`
+- `docs/archive/statuses/АНАЛИЗ_ЛОГИКИ_СДЕЛОК.md`
+- `docs/archive/statuses/АРХИТЕКТУРА_ПРОВЕРКА.md`
+- `docs/archive/statuses/АРХИТЕКТУРА_ПРОЕКТА_ПОЛНАЯ.md`
+- `docs/archive/statuses/ВСЕ_ГОТОВО_ФИНАЛ.md`
+- `docs/archive/statuses/ВСЕ_ИЗМЕНЕНИЯ_ГОТОВО.md`
+- `docs/archive/statuses/ГОТОВО_ИТОГ.md`
+- `docs/archive/statuses/ИНТЕГРАЦИЯ_АДАПТАЦИИ_ПРОГРЕСС.md`
+- `docs/archive/statuses/ИСПРАВЛЕНИЕ_КОЛИЧЕСТВА_СДЕЛОК.md`
+- `docs/archive/statuses/ИСПРАВЛЕНИЯ_26_10_2025.md`
+- `docs/archive/statuses/ИСПРАВЛЕНИЯ_2МИН_ТЕСТА.md`
+- `docs/archive/statuses/ИСПРАВЛЕНИЯ_БАЛАНС_И_TP_SL.md`
+- `docs/archive/statuses/ИТОГ_ВСЕ_ГОТОВО.md`
+- `docs/archive/statuses/ИТОГ_ТЕСТА_РЕАЛЬНЫХ_СДЕЛОК.md`
+- `docs/archive/statuses/ИТОГОВЫЙ_ОТЧЕТ_С_ПОЛНЫМИ_ТЕСТАМИ.md`
+- `docs/archive/statuses/ИТОГОВЫЙ_ОТЧЕТ_ТЕСТОВ.md`
+- `docs/archive/statuses/КАК_ВИДЕТЬ_РЕАЛЬНЫЕ_СДЕЛКИ.md`
+- `docs/archive/statuses/КОНФЛИКТ_РЕШЕН.md`
+- `docs/archive/statuses/НОВЫЕ_БЕЗОПАСНЫЕ_ПАРАМЕТРЫ.md`
+- `docs/archive/statuses/ОБЪЯСНЕНИЕ_ДОПОЛНИТЕЛЬНЫХ_ЗАЩИТ.md`
+- `docs/archive/statuses/ОТЧЕТ_ФИНАЛЬНЫЙ.md`
+- `docs/archive/statuses/ОТЧЕТ_ЭТАП_1.md`
+- `docs/archive/statuses/ПЛАВАЮЩИЕ_TP_SL_ДОБАВЛЕНЫ.md`
+- `docs/archive/statuses/ПЛАН_ДОРАБОТКИ_FUTURES.md`
+- `docs/archive/statuses/ПРОМПТ_ДЛЯ_KIMMIE_ПРОВЕРКА_МАТЕМАТИКИ.md`
+- `docs/archive/statuses/РАСШИРЕНИЕ_СТАТУС.md`
+- `docs/archive/statuses/РЕШЕНИЕ_КОНФЛИКТ_TP_SL.md`
+- `docs/archive/statuses/СРАВНЕНИЕ_SPOT_VS_FUTURES.md`
+- `docs/archive/statuses/СТРУКТУРА_ПРОЕКТА.md`
+- `docs/archive/statuses/УСПЕХ_107_ТЕСТОВ.md`
+- `docs/archive/statuses/УСПЕШНАЯ_ИНТЕГРАЦИЯ_АДАПТАЦИИ.md`
+- `docs/archive/statuses/ФИНАЛЬНЫЕ_ЗАЩИТЫ_ДОБАВЛЕНЫ.md`
+- `docs/archive/statuses/ФИНАЛЬНЫЕ_РЕЗУЛЬТАТЫ_ТЕСТОВ.md`
+- `docs/archive/statuses/ФИНАЛЬНЫЙ_АНАЛИЗ_РИСКОВ.md`
+- `docs/archive/statuses/ФИНАЛЬНЫЙ_ИТОГ.md`
+- `docs/archive/statuses/ФИНАЛЬНЫЙ_ОТЧЕТ_ТЕСТОВ.md`
+- `docs/archive/statuses/ФИНАЛЬНЫЙ_СТАТУС.md`
+- `docs/archive/statuses/ФИНАЛЬНЫЙ_УСПЕХ.md`
+
+### `docs/audit` (21)
+- `docs/audit/ADAPTIVITY_AUDIT_REPORT.md`
+- `docs/audit/ALL_AUDIT_RECOMMENDATIONS.md`
+- `docs/audit/AUDIT_CHECKLIST.md`
+- `docs/audit/AUDIT_REPORT.md`
+- `docs/audit/AUDIT_REPORT_LOGS.md`
+- `docs/audit/AUDIT_RESPONSE_ANALYSIS.md`
+- `docs/audit/AUDIT_ROADMAP.md`
+- `docs/audit/AUDIT_TIME_ESTIMATE.md`
+- `docs/audit/FINAL_AUDITS_SUMMARY.md`
+- `docs/audit/FULL_MATH_AUDIT_REPORT.md`
+- `docs/audit/INDICATORS_AUDIT_REPORT.md`
+- `docs/audit/LOGGING_COVERAGE_AUDIT_REPORT.md`
+- `docs/audit/LOGGING_COVERAGE_DETAILED_REPORT.md`
+- `docs/audit/MATH_AUDIT_DETAILED.md`
+- `docs/audit/ORDER_PLACEMENT_AUDIT_REPORT.md`
+- `docs/audit/PARTIAL_TP_AUDIT_REPORT.md`
+- `docs/audit/POSITION_MANAGEMENT_AUDIT_REPORT.md`
+- `docs/audit/POSITION_MANAGEMENT_AUDIT_SUMMARY.md`
+- `docs/audit/RISK_MANAGEMENT_AUDIT_REPORT.md`
+- `docs/audit/SIGNALS_AND_FILTERS_AUDIT_REPORT.md`
+- `docs/audit/SLIPPAGE_GUARD_AUDIT_REPORT.md`
+
+### `docs/audit/2025-12` (2)
+- `docs/audit/2025-12/АУДИТ_ДЛЯ_ГРОКА_4.1.md`
+- `docs/audit/2025-12/КРИТИЧЕСКИЕ_ИСПРАВЛЕНИЯ_ПО_ЛОГАМ.md`
+
+### `docs/current` (283)
+- `docs/current/AB_ТЕСТ_ПАРАМЕТРЫ.md`
+- `docs/current/АДАПТАЦИЯ_ПАРАМЕТРОВ_В_РЕАЛЬНОМ_ВРЕМЕНИ.md`
+- `docs/current/АНАЛИЗ_АРХИТЕКТУРЫ_ARM_И_ИНДИКАТОРОВ.md`
+- `docs/current/АНАЛИЗ_КОМИССИЙ_ПО_СКРИНШОТУ.md`
+- `docs/current/АНАЛИЗ_ЛОГОВ_01_11_2025.md`
+- `docs/current/АНАЛИЗ_МОДУЛЕЙ_FUTURES.md`
+- `docs/current/АНАЛИЗ_НУЛЕВЫХ_СИГНАЛОВ.md`
+- `docs/current/АНАЛИЗ_ПАРАМЕТРОВ_ЗАКРЫТИЯ_ПОЗИЦИЙ.md`
+- `docs/current/АНАЛИЗ_ПАРАМЕТРОВ_РИСКА.md`
+- `docs/current/АНАЛИЗ_ПРОБЛЕМ_И_СТРАТЕГИЙ.md`
+- `docs/current/АНАЛИЗ_ПРОБЛЕМЫ_НЕЗАКРЫТИЯ_ПО_TP.md`
+- `docs/current/АНАЛИЗ_ТЕКУЩИХ_ПОЗИЦИЙ.md`
+- `docs/current/АРХИТЕКТУРА_ГИБРИДНОГО_БОТА_WEBSOCKET.md`
+- `docs/current/БЕЗОПАСНОСТЬ_DASHBOARD.md`
+- `docs/current/ГИБРИДНЫЙ_ПЛАН_РЕФАКТОРИНГА.md`
+- `docs/current/ГЛУБОКИЙ_АНАЛИЗ_ИНДИКАТОРОВ_И_ПАРАМЕТРОВ.md`
+- `docs/current/ГОТОВНОСТЬ_К_ЗАПУСКУ.md`
+- `docs/current/ДЕТАЛЬНЫЙ_РАСЧЕТ_КОМИССИИ.md`
+- `docs/current/ИНСТРУКЦИЯ_НОВАЯ_АРХИТЕКТУРА.md`
+- `docs/current/ИСПРАВЛЕНИЕ_TP_PNL.md`
+- `docs/current/ИСПРАВЛЕНИЕ_WEBSOCKET_SANDBOX.md`
+- `docs/current/ИСПРАВЛЕНИЕ_ЗАГЛУШЕК_31_10_2025.md`
+- `docs/current/ИСПРАВЛЕНИЕ_ОДНОРАЗОВОГО_ОТКРЫТИЯ.md`
+- `docs/current/ИСПРАВЛЕНИЕ_ОШИБКИ_BOLLINGER_BANDS.md`
+- `docs/current/ИСПРАВЛЕНИЕ_ОШИБКИ_CONFIG_FUTURES.md`
+- `docs/current/ИСПРАВЛЕНИЕ_ОШИБКИ_ПРИ_ОСТАНОВКЕ.md`
+- `docs/current/ИСПРАВЛЕНИЯ_15_10_2025_ВЕЧЕР.md`
+- `docs/current/ИСПРАВЛЕНИЯ_РАЗМЕРА_ПОЗИЦИЙ_И_ОРДЕРОВ.md`
+- `docs/current/ИССЛЕДОВАНИЕ_БЕКТЕСТИНГА_И_АНАЛИЗА_ГРАФИКОВ.md`
+- `docs/current/ИСТОРИЯ_ИСПРАВЛЕНИЙ_ОКТЯБРЬ_2025.md`
+- `docs/current/ИТОГОВЫЙ_ОТЧЕТ_МОДЕРНИЗАЦИИ.md`
+- `docs/current/ИТОГОВЫЙ_СПИСОК_ИСПРАВЛЕНИЙ.md`
+- `docs/current/КОМПЛЕКСНОЕ_ИССЛЕДОВАНИЕ_СТРАТЕГИЙ.md`
+- `docs/current/МАСТЕР_ПЛАН_УЛУЧШЕНИЯ_ПРОЕКТА.md`
+- `docs/current/ОБСУЖДЕНИЕ_АРХИТЕКТУРЫ_И_ИНТЕГРАЦИИ.md`
+- `docs/current/ОБЪЯСНЕНИЕ_БЭКТЕСТИНГА_И_ДАННЫХ.md`
+- `docs/current/ОБЪЯСНЕНИЕ_КОМИССИЙ_И_ЛОГОВ.md`
+- `docs/current/ОТВЕТ_НА_ВОПРОСЫ_31_10_2025.md`
+- `docs/current/ОТЧЕТ_АНАЛИЗ_СДЕЛКИ_15_10_2025.md`
+- `docs/current/ОТЧЕТ_О_ЗАХАРДОЖЕННЫХ_ПАРАМЕТРАХ.md`
+- `docs/current/ОЧИСТКА_ПРОЕКТА_31_10_2025.md`
+- `docs/current/ОЧИСТКА_ПРОЕКТА_ЗАВЕРШЕНА.md`
+- `docs/current/ПЛАН_ИНТЕГРАЦИИ_ARM_С_ГЕНЕРАЦИЕЙ_СИГНАЛОВ.md`
+- `docs/current/ПОЛНОЕ_ОПИСАНИЕ_СТРАТЕГИИ_И_АРХИТЕКТУРЫ.md`
+- `docs/current/ПОЛНЫЙ_АНАЛИЗ_МОДУЛЕЙ_FUTURES.md`
+- `docs/current/ПОЛНЫЙ_АУДИТ_МАТЕМАТИКИ.md`
+- `docs/current/ПОЛНЫЙ_АУДИТ_СТРУКТУРЫ_ПРОЕКТА.md`
+- `docs/current/ПОЛНЫЙ_ЧЕКЛИСТ_ИСПРАВЛЕНИЙ_И_ПРОВЕРОК.md`
+- `docs/current/ПРИМЕНЕННЫЕ_УЛУЧШЕНИЯ_ПАРАМЕТРОВ.md`
+- `docs/current/ПРОБЛЕМА_НЕЗАКРЫТИЯ_TP_АНАЛИЗ.md`
+- `docs/current/ПРОВЕРКА_АДАПТИВНЫХ_СИСТЕМ.md`
+- `docs/current/ПРОВЕРКА_БАЛАНСА_400.md`
+- `docs/current/РЕКОМЕНДАЦИИ_ПО_УЛУЧШЕНИЮ_ПАРАМЕТРОВ.md`
+- `docs/current/РЕФАКТОРИНГ_ЗАВЕРШЕН.md`
+- `docs/current/СХЕМА_АРХИТЕКТУРЫ_С_ОПИСАНИЯМИ.md`
+- `docs/current/ТЕХНИЧЕСКАЯ_ДОКУМЕНТАЦИЯ_И_АНАЛИЗ.md`
+- `docs/current/ФИНАЛЬНАЯ_ПРОВЕРКА_ПЕРЕД_ЗАПУСКОМ.md`
+- `docs/current/ФИНАЛЬНАЯ_СВОДКА_ГИБРИДНОГО_ПЛАНА.md`
+- `docs/current/ЧЕКЛИСТ_ПРОВЕРКИ_TP.md`
+- `docs/current/ЭТАП_1_ЗАВЕРШЕН.md`
+- `docs/current/ЭТАП_2_ЗАВЕРШЕН.md`
+- `docs/current/⚠️_АНАЛИЗ_4_ПОЗИЦИЙ_В_МИНУСЕ.md`
+- `docs/current/⚠️_АНАЛИЗ_ВСЕХ_ПРОБЛЕМ_ИЗ_ЛОГОВ.md`
+- `docs/current/⚠️_АНАЛИЗ_ЗАКРЫТИЯ_DOGE-USDT_14-38.md`
+- `docs/current/⚠️_АНАЛИЗ_ПРОБЛЕМЫ_НЕТ_СИГНАЛОВ.md`
+- `docs/current/⚠️_КОНСЕРВАТИВНЫЕ_ПАРАМЕТРЫ_ФИЛЬТРОВ.md`
+- `docs/current/⚠️_КРИТИЧЕСКАЯ_ПРОБЛЕМА_TP_И_LOSS_CUT.md`
+- `docs/current/⚠️_КРИТИЧЕСКАЯ_ПРОБЛЕМА_БЫСТРЫХ_ЗАКРЫТИЙ.md`
+- `docs/current/⚠️_КРИТИЧЕСКАЯ_СТАТИСТИКА_WIN_RATE.md`
+- `docs/current/⚠️_КРИТИЧЕСКИЕ_ВОПРОСЫ_АДАПТИВНОГО_ЛЕВЕРИДЖА.md`
+- `docs/current/⚠️_КРИТИЧЕСКИЙ_ADL_ETH-USDT.md`
+- `docs/current/⚠️_КРИТИЧЕСКИЙ_АНАЛИЗ_ЗАКРЫТИЙ_3_ПОЗИЦИЙ.md`
+- `docs/current/⚠️_ОТСУТСТВИЕ_НАСТРОЕК_ДЛЯ_ПАР.md`
+- `docs/current/⚠️_ПРИЧИНА_ЗАКРЫТИЯ_DOGE-USDT.md`
+- `docs/current/⚠️_ПРОБЛЕМА_BIG_PROFIT_EXIT_ОБХОДИТ_MIN_HOLDING.md`
+- `docs/current/⚠️_ПРОБЛЕМА_FALLBACK_LIMIT_OFFSET.md`
+- `docs/current/⚠️_ПРОБЛЕМА_FALLBACK_ВСЕ_ЕЩЕ_ИСПОЛЬЗУЕТСЯ.md`
+- `docs/current/⚠️_ПРОБЛЕМА_FALLBACK_И_ЛИМИТНОЙ_ЦЕНЫ.md`
+- `docs/current/⚠️_ПРОБЛЕМА_PARTIAL_TP_И_НОВОЙ_ПОЗИЦИИ.md`
+- `docs/current/⚠️_ПРОБЛЕМА_TP_ПАРАМЕТРОВ.md`
+- `docs/current/⚠️_ПРОБЛЕМА_V_РАЗВОРОТА_ETH-USDT.md`
+- `docs/current/⚠️_ПРОБЛЕМА_АВТОМАТИЧЕСКОГО_ЗАКРЫТИЯ_DOGE-USDT.md`
+- `docs/current/⚠️_ПРОБЛЕМА_ЛИМИТНОЙ_ЦЕНЫ.md`
+- `docs/current/⚠️_ПРОБЛЕМА_МАРЖИ_30_USD.md`
+- `docs/current/⚠️_ПРОБЛЕМА_МАРЖИ_40_USD.md`
+- `docs/current/⚠️_ПРОВЕРКА_ЛОГИКИ_FALLBACK.md`
+- `docs/current/✅_ADL_МОНИТОРИНГ_РЕАЛИЗОВАН.md`
+- `docs/current/✅_DEBUG_ЛОГИ_РАБОТАЮТ_АНАЛИЗ.md`
+- `docs/current/✅_АДАПТИВНЫЕ_ПРОВЕРКИ_РАЗВОРОТА_И_СТАТИСТИКА.md`
+- `docs/current/✅_АДАПТИВНЫЙ_BIG_PROFIT_EXIT_ЗАВЕРШЕН.md`
+- `docs/current/✅_АНАЛИЗ_FALLBACK_LIMIT_OFFSET.md`
+- `docs/current/✅_АНАЛИЗ_FALLBACK_ЗНАЧЕНИЙ.md`
+- `docs/current/✅_АНАЛИЗ_SOL-USDT_КРАСАВЧИК.md`
+- `docs/current/✅_АНАЛИЗ_ЗАКРЫТИЯ_BTC-USDT_14-25.md`
+- `docs/current/✅_АНАЛИЗ_КОНСЕРВАТИВНЫХ_ПАРАМЕТРОВ.md`
+- `docs/current/✅_АНАЛИЗ_ЛОГОВ_XRP-USDT.md`
+- `docs/current/✅_АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ЗАПУСКА.md`
+- `docs/current/✅_АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/current/✅_АНАЛИЗ_ЛОГОВ_РАБОТЫ_БОТА.md`
+- `docs/current/✅_АНАЛИЗ_МАРЖИ_40_USD_И_ИСПРАВЛЕНИЕ.md`
+- `docs/current/✅_АНАЛИЗ_НАПРАВЛЕНИЯ_СИГНАЛОВ_И_PNL.md`
+- `docs/current/✅_АНАЛИЗ_ОТКРЫТИЯ_BTC-USDT.md`
+- `docs/current/✅_АНАЛИЗ_ОТКРЫТИЯ_BTC-USDT_LONG.md`
+- `docs/current/✅_АНАЛИЗ_ОТКРЫТЫХ_ПОЗИЦИЙ_И_ПРОЦЕНТОВ.md`
+- `docs/current/✅_АНАЛИЗ_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/current/✅_АНАЛИЗ_ПРОБЛЕМЫ_XRP-USDT.md`
+- `docs/current/✅_АНАЛИЗ_ПРОЦЕНТОВ_И_ПРОБЛЕМ.md`
+- `docs/current/✅_БОТ_РАБОТАЕТ_ПРОВЕРКА_ЛОГОВ.md`
+- `docs/current/✅_БЫСТРЫЙ_ОТВЕТ_ПРО_START_BAT.md`
+- `docs/current/✅_ВСЕ_ИСПРАВЛЕНИЯ_ВЫПОЛНЕНЫ.md`
+- `docs/current/✅_ВСЕ_ИСПРАВЛЕНИЯ_ПРИМЕНЕНЫ.md`
+- `docs/current/✅_ВСЕ_ПАРАМЕТРЫ_АДАПТИВНЫЕ_ПОДТВЕРЖДЕНО.md`
+- `docs/current/✅_ВСЕ_ПРАВКИ_ПРИМЕНЕНЫ_ГОТОВО_К_ТЕСТИРОВАНИЮ.md`
+- `docs/current/✅_ВЫВОД_ПРО_LOSS_CUT_И_ЗАЩИТУ.md`
+- `docs/current/✅_ГИБРИДНЫЙ_ПОДХОД_ПРОГНОЗЫ.md`
+- `docs/current/✅_ДИАГНОСТИКА_ORDER_EXECUTOR_CONFIG.md`
+- `docs/current/✅_ДИАГНОСТИКА_ORDER_EXECUTOR_ПРОДОЛЖЕНИЕ.md`
+- `docs/current/✅_ИНТЕГРАЦИЯ_DEBUG_LOGGER_ЗАВЕРШЕНА_ГОТОВО.md`
+- `docs/current/✅_ИНТЕГРАЦИЯ_DEBUG_LOГИРОВАНИЯ_ЗАВЕРШЕНА.md`
+- `docs/current/✅_ИСПРАВЛЕН_BIG_PROFIT_EXIT_С_ТРЕЙЛИНГОМ.md`
+- `docs/current/✅_ИСПРАВЛЕН_INITIAL_TRAIL.md`
+- `docs/current/✅_ИСПРАВЛЕНА_АДАПТИВНОСТЬ_TP.md`
+- `docs/current/✅_ИСПРАВЛЕНА_ЛОГИКА_FALLBACK_В_POSITION_MANAGER.md`
+- `docs/current/✅_ИСПРАВЛЕНА_ПРОБЛЕМА_BIG_PROFIT_EXIT.md`
+- `docs/current/✅_ИСПРАВЛЕНА_ПРОБЛЕМА_ПРОТИВОПОЛОЖНЫХ_ПОЗИЦИЙ.md`
+- `docs/current/✅_ИСПРАВЛЕНА_ПРОБЛЕМА_РЕЖИМА_TSL.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_FALLBACK_LIMIT_OFFSET.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_LIQUIDITY_FILTER_ДЛЯ_XRP.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_ORDER_EXECUTOR_ЗАГРУЗКА.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_V_РАЗВОРОТА_РЕАЛИЗОВАНО.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_ЛИМИТНОЙ_ЦЕНЫ.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_ОШИБКИ_51006.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_ОШИБКИ_ОРДЕРА.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_ОШИБКИ_ОРДЕРА_2.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_ПОРЯДКА_ИНИЦИАЛИЗАЦИИ.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_ПРОБЛЕМЫ_СИГНАЛОВ_ПРОТИВ_ТРЕНДА.md`
+- `docs/current/✅_ИСПРАВЛЕНИЕ_ПРОГРЕССИВНОГО_РАСЧЕТА.md`
+- `docs/current/✅_ИСПРАВЛЕНИЯ_FALLBACK_И_ЛИМИТНОЙ_ЦЕНЫ.md`
+- `docs/current/✅_ИСПРАВЛЕНИЯ_TP_И_LOSS_CUT.md`
+- `docs/current/✅_ИСПРАВЛЕНИЯ_ИМПОРТОВ_И_BATНИКОВ.md`
+- `docs/current/✅_ИСПРАВЛЕНИЯ_ПО_СТАТИСТИКЕ_21.4%.md`
+- `docs/current/✅_ИСПРАВЛЕНО_MIN_MA_DIFFERENCE_И_АНАЛИЗ_ARM.md`
+- `docs/current/✅_ИСПРАВЛЕНО_ПРОБЛЕМА_НЕТ_СИГНАЛОВ.md`
+- `docs/current/✅_ИСПРАВЛЕНЫ_ВСЕ_MIN_MA_DIFFERENCE_ДЛЯ_СИМВОЛОВ.md`
+- `docs/current/✅_ИСПРАВЛЕНЫ_ПАРАМЕТРЫ_XRP-USDT.md`
+- `docs/current/✅_ИСПРАВЛЕНЫ_ПРОБЛЕМЫ_ПРОСАДКИ_И_BIG_PROFIT_EXIT.md`
+- `docs/current/✅_ИТОГОВАЯ_ПРОВЕРКА_FALLBACK.md`
+- `docs/current/✅_ИТОГОВАЯ_ПРОВЕРКА_ВСЕХ_ПАРАМЕТРОВ.md`
+- `docs/current/✅_ИТОГОВАЯ_ПРОВЕРКА_ЗАГРУЗКИ.md`
+- `docs/current/✅_ИТОГОВАЯ_ПРОВЕРКА_ЛОГИКИ.md`
+- `docs/current/✅_ИТОГОВАЯ_ПРОВЕРКА_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/current/✅_ИТОГОВАЯ_ПРОВЕРКА_ХАРДКОДА.md`
+- `docs/current/✅_ИТОГОВАЯ_СТАТИСТИКА_23НОЯ.md`
+- `docs/current/✅_ИТОГОВОЕ_РЕШЕНИЕ_МАРЖИ.md`
+- `docs/current/✅_ИТОГОВЫЙ_АНАЛИЗ_ЛОГОВ.md`
+- `docs/current/✅_ИТОГОВЫЙ_АНАЛИЗ_РАЗВОРОТА_ПОЗИЦИЙ.md`
+- `docs/current/✅_ИТОГОВЫЙ_ОТЧЕТ_FALLBACK.md`
+- `docs/current/✅_ИТОГОВЫЙ_СПИСОК_ВСЕХ_ИСПРАВЛЕНИЙ.md`
+- `docs/current/✅_КРАТКИЙ_СТАТУС_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/current/✅_МОДЕРНИЗАЦИЯ_ЗАВЕРШЕНА.md`
+- `docs/current/✅_ОБЪЯСНЕНИЕ_FALLBACK_ЗНАЧЕНИЙ.md`
+- `docs/current/✅_ОБЪЯСНЕНИЕ_ЗАКРЫТИЯ_DOGE-USDT.md`
+- `docs/current/✅_ОБЪЯСНЕНИЕ_ОКРУГЛЕНИЯ_РАЗМЕРА.md`
+- `docs/current/✅_ОБЪЯСНЕНИЕ_ОКРУГЛЕНИЯ_РАЗМЕРА_2.md`
+- `docs/current/✅_ОБЪЯСНЕНИЕ_ОКРУГЛЕНИЯ_РАЗМЕРА_ПОЗИЦИИ.md`
+- `docs/current/✅_ОБЪЯСНЕНИЕ_ОПЦИОНАЛЬНОСТИ_НАСТРОЕК.md`
+- `docs/current/✅_ОБЪЯСНЕНИЕ_ПРОБЛЕМЫ_МАРЖИ.md`
+- `docs/current/✅_ОПТИМИЗАЦИЯ_XRPUSDT_ПРИМЕНЕНА.md`
+- `docs/current/✅_ОПТИМИЗАЦИЯ_ЗАВЕРШЕНА.md`
+- `docs/current/✅_ОТВЕТ_НА_ВОПРОС_СТРАТЕГИЯ_ИЛИ_ОШИБКА.md`
+- `docs/current/✅_ОТВЕТ_ПРО_LOSS_CUT_И_ЗАЩИТУ.md`
+- `docs/current/✅_ПЕРЕСЧЕТ_С_ПРЕДЛОЖЕННЫМИ_ПАРАМЕТРАМИ.md`
+- `docs/current/✅_ПЕРЕСЧЕТ_С_РЕАЛЬНЫМИ_TP_SL.md`
+- `docs/current/✅_ПЛАН_ДОБАВЛЕНИЯ_ADL_МОНИТОРИНГА.md`
+- `docs/current/✅_ПЛАН_МОНИТОРИНГА_ADL.md`
+- `docs/current/✅_ПЛАН_РЕАЛИЗАЦИИ_АДАПТИВНОГО_SL.md`
+- `docs/current/✅_ПОЛНАЯ_ПРОВЕРКА_FALLBACK_ВСЕХ_МОДУЛЕЙ.md`
+- `docs/current/✅_ПОЛНАЯ_ПРОВЕРКА_TP_SL_ДЛЯ_ВСЕХ.md`
+- `docs/current/✅_ПОЛНАЯ_ПРОВЕРКА_ВСЕХ_FALLBACK.md`
+- `docs/current/✅_ПОЛНАЯ_ПРОВЕРКА_ВСЕХ_ПАРАМЕТРОВ.md`
+- `docs/current/✅_ПОЛНАЯ_ПРОВЕРКА_ПАРАМЕТРОВ.md`
+- `docs/current/✅_ПОЛНАЯ_ПРОВЕРКА_ПРОЕКТА_ФЬЮЧЕРСОВ.md`
+- `docs/current/✅_ПОЛНАЯ_ПРОВЕРКА_РАСЧЕТОВ.md`
+- `docs/current/✅_ПОЛНАЯ_ПРОВЕРКА_ХАРДКОДА.md`
+- `docs/current/✅_ПОЛНЫЙ_АНАЛИЗ_БОТА.md`
+- `docs/current/✅_ПОЛНЫЙ_АНАЛИЗ_ВСЕХ_ЛОГОВ_С_АРХИВАМИ.md`
+- `docs/current/✅_ПОЛНЫЙ_АНАЛИЗ_КОНФИГУРАЦИЙ.md`
+- `docs/current/✅_ПОЛНЫЙ_АНАЛИЗ_РАБОТЫ_БОТА.md`
+- `docs/current/✅_ПОЛНЫЙ_ОТЧЕТ_ВСЕХ_FALLBACK.md`
+- `docs/current/✅_ПОЛНЫЙ_ОТЧЕТ_ПО_FALLBACK.md`
+- `docs/current/✅_ПРАВИЛЬНОЕ_ПОВЕДЕНИЕ_BTC-USDT.md`
+- `docs/current/✅_ПРАВИЛЬНОЕ_ПОНИМАНИЕ_ADL.md`
+- `docs/current/✅_ПРИМЕНЕНЫ_ОПТИМАЛЬНЫЕ_ПАРАМЕТРЫ.md`
+- `docs/current/✅_ПРОВЕРКА_FALLBACK_ЛОГИКИ.md`
+- `docs/current/✅_ПРОВЕРКА_LOSS_CUT_ПАРАМЕТРОВ.md`
+- `docs/current/✅_ПРОВЕРКА_АГЕНТОМ_ЗАВЕРШЕНА.md`
+- `docs/current/✅_ПРОВЕРКА_ВСЕХ_ПАР.md`
+- `docs/current/✅_ПРОВЕРКА_ВСЕХ_ПАР_И_РЕЖИМОВ.md`
+- `docs/current/✅_ПРОВЕРКА_ГАРМОНИИ_СИСТЕМЫ.md`
+- `docs/current/✅_ПРОВЕРКА_ДЕБАГГЕРОМ_ЗАВЕРШЕНА.md`
+- `docs/current/✅_ПРОВЕРКА_ЗАГРУЗКИ_ПАРАМЕТРОВ.md`
+- `docs/current/✅_ПРОВЕРКА_КОДА_ЗАВЕРШЕНА.md`
+- `docs/current/✅_ПРОВЕРКА_ЛОГИКИ_НАПРАВЛЕНИЯ_И_PNL.md`
+- `docs/current/✅_ПРОВЕРКА_ЛОГОВ_ПЕРЕД_СУТОЧНЫМ_ЗАПУСКОМ.md`
+- `docs/current/✅_ПРОВЕРКА_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/current/✅_ПРОВЕРКА_ПОСЛЕ_ПЕРЕЗАПУСКА_INITIAL_TRAIL.md`
+- `docs/current/✅_ПРОВЕРКА_ПОСЛЕ_ПЕРЕЗАПУСКА_ВСЕХ_ИСПРАВЛЕНИЙ.md`
+- `docs/current/✅_ПРОВЕРКА_ПОСЛЕ_ПЕРЕЗАПУСКА_СИГНАЛЫ.md`
+- `docs/current/✅_ПРОВЕРКА_ХАРДКОДА_В_РАСЧЕТАХ.md`
+- `docs/current/✅_РЕАЛИЗАЦИЯ_ADL_МОНИТОРИНГА.md`
+- `docs/current/✅_РЕАЛИЗАЦИЯ_АДАПТИВНОГО_BIG_PROFIT_EXIT.md`
+- `docs/current/✅_РЕАЛИЗАЦИЯ_АДАПТИВНОГО_SL_ЗАВЕРШЕНА.md`
+- `docs/current/✅_РЕАЛИЗОВАНО_ИСПРАВЛЕНИЕ_МАРЖИ.md`
+- `docs/current/✅_РЕАЛИЗОВАНЫ_НАСТРОЙКИ_ДЛЯ_ПАР.md`
+- `docs/current/✅_РЕШЕНИЕ_ПРОБЛЕМЫ_МАРЖИ.md`
+- `docs/current/✅_РУКОВОДСТВО_ПО_DEBUG_КОНСОЛИ.md`
+- `docs/current/✅_СИСТЕМА_ОСТАЕТСЯ_КОНСЕРВАТИВНОЙ.md`
+- `docs/current/✅_СТАТУС_DEBUG_ЛОГИРОВАНИЯ.md`
+- `docs/current/✅_СТАТУС_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/current/✅_УВЕЛИЧЕНО_ИСПОЛЬЗОВАНИЕ_БАЛАНСА.md`
+- `docs/current/✅_УМНОЕ_ПЕРЕКЛЮЧЕНИЕ_НАПРАВЛЕНИЯ_СИГНАЛА.md`
+- `docs/current/✅_ФИНАЛЬНАЯ_ПРОВЕРКА_CONFIG_MANAGER.md`
+- `docs/current/✅_ФИНАЛЬНАЯ_ПРОВЕРКА_ВСЕГО.md`
+- `docs/current/✅_ФИНАЛЬНАЯ_ПРОВЕРКА_ВСЕХ_ИСПРАВЛЕНИЙ.md`
+- `docs/current/✅_ФИНАЛЬНАЯ_ПРОВЕРКА_ВСЕХ_ПАР.md`
+- `docs/current/✅_ФИНАЛЬНАЯ_ПРОВЕРКА_ГАРМОНИИ.md`
+- `docs/current/✅_ФИНАЛЬНАЯ_ПРОВЕРКА_ПЕРЕД_ЗАПУСКОМ.md`
+- `docs/current/✅_ФИНАЛЬНОЕ_РЕШЕНИЕ_BIG_PROFIT_EXIT.md`
+- `docs/current/✅_ФИНАЛЬНЫЕ_ОПТИМАЛЬНЫЕ_ПАРАМЕТРЫ.md`
+- `docs/current/✅_ФИНАЛЬНЫЙ_СТАТУС_ВСЕГО.md`
+- `docs/current/🎯_СТАРТ_ДИАГНОСТИКИ_ПРЯМО_СЕЙЧАС.txt`
+- `docs/current/🎯_ФИНАЛЬНОЕ_РЕШЕНИЕ_DEBUG_ЛОГИРОВАНИЯ.md`
+- `docs/current/💡_ОБСУЖДЕНИЕ_АДАПТИВНОГО_ЛЕВЕРИДЖА.md`
+- `docs/current/💡_ОТВЕТЫ_НА_ВОПРОСЫ_ОБ_ИНТЕГРАЦИИ.md`
+- `docs/current/📊_АНАЛИЗ_ЗАКРЫТЫХ_ПОЗИЦИЙ_23НОЯ.md`
+- `docs/current/📊_АНАЛИЗ_И_ОПТИМИЗАЦИЯ_XRPUSDT.md`
+- `docs/current/📊_АНАЛИЗ_ИСПОЛЬЗОВАНИЯ_БАЛАНСА.md`
+- `docs/current/📊_АНАЛИЗ_ПРОДЛЕНИЯ_TP_И_РИСКИ.md`
+- `docs/current/📊_ДЕТАЛЬНЫЙ_АНАЛИЗ_СЕССИИ_23НОЯ.md`
+- `docs/current/📊_ПОЛНАЯ_ТАБЛИЦА_TP_SL_ДЛЯ_ВСЕХ_СИМВОЛОВ.md`
+- `docs/current/📊_ПОЛНЫЙ_АНАЛИЗ_ВСЕХ_ЗАКРЫТИЙ.md`
+- `docs/current/📊_ПОЛНЫЙ_АНАЛИЗ_МАРЖИ.md`
+- `docs/current/📊_ПОЛНЫЙ_АНАЛИЗ_СДЕЛОК_22НОЯ.md`
+- `docs/current/📊_ПОЛНЫЙ_АНАЛИЗ_СЕССИИ_23НОЯ.md`
+- `docs/current/📊_ПОЛНЫЙ_СТАТИСТИЧЕСКИЙ_АНАЛИЗ_23НОЯ.md`
+- `docs/current/📊_РАСЧЕТ_ОПТИМАЛЬНЫХ_ПАРАМЕТРОВ.md`
+- `docs/current/📊_СТАТУС_СИГНАЛОВ_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/current/📋_ИТОГОВОЕ_ОБЪЯСНЕНИЕ_XRP-USDT.md`
+- `docs/current/📋_ПЛАН_АДАПТИВНЫЙ_BIG_PROFIT_EXIT.md`
+- `docs/current/📋_ПЛАН_АНАЛИЗА_ПОСЛЕ_ЧАСА_РАБОТЫ.md`
+- `docs/current/📋_ПЛАН_ИСПРАВЛЕНИЯ_ВСЕХ_ПРОБЛЕМ.md`
+- `docs/current/📋_ПОЛНОЕ_ОПИСАНИЕ_ЛОГИРОВАНИЯ_И_БАТНИКОВ.md`
+- `docs/current/📋_ПОЛНЫЙ_АНАЛИЗ_АДАПТИВНОСТИ.md`
+- `docs/current/📋_ПОЛНЫЙ_ПЛАН_ДИАГНОСТИКИ_CLOSES.md`
+- `docs/current/📋_ПОЛНЫЙ_СПИСОК_ИЗМЕНЕНИЙ_23НОЯ.md`
+- `docs/current/📋_ПОЛНЫЙ_СПИСОК_ИСПРАВЛЕНИЙ_23НОЯ.md`
+- `docs/current/📋_СИСТЕМА_ПРИОРИТЕТОВ_ЗАКРЫТИЯ_ПОЗИЦИЙ.md`
+- `docs/current/📋_СПИСОК_ПРАВОК_ПО_АНАЛИЗУ.md`
+- `docs/current/📋_ФИНАЛЬНЫЙ_ЧЕКЛИСТ_ИНТЕГРАЦИИ.md`
+- `docs/current/📚_ЧТО_ТАКОЕ_ADL.md`
+- `docs/current/🔍_АНАЛИЗ_ADL_BTC-USDT_С_ПРИБЫЛЬЮ.md`
+- `docs/current/🔍_АНАЛИЗ_TP_TSL_SL_СО_ВРЕМЕНЕМ_ЖИЗНИ.md`
+- `docs/current/🔍_АНАЛИЗ_АВТОМАТИЧЕСКОГО_РАЗВОРОТА_ПОЗИЦИЙ.md`
+- `docs/current/🔍_АНАЛИЗ_БЫСТРЫХ_ЗАКРЫТИЙ_ПОЗИЦИЙ.md`
+- `docs/current/🔍_АНАЛИЗ_ЗАКРЫТИЯ_DOGE-USDT.md`
+- `docs/current/🔍_АНАЛИЗ_ЗАКРЫТЫХ_И_ОТКРЫТЫХ_ПОЗИЦИЙ.md`
+- `docs/current/🔍_АНАЛИЗ_КОНФЛИКТА_СТРАТЕГИИ.md`
+- `docs/current/🔍_АНАЛИЗ_ОКРУГЛЕНИЯ_РАЗМЕРА_ПОЗИЦИЙ.md`
+- `docs/current/🔍_АНАЛИЗ_ПАРАМЕТРОВ_ФИЛЬТРОВ_ВСЕХ_РЕЖИМОВ.md`
+- `docs/current/🔍_АНАЛИЗ_ПРОБЛЕМЫ_ОРДЕРА_И_PNL.md`
+- `docs/current/🔍_ДЕТАЛЬНЫЙ_АНАЛИЗ_И_РЕКОМЕНДАЦИИ.md`
+- `docs/current/🔍_ПРОБЛЕМА_XRP-USDT_БЛОКИРОВКИ.md`
+- `docs/current/🔍_ПРОВЕРКА_РАСЧЕТОВ_И_ПОДСЧЕТА_ПОЗИЦИЙ.md`
+- `docs/current/🔧_ИНТЕГРАЦИЯ_DEBUG_LOGGER_С_ТЕКУЩЕЙ_СИСТЕМОЙ.md`
+- `docs/current/🔴_КРИТИЧЕСКАЯ_ПРОБЛЕМА_SL_И_LOSS_CUT.md`
+- `docs/current/🔴_КРИТИЧЕСКАЯ_ПРОБЛЕМА_ПРОГРЕССИВНОГО_РАСЧЕТА.md`
+- `docs/current/🔴_КРИТИЧЕСКАЯ_ПРОБЛЕМА_СИГНАЛОВ_ПРОТИВ_ТРЕНДА.md`
+- `docs/current/🔴_КРИТИЧЕСКИЕ_ПРОБЛЕМЫ_ПОСЛЕ_РЕФАКТОРИНГА.md`
+- `docs/current/🔴_КРИТИЧЕСКИЙ_АНАЛИЗ_ПРОБЛЕМ_ПОЛЬЗОВАТЕЛЯ.md`
+- `docs/current/🔴_ПОЛНЫЙ_АУДИТ_ПРОБЛЕМ_ПОСЛЕ_РЕФАКТОРИНГА.md`
+- `docs/current/🔴_ПОЛНЫЙ_СПИСОК_ВСЕХ_ПРОБЛЕМ.md`
+- `docs/current/🔴_ПРОБЛЕМА_ДУБЛИРОВАНИЯ_ПОЗИЦИЙ_И_ПРЕЖДЕВРЕМЕННОГО_ЗАКРЫТИЯ.md`
+- `docs/current/🤔_АНАЛИЗ_LOSS_CUT_КАК_ЗАЩИТА_ОТ_ПРОСАДКИ.md`
+
+### `docs/development` (4)
+- `docs/development/coding-standards.md`
+- `docs/development/DOCUMENTATION_STANDARDS.md`
+- `docs/development/project-rules.md`
+- `docs/development/refactoring-complete.md`
+
+### `docs/fixes` (10)
+- `docs/fixes/ALL_FIXES_COMPLETED.md`
+- `docs/fixes/CRITICAL_FIXES_APPLIED.md`
+- `docs/fixes/CRITICAL_FIXES_SUMMARY.md`
+- `docs/fixes/FIXES_COMPLETED_SUMMARY.md`
+- `docs/fixes/FIXES_FINAL_SUMMARY.md`
+- `docs/fixes/FIXES_PLAN_LOGGING_AND_TIME.md`
+- `docs/fixes/FIXES_REPORT_ADAPTIVE.md`
+- `docs/fixes/FIXES_SIDE_NORMALIZATION.md`
+- `docs/fixes/FIXES_SUMMARY_FINAL.md`
+- `docs/fixes/NON_CRITICAL_FIXES_STATUS.md`
+
+### `docs/fixes/completed` (170)
+- `docs/fixes/completed/АНАЛИЗ_BTC_И_ПРИМЕНЕНИЕ_НАСТРОЕК.md`
+- `docs/fixes/completed/АНАЛИЗ_XRP_ETH_ПОДСЕЛИ.md`
+- `docs/fixes/completed/АНАЛИЗ_ДОЛГОГО_УДЕРЖАНИЯ_ПОЗИЦИЙ.md`
+- `docs/fixes/completed/АНАЛИЗ_ЖИЗНЕННОГО_ЦИКЛА_СДЕЛОК.md`
+- `docs/fixes/completed/АНАЛИЗ_КОДОВОЙ_БАЗЫ.md`
+- `docs/fixes/completed/АНАЛИЗ_МЕХАНИЗМОВ_ЗАКРЫТИЯ.md`
+- `docs/fixes/completed/АНАЛИЗ_ОТКРЫТЫХ_ПОЗИЦИЙ.md`
+- `docs/fixes/completed/АНАЛИЗ_ПЕРЕЗАПУСКА_2025-11-27.md`
+- `docs/fixes/completed/АНАЛИЗ_ПЕРЕЗАПУСКА_27-11-2025.md`
+- `docs/fixes/completed/АНАЛИЗ_ПРОБЛЕМ_CSV_И_ЛОГОВ.md`
+- `docs/fixes/completed/АНАЛИЗ_ТЕКУЩИХ_ПОЗИЦИЙ.md`
+- `docs/fixes/completed/АНАЛИЗ_УМЕНЬШЕНИЯ_MIN_HOLDING.md`
+- `docs/fixes/completed/ДЕТАЛЬНЫЙ_РАЗБОР_LOSS_CUT.md`
+- `docs/fixes/completed/ДЕТАЛЬНЫЙ_СПИСОК_ПЕРЕМЕЩЕНИЯ_ФАЙЛОВ.md`
+- `docs/fixes/completed/ИСПРАВЛЕНИЕ_ЛОГИКИ_ВРЕМЕНИ.md`
+- `docs/fixes/completed/ИТОГ_ИСПРАВЛЕНИЙ_28-11.md`
+- `docs/fixes/completed/ИТОГ_ИСПРАВЛЕНИЙ_28-11_ПОЛНЫЙ.md`
+- `docs/fixes/completed/ИТОГОВЫЙ_ОТЧЕТ_ИЗМЕНЕНИЙ_27-11-2025.md`
+- `docs/fixes/completed/КАК_АКТИВИРОВАТЬ_VENV.md`
+- `docs/fixes/completed/КРИТИЧЕСКАЯ_ПРОБЛЕМА_MIN_HOLDING_И_ПРИБЫЛЬ.md`
+- `docs/fixes/completed/КРИТИЧЕСКИЙ_АНАЛИЗ_ПРОБЛЕМ_28-11.md`
+- `docs/fixes/completed/ОБЪЯСНЕНИЕ_MIN_HOLDING_И_TSL.md`
+- `docs/fixes/completed/ОБЪЯСНЕНИЕ_WARNING_ENTRY_MANAGER.md`
+- `docs/fixes/completed/ОБЪЯСНЕНИЕ_СМЫСЛА_MIN_HOLDING.md`
+- `docs/fixes/completed/ПЛАН_ОРГАНИЗАЦИИ_ДОКУМЕНТАЦИИ.md`
+- `docs/fixes/completed/ПОЛНАЯ_ПРОВЕРКА_ФИЛЬТРОВ_ВСЕХ_ПАР.md`
+- `docs/fixes/completed/ПОЛНЫЙ_АНАЛИЗ_ЖИЗНЕННОГО_ЦИКЛА.md`
+- `docs/fixes/completed/ПОЛНЫЙ_АНАЛИЗ_И_РЕШЕНИЕ_ВСЕХ_ПРОБЛЕМ.md`
+- `docs/fixes/completed/ПРОБЛЕМА_TSL_ДЛЯ_СТАРЫХ_ПОЗИЦИЙ.md`
+- `docs/fixes/completed/ПРОВЕРКА_РЕФАКТОРИНГА.md`
+- `docs/fixes/completed/РЕАЛЬНЫЙ_АНАЛИЗ_ПРОБЛЕМ_28-11.md`
+- `docs/fixes/completed/⚠️_АНАЛИЗ_ETH_ПРОСАДКА_В_МИНУСЕ.md`
+- `docs/fixes/completed/⚠️_КРИТИЧЕСКАЯ_ПРОБЛЕМА_ПЕРЕРЕГИСТРАЦИЯ_ПОЗИЦИЙ.md`
+- `docs/fixes/completed/⚠️_ПРОБЛЕМЫ_С_СВЕЧАМИ_ВО_ВСЕХ_РЕЖИМАХ.md`
+- `docs/fixes/completed/⚠️_СТАТУС_ИНТЕГРАЦИИ.md`
+- `docs/fixes/completed/✅_EXITANALYZER_РЕАЛИЗОВАН.md`
+- `docs/fixes/completed/✅_АНАЛИЗ_ЗАКРЫТИЯ_BTC.md`
+- `docs/fixes/completed/✅_АНАЛИЗ_ЛОГОВ_ПОСЛЕ_РЕАЛИЗАЦИИ_СВЕЧЕЙ.md`
+- `docs/fixes/completed/✅_АНАЛИЗ_ОТКРЫТИЯ_ПОЗИЦИИ_BTC-USDT.md`
+- `docs/fixes/completed/✅_БАТНИКИ_ВОЗВРАЩЕНЫ_В_КОРЕНЬ.md`
+- `docs/fixes/completed/✅_ВСЕ_ИСПРАВЛЕНИЯ_ВЫПОЛНЕНЫ_28-11.md`
+- `docs/fixes/completed/✅_ВСЕ_ИСПРАВЛЕНО_ЛОГИРОВАНИЕ.md`
+- `docs/fixes/completed/✅_ГОТОВНОСТЬ_К_ЗАПУСКУ_И_СБОРУ_СТАТИСТИКИ.md`
+- `docs/fixes/completed/✅_ИНТЕГРАЦИЯ_ЗАВЕРШЕНА.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНА_ОШИБКА_ИНИЦИАЛИЗАЦИИ_SIGNALGENERATOR.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНА_ОШИБКА_РАСЧЕТА_МАРЖИ.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНА_ОШИБКА_ФОРМАТИРОВАНИЯ_МАРЖИ.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНИЕ_CORRELATION_FILTER.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНИЕ_SYNTAX_ERROR.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНИЕ_ЛОГИКИ_ЗАКРЫТИЯ_ПО_ВРЕМЕНИ.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНИЕ_СИСТЕМЫ_СВЕЧЕЙ_ВСЕХ_ТАЙМФРЕЙМОВ.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНИЯ_FILTERMANAGER.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНИЯ_TSL_ЗАВЕРШЕНЫ.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНИЯ_ВЫПОЛНЕНЫ.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНО_ENTRY_PRICE_ПРОБЛЕМА.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНО_SYNTAX_ERROR_UPDATE_REGIME.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНО_КОНФЛИКТ_OPEN.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНО_ЛОГИРОВАНИЕ_СВЕЧЕЙ.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНО_ЛОГИРОВАНИЕ_СТРУКТУРА.md`
+- `docs/fixes/completed/✅_ИСПРАВЛЕНЫ_ВСЕ_ОШИБКИ_ФОРМАТИРОВАНИЯ.md`
+- `docs/fixes/completed/✅_ИТОГОВАЯ_ПРОВЕРКА_ВСЕХ_ПРОБЛЕМ.md`
+- `docs/fixes/completed/✅_ИТОГОВОЕ_ЛОГИРОВАНИЕ_СИСТЕМЫ_СВЕЧЕЙ.md`
+- `docs/fixes/completed/✅_ИТОГОВЫЙ_ОТЧЕТ_ИСПОЛЬЗОВАНИЯ_МОДУЛЕЙ.md`
+- `docs/fixes/completed/✅_ИТОГОВЫЙ_ОТЧЕТ_ЛОГИРОВАНИЕ_И_BAT_ФАЙЛЫ.md`
+- `docs/fixes/completed/✅_ИТОГОВЫЙ_ПЛАН_ИСПРАВЛЕНИЙ.md`
+- `docs/fixes/completed/✅_ИТОГОВЫЙ_ПРОГРЕСС_DATAREGISTRY.md`
+- `docs/fixes/completed/✅_ИТОГОВЫЙ_СТАТУС_ПЕРЕД_ЧЕКАПОМ.md`
+- `docs/fixes/completed/✅_ЛОГИРОВАНИЕ_СИСТЕМЫ_СВЕЧЕЙ_ГОТОВО.md`
+- `docs/fixes/completed/✅_ЛОГИРОВАНИЕ_СИСТЕМЫ_СВЕЧЕЙ_ДОБАВЛЕНО.md`
+- `docs/fixes/completed/✅_ОТВЕТ_ИНИЦИАЛИЗИРУЕТСЯ_ЛИ_МОДУЛЬ.md`
+- `docs/fixes/completed/✅_ОТВЕТ_ПОЛЬЗОВАТЕЛЮ_ПРОВЕРКА_ЗАВЕРШЕНА.md`
+- `docs/fixes/completed/✅_ОТЧЕТ_ИНТЕГРАЦИИ.md`
+- `docs/fixes/completed/✅_ПОДТВЕРЖДЕНИЕ_ЗАЩИТЫ_И_ЛОГИРОВАНИЯ.md`
+- `docs/fixes/completed/✅_ПОДТВЕРЖДЕНИЕ_КОМИССИЯ_УЧИТЫВАЕТСЯ_ПРАВИЛЬНО.md`
+- `docs/fixes/completed/✅_ПОДТВЕРЖДЕНИЕ_РАБОТЫ_БОТА.md`
+- `docs/fixes/completed/✅_ПОДТВЕРЖДЕНИЕ_РАБОТЫ_НА_ВСЕХ_РЕЖИМАХ_ПАРАХ_НАПРАВЛЕНИЯХ.md`
+- `docs/fixes/completed/✅_ПОЛНАЯ_ПРОВЕРКА_DATAREGISTRY.md`
+- `docs/fixes/completed/✅_ПОЛНАЯ_ПРОВЕРКА_ВСЕХ_ВЫЗОВОВ.md`
+- `docs/fixes/completed/✅_ПОЛНАЯ_ПРОВЕРКА_ВСЕХ_ОШИБОК_ЗАВЕРШЕНА.md`
+- `docs/fixes/completed/✅_ПОЛНАЯ_ПРОВЕРКА_РЕФАКТОРИНГА.md`
+- `docs/fixes/completed/✅_ПОЛНОЕ_ИСПРАВЛЕНИЕ_СИСТЕМЫ_СВЕЧЕЙ_ЗАВЕРШЕНО.md`
+- `docs/fixes/completed/✅_ПОЛНЫЙ_ИТОГОВЫЙ_ОТЧЕТ_DATAREGISTRY.md`
+- `docs/fixes/completed/✅_ПРОВЕРКА_ИНИЦИАЛИЗАЦИИ_SIGNALGENERATOR.md`
+- `docs/fixes/completed/✅_ПРОВЕРКА_ЛОГОВ_ИНИЦИАЛИЗАЦИЯ_УСПЕШНА.md`
+- `docs/fixes/completed/✅_ПРОВЕРКА_ЛОГОВ_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/fixes/completed/✅_ПРОВЕРКА_СИСТЕМЫ_ЛОГИРОВАНИЯ_И_BAT_ФАЙЛОВ.md`
+- `docs/fixes/completed/✅_ПРОГРЕСС_DATAREGISTRY_25_11_2025.md`
+- `docs/fixes/completed/✅_ПРОГРЕСС_DATAREGISTRY_ОБНОВЛЕН.md`
+- `docs/fixes/completed/✅_ПРОГРЕСС_ИНТЕГРАЦИИ_25_11_2025.md`
+- `docs/fixes/completed/✅_СИСТЕМА_СВЕЧЕЙ_РЕАЛИЗОВАНА.md`
+- `docs/fixes/completed/✅_УДАЛЕНИЕ_3_МОДУЛЕЙ_ЗАВЕРШЕНО.md`
+- `docs/fixes/completed/✅_УДАЛЕНИЕ_ЗАВЕРШЕНО_УСПЕШНО.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНАЯ_ПРОВЕРКА_ВСЕХ_ПРОБЛЕМ_ЗАВЕРШЕНА.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНАЯ_ПРОВЕРКА_ЛОГИРОВАНИЯ_И_BAT_ФАЙЛОВ.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНЫЙ_ВЕРДИКТ_ПО_ЗАВИСИМОСТЯМ.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНЫЙ_ИТОГ_DATAREGISTRY.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНЫЙ_ОТВЕТ_ИСПОЛЬЗОВАНИЕ_ФУНКЦИЙ.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНЫЙ_ОТВЕТ_ПОЛЬЗОВАТЕЛЮ.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНЫЙ_ОТВЕТ_ПРОВЕРКА_ЗАВЕРШЕНА.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНЫЙ_ОТЧЕТ_РЕФАКТОРИНГА.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНЫЙ_ОТЧЕТ_УДАЛЕНИЯ_МОДУЛЕЙ.md`
+- `docs/fixes/completed/✅_ФИНАЛЬНЫЙ_ПРОГРЕСС_DATAREGISTRY.md`
+- `docs/fixes/completed/✅_ЭТАП_1_1_И_1_4_DATAREGISTRY_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_1_2_DATAREGISTRY_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_1_3_DATAREGISTRY_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_1_КРИТИЧЕСКИЕ_ИСПРАВЛЕНИЯ_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_2_1_DATAREGISTRY_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_2_2_DATAREGISTRY_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_2_3_DATAREGISTRY_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_2_ENTRYMANAGER_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_2_ENTRYMANAGER_НАЧАТ.md`
+- `docs/fixes/completed/✅_ЭТАП_2_ИНТЕГРАЦИЯ_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_3_1_DATAREGISTRY_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/✅_ЭТАП_3_2_DATAREGISTRY_ЗАВЕРШЕН.md`
+- `docs/fixes/completed/🎯_АНАЛИЗ_ТЕКУЩЕЙ_И_ПРАВИЛЬНОЙ_СИСТЕМЫ_СВЕЧЕЙ.md`
+- `docs/fixes/completed/🎯_ПЛАН_ЗАВЕРШЕНИЯ_ИНТЕГРАЦИИ.md`
+- `docs/fixes/completed/📊_АНАЛИЗ_ЗАКРЫТЫХ_ПОЗИЦИЙ.md`
+- `docs/fixes/completed/📊_АНАЛИЗ_ИСПОЛЬЗОВАНИЯ_ВСЕХ_МОДУЛЕЙ.md`
+- `docs/fixes/completed/📊_АНАЛИЗ_ИСПОЛЬЗОВАНИЯ_СВЕЧЕЙ_БЕЗ_КОДА.md`
+- `docs/fixes/completed/📊_АНАЛИЗ_КОМИССИИ_BTC.md`
+- `docs/fixes/completed/📊_АНАЛИЗ_ЛОГОВ_ПОЗИЦИЙ.md`
+- `docs/fixes/completed/📊_АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИСПРАВЛЕНИЙ.md`
+- `docs/fixes/completed/📊_АНАЛИЗ_ОТВЕТОВ_KIMI.md`
+- `docs/fixes/completed/📊_ГЛУБОКИЙ_АНАЛИЗ_КОДА_И_АРХИТЕКТУРЫ.md`
+- `docs/fixes/completed/📊_ДЕТАЛЬНЫЙ_АНАЛИЗ_ЛОГОВ.md`
+- `docs/fixes/completed/📊_КАК_МОДУЛИ_БУДУТ_ИСПОЛЬЗОВАТЬ_СИСТЕМУ_СВЕЧЕЙ.md`
+- `docs/fixes/completed/📊_ПОДРОБНЫЙ_АНАЛИЗ_DATAREGISTRY.md`
+- `docs/fixes/completed/📊_ПОЛНЫЙ_АНАЛИЗ_CORRELATION_FILTER.md`
+- `docs/fixes/completed/📊_ПОЛНЫЙ_АНАЛИЗ_ETH_УБЫТОЧНОЙ_ПОЗИЦИИ.md`
+- `docs/fixes/completed/📊_ПОЛНЫЙ_АНАЛИЗ_РАБОТЫ_БОТА.md`
+- `docs/fixes/completed/📊_ПРОВЕРКА_ЛОГОВ_ПОСЛЕ_ПЕРЕЗАПУСКА.md`
+- `docs/fixes/completed/📊_СТАТУС_ДЛЯ_СБОРА_СТАТИСТИКИ.md`
+- `docs/fixes/completed/📋_АНАЛИЗ_ДУБЛИРУЮЩИХ_КЭШЕЙ.md`
+- `docs/fixes/completed/📋_АНАЛИЗ_ПРЯМЫХ_ЗАПРОСОВ_К_API.md`
+- `docs/fixes/completed/📋_ДЕТАЛЬНЫЕ_РЕКОМЕНДАЦИИ_ПО_ПРОБЛЕМАМ.md`
+- `docs/fixes/completed/📋_ИТОГИ_РЕАЛИЗАЦИИ_EXITANALYZER.md`
+- `docs/fixes/completed/📋_ИТОГОВЫЙ_АУДИТ_СЕССИЯ_22НОЯ.md`
+- `docs/fixes/completed/📋_ОТВЕТЫ_НА_ВОПРОСЫ.md`
+- `docs/fixes/completed/📋_ПЛАН_ИНТЕГРАЦИИ_DATAREGISTRY_ДЕТАЛЬНО.md`
+- `docs/fixes/completed/📋_ПЛАН_ИСПРАВЛЕНИЙ.md`
+- `docs/fixes/completed/📋_ПЛАН_ЛОГИРОВАНИЯ_СИСТЕМЫ_СВЕЧЕЙ.md`
+- `docs/fixes/completed/📋_ПЛАН_РЕАЛИЗАЦИИ_EXITANALYZER.md`
+- `docs/fixes/completed/📋_ПЛАН_РЕАЛИЗАЦИИ_СИСТЕМЫ_СВЕЧЕЙ.md`
+- `docs/fixes/completed/📋_СТАТУС_ОСТАВШИХСЯ_ЗАДАЧ.md`
+- `docs/fixes/completed/📋_СТРУКТУРИРОВАННЫЙ_АНАЛИЗ_ПРОБЛЕМ_ПО_МОДУЛЯМ.md`
+- `docs/fixes/completed/📋_ФИНАЛЬНЫЙ_TODO_ПЛАН_РЕФАКТОРИНГА.md`
+- `docs/fixes/completed/📋_ЧЕКЛИСТ_ДЛЯ_ВЕЧЕРНЕГО_ЧЕКАПА.md`
+- `docs/fixes/completed/📐_ПОЛНЫЙ_ПЛАН_РЕОРГАНИЗАЦИИ_ПРОЕКТА.md`
+- `docs/fixes/completed/🔍_АНАЛИЗ_ETH_УБЫТОЧНАЯ_ПОЗИЦИЯ.md`
+- `docs/fixes/completed/🔍_АНАЛИЗ_ОПРЕДЕЛЕНИЯ_НАПРАВЛЕНИЯ.md`
+- `docs/fixes/completed/🔍_АНАЛИЗ_СИСТЕМЫ_СВЕЧЕЙ_ВО_ВСЕХ_РЕЖИМАХ.md`
+- `docs/fixes/completed/🔍_ОТКРЫТЫЙ_АНАЛИЗ_БАЗОВЫХ_ПРИЕМОВ.md`
+- `docs/fixes/completed/🔍_ПОЛНАЯ_ПРОВЕРКА_ASYNC_AWAIT.md`
+- `docs/fixes/completed/🔍_ПОЛНЫЙ_АНАЛИЗ_ЗАВИСИМОСТЕЙ_3_МОДУЛЕЙ.md`
+- `docs/fixes/completed/🔍_ПОЛНЫЙ_АНАЛИЗ_РЕАЛИЗАЦИИ_И_ИСПОЛЬЗОВАНИЯ.md`
+- `docs/fixes/completed/🔍_ПРОВЕРКА_ВЗАИМОСВЯЗАННЫХ_ПРОБЛЕМ.md`
+- `docs/fixes/completed/🔍_ПРОВЕРКА_ЛОГИРОВАНИЯ.md`
+- `docs/fixes/completed/🔬_ГЛУБОКИЙ_АНАЛИЗ_КОДА_И_АРХИТЕКТУРЫ.md`
+- `docs/fixes/completed/🚨_АНАЛИЗ_ПРОБЛЕМЫ_CORRELATION_FILTER.md`
+- `docs/fixes/completed/🚨_КРИТИЧЕСКАЯ_ПРОБЛЕМА_ETH_TSL_НЕ_РАБОТАЕТ.md`
+- `docs/fixes/completed/🚨_КРИТИЧЕСКАЯ_ПРОБЛЕМА_EXITANALYZER_НЕ_ИСПОЛЬЗУЕТСЯ.md`
+- `docs/fixes/completed/🚨_КРИТИЧЕСКАЯ_ПРОБЛЕМА_ЗАКРЫТИЯ_ПО_ВРЕМЕНИ.md`
+- `docs/fixes/completed/🚨_КРИТИЧЕСКИЕ_ПРОБЛЕМЫ_TSL_ДЛЯ_ВСЕХ_ПОЗИЦИЙ.md`
+- `docs/fixes/completed/🚨_КРИТИЧЕСКИЙ_АНАЛИЗ_ПРОБЛЕМ.md`
+- `docs/fixes/completed/🚨_НАЙДЕНА_ПРОБЛЕМА_TSL_БЛОКИРОВКА.md`
+- `docs/fixes/completed/🚨_ПОЛНЫЙ_АНАЛИЗ_ЛОГИКИ_ЗАКРЫТИЯ.md`
+- `docs/fixes/completed/🚨_ПРОБЛЕМА_НЕ_ОТКРЫВАЮТСЯ_НОВЫЕ_ПОЗИЦИИ.md`
+- `docs/fixes/completed/🚨_СРОЧНЫЙ_АНАЛИЗ_3_МОДУЛЕЙ.md`
+- `docs/fixes/completed/🚨_СРОЧНЫЙ_ВЕРДИКТ_КРИТИЧНОСТЬ_3_МОДУЛЕЙ.md`
+- `docs/fixes/completed/🚨_ФИНАЛЬНЫЙ_ВЕРДИКТ_3_МОДУЛЕЙ.md`
+
+### `docs/fixes/completed/2025-12` (28)
+- `docs/fixes/completed/2025-12/ANALYSIS_IMPROVEMENTS_AND_FIXES.md`
+- `docs/fixes/completed/2025-12/ИСПРАВЛЕНИЕ_CSV_И_АРХИВАЦИИ.md`
+- `docs/fixes/completed/2025-12/ИСПРАВЛЕНИЕ_КРИТИЧЕСКИХ_БАГОВ.md`
+- `docs/fixes/completed/2025-12/ИСПРАВЛЕНИЕ_ОШИБОК_АДАПТИВНЫХ_ФИЛЬТРОВ.md`
+- `docs/fixes/completed/2025-12/ИСПРАВЛЕНИЕ_ОШИБОК_ИЗ_ЛОГОВ.md`
+- `docs/fixes/completed/2025-12/ИСПРАВЛЕНИЕ_ЧТЕНИЯ_SL_ИЗ_КОНФИГА.md`
+- `docs/fixes/completed/2025-12/ИСПРАВЛЕНИЯ_DATETIME_2025-12-23.md`
+- `docs/fixes/completed/2025-12/ИСПРАВЛЕНИЯ_КРИТИЧЕСКИХ_ПРОБЛЕМ_ЛОГИРОВАНИЯ.md`
+- `docs/fixes/completed/2025-12/ИСПРАВЛЕНИЯ_ПО_РЕКОМЕНДАЦИЯМ_ГРОКА.md`
+- `docs/fixes/completed/2025-12/ИТОГОВЫЙ_ОТЧЕТ_ВЫПОЛНЕНИЯ_ПРАВОК.md`
+- `docs/fixes/completed/2025-12/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЙ_2025-12-23.md`
+- `docs/fixes/completed/2025-12/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЙ_24_12_2025.md`
+- `docs/fixes/completed/2025-12/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЯ_SL.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ИНТЕГРАЦИИ_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ИСПРАВЛЕНИЙ_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ИСПРАВЛЕНИЙ_FALLBACK_25_12_2025.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ИСПРАВЛЕНИЙ_АДАПТИВНЫХ_ФИЛЬТРОВ_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ИСПРАВЛЕНИЙ_ИНИЦИАЛИЗАЦИИ_И_РЕЖИМОВ_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ИСПРАВЛЕНИЙ_ОШИБОК_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ИСПРАВЛЕНИЯ_DATETIME_ERROR_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ИСПРАВЛЕНИЯ_EXIT_PARAMS_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ПРОБЛЕМ_ПАРАМЕТРОВ.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_ПРОВЕРКИ_ОПИСАНИЯ_БОТА.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_УБИРАНИЯ_FALLBACK_РЕЖИМОВ_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ОТЧЕТ_УЛУЧШЕНИЯ_ЛОГИРОВАНИЯ_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ПОЛНЫЙ_ОТЧЕТ_ИЗМЕНЕНИЙ_26_12_2025.md`
+- `docs/fixes/completed/2025-12/ПРОВЕРКА_ИНДИКАТОРОВ_27_12_2025.md`
+- `docs/fixes/completed/2025-12/РЕЗЮМЕ_ИСПРАВЛЕНИЙ_27_12_2025.md`
+
+### `docs/fixes/completed/2025-12/checks` (9)
+- `docs/fixes/completed/2025-12/checks/ПРОВЕРКА_АНАЛИЗА_ГРОКА_ADX.md`
+- `docs/fixes/completed/2025-12/checks/ПРОВЕРКА_АНАЛИЗА_ГРОКА_ПОЛНЫЙ.md`
+- `docs/fixes/completed/2025-12/checks/ПРОВЕРКА_ВСЕХ_ИСПРАВЛЕНИЙ_26_12_2025.md`
+- `docs/fixes/completed/2025-12/checks/ПРОВЕРКА_КОНФИГА_25_12_2025.md`
+- `docs/fixes/completed/2025-12/checks/ПРОВЕРКА_ЛОГИКИ_РЕЖИМОВ_26_12_2025.md`
+- `docs/fixes/completed/2025-12/checks/ПРОВЕРКА_НОВЫХ_ЛОГОВ_ПОСЛЕ_ОТКРЫТИЯ.md`
+- `docs/fixes/completed/2025-12/checks/ПРОВЕРКА_РЕКОМЕНДАЦИЙ_ГРОКА_2025-12-21.md`
+- `docs/fixes/completed/2025-12/checks/ПРОВЕРКА_ЧЕКЛИСТА_ГРОКА_2025-12-21.md`
+- `docs/fixes/completed/2025-12/checks/ФИНАЛЬНАЯ_ПРОВЕРКА_ПЕРЕД_ЗАПУСКОМ_2025-12-21.md`
+
+### `docs/fixes/completed/2025-12/implementation` (9)
+- `docs/fixes/completed/2025-12/implementation/РЕАЛИЗАЦИЯ_АДАПТИВНОЙ_СИСТЕМЫ_ФИЛЬТРОВ.md`
+- `docs/fixes/completed/2025-12/implementation/РЕАЛИЗАЦИЯ_АДАПТИВНЫХ_PH_И_PROFIT_DRAWDOWN.md`
+- `docs/fixes/completed/2025-12/implementation/РЕАЛИЗАЦИЯ_КОМПРОМИССОВ_ГРОКА_2025-12-21.md`
+- `docs/fixes/completed/2025-12/implementation/РЕАЛИЗАЦИЯ_КРИТИЧЕСКИХ_УЛУЧШЕНИЙ_ЛОГИРОВАНИЯ.md`
+- `docs/fixes/completed/2025-12/implementation/РЕАЛИЗАЦИЯ_ОПТИМИЗАЦИИ_TCC_2025-12-21.md`
+- `docs/fixes/completed/2025-12/implementation/РЕАЛИЗАЦИЯ_ОПТИМИЗАЦИИ_ГЕНЕРАЦИИ_СИГНАЛОВ.md`
+- `docs/fixes/completed/2025-12/implementation/РЕАЛИЗАЦИЯ_ОПТИМИЗАЦИЙ_ГРОКА_2025-12-21.md`
+- `docs/fixes/completed/2025-12/implementation/РЕАЛИЗАЦИЯ_ФИКСОВ_ГРОКА_ПРОСКАЛЬЗЫВАНИЕ_2025-12-21.md`
+- `docs/fixes/completed/2025-12/implementation/РЕАЛИЗОВАНО_КРИТИЧЕСКИЕ_УЛУЧШЕНИЯ_ЛОГИРОВАНИЯ.md`
+
+### `docs/fixes/completed/2025-12/optimization` (2)
+- `docs/fixes/completed/2025-12/optimization/ОПТИМИЗАЦИЯ_TCC_CYCLE_2025-12-21.md`
+- `docs/fixes/completed/2025-12/optimization/УЛУЧШЕНИЕ_АДАПТИВНОСТИ_SL_TP_2025-12-21.md`
+
+### `docs/guides` (5)
+- `docs/guides/DEBUGGING_WITH_DEBUG_LOGGER.md`
+- `docs/guides/GITHUB_DESKTOP_ИНСТРУКЦИЯ.md`
+- `docs/guides/INTEGRATION_DEBUG_LOGGER_STEP_BY_STEP.md`
+- `docs/guides/ИНСТРУКЦИЯ_ПОСЛЕ_ИСПРАВЛЕНИЙ.md`
+- `docs/guides/КАК_РАБОТАТЬ_С_GITHUB.md`
+
+### `docs/plans` (1)
+- `docs/plans/IMPROVEMENT_PLAN.md`
+
+### `docs/plans/2025-12` (14)
+- `docs/plans/2025-12/FINAL_TASK_LIST.md`
+- `docs/plans/2025-12/TODO_АРХИТЕКТУРНЫЕ_ИЗМЕНЕНИЯ_26_12_2025.md`
+- `docs/plans/2025-12/ИТОГОВЫЙ_СПИСОК_ЗАДАЧ_ОТ_ГРОКА.md`
+- `docs/plans/2025-12/ИТОГОВЫЙ_СПИСОК_ЗАДАЧ_ОТ_ГРОКА_ФИНАЛЬНЫЙ.md`
+- `docs/plans/2025-12/ПЛАН_АНАЛИЗА_ПОСЛЕ_6_ЧАСОВ_РАБОТЫ.md`
+- `docs/plans/2025-12/ПЛАН_ИСПРАВЛЕНИЙ_28_ПРАВОК.md`
+- `docs/plans/2025-12/ПЛАН_ИСПРАВЛЕНИЙ_КРИТИЧЕСКИХ_ПРОБЛЕМ.md`
+- `docs/plans/2025-12/ПЛАН_ИСПРАВЛЕНИЙ_ПО_АНАЛИЗУ_SONNET.md`
+- `docs/plans/2025-12/ПЛАН_ИСПРАВЛЕНИЙ_СИСТЕМНЫХ_ПРОБЛЕМ_26_12_2025.md`
+- `docs/plans/2025-12/ПЛАН_ОПТИМИЗАЦИИ_ГЕНЕРАЦИИ_СИГНАЛОВ.md`
+- `docs/plans/2025-12/ПЛАН_ОРГАНИЗАЦИИ_ДОКУМЕНТОВ_27_12_2025.md`
+- `docs/plans/2025-12/ПЛАН_УЛУЧШЕНИЯ_ЛОГИРОВАНИЯ.md`
+- `docs/plans/2025-12/ТОЧНЫЙ_ПЛАН_ИСПРАВЛЕНИЙ.md`
+- `docs/plans/2025-12/ФИНАЛЬНЫЙ_ТОЧНЫЙ_ПЛАН.md`
+
+### `docs/plans/active` (1)
+- `docs/plans/active/TODO_ПОЛНЫЙ_ПЛАН_ИЗМЕНЕНИЙ.md`
+
+### `docs/recommendations` (4)
+- `docs/recommendations/PARAMETERS_APPLIED_SUMMARY.md`
+- `docs/recommendations/RECOMMENDATIONS_CLOSED_POSITIONS.md`
+- `docs/recommendations/RECOMMENDATIONS_FULL_LIST.md`
+- `docs/recommendations/RECOMMENDED_PARAMETERS_ALL_PAIRS.md`
+
+### `docs/reference` (2)
+- `docs/reference/КЛЮЧЕВЫЕ_ФРАГМЕНТЫ_КОДА.md`
+- `docs/reference/СПИСОК_ФАЙЛОВ_ДЛЯ_АНАЛИЗА.md`
+
+### `docs/reports` (5)
+- `docs/reports/FINAL_AUDIT_RESPONSE_AND_FIXES.md`
+- `docs/reports/FINAL_EXIT_MECHANISMS_REPORT.md`
+- `docs/reports/FINAL_READINESS_ASSESSMENT.md`
+- `docs/reports/FINAL_TRADES_ANALYSIS_REPORT.md`
+- `docs/reports/VERIFICATION_REPORT.md`
+
+### `docs/reports/2025-12` (10)
+- `docs/reports/2025-12/EXIT_DECISIONS_2025-12-21.md`
+- `docs/reports/2025-12/REORGANIZATION_SUCCESS_REPORT.md`
+- `docs/reports/2025-12/ИТОГОВОЕ_РЕЗЮМЕ_ИСПРАВЛЕНИЙ_21_12_2025.md`
+- `docs/reports/2025-12/ИТОГОВЫЙ_ОТЧЕТ_ОПТИМИЗАЦИЙ_TCC_2025-12-21.md`
+- `docs/reports/2025-12/ОТЧЕТ_ОРГАНИЗАЦИИ_ДОКУМЕНТОВ_27_12_2025.md`
+- `docs/reports/2025-12/РЕЗУЛЬТАТЫ_ОПТИМИЗАЦИИ_ПРОИЗВОДИТЕЛЬНОСТИ.md`
+- `docs/reports/2025-12/РЕЗЮМЕ_ИСПРАВЛЕНИЙ_21_12_2025.md`
+- `docs/reports/2025-12/РЕЗЮМЕ_ИСПРАВЛЕНИЙ_ПО_ГРОКУ_2025-12-21.md`
+- `docs/reports/2025-12/СПИСОК_ИСПРАВЛЕНИЙ_26_12_2025.md`
+- `docs/reports/2025-12/СТАТУС_ИСПРАВЛЕНИЙ.md`
+
+### `docs/reports/2026-02` (2)
+- `docs/reports/2026-02/DOCUMENTATION_DEDUPLICATION_2026-02-21.md`
+- `docs/reports/2026-02/DOCUMENTATION_DEDUPLICATION_AGGRESSIVE_2026-02-21.md`
+
+### `docs/reports/status` (1)
+- `docs/reports/status/СТАТУС_BTC_ПОЗИЦИИ.md`
+
+### `docs/specifications` (3)
+- `docs/specifications/FUNDING_FEE_ANALYSIS.md`
+- `docs/specifications/MY_OPINION_PER_SYMBOL_SETTINGS.md`
+- `docs/specifications/POSITION_CLOSING_LOGIC.md`

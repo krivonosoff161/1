@@ -1,0 +1,31 @@
+{
+  "date": "2026-02-21",
+  "before": {
+    "docs_files_total": 1483,
+    "docs_root_files": 175,
+    "zero_files": 25,
+    "exact_duplicate_groups": 4,
+    "exact_duplicate_files": 31
+  },
+  "after": {
+    "docs_files_total": 1458,
+    "docs_root_files": 4,
+    "zero_files": 0,
+    "exact_duplicate_groups": 0,
+    "exact_duplicate_files": 0
+  },
+  "roadmap": {
+    "main": "docs/PROJECT_ROADMAP.md",
+    "sources": [
+      "docs/audit/AUDIT_ROADMAP.md",
+      "docs/current/ПОЛНОЕ_ОПИСАНИЕ_СТРАТЕГИИ_И_АРХИТЕКТУРЫ.md"
+    ]
+  },
+  "archive_targets": [
+    "docs/archive/root/analysis/",
+    "docs/archive/root/fixes/",
+    "docs/archive/root/plans/",
+    "docs/archive/root/reports/",
+    "docs/archive/root/misc/"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "run_ts": "2026-02-21_07-15-27",
+  "mode": "aggressive",
+  "similarity_threshold": 0.89,
+  "min_shared_tokens": 1,
+  "max_size_ratio": 1.55,
+  "before_docs_files": 1426,
+  "after_docs_files": 1423,
+  "exact_duplicate_groups": 0,
+  "exact_moved": 0,
+  "candidate_pairs_checked": 27662,
+  "similar_pairs": 3,
+  "near_duplicate_groups": 3,
+  "near_moved": 3,
+  "exact_moves": [],
+  "near_moves": [
+    {
+      "from": "archive/root/fixes/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЙ.md",
+      "to": "archive/deduplicated/near/archive/root/fixes/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЙ.md",
+      "canonical": "analysis/archive/fixes/ИТОГОВЫЙ_ОТЧЕТ_ИСПРАВЛЕНИЙ.md"
+    },
+    {
+      "from": "archive/root/analysis/АНАЛИЗ_ОРКЕСТРАТОРА.md",
+      "to": "archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_ОРКЕСТРАТОРА.md",
+      "canonical": "analysis/archive/logs/АНАЛИЗ_ОРКЕСТРАТОРА.md"
+    },
+    {
+      "from": "archive/root/analysis/АНАЛИЗ_ПРЕДУПРЕЖДЕНИЙ.md",
+      "to": "archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_ПРЕДУПРЕЖДЕНИЙ.md",
+      "canonical": "analysis/archive/problems/АНАЛИЗ_ПРЕДУПРЕЖДЕНИЙ.md"
+    }
+  ]
+}

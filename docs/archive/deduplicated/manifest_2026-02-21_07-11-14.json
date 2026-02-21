@@ -1,0 +1,59 @@
+{
+  "run_ts": "2026-02-21_07-11-14",
+  "before_docs_files": 1434,
+  "after_docs_files": 1425,
+  "exact_duplicate_groups": 0,
+  "exact_moved": 0,
+  "candidate_pairs_checked": 2025,
+  "similar_pairs": 9,
+  "near_duplicate_groups": 9,
+  "near_moved": 9,
+  "exact_moves": [],
+  "near_moves": [
+    {
+      "from": "archive/root/fixes/ПРОВЕРКА_ВСЕХ_ИСПРАВЛЕНИЙ.md",
+      "to": "archive/deduplicated/near/archive/root/fixes/ПРОВЕРКА_ВСЕХ_ИСПРАВЛЕНИЙ.md",
+      "canonical": "analysis/archive/fixes/ПРОВЕРКА_ВСЕХ_ИСПРАВЛЕНИЙ.md"
+    },
+    {
+      "from": "archive/root/analysis/АНАЛИЗ_ЗАКРЫТИЙ_ПОЗИЦИЙ.md",
+      "to": "archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_ЗАКРЫТИЙ_ПОЗИЦИЙ.md",
+      "canonical": "analysis/archive/logs/АНАЛИЗ_ЗАКРЫТИЙ_ПОЗИЦИЙ.md"
+    },
+    {
+      "from": "archive/root/analysis/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИЗМЕНЕНИЙ.md",
+      "to": "archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИЗМЕНЕНИЙ.md",
+      "canonical": "analysis/archive/logs/АНАЛИЗ_ЛОГОВ_ПОСЛЕ_ИЗМЕНЕНИЙ.md"
+    },
+    {
+      "from": "archive/root/analysis/АНАЛИЗ_СТРУКТУРЫ_И_АРХИТЕКТУРЫ.md",
+      "to": "archive/deduplicated/near/archive/root/analysis/АНАЛИЗ_СТРУКТУРЫ_И_АРХИТЕКТУРЫ.md",
+      "canonical": "analysis/archive/logs/АНАЛИЗ_СТРУКТУРЫ_И_АРХИТЕКТУРЫ.md"
+    },
+    {
+      "from": "archive/root/plans/ПЛАН_РЕФАКТОРИНГА_ОРКЕСТРАТОРА.md",
+      "to": "archive/deduplicated/near/archive/root/plans/ПЛАН_РЕФАКТОРИНГА_ОРКЕСТРАТОРА.md",
+      "canonical": "analysis/archive/parameters/ПЛАН_РЕФАКТОРИНГА_ОРКЕСТРАТОРА.md"
+    },
+    {
+      "from": "archive/root/analysis/ПОЛНЫЙ_АНАЛИЗ_ВСЕХ_ПРЕДУПРЕЖДЕНИЙ.md",
+      "to": "archive/deduplicated/near/archive/root/analysis/ПОЛНЫЙ_АНАЛИЗ_ВСЕХ_ПРЕДУПРЕЖДЕНИЙ.md",
+      "canonical": "analysis/archive/problems/ПОЛНЫЙ_АНАЛИЗ_ВСЕХ_ПРЕДУПРЕЖДЕНИЙ.md"
+    },
+    {
+      "from": "archive/root/reports/ИТОГОВАЯ_ПРОВЕРКА_ПОЗИЦИИ.md",
+      "to": "archive/deduplicated/near/archive/root/reports/ИТОГОВАЯ_ПРОВЕРКА_ПОЗИЦИИ.md",
+      "canonical": "analysis/archive/reports/ИТОГОВАЯ_ПРОВЕРКА_ПОЗИЦИИ.md"
+    },
+    {
+      "from": "archive/root/misc/ПРОВЕРКА_ПОЗИЦИИ_ПОСЛЕ_ОТКРЫТИЯ.md",
+      "to": "archive/deduplicated/near/archive/root/misc/ПРОВЕРКА_ПОЗИЦИИ_ПОСЛЕ_ОТКРЫТИЯ.md",
+      "canonical": "analysis/archive/reports/ПРОВЕРКА_ПОЗИЦИИ_ПОСЛЕ_ОТКРЫТИЯ.md"
+    },
+    {
+      "from": "current/✅_ФИНАЛЬНОЕ_РЕШЕНИЕ_МАРЖИ.md",
+      "to": "archive/deduplicated/near/current/✅_ФИНАЛЬНОЕ_РЕШЕНИЕ_МАРЖИ.md",
+      "canonical": "current/✅_ИТОГОВОЕ_РЕШЕНИЕ_МАРЖИ.md"
+    }
+  ]
+}
