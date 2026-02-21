@@ -134,26 +134,41 @@ class PositionSync:
 
         self._last_positions_sync = now
 
-        # ✅ FIX (2026-02-18): Обновляем баланс из API при каждой синхронизации
-        # БЫЛО: Fix 4 был применён к orchestrator._sync_positions_with_exchange (устаревшая, не вызывается)
-        # ТЕПЕРЬ: Реальная синхронизация идёт через PositionSync → обновляем баланс здесь
+        # FIX (2026-02-21): Обновляем баланс только если account WS не активен.
+        # Если account WS работает (data_registry.get_balance_ws_age() < 30s) — баланс уже актуален,
+        # REST get_balance() пропускаем. REST остаётся fallback при обрыве WS.
         if self.client and self.data_registry:
             try:
-                balance = await self.client.get_balance()
-                if balance and balance > 0:
-                    profile_name = "small"
-                    if self.config_manager:
-                        try:
-                            balance_profile = self.config_manager.get_balance_profile(
-                                balance
-                            )
-                            if balance_profile:
-                                profile_name = balance_profile.get("name", "small")
-                        except Exception:
-                            pass
-                    await self.data_registry.update_balance(balance, profile_name)
+                ws_balance_age = await self.data_registry.get_balance_ws_age()
+                if ws_balance_age < 30.0:
+                    # Account WS активен — баланс свежий, REST не нужен
+                    logger.debug(
+                        f"📊 PositionSync: баланс актуален через account WS "
+                        f"(age={ws_balance_age:.1f}s), REST get_balance() пропускаем"
+                    )
+                else:
+                    # Account WS не активен или стал — REST fallback
+                    balance = await self.client.get_balance()
+                    if balance and balance > 0:
+                        profile_name = "small"
+                        if self.config_manager:
+                            try:
+                                balance_profile = (
+                                    self.config_manager.get_balance_profile(balance)
+                                )
+                                if balance_profile:
+                                    profile_name = balance_profile.get("name", "small")
+                            except Exception:
+                                pass
+                        await self.data_registry.update_balance(
+                            balance, profile_name, source="REST"
+                        )
+                        logger.debug(
+                            f"📊 PositionSync: баланс обновлён через REST "
+                            f"(ws_age={ws_balance_age:.1f}s): {balance:.2f} USDT"
+                        )
             except Exception as e:
-                logger.debug(f"⚠️ PositionSync: Не удалось получить баланс из API: {e}")
+                logger.debug(f"⚠️ PositionSync: Не удалось получить баланс: {e}")
 
         seen_symbols: set[str] = set()
         total_margin = 0.0

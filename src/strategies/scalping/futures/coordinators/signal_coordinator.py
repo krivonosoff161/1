@@ -2515,17 +2515,15 @@ class SignalCoordinator:
                 signal_side = signal.get("side", "").lower() if signal else "buy"
                 signal_position_side = "long" if signal_side == "buy" else "short"
 
-                # Проверяем все позиции (не только по символу, чтобы увидеть все)
-                all_positions = await self.client.get_positions()
-                for pos in all_positions:
-                    pos_size = float(pos.get("pos", "0"))
-                    pos_inst_id = pos.get("instId", "")
+                # FIX (2026-02-21): Читаем позиции из active_positions_ref (in-memory, WS-driven)
+                # вместо REST get_positions(). active_positions_ref обновляется Private WS в реальном времени.
+                # REST fallback (drift detection) покрывается position_sync slow loop каждые 5с.
+                for sym, pos_data in list(self.active_positions_ref.items()):
+                    pos_size = float(pos_data.get("size", pos_data.get("pos", 0)))
+                    pos_inst_id = f"{sym}-SWAP"
 
-                    # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем все возможные форматы instId
-                    # instId может быть: "BTC-USDT-SWAP", "BTCUSDT-SWAP", "BTC-USDT" и т.д.
-                    if (
-                        abs(pos_size) > 0.000001
-                    ):  # Учитываем даже очень маленькие позиции
+                    # Учитываем даже очень маленькие позиции
+                    if abs(pos_size) > 0.000001:
                         # Нормализуем оба instId (убираем разделители и приводим к одному формату)
                         normalized_pos_id = pos_inst_id.replace("-", "").upper()
                         normalized_inst_id = inst_id.replace("-", "").upper()
@@ -2535,10 +2533,12 @@ class SignalCoordinator:
                             normalized_pos_id == normalized_inst_id
                             or pos_inst_id == inst_id
                         ):
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем направление позиции!
+                            # Проверяем направление позиции!
                             # На OKX Futures в hedge mode могут быть LONG и SHORT позиции одновременно
                             # Блокируем только если позиция в ТОМ ЖЕ направлении, что и сигнал
-                            pos_side_raw = pos.get("posSide", "").lower()
+                            pos_side_raw = pos_data.get(
+                                "position_side", pos_data.get("posSide", "")
+                            ).lower()
                             if pos_side_raw in ["long", "short"]:
                                 actual_side = pos_side_raw
                             else:
@@ -2553,7 +2553,6 @@ class SignalCoordinator:
 
                             if actual_side == signal_position_side:
                                 # Позиция в том же направлении - блокируем
-                                # ✅ ЛОГИРОВАНИЕ: Показываем, было ли переключение направления ADX
                                 original_side = signal.get("original_side", "")
                                 side_switched = signal.get(
                                     "side_switched_by_adx", False
@@ -2565,25 +2564,25 @@ class SignalCoordinator:
                                         else "short"
                                     )
                                     logger.warning(
-                                        f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
+                                        f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта (WS, size={abs(pos_size):.4f}), "
                                         f"БЛОКИРУЕМ новый {signal_side.upper()} ордер "
                                         f"(ADX переключил направление с {original_position_side.upper()} → {signal_position_side.upper()}, "
                                         f"но позиция уже открыта в этом направлении)"
                                     )
                                 else:
                                     logger.warning(
-                                        f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
+                                        f"⚠️ Позиция {symbol} {actual_side.upper()} уже открыта (WS, size={abs(pos_size):.4f}), "
                                         f"БЛОКИРУЕМ новый {signal_side.upper()} ордер (позиция в том же направлении)"
                                     )
                                 return False
                             elif not allow_concurrent:
-                                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #2: Позиция в другом направлении, allow_concurrent=false - БЛОКИРУЕМ открытие новой
+                                # Позиция в другом направлении, allow_concurrent=false - БЛОКИРУЕМ открытие новой
                                 logger.warning(
-                                    f"🚨 Позиция {symbol} {actual_side.upper()} уже открыта на бирже (size={abs(pos_size)}, instId={pos_inst_id}), "
+                                    f"🚨 Позиция {symbol} {actual_side.upper()} уже открыта (WS, size={abs(pos_size):.4f}), "
                                     f"БЛОКИРУЕМ открытие {signal_side.upper()} (allow_concurrent=false). "
                                     f"Позиция будет закрыта по TP/SL или вручную."
                                 )
-                                return False  # ✅ КРИТИЧЕСКОЕ: Блокируем открытие новой позиции, не закрываем автоматически
+                                return False
                             # Если allow_concurrent=true и позиция в другом направлении - разрешаем
 
                 # 🔥 ДОПОЛНИТЕЛЬНО: Проверяем активные ордера на открытие позиции

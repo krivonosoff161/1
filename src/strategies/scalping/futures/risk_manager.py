@@ -1798,22 +1798,31 @@ class FuturesRiskManager:
             except Exception:
                 pass
 
-            # 🔴 BUG #21 FIX: Получаем маржу из позиции через API
+            # FIX (2026-02-21): Получаем маржу из active_positions (WS-driven) вместо REST.
+            # Private WS positions channel присылает поле "margin" в реальном времени.
+            # REST fallback только если WS margin == 0 (новая позиция, WS ещё не обновился).
             try:
-                if self.client:
-                    # Получаем информацию о позиции из OKX API
+                ws_margin = 0.0
+                if self.orchestrator and hasattr(self.orchestrator, "active_positions"):
+                    pos_data = self.orchestrator.active_positions.get(symbol, {})
+                    ws_margin = float(pos_data.get("margin", 0) or 0)
+                    if ws_margin > 0:
+                        margin = ws_margin
+                        logger.debug(f"✓ Маржа для {symbol}: {margin} USDT [source=WS]")
+
+                # REST fallback: только если WS margin не пришёл ещё
+                if (margin is None or margin == 0) and self.client:
                     positions_data = await self.client.get_positions()
                     if positions_data:
                         for pos in positions_data:
                             if pos.get("instId") == f"{symbol}-SWAP":
-                                # margin field содержит РЕАЛЬНУЮ маржу, не нотионал
                                 margin = float(pos.get("margin", 0))
                                 logger.debug(
-                                    f"✓ Получена маржа для {symbol}: {margin} USDT"
+                                    f"✓ Маржа для {symbol}: {margin} USDT [source=REST_FALLBACK]"
                                 )
                                 break
             except Exception as e:
-                logger.warning(f"⚠️ Не удалось получить маржу из API: {e}")
+                logger.warning(f"⚠️ Не удалось получить маржу: {e}")
 
             # Fallback: если маржа не получена
             if margin is None or margin == 0:

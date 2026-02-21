@@ -565,25 +565,62 @@ class TradingControlCenter:
             if not self.is_running:
                 return
 
-            # Получение текущих позиций
-            positions = await self.client.get_positions()
+            # FIX (2026-02-21): REST get_positions() только раз в _slow_loop_interval (5с).
+            # Private WS (handle_private_ws_positions) обновляет PositionRegistry в реальном времени.
+            # REST остаётся как drift-detection и fallback при обрыве WS.
+            import time as _t
 
-            # 🛡️ Защита от некорректного формата (иногда API/клиент может вернуть строку/None)
-            if not isinstance(positions, list):
-                logger.warning(
-                    f"⚠️ TCC: Некорректный формат позиций от клиента: {type(positions).__name__}, ожидается list. Пропускаем обновление."
+            _now = _t.time()
+            _ws_pos_age = (
+                self.data_registry.get_ws_positions_age()
+                if self.data_registry
+                else 9999.0
+            )
+            _rest_due = (
+                _now - getattr(self, "_update_state_rest_ts", 0.0)
+                >= self._slow_loop_interval
+            )
+
+            # Дефолты: при WS-режиме loops ниже пропускают итерации (positions=[], dicts={})
+            positions = []
+            all_registered: dict = {}
+            all_metadata: dict = {}
+
+            if not _rest_due and _ws_pos_age < self._slow_loop_interval:
+                # WS positions свежие — пропускаем REST + PositionRegistry batch update.
+                # WS handle_private_ws_positions уже обновляет PositionRegistry в реальном времени.
+                logger.debug(
+                    f"📊 TCC: update_state — WS-режим "
+                    f"(ws_pos_age={_ws_pos_age:.1f}s, rest_skip)"
                 )
-                positions = []
+            else:
+                # Время REST-синхронизации: drift-detection + fallback если WS упал
+                if _ws_pos_age >= self._slow_loop_interval:
+                    logger.debug(
+                        f"📊 TCC: update_state — REST sync "
+                        f"(ws_pos_age={_ws_pos_age:.1f}s ≥ {self._slow_loop_interval}s)"
+                    )
+                self._update_state_rest_ts = _now
 
-            if not self.is_running:
-                return
+                # Получение текущих позиций
+                positions = await self.client.get_positions()
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновление позиций через PositionRegistry с сохранением метаданных
-            # Сохраняем существующие метаданные перед обновлением позиций
-            all_registered = await self.position_registry.get_all_positions()
-            all_metadata = await self.position_registry.get_all_metadata()
+                # 🛡️ Защита от некорректного формата (иногда API/клиент может вернуть строку/None)
+                if not isinstance(positions, list):
+                    logger.warning(
+                        f"⚠️ TCC: Некорректный формат позиций от клиента: {type(positions).__name__}, ожидается list. Пропускаем обновление."
+                    )
+                    positions = []
 
-            # Удаляем позиции, которых больше нет на бирже
+                if not self.is_running:
+                    return
+
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновление позиций через PositionRegistry с сохранением метаданных
+                # Сохраняем существующие метаданные перед обновлением позиций
+                all_registered = await self.position_registry.get_all_positions()
+                all_metadata = await self.position_registry.get_all_metadata()
+
+            # Loops ниже безопасны при WS-режиме: positions=[], all_registered={} → 0 итераций
             exchange_symbols = set()
             for position in positions:
                 if not isinstance(position, dict):

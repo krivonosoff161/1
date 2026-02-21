@@ -202,6 +202,10 @@ class WebSocketCoordinator:
         self._ticker_force_process_threshold: float = (
             45.0  # seconds before we force processing to keep DataRegistry fresh
         )
+        # FIX (2026-02-21): timestamp последнего account WS обновления — для REST fallback guard
+        self._ws_account_last_ts: float = 0.0
+        # FIX (2026-02-21): timestamp последнего WS positions обновления — для TCC REST throttle guard
+        self._ws_positions_last_ts: float = 0.0
 
         # Sandbox WS often does not support candle channels; use REST fallback.
         if self.client and getattr(self.client, "sandbox", False):
@@ -472,8 +476,13 @@ class WebSocketCoordinator:
                     await self.private_ws_manager.subscribe_orders(
                         callback=self.handle_private_ws_orders
                     )
+                    # FIX (2026-02-21): Подписываемся на аккаунт — баланс/equity/маржа в реальном времени
+                    # Это устраняет необходимость REST get_balance() на горячем пути
+                    await self.private_ws_manager.subscribe_account(
+                        callback=self.handle_private_ws_account
+                    )
                     logger.info(
-                        "✅ Private WebSocket подключен и подписан на позиции/ордера"
+                        "✅ Private WebSocket подключен: позиции + ордера + аккаунт (live баланс)"
                     )
                 else:
                     logger.warning(
@@ -1497,6 +1506,10 @@ class WebSocketCoordinator:
         """
         try:
             position_closed = False  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (28.12.2025): Флаг для отслеживания закрытий
+            # FIX (2026-02-21): обновляем timestamp WS positions в DataRegistry — TCC использует для REST throttle
+            self._ws_positions_last_ts = time.time()
+            if self.data_registry:
+                self.data_registry.update_ws_positions_ts()
 
             for position_data in positions_data:
                 symbol = position_data.get("instId", "").replace("-SWAP", "")
@@ -1682,6 +1695,60 @@ class WebSocketCoordinator:
 
         except Exception as e:
             logger.error(f"❌ Ошибка обработки обновлений ордеров из Private WS: {e}")
+
+    async def handle_private_ws_account(self, account_data: list):
+        """
+        FIX (2026-02-21): Обработка account WS канала — реальный баланс без REST.
+
+        OKX account channel payload (data[]):
+          totalEq      — суммарный equity аккаунта (все валюты)
+          details[]    — детали по каждой валюте
+            ccy        — "USDT"
+            eq         — equity (баланс + unrealized PnL)
+            availEq    — доступный equity (без margin)
+            cashBal    — cash balance
+            frozenBal  — заморожено под margin
+
+        Обновляет DataRegistry с source="ACCOUNT_WS" — модули используют
+        это как признак актуальности и пропускают REST get_balance().
+        """
+        try:
+            self._ws_account_last_ts = time.time()
+
+            for account in account_data:
+                details = account.get("details", [])
+                for detail in details:
+                    ccy = detail.get("ccy", "")
+                    if ccy != "USDT":
+                        continue
+
+                    eq = self._safe_float_ws(detail.get("eq"), 0.0, "account.eq")
+                    avail_eq = self._safe_float_ws(
+                        detail.get("availEq"), 0.0, "account.availEq"
+                    )
+                    frozen_bal = self._safe_float_ws(
+                        detail.get("frozenBal"), 0.0, "account.frozenBal"
+                    )
+
+                    if eq <= 0:
+                        logger.debug(
+                            f"⚠️ Account WS: eq={eq} ≤ 0, пропускаем обновление баланса"
+                        )
+                        continue
+
+                    if self.data_registry:
+                        await self.data_registry.update_balance(
+                            eq, profile=None, source="ACCOUNT_WS"
+                        )
+                        logger.info(
+                            f"✅ Account WS: баланс={eq:.2f} USDT, "
+                            f"available={avail_eq:.2f}, frozen={frozen_bal:.2f} "
+                            f"[source=ACCOUNT_WS]"
+                        )
+                    break  # USDT найден — выходим
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки account WS данных: {e}")
 
     async def handle_position_closed_via_ws(self, symbol: str):
         """

@@ -84,6 +84,9 @@ class DataRegistry:
         self._lock = asyncio.Lock()
         # 🔇 Для условного логирования баланса (только при значительном изменении)
         self._last_logged_balance: Optional[float] = None
+        # FIX (2026-02-21): timestamp последнего WS positions обновления (из handle_private_ws_positions)
+        # Используется TCC update_state() для решения: делать REST или доверять WS
+        self._ws_positions_ts: float = 0.0
         # TTL для данных (секунды)
         self.market_data_ttl = 5.0
         self.indicator_ttl = 2.0
@@ -776,7 +779,7 @@ class DataRegistry:
     # ==================== BALANCE ====================
 
     async def update_balance(
-        self, balance: float, profile: Optional[str] = None
+        self, balance: float, profile: Optional[str] = None, source: str = "REST"
     ) -> None:
         """
         Обновить баланс и профиль баланса.
@@ -784,12 +787,18 @@ class DataRegistry:
         Args:
             balance: Текущий баланс
             profile: Профиль баланса (small, medium, large)
+            source: Источник данных — "REST" или "ACCOUNT_WS"
         """
+        import time as _time
+
         async with self._lock:
             self._balance = {
                 "balance": balance,
                 "profile": profile,
                 "updated_at": datetime.now(),
+                "source": source,
+                # FIX (2026-02-21): храним unix ts для быстрого расчёта age без datetime
+                "ws_ts": _time.time() if source == "ACCOUNT_WS" else 0.0,
             }
 
             # 🔇 УСЛОВНОЕ ЛОГИРОВАНИЕ (2026-02-08): Логируем только при значительном изменении баланса (>1%)
@@ -806,13 +815,10 @@ class DataRegistry:
 
             if should_log:
                 logger.info(
-                    f"✅ DataRegistry: Обновлен баланс: {balance:.2f} USDT (profile={profile})"
+                    f"✅ DataRegistry: Обновлен баланс: {balance:.2f} USDT "
+                    f"(profile={profile}, source={source})"
                 )
                 self._last_logged_balance = balance
-            # Если нужно всегда логировать, раскомментируй:
-            # logger.debug(
-            #     f"✅ DataRegistry: Обновлен баланс: {balance:.2f} USDT (profile={profile})"
-            # )
 
     async def get_balance(self) -> Optional[Dict[str, Any]]:
         """
@@ -833,6 +839,50 @@ class DataRegistry:
         """
         async with self._lock:
             return self._balance.get("balance") if self._balance else None
+
+    async def get_balance_ws_age(self) -> float:
+        """
+        FIX (2026-02-21): Возвращает возраст последнего ACCOUNT_WS обновления баланса.
+
+        Returns:
+            Секунды с последнего ACCOUNT_WS обновления, или 9999 если не было WS обновлений.
+            Используется модулями для решения: делать REST get_balance() или нет.
+        """
+        import time as _time
+
+        async with self._lock:
+            if not self._balance:
+                return 9999.0
+            if self._balance.get("source") != "ACCOUNT_WS":
+                return 9999.0
+            ws_ts = self._balance.get("ws_ts", 0.0)
+            if ws_ts <= 0:
+                return 9999.0
+            return _time.time() - ws_ts
+
+    def update_ws_positions_ts(self) -> None:
+        """
+        FIX (2026-02-21): Обновить timestamp последнего WS positions обновления.
+        Вызывается из WSCoordinator.handle_private_ws_positions() при каждом приходе данных.
+        Синхронный (не async) — вызывается из горячего WS callback'а.
+        """
+        import time as _time
+
+        self._ws_positions_ts = _time.time()
+
+    def get_ws_positions_age(self) -> float:
+        """
+        FIX (2026-02-21): Возраст последнего WS positions обновления в секундах.
+        Используется TCC.update_state() для решения: делать REST get_positions() или нет.
+
+        Returns:
+            Секунды с последнего WS обновления позиций, или 9999 если данных не было.
+        """
+        import time as _time
+
+        if self._ws_positions_ts <= 0:
+            return 9999.0
+        return _time.time() - self._ws_positions_ts
 
     async def get_balance_profile(self) -> Optional[str]:
         """
