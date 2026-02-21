@@ -359,8 +359,21 @@ class TradingControlCenter:
                 else:
                     logger.debug(perf_message)
 
-                # Пауза между итерациями fast-loop
-                await asyncio.sleep(self._fast_loop_interval)
+                # Phase 3: Event-driven пауза вместо asyncio.sleep.
+                # WS ticker → data_registry._ws_tick_event.set() → TCC просыпается мгновенно.
+                # Fallback: таймер fast_loop_interval (если WS нет или тихий рынок).
+                if self.data_registry and hasattr(self.data_registry, "_ws_tick_event"):
+                    try:
+                        await asyncio.wait_for(
+                            self.data_registry._ws_tick_event.wait(),
+                            timeout=self._fast_loop_interval,
+                        )
+                    except asyncio.TimeoutError:
+                        pass  # Нет WS тиков — ждали полный интервал, продолжаем
+                    finally:
+                        self.data_registry._ws_tick_event.clear()
+                else:
+                    await asyncio.sleep(self._fast_loop_interval)
 
             except asyncio.CancelledError:
                 logger.info("🛑 TCC: Торговый цикл отменен")

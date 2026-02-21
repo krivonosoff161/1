@@ -1001,13 +1001,25 @@ class FuturesScalpingOrchestrator:
         def _update_orders_cache_from_ws(
             symbol: str, order_id: str, order_cache_data: Dict[str, Any]
         ) -> None:
-            """Callback для обновления кэша ордеров из WebSocket"""
+            """Callback для обновления кэша ордеров из WebSocket.
+
+            Phase 4 fix (2026-02-21): Удаляем filled/cancelled ордера из order_ids.
+            Root cause: без удаления кэш накапливал мусор → signal_coordinator
+            не мог доверять кэшу → каждый сигнал шёл в REST get_active_orders().
+            """
             if symbol not in self.active_orders_cache:
                 self.active_orders_cache[symbol] = {}
             if "order_ids" not in self.active_orders_cache[symbol]:
                 self.active_orders_cache[symbol]["order_ids"] = set()
-            if order_id not in self.active_orders_cache[symbol]["order_ids"]:
+
+            state = order_cache_data.get("state", "")
+            if state in ("filled", "canceled", "mmp_canceled"):
+                # Ордер завершён — удаляем из live set
+                self.active_orders_cache[symbol]["order_ids"].discard(order_id)
+            else:
+                # live / partially_filled — в live set
                 self.active_orders_cache[symbol]["order_ids"].add(order_id)
+
             self.active_orders_cache[symbol][order_id] = order_cache_data
             self.active_orders_cache[symbol]["timestamp"] = time.time()
 

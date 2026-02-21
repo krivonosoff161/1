@@ -2587,47 +2587,60 @@ class SignalCoordinator:
 
                 # 🔥 ДОПОЛНИТЕЛЬНО: Проверяем активные ордера на открытие позиции
                 # Если есть pending ордер - тоже не открываем дубликат
+                #
+                # Phase 4 fix (2026-02-21): WS orders cache вместо REST.
+                # Root cause: REST get_active_orders() на каждый сигнал = 50-200ms latency.
+                # Теперь: если WS кэш свежий (<10s) и нет live ордеров → пропускаем REST.
+                # WS кэш надёжен после Phase 4 fix в orchestrator._update_orders_cache_from_ws
+                # (filled/cancelled теперь удаляются из order_ids set).
                 active_orders = []
-                try:
-                    active_orders = await self.client.get_active_orders(symbol)
-                    normalized_symbol = (
-                        self.normalize_symbol_callback(symbol)
-                        if self.normalize_symbol_callback
-                        else symbol
+                normalized_symbol = (
+                    self.normalize_symbol_callback(symbol)
+                    if self.normalize_symbol_callback
+                    else symbol
+                )
+                ws_cache = self.active_orders_cache_ref.get(normalized_symbol, {})
+                ws_cache_ts = float(ws_cache.get("timestamp", 0) or 0)
+                ws_cache_age = time.time() - ws_cache_ts
+                ws_live_ids = ws_cache.get("order_ids") or set()
+                # Нормируем: REST-path хранит list, WS-path хранит set — приводим к bool
+                ws_has_live = bool(ws_live_ids)
+
+                if ws_cache_age < 10.0 and not ws_has_live:
+                    # WS кэш свежий и нет активных ордеров → REST не нужен
+                    logger.debug(
+                        f"[VALIDATION] {symbol}: нет активных ордеров (WS cache, age={ws_cache_age:.1f}s) — REST пропускаем"
                     )
-                    self.active_orders_cache_ref[normalized_symbol] = {
-                        "order_ids": [o.get("ordId") for o in active_orders],
-                        "timestamp": time.time(),
-                    }
-                except Exception as e:
-                    if (
-                        isinstance(e, TimeoutError)
-                        or "orders-pending timeout" in str(e).lower()
-                    ):
-                        normalized_symbol = (
-                            self.normalize_symbol_callback(symbol)
-                            if self.normalize_symbol_callback
-                            else symbol
-                        )
-                        cached_orders = self.active_orders_cache_ref.get(
-                            normalized_symbol, {}
-                        )
-                        cached_ts = float(cached_orders.get("timestamp", 0) or 0)
-                        cached_ids = cached_orders.get("order_ids") or []
-                        if cached_ids and (time.time() - cached_ts) < 15:
+                    # active_orders остаётся [], цикл ниже пропускается
+                else:
+                    # WS кэш стал или есть live ордера → REST для точности
+                    try:
+                        active_orders = await self.client.get_active_orders(symbol)
+                        self.active_orders_cache_ref[normalized_symbol] = {
+                            "order_ids": [o.get("ordId") for o in active_orders],
+                            "timestamp": time.time(),
+                        }
+                    except Exception as e:
+                        if (
+                            isinstance(e, TimeoutError)
+                            or "orders-pending timeout" in str(e).lower()
+                        ):
+                            cached_ts = float(ws_cache.get("timestamp", 0) or 0)
+                            cached_ids = ws_cache.get("order_ids") or []
+                            if cached_ids and (time.time() - cached_ts) < 15:
+                                logger.warning(
+                                    f"[VALIDATION] {symbol}: orders-pending timeout; cached active orders present, block entry"
+                                )
+                                return False
                             logger.warning(
-                                f"[VALIDATION] {symbol}: orders-pending timeout; cached active orders present, block entry"
+                                f"[VALIDATION] {symbol}: orders-pending timeout; no recent cache, continue"
+                            )
+                            active_orders = []
+                        else:
+                            logger.warning(
+                                f"[VALIDATION] {symbol}: active orders check error: {e}"
                             )
                             return False
-                        logger.warning(
-                            f"[VALIDATION] {symbol}: orders-pending timeout; no recent cache, continue"
-                        )
-                        active_orders = []
-                    else:
-                        logger.warning(
-                            f"[VALIDATION] {symbol}: active orders check error: {e}"
-                        )
-                        return False
                 for order in active_orders:
                     order_inst_id = order.get("instId", "")
                     order_side = order.get("side", "").lower()

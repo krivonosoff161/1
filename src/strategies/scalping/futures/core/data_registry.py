@@ -87,6 +87,10 @@ class DataRegistry:
         # FIX (2026-02-21): timestamp последнего WS positions обновления (из handle_private_ws_positions)
         # Используется TCC update_state() для решения: делать REST или доверять WS
         self._ws_positions_ts: float = 0.0
+        # Phase 3 (2026-02-21): Event-driven TCC wake-up.
+        # WS ticker → set event → TCC просыпается немедленно (вместо asyncio.sleep).
+        # Снижает latency сигнала: ~1000ms → ~50ms на fast pairs.
+        self._ws_tick_event: asyncio.Event = asyncio.Event()
         # TTL для данных (секунды)
         self.market_data_ttl = 5.0
         self.indicator_ttl = 2.0
@@ -272,6 +276,11 @@ class DataRegistry:
                 )
             except Exception:
                 pass
+
+        # Phase 3: Сигналим TCC о новом WS тике (вне лока — мгновенная операция).
+        # TCC использует asyncio.wait_for(event.wait()) вместо asyncio.sleep.
+        if data.get("source") == "WEBSOCKET":
+            self._ws_tick_event.set()
 
     async def get_market_data(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
