@@ -8447,6 +8447,17 @@ class FuturesSignalGenerator:
             except Exception as exc:
                 logger.debug("Ignored error in optional block: %s", exc)
 
+            # P0-3 fix (2026-02-21): нет сигналов → нечего фильтровать.
+            # Root cause: symbols_in_signals брался из входных сигналов, а не из конфига.
+            # При signals=[] → пустой set → цикл ниже не выполнялся → словарь {} →
+            # "PARAM_ORCH: no valid min_signal_strength values; block signals" (328 раз).
+            # Решение: ранний выход. Нечего фильтровать = нечего и валидировать.
+            if not signals:
+                logger.debug(
+                    "_filter_and_rank_signals: нет сигналов на входе — пропускаем orchestrator валидацию"
+                )
+                return []
+
             if not getattr(self, "parameter_orchestrator", None):
                 logger.error(
                     "PARAM_ORCH missing: min_signal_strength must come from ParameterOrchestrator"

@@ -391,6 +391,38 @@ class WebSocketCoordinator:
                         if symbol:
                             await self.handle_trades_data(symbol, data)
 
+                # P0-2 fix (2026-02-21): mark-price канал OKX шлёт данные каждые ~3с
+                # независимо от движения цены. Используем как heartbeat для freshness.
+                # Root cause: OKX не шлёт tickers на flat рынке → DataRegistry.updated_at
+                # устаревает → 1150 ошибок "устарели на 30-66s" за сессию.
+                # mark-price обновляет updated_at → ошибки уходят.
+                # source="MARK_PRICE" (не WEBSOCKET) → НЕ триггерит _ws_tick_event
+                # (чтобы не будить TCC на каждый mark-price, только на реальные тики).
+                async def mark_price_callback(data):
+                    if "data" not in data or not data["data"]:
+                        return
+                    item = data["data"][0]
+                    inst_id = item.get("instId", "") or data.get("arg", {}).get(
+                        "instId", ""
+                    )
+                    symbol = inst_id.replace("-SWAP", "")
+                    mark_px_str = item.get("markPx", "")
+                    if not symbol or not mark_px_str:
+                        return
+                    try:
+                        mark_px = float(mark_px_str)
+                        if mark_px > 0 and self.data_registry:
+                            await self.data_registry.update_market_data(
+                                symbol,
+                                {
+                                    "mark_price": mark_px,
+                                    "updated_at": datetime.now(),
+                                    "source": "MARK_PRICE",
+                                },
+                            )
+                    except (ValueError, TypeError):
+                        pass
+
                 # FIX (2026-02-20): подписываемся только на АКТИВНЫЕ символы
                 # by_symbol.enabled=false → не подписываемся на WS (раньше BTC/XRP получали данные вхолостую)
                 active_symbols = []
@@ -428,6 +460,12 @@ class WebSocketCoordinator:
                         channel="tickers",
                         inst_id=inst_id,
                         callback=ticker_callback,  # Один callback для всех
+                    )
+                    # P0-2 fix: mark-price как heartbeat (каждые ~3с от OKX)
+                    await self.ws_manager.subscribe(
+                        channel="mark-price",
+                        inst_id=inst_id,
+                        callback=mark_price_callback,
                     )
                     if self._use_kline_candles:
                         await self.ws_manager.subscribe(

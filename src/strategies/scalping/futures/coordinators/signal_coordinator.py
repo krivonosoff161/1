@@ -4365,6 +4365,17 @@ class SignalCoordinator:
                         "regime": regime,  # ✅ НОВОЕ: Сохраняем режим для per-regime TP
                         "order_type": order_type,  # ✅ ЗАДАЧА #10: Сохраняем тип ордера для расчета комиссии
                         "post_only": post_only,  # ✅ ЗАДАЧА #10: Сохраняем post_only для расчета комиссии
+                        # P0-1 fix (2026-02-21): явный сброс upl-полей от предыдущей позиции.
+                        # Root cause: active_positions_ref[symbol].update() — merge, не reset.
+                        # Старый отрицательный upl от закрытой убыточной позиции оставался в
+                        # словаре → exit_analyzer читал его → exchange_pnl отрицательный →
+                        # model_pnl положительный → sign mismatch → EXIT_BLOCKED.
+                        # "0" (строка OKX-формат) → _get_exchange_pnl_percent вернёт None →
+                        # _is_pnl_sign_mismatch не сработает → блокировки нет пока WS не
+                        # обновит реальный upl через handle_private_ws_positions.
+                        "upl": "0",
+                        "unrealizedPnl": "0",
+                        "pnl": "0",
                         # ✅ БЕЗ tp_order_id и sl_order_id - используем TrailingSL!
                     }
                 )
