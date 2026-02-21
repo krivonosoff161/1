@@ -4,8 +4,10 @@ from datetime import datetime, timedelta
 
 from loguru import logger
 
-from src.strategies.scalping.futures.coordinators.websocket_coordinator import \
-    WebSocketCoordinator
+from src.strategies.scalping.futures.coordinators.websocket_coordinator import (
+    WebSocketCoordinator,
+)
+
 # Imports from project
 from src.strategies.scalping.futures.core.data_registry import DataRegistry
 from src.strategies.scalping.futures.order_executor import FuturesOrderExecutor

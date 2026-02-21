@@ -8,8 +8,7 @@ import yaml
 
 from src.config import BotConfig
 from src.strategies.scalping.futures.config.config_manager import ConfigManager
-from src.strategies.scalping.futures.config.parameter_provider import \
-    ParameterProvider
+from src.strategies.scalping.futures.config.parameter_provider import ParameterProvider
 
 
 def test_adaptive_integration():

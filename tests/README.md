@@ -1,132 +1,38 @@
-# 🧪 Tests Directory Structure
+﻿# Tests
 
-## 📁 Структура папок
+This directory contains automated and manual checks for the project.
 
-```
-tests/
-├── main/           # Основные тесты системы
-├── unit/           # Unit тесты (модульные)
-├── integration/    # Integration тесты (интеграционные)
-├── debug/          # Debug скрипты и диагностика
-├── check/          # Проверочные скрипты
-├── emergency/      # Экстренные скрипты
-└── backtest/       # Backtest тесты
-```
+## Layout
 
-## 📋 Описание папок
+- `tests/unit/` - isolated unit tests.
+- `tests/integration/` - integration tests across modules and external APIs.
+- `tests/futures/` - futures strategy specific tests.
+- `tests/main/` - main scenario tests and orchestrated flows.
+- `tests/smoke/` - fast smoke checks and root-level quick tests moved here.
+- `tests/check/` - operational checks and exchange diagnostics.
+- `tests/debug/` - debugging and analysis scripts.
+- `tests/emergency/` - emergency operational scripts.
+- `tests/backtest/`, `tests/backtesting/` - backtesting helpers.
+- `tests/tools/` - test runners and parameter utilities.
+- `tests/reports/` - human-readable status reports.
+- `tests/artifacts/`, `tests/results/` - generated test artifacts.
+- `tests/archive/` - archived or deduplicated legacy files.
+- `tests/development/` - testing standards and maintenance docs.
 
-### 🎯 `main/` - Основные тесты
-- **Назначение**: Основные тесты торговой системы
-- **Файлы**: `test_*.py`, `analyze_trades.py`
-- **Примеры**:
-  - `test_full_trading_system.py` - полный тест торговой системы
-  - `test_maker_strategy.py` - тест Maker стратегии
-  - `test_manual_pool_strategy.py` - тест Manual Pool стратегии
+## Entry points
 
-### 🔬 `unit/` - Unit тесты
-- **Назначение**: Тестирование отдельных модулей
-- **Файлы**: `test_*.py` для каждого модуля
-- **Примеры**:
-  - `test_adaptive_regime.py` - тест Adaptive Regime Manager
-  - `test_balance_checker.py` - тест Balance Checker
-  - `test_correlation.py` - тест Correlation Manager
+- Full index: `TESTS_INDEX.md` (project root).
+- Reorg audit: `tests/TESTS_AUDIT_2026-02-21.md`.
+- Standards: `tests/development/TESTS_STANDARDS.md`.
 
-### 🔗 `integration/` - Integration тесты
-- **Назначение**: Тестирование взаимодействия модулей
-- **Файлы**: `test_*.py` для интеграционных тестов
-- **Примеры**:
-  - `test_okx_signature.py` - тест подписи OKX API
+## Naming
 
-### 🐛 `debug/` - Debug скрипты
-- **Назначение**: Диагностика и отладка проблем
-- **Файлы**: `debug_*.py`, `diagnose_*.py`
-- **Примеры**:
-  - `debug_oco_orders.py` - отладка OCO ордеров
-  - `debug_batch_api.py` - отладка Batch API
-  - `debug_post_only.py` - отладка POST-ONLY ордеров
+- Test files: `test_*.py`
+- Smoke checks: `smoke_*.py`
+- Utility runners: `run_*.py` or `*_tester.py`
 
-### ✅ `check/` - Проверочные скрипты
-- **Назначение**: Проверка состояния системы
-- **Файлы**: `check_*.py`, `final_*.py`
-- **Примеры**:
-  - `check_exchange_status.py` - проверка статуса биржи
-  - `check_borrowed_funds.py` - проверка займов
-  - `final_exchange_check.py` - финальная проверка биржи
+## Maintenance
 
-### 🚨 `emergency/` - Экстренные скрипты
-- **Назначение**: Экстренные действия и очистка
-- **Файлы**: `emergency_*.py`, `cancel_*.py`
-- **Примеры**:
-  - `emergency_cancel_oco.py` - экстренная отмена OCO ордеров
-  - `cancel_test_orders.py` - отмена тестовых ордеров
-
-### 📊 `backtest/` - Backtest тесты
-- **Назначение**: Тестирование стратегий на исторических данных
-- **Файлы**: `test_*.py` для backtest
-
-## 🚀 Как запускать тесты
-
-### Основные тесты:
-```bash
-python tests/main/test_full_trading_system.py
-python tests/main/test_maker_strategy.py
-```
-
-### Unit тесты:
-```bash
-python tests/unit/test_adaptive_regime.py
-python tests/unit/test_balance_checker.py
-```
-
-### Debug скрипты:
-```bash
-python tests/debug/debug_oco_orders.py
-python tests/debug/debug_batch_api.py
-```
-
-### Проверочные скрипты:
-```bash
-python tests/check/check_exchange_status.py
-python tests/check/check_borrowed_funds.py
-```
-
-### Экстренные скрипты:
-```bash
-python tests/emergency/emergency_cancel_oco.py
-python tests/emergency/cancel_test_orders.py
-```
-
-## 📝 Правила именования
-
-- **Основные тесты**: `test_*.py`
-- **Debug скрипты**: `debug_*.py`
-- **Проверочные скрипты**: `check_*.py`
-- **Экстренные скрипты**: `emergency_*.py`
-- **Unit тесты**: `test_*.py`
-- **Integration тесты**: `test_*.py`
-
-## ⚠️ Важные замечания
-
-1. **Все тесты должны быть в соответствующих папках**
-2. **Не создавать тесты в корне проекта**
-3. **Обновлять импорты при перемещении файлов**
-4. **Документировать новые тесты в этом README**
-
-## 🔧 Обновление импортов
-
-При перемещении файлов обновляйте импорты:
-
-```python
-# Было (в корне):
-from src.okx_client import OKXClient
-
-# Стало (в tests/):
-import sys
-sys.path.append('..')
-from src.okx_client import OKXClient
-```
-
----
-
-**Последнее обновление**: 26.10.2025  
-**Автор**: Trading Bot Team
+- Keep `tests/` root minimal: only README, package marker, and audit files.
+- Move new files into a category folder immediately.
+- Archive duplicates into `tests/archive/` instead of deleting without review.
