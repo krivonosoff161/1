@@ -37,6 +37,7 @@ class PositionSync:
         data_registry=None,
         config_manager=None,
         get_used_margin_callback=None,
+        telegram=None,
     ):
         """
         Инициализация PositionSync.
@@ -52,6 +53,7 @@ class PositionSync:
             scalping_config: Конфигурация скальпинга
             fast_adx: FastADX индикатор
             signal_generator: Генератор сигналов
+            telegram: TelegramNotifier для отправки алертов
         """
         self.client = client
         self.position_registry = position_registry
@@ -66,6 +68,7 @@ class PositionSync:
         self.data_registry = data_registry
         self.config_manager = config_manager
         self.get_used_margin_callback = get_used_margin_callback
+        self.telegram = telegram
 
         # ✅ Блокировки для предотвращения race condition
         self._drift_locks: Dict[str, asyncio.Lock] = {}
@@ -332,7 +335,58 @@ class PositionSync:
         # Удаляем позиции, которых нет на бирже
         stale_symbols = set(self.active_positions.keys()) - seen_symbols
         for symbol in list(stale_symbols):
-            logger.warning(f"DRIFT_REMOVE {symbol} not on exchange")
+            # ✅ CRITICAL FIX (L0-5): DRIFT_REMOVE теперь с CRITICAL логированием и алертом
+            local_position = self.active_positions.get(symbol, {})
+            entry_price = local_position.get("entry_price", 0)
+            size = local_position.get("size", 0)
+            side = local_position.get("position_side", "unknown")
+            entry_time = local_position.get("entry_time")
+
+            # Рассчитываем длительность
+            duration_str = "N/A"
+            if entry_time:
+                if isinstance(entry_time, datetime):
+                    duration_sec = (
+                        datetime.now(timezone.utc) - entry_time
+                    ).total_seconds()
+                elif isinstance(entry_time, (int, float)):
+                    duration_sec = time.time() - entry_time
+                else:
+                    duration_sec = 0
+                duration_str = f"{duration_sec:.0f} сек"
+
+            # 🔴 CRITICAL Логирование
+            logger.critical("=" * 80)
+            logger.critical(f"🚨 DRIFT_REMOVE: {symbol} - ПОЗИЦИЯ ЗАКРЫТА НА БИРЖЕ!")
+            logger.critical("=" * 80)
+            logger.critical(f"   📊 Локальная позиция:")
+            logger.critical(f"      Side: {side.upper()}")
+            logger.critical(f"      Size: {size} контрактов")
+            logger.critical(f"      Entry: ${entry_price:.6f}")
+            logger.critical(f"      Длительность: {duration_str}")
+            logger.critical(f"   🔍 Возможные причины:")
+            logger.critical(f"      • Trailing Stop Loss на бирже")
+            logger.critical(f"      • Liquidation (принудительное закрытие)")
+            logger.critical(f"      • ADL (Auto-Deleveraging)")
+            logger.critical(f"      • Manual close (пользователь)")
+            logger.critical(f"   📝 Действие: Синхронизация локального состояния...")
+            logger.critical("=" * 80)
+
+            # ✅ Отправляем CRITICAL алерт в Telegram
+            if self.telegram and hasattr(self.telegram, "send_drift_remove_alert"):
+                try:
+                    asyncio.create_task(
+                        self.telegram.send_drift_remove_alert(
+                            symbol=symbol,
+                            side=side,
+                            entry_price=entry_price,
+                            size=size,
+                            duration_str=duration_str,
+                        )
+                    )
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось отправить DRIFT_REMOVE алерт: {e}")
+
             self.active_positions.pop(symbol, None)
 
             # Удаляем TSL

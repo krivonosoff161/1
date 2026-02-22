@@ -1080,6 +1080,7 @@ class FuturesScalpingOrchestrator:
             data_registry=self.data_registry,
             config_manager=self.config_manager,
             get_used_margin_callback=self._get_used_margin,
+            telegram=self.telegram,  # ✅ CRITICAL: Telegram для DRIFT_REMOVE алертов
         )
         logger.info("✅ PositionSync инициализирован")
 
@@ -5624,6 +5625,49 @@ class FuturesScalpingOrchestrator:
                         )
                     except Exception as e:
                         logger.warning(f"⚠️ Ошибка записи статистики: {e}")
+
+                # ✅ L6-1 FIX: Отправляем уведомление о закрытии позиции в Telegram
+                try:
+                    if (
+                        hasattr(self, "telegram")
+                        and self.telegram
+                        and self.telegram.enabled
+                    ):
+                        # Получаем данные для уведомления
+                        close_side = position.get("side", "buy")
+                        close_entry = float(position.get("entry_price", 0) or 0)
+                        close_exit = float(position.get("current_price", 0) or 0)
+                        # PnL берём из trade_result если есть
+                        close_pnl = 0.0
+                        if trade_result:
+                            if isinstance(trade_result, dict):
+                                close_pnl = float(trade_result.get("net_pnl", 0) or 0)
+                            else:
+                                close_pnl = float(
+                                    getattr(trade_result, "net_pnl", 0) or 0
+                                )
+                        # Длительность позиции
+                        close_duration = 0.0
+                        if isinstance(entry_time, datetime):
+                            close_duration = (
+                                datetime.now(timezone.utc) - entry_time
+                            ).total_seconds() / 60.0
+
+                        # Отправляем уведомление асинхронно (не блокируем)
+                        asyncio.create_task(
+                            self.telegram.send_trade_close(
+                                symbol=symbol,
+                                side=close_side,
+                                entry_price=close_entry,
+                                close_price=close_exit,
+                                net_pnl=close_pnl,
+                                reason=reason,
+                                duration_min=close_duration,
+                            )
+                        )
+                        logger.debug(f"📨 Telegram notification sent for {symbol} close")
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка отправки уведомления в Telegram: {e}")
 
                 # ✅ Обновляем кэш ордеров
                 normalized_symbol = self.config_manager.normalize_symbol(symbol)

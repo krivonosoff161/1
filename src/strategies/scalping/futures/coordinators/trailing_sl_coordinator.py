@@ -540,6 +540,7 @@ class TrailingSLCoordinator:
                 "loss_cut_confirmation_window_sec", 5.0
             ),
             debug_logger=self.debug_logger,  # ✅ DEBUG LOGGER для логирования
+            breakeven_trigger=params.get("breakeven_trigger"),
         )
 
         # ✅ АДАПТИВНО: Устанавливаем параметры из конфига для TSL

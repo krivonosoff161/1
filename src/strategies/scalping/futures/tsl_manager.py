@@ -86,6 +86,7 @@ class TSLManager:
             trail_growth_high_multiplier=tsl_params.get(
                 "trail_growth_high_multiplier", 3.0
             ),
+            breakeven_trigger=tsl_params.get("breakeven_trigger"),
         )
 
         # Инициализируем TSL

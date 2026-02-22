@@ -713,6 +713,10 @@ class ConfigManager:
                 "loss_cut_confirmation_window_sec",
                 params["loss_cut_confirmation_window_sec"],
             )
+            # ✅ BREAKEVEN: Порог прибыли для активации безубытка
+            params["breakeven_trigger"] = self.get_config_value(
+                trailing_sl_config, "breakeven_trigger", None
+            )
 
             # ✅ АДАПТИВНО: Short reversal protection параметры из общего конфига
             short_reversal_config = self.get_config_value(
@@ -829,6 +833,11 @@ class ConfigManager:
                             params[
                                 "loss_cut_confirmation_window_sec"
                             ] = regime_params_dict["loss_cut_confirmation_window_sec"]
+                        # ✅ BREAKEVEN: Режим-специфичный порог безубытка
+                        if "breakeven_trigger" in regime_params_dict:
+                            params["breakeven_trigger"] = regime_params_dict[
+                                "breakeven_trigger"
+                            ]
                         # ✅ НОВОЕ: Множители режимов для trailing stop (из конфига)
                         if "regime_multiplier" in regime_params_dict:
                             params["regime_multiplier"] = regime_params_dict[

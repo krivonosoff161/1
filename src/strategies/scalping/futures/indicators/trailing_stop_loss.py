@@ -63,6 +63,9 @@ class TrailingStopLoss:
         loss_cut_confirmation_required: int = 2,
         loss_cut_confirmation_window_sec: float = 5.0,
         debug_logger=None,  # ✅ DEBUG LOGGER для логирования
+        breakeven_trigger: Optional[
+            float
+        ] = None,  # ✅ BREAKEVEN: Порог прибыли для активации (0.008 = 0.8%)
     ):
         """
         Инициализация Trailing Stop Loss.
@@ -88,6 +91,8 @@ class TrailingStopLoss:
             taker_fee_rate if taker_fee_rate is not None else trading_fee_rate,
             default=0.0005,
         )
+        # ✅ BREAKEVEN: Сохраняем trading_fee_rate для расчета безубытка
+        self.trading_fee_rate = self.maker_fee_rate
         logger.info(
             f"TrailingStopLoss комиссии: maker={self.maker_fee_rate:.5f}, taker={self.taker_fee_rate:.5f}, trading_fee_rate={trading_fee_rate}"
         )
@@ -177,6 +182,12 @@ class TrailingStopLoss:
             self.loss_cut_confirmation_window_sec = 5.0
         self._loss_cut_breach_count = 0
         self._loss_cut_breach_last_ts = 0.0
+        # ✅ BREAKEVEN: Параметры для гарантии безубытка
+        self.breakeven_trigger: Optional[
+            float
+        ] = breakeven_trigger  # Порог прибыли для активации (0.008 = 0.8%)
+        self.breakeven_activated: bool = False
+        self.breakeven_price: Optional[float] = None  # Цена безубытка + комиссия
 
     @staticmethod
     def _normalize_fee_rate(value: Optional[float], default: float) -> float:
@@ -251,6 +262,10 @@ class TrailingStopLoss:
         else:  # short
             self.highest_price = 0.0
             self.lowest_price = entry_price
+
+        # ✅ BREAKEVEN: Сброс при новой позиции
+        self.breakeven_activated = False
+        self.breakeven_price = None
 
         human_ts = datetime.fromtimestamp(self.entry_timestamp).isoformat()
         logger.info(
@@ -443,6 +458,36 @@ class TrailingStopLoss:
                 )
             self._next_trail_profit_target = target
 
+        # ✅ BREAKEVEN: Гарантируем безубыток при достижении порога прибыли
+        if (
+            self.breakeven_trigger
+            and profit_pct_total >= self.breakeven_trigger
+            and not self.breakeven_activated
+        ):
+            # Рассчитываем цену безубытка + комиссия
+            fee_buffer = self.trading_fee_rate * 2  # Вход + выход
+            if self.side == "long":
+                self.breakeven_price = self.entry_price * (1 + fee_buffer)
+                # Подтягиваем highest_price к breakeven_price если ниже
+                if self.highest_price < self.breakeven_price:
+                    self.highest_price = self.breakeven_price
+                    logger.info(
+                        f"🛡️ BREAKEVEN АКТИВИРОВАН для {getattr(self, '_symbol', 'UNKNOWN')} LONG: "
+                        f"прибыль {profit_pct_total:.2%} >= {self.breakeven_trigger:.2%}, "
+                        f"SL подтянут к {self.breakeven_price:.2f} (entry + fee)"
+                    )
+            else:  # short
+                self.breakeven_price = self.entry_price * (1 - fee_buffer)
+                # Подтягиваем lowest_price к breakeven_price если выше
+                if self.lowest_price > self.breakeven_price:
+                    self.lowest_price = self.breakeven_price
+                    logger.info(
+                        f"🛡️ BREAKEVEN АКТИВИРОВАН для {getattr(self, '_symbol', 'UNKNOWN')} SHORT: "
+                        f"прибыль {profit_pct_total:.2%} >= {self.breakeven_trigger:.2%}, "
+                        f"SL подтянут к {self.breakeven_price:.2f} (entry - fee)"
+                    )
+            self.breakeven_activated = True
+
         new_stop_loss = self.get_stop_loss()
 
         # Возвращаем новый стоп-лосс только если он изменился
@@ -474,7 +519,11 @@ class TrailingStopLoss:
                 if self.highest_price > 0
                 else self.entry_price
             )
-            return effective_highest * (1 - self.current_trail)
+            stop_loss = effective_highest * (1 - self.current_trail)
+            # ✅ BREAKEVEN: Гарантируем минимум entry + fee если breakeven активирован
+            if self.breakeven_activated and self.breakeven_price is not None:
+                stop_loss = max(stop_loss, self.breakeven_price)
+            return stop_loss
         else:  # short
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для SHORT стоп должен быть ВЫШЕ entry при инициализации (защита от роста)
             # При инициализации: lowest_price = entry_price, стоп = entry_price * (1 + trail%) (выше entry)
@@ -501,6 +550,10 @@ class TrailingStopLoss:
                 # Цена еще не упала ниже entry или это инициализация - стоп выше entry
                 # Стоп = entry_price * (1 + trail%) (защита от роста)
                 stop_loss = self.entry_price * (1 + self.current_trail)
+
+            # ✅ BREAKEVEN: Гарантируем максимум entry - fee если breakeven активирован
+            if self.breakeven_activated and self.breakeven_price is not None:
+                stop_loss = min(stop_loss, self.breakeven_price)
 
             return stop_loss
 
@@ -1203,6 +1256,9 @@ class TrailingStopLoss:
         self._next_trail_profit_target = (
             self.aggressive_step_profit if self.aggressive_mode else None
         )
+        # ✅ BREAKEVEN: Сброс состояния безубытка
+        self.breakeven_activated = False
+        self.breakeven_price = None
         logger.info("TrailingStopLoss сброшен")
 
     def __repr__(self) -> str:

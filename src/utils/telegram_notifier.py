@@ -364,6 +364,54 @@ class TelegramNotifier:
 
         await self.send_message(text)
 
+    async def send_drift_remove_alert(
+        self,
+        symbol: str,
+        side: str,
+        entry_price: float,
+        size: float,
+        duration_str: str,
+        possible_causes: list = None,
+    ) -> None:
+        """
+        ✅ CRITICAL ALERT: Позиция закрыта на бирже, но не через бота (DRIFT_REMOVE).
+
+        Args:
+            symbol: Торговый символ
+            side: Сторона позиции (buy/sell)
+            entry_price: Цена входа
+            size: Размер позиции
+            duration_str: Длительность удержания
+            possible_causes: Список возможных причин закрытия
+        """
+        if not self.enabled:
+            return
+
+        side_ru = "LONG" if side == "buy" else "SHORT"
+        causes = possible_causes or [
+            "Trailing Stop Loss на бирже",
+            "Liquidation (принудительное закрытие)",
+            "ADL (Auto-Deleveraging)",
+            "Manual close (пользователь закрыл вручную)",
+        ]
+        causes_str = "\n".join([f"  • {c}" for c in causes])
+
+        text = (
+            f"🚨 <b>CRITICAL: ПОЗИЦИЯ ЗАКРЫТА НА БИРЖЕ</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>{side_ru} {symbol}</b>\n\n"
+            f"📊 Детали позиции:\n"
+            f"  • Entry: ${entry_price:.4f}\n"
+            f"  • Size: {size} контрактов\n"
+            f"  • Длительность: {duration_str}\n\n"
+            f"⚠️ Позиция отсутствует на бирже, но была в локальном реестре!\n\n"
+            f"🔍 Возможные причины:\n"
+            f"{causes_str}\n\n"
+            f"📝 Действие: Локальное состояние синхронизировано"
+        )
+
+        await self.send_critical_alert(text, "DRIFT_REMOVE DETECTED")
+
     async def send_message(self, text: str) -> None:
         """Отправить произвольное HTML-сообщение всем получателям из chat_ids."""
         if not self.enabled:

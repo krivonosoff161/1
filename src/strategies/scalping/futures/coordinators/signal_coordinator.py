@@ -157,9 +157,28 @@ class SignalCoordinator:
         self._reentry_same_side_cooldown_sec = max(
             0.0, float(_cfg_get(reentry_guard_cfg, "same_side_cooldown_sec", 12.0))
         )
+        # ✅ FIX L2-3: Используем cooldown_after_loss_minutes из конфига если loss_cooldown_sec не задан
+        # Порядок приоритета: reentry_guard.loss_cooldown_sec > exit_params.cooldown_after_loss_minutes > default
+        _default_loss_cooldown_sec = 45.0
+        _cooldown_from_config = _cfg_get(reentry_guard_cfg, "loss_cooldown_sec", None)
+        if _cooldown_from_config is None:
+            # Fallback на cooldown_after_loss_minutes из exit_params (в минутах, конвертируем в секунды)
+            exit_params = _cfg_get(self.scalping_config, "exit_params", {}) or {}
+            _cooldown_minutes = _cfg_get(
+                exit_params, "cooldown_after_loss_minutes", None
+            )
+            if _cooldown_minutes is not None:
+                _default_loss_cooldown_sec = float(_cooldown_minutes) * 60.0
+                logger.info(
+                    f"✅ L2-3 FIX: Using cooldown_after_loss_minutes={_cooldown_minutes}min "
+                    f"({_default_loss_cooldown_sec:.0f}s) for reentry_guard"
+                )
+        else:
+            _default_loss_cooldown_sec = float(_cooldown_from_config)
+
         self._reentry_loss_cooldown_sec = max(
             self._reentry_same_side_cooldown_sec,
-            float(_cfg_get(reentry_guard_cfg, "loss_cooldown_sec", 45.0)),
+            _default_loss_cooldown_sec,
         )
         self._reentry_opposite_side_cooldown_sec = max(
             0.0,

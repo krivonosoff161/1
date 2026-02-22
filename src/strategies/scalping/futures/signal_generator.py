@@ -2069,7 +2069,7 @@ class FuturesSignalGenerator:
 
             # ✅ ИСПРАВЛЕНИЕ (13.02.2026): Дедупликация конфликтующих BUY+SELL сигналов
             # Проблема: RSI генерирует SELL, MACD генерирует BUY на одном тике → downstream выбирает случайно
-            # Решение: если есть и buy и sell → оставляем более сильный; при равной силе (±0.05) → убираем оба
+            # ✅ FIX L2-1: При равной силе (diff ≤ 0.05) выбираем победителя с -20% штрафом к силе вместо отбрасывания обоих
             if base_signals and len(base_signals) > 1:
                 buy_signals = [
                     s for s in base_signals if s.get("side") in ("buy", "long")
@@ -2084,11 +2084,20 @@ class FuturesSignalGenerator:
                     sell_str = best_sell.get("strength", 0)
                     diff = abs(buy_str - sell_str)
                     if diff <= 0.05:
+                        # ✅ FIX L2-1: Выбираем победителя с -20% штрафом вместо отбрасывания обоих
+                        winner = best_buy if buy_str >= sell_str else best_sell
+                        loser_side = "SELL" if buy_str >= sell_str else "BUY"
+                        winner_side = "BUY" if buy_str >= sell_str else "SELL"
+                        # Применяем штраф -20% к силе
+                        original_strength = winner.get("strength", 0)
+                        winner["strength"] = original_strength * 0.8
+                        winner["has_conflict"] = True  # Помечаем как конфликтный
                         logger.warning(
                             f"⚡ {symbol}: КОНФЛИКТ BUY({buy_str:.3f}) vs SELL({sell_str:.3f}) — "
-                            f"сила равная (diff={diff:.3f}), пропускаем оба сигнала"
+                            f"сила равная (diff={diff:.3f}), выбираем {winner_side} с штрафом -20% "
+                            f"(strength: {original_strength:.3f} → {winner['strength']:.3f})"
                         )
-                        base_signals = []
+                        base_signals = [winner]
                     else:
                         winner = best_buy if buy_str > sell_str else best_sell
                         loser_side = "SELL" if buy_str > sell_str else "BUY"
