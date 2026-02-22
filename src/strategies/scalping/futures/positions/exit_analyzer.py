@@ -573,6 +573,16 @@ class ExitAnalyzer:
                             entry_ts = datetime.fromisoformat(etime).timestamp()
                         except Exception:
                             pass
+                # FIX 2026-02-22: после рестарта position_sync кладёт сырые данные OKX
+                # где время позиции = cTime (ms), а не entry_time/entryTime.
+                # Без этого fallback pre-check молча пропускается → позиции висят 7+ часов.
+                if entry_ts is None and isinstance(position, dict):
+                    c_time_raw = position.get("cTime")
+                    if c_time_raw:
+                        try:
+                            entry_ts = float(c_time_raw) / 1000.0  # ms → seconds
+                        except (ValueError, TypeError):
+                            pass
                 if entry_ts and entry_ts > 0:
                     minutes_now = (time.time() - entry_ts) / 60.0
                     max_holding = self._get_max_holding_minutes(
@@ -592,7 +602,7 @@ class ExitAnalyzer:
                             "current_price": 0.0,
                         }
             except Exception as _e:
-                logger.debug(
+                logger.warning(
                     f"⚠️ ExitAnalyzer: Ошибка pre-price max_holding check для {symbol}: {_e}"
                 )
 
@@ -4096,15 +4106,17 @@ class ExitAnalyzer:
                     )  # 0.3% в процентах
 
                     if pnl_percent < min_profit_threshold_pct:
-                        # Прибыль меньше min_profit_to_close - НЕ закрываем по времени (после комиссий будет убыток!)
-                        logger.info(
+                        # FIX 2026-02-22: max_holding превышен — закрываем ВСЕГДА независимо от размера прибыли.
+                        # Раньше здесь был "hold" → позиции висели 7+ часов платя funding (-5.5$/позицию).
+                        # Лучше зафиксировать малую прибыль или небольшой убыток, чем терять на funding.
+                        logger.warning(
                             f"⏰ ExitAnalyzer TRENDING: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
-                            f"но прибыль {pnl_percent:.2f}% < min_profit_threshold {min_profit_threshold_pct:.2f}% - "
-                            f"НЕ закрываем по времени (после комиссий будет убыток!)"
+                            f"прибыль {pnl_percent:.2f}% < min_profit_threshold {min_profit_threshold_pct:.2f}% - "
+                            f"ЗАКРЫВАЕМ по времени (funding > потенциальная прибыль от ожидания)"
                         )
                         return {
-                            "action": "hold",
-                            "reason": "max_holding_low_profit",
+                            "action": "close",
+                            "reason": "max_holding_low_profit_timeout",
                             "pnl_pct": pnl_percent,
                             "min_profit_threshold": min_profit_threshold_pct,
                             "minutes_in_position": minutes_in_position,
@@ -5685,18 +5697,20 @@ class ExitAnalyzer:
 
                 # ✅ ИСПРАВЛЕНО: Используем Net PnL для проверки min_profit_to_close (реальная прибыль после комиссий)
                 if net_pnl_percent < min_profit_threshold_pct:
-                    # Прибыль меньше min_profit_to_close - НЕ закрываем по времени (после комиссий будет убыток!)
-                    logger.info(
+                    # FIX 2026-02-22: max_holding превышен — закрываем ВСЕГДА.
+                    # Раньше здесь был "hold" → позиции висели 7+ часов платя funding (-5.5$/позицию).
+                    # Лучше зафиксировать малую прибыль или небольшой убыток, чем терять на funding.
+                    logger.warning(
                         f"⏰ ExitAnalyzer RANGING: Время {minutes_in_position:.1f} мин >= {actual_max_holding:.1f} мин "
-                        f"(базовое: {max_holding_minutes:.1f} мин), но Net прибыль {net_pnl_percent:.2f}% < "
+                        f"(базовое: {max_holding_minutes:.1f} мин), Net прибыль {net_pnl_percent:.2f}% < "
                         f"min_profit_threshold {min_profit_threshold_pct:.2f}% (Gross PnL {gross_pnl_percent:.2f}%) - "
-                        f"НЕ закрываем по времени (после комиссий будет убыток!)"
+                        f"ЗАКРЫВАЕМ по времени (funding > потенциальная прибыль от ожидания)"
                     )
                     return {
-                        "action": "hold",
-                        "reason": "max_holding_low_profit",
-                        "pnl_pct": net_pnl_percent,  # Net PnL для логирования
-                        "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
+                        "action": "close",
+                        "reason": "max_holding_low_profit_timeout",
+                        "pnl_pct": net_pnl_percent,
+                        "gross_pnl_pct": gross_pnl_percent,
                         "min_profit_threshold": min_profit_threshold_pct,
                         "minutes_in_position": minutes_in_position,
                         "regime": regime,
@@ -6625,15 +6639,15 @@ class ExitAnalyzer:
                 )  # 0.3% в процентах
 
                 if pnl_percent < min_profit_threshold_pct:
-                    # Прибыль меньше min_profit_to_close - НЕ закрываем по времени (после комиссий будет убыток!)
-                    logger.info(
+                    # FIX 2026-02-22: max_holding превышен — закрываем ВСЕГДА.
+                    logger.warning(
                         f"⏰ ExitAnalyzer CHOPPY: Время {minutes_in_position:.1f} мин >= {max_holding_minutes:.1f} мин, "
-                        f"но прибыль {pnl_percent:.2f}% < min_profit_threshold {min_profit_threshold_pct:.2f}% - "
-                        f"НЕ закрываем по времени (после комиссий будет убыток!)"
+                        f"прибыль {pnl_percent:.2f}% < min_profit_threshold {min_profit_threshold_pct:.2f}% - "
+                        f"ЗАКРЫВАЕМ по времени (funding > потенциальная прибыль от ожидания)"
                     )
                     return {
-                        "action": "hold",
-                        "reason": "max_holding_low_profit",
+                        "action": "close",
+                        "reason": "max_holding_low_profit_timeout",
                         "pnl_pct": pnl_percent,
                         "min_profit_threshold": min_profit_threshold_pct,
                         "minutes_in_position": minutes_in_position,

@@ -4989,11 +4989,13 @@ class FuturesSignalGenerator:
                 except Exception as exc:
                     logger.debug("Ignored error in optional block: %s", exc)
 
-                adx_threshold_rsi_oversold = 30.0  # Fallback для ranging
+                adx_threshold_rsi_oversold = (
+                    25.0  # Fallback для ranging (FIX 2026-02-22: было 30)
+                )
                 if current_regime_rsi_oversold == "trending":
                     adx_threshold_rsi_oversold = 20.0
                 elif current_regime_rsi_oversold == "choppy":
-                    adx_threshold_rsi_oversold = 40.0
+                    adx_threshold_rsi_oversold = 25.0  # FIX 2026-02-22: было 40 — слишком высоко, DOGE ADX=40.1 не блокировался
 
                 if adx_value >= adx_threshold_rsi_oversold and adx_trend == "bearish":
                     should_block = True
@@ -5074,11 +5076,13 @@ class FuturesSignalGenerator:
                 current_regime_rsi_overbought_2 = (
                     current_regime  # Используем уже полученный режим выше
                 )
-                adx_threshold_rsi_overbought_2 = 30.0  # Fallback для ranging
+                adx_threshold_rsi_overbought_2 = (
+                    25.0  # Fallback для ranging (FIX 2026-02-22: было 30)
+                )
                 if current_regime_rsi_overbought_2 == "trending":
                     adx_threshold_rsi_overbought_2 = 20.0
                 elif current_regime_rsi_overbought_2 == "choppy":
-                    adx_threshold_rsi_overbought_2 = 40.0
+                    adx_threshold_rsi_overbought_2 = 25.0  # FIX 2026-02-22: было 40
 
                 if (
                     adx_value >= adx_threshold_rsi_overbought_2
@@ -5369,11 +5373,15 @@ class FuturesSignalGenerator:
                 except Exception as exc:
                     logger.debug("Ignored error in optional block: %s", exc)
 
-                adx_threshold_macd_bullish = 30.0  # Fallback для ranging
+                adx_threshold_macd_bullish = (
+                    25.0  # Fallback для ranging (FIX 2026-02-22: было 30)
+                )
                 if current_regime_macd_bullish == "trending":
                     adx_threshold_macd_bullish = 20.0
                 elif current_regime_macd_bullish == "choppy":
-                    adx_threshold_macd_bullish = 40.0
+                    adx_threshold_macd_bullish = (
+                        25.0  # FIX 2026-02-22: было 40 — слишком высоко
+                    )
 
                 if adx_value >= adx_threshold_macd_bullish and adx_trend == "bearish":
                     should_block_macd_bullish = True
