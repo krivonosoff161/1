@@ -269,6 +269,15 @@ class ParameterOrchestrator:
             adx_filter = modules_cfg.get("adx_filter")
             if isinstance(adx_filter, dict):
                 adx_threshold = optional_float(adx_filter, "adx_threshold")
+
+        # FIX 2026-02-22 P1.4: Override min_adx с per-symbol значения если есть.
+        # Config давно содержит by_symbol.DOGE-USDT.min_adx: 8.0 и т.д., но код игнорировал их.
+        if isinstance(by_symbol, dict) and symbol in by_symbol:
+            symbol_cfg = by_symbol.get(symbol)
+            if isinstance(symbol_cfg, dict) and "min_adx" in symbol_cfg:
+                adx_threshold = float(symbol_cfg["min_adx"])
+                sources["min_adx"] = f"scalping.by_symbol.{symbol}"
+
         if adx_threshold is None:
             errors.append(
                 f"adaptive_regime.{regime}.modules.adx_filter.adx_threshold missing"

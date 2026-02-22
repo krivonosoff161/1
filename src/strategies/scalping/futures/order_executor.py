@@ -2665,7 +2665,8 @@ class FuturesOrderExecutor:
 
             # Получаем режим рынка (если доступен)
             regime = signal.get("regime", "ranging")
-            regime_params = self._get_regime_params(regime)
+            # FIX 2026-02-22 P1.3: передаём symbol чтобы by_symbol overrides (sl/tp ATR multiplier) применялись
+            regime_params = self._get_regime_params(regime, symbol=symbol)
 
             # 🎯 АДАПТИВНЫЕ МУЛЬТИПЛИКАТОРЫ
             if regime_params:
@@ -2749,6 +2750,37 @@ class FuturesOrderExecutor:
                 logger.info(
                     f"✅ Используется ATR-based SL ({sl_distance/entry_price*100:.2f}%) для {symbol} "
                     f"(regime={regime}, больше минимального {sl_percent_value:.2f}%)"
+                )
+
+            # FIX 2026-02-22 P0.1: применяем tp_percent как минимальный TP (зеркально sl_percent).
+            # Без этого TP остаётся ATR-based (~0.2-0.4%) при SL floored 1.0-1.5% → R:R 0.2:1 → гарантированный убыток.
+            # Config уже содержит правильные значения: trending tp_percent=4.0%/sl=1.2% → R:R 3.3:1
+            tp_percent_value = None
+            if regime_params:
+                tp_percent_value = regime_params.get("tp_percent") or regime_params.get(
+                    "tp_min_percent"
+                )
+            if tp_percent_value is None:
+                tp_percent_value = getattr(self.scalping_config, "tp_percent", 2.4)
+                logger.warning(
+                    f"⚠️ FALLBACK: Используется глобальный tp_percent={tp_percent_value:.2f}% для {symbol} "
+                    f"(regime={regime})"
+                )
+
+            tp_percent_abs = entry_price * (float(tp_percent_value) / 100.0)
+            if tp_distance < tp_percent_abs:
+                old_tp_distance = tp_distance
+                tp_distance = tp_percent_abs
+                logger.info(
+                    f"⚠️ ATR-based TP слишком мал ({old_tp_distance/entry_price*100:.2f}%) "
+                    f"→ применяем tp_percent floor ({float(tp_percent_value):.2f}%) для {symbol} "
+                    f"(regime={regime}, итоговый R:R={tp_distance/sl_distance:.2f}:1)"
+                )
+            else:
+                logger.info(
+                    f"✅ ATR-based TP ({tp_distance/entry_price*100:.2f}%) для {symbol} "
+                    f"выше tp_percent floor ({float(tp_percent_value):.2f}%) "
+                    f"(regime={regime}, итоговый R:R={tp_distance/sl_distance:.2f}:1)"
                 )
 
             if side.lower() == "buy":
