@@ -259,6 +259,7 @@ class TelegramNotifier:
         regime = signal.get("regime", "")
         confidence = signal.get("confidence", 0.0)
         ind_value = signal.get("indicator_value")
+        leverage = signal.get("leverage")
 
         side_icon = "🟢 LONG" if side == "buy" else "🔴 SHORT"
         regime_ru = self._REGIME_RU.get(regime, regime)
@@ -276,6 +277,21 @@ class TelegramNotifier:
             tp_str = f"{tp_price:.4f}"
             sl_str = f"{sl_price:.4f}"
             rr_str = "—"
+
+        # Плечо
+        if leverage:
+            lev_int = int(leverage)
+            if lev_int <= 3:
+                lev_comment = "консервативное"
+            elif lev_int <= 7:
+                lev_comment = "умеренное"
+            elif lev_int <= 12:
+                lev_comment = "агрессивное"
+            else:
+                lev_comment = "⚠️ высокий риск"
+            lev_str = f"<b>{lev_int}x</b>  ({lev_comment})"
+        else:
+            lev_str = "—"
 
         # Объяснение почему
         why_parts = [sig_ru]
@@ -301,6 +317,7 @@ class TelegramNotifier:
             f"🎯 TP:    <b>{tp_str}</b>\n"
             f"🛡 SL:    <b>{sl_str}</b>\n"
             f"📊 R:R:   <b>{rr_str}</b>\n"
+            f"⚡ Плечо: {lev_str}\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"⚡ Сигнал:  {sig_ru}\n"
             f"📈 Режим:  {regime_ru}\n"
