@@ -29,6 +29,7 @@ from src.config import BotConfig, load_yaml_strict
 from src.strategies.modules.liquidation_guard import LiquidationGuard
 from src.strategies.modules.slippage_guard import SlippageGuard
 from src.strategies.modules.trading_statistics import TradingStatistics
+from src.utils.telegram_notifier import TelegramNotifier
 
 from ..spot.performance_tracker import PerformanceTracker
 
@@ -505,6 +506,12 @@ class FuturesScalpingOrchestrator:
             self.order_executor.set_signal_generator(self.signal_generator)
         if hasattr(self.signal_generator, "set_performance_tracker"):
             self.signal_generator.set_performance_tracker(self.performance_tracker)
+
+        # Telegram: инициализация и подключение к order_executor
+        self.telegram = TelegramNotifier()
+        if self.telegram.enabled and hasattr(self.order_executor, "set_telegram"):
+            self.order_executor.set_telegram(self.telegram)
+            logger.info("✅ Telegram signal notifications подключены к OrderExecutor")
 
         # ✅ ЭТАП 1: Используем symbol_profiles из ConfigManager
         self.symbol_profiles: Dict[

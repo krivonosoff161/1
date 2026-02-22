@@ -54,6 +54,7 @@ class FuturesOrderExecutor:
         self.performance_tracker = None  # Будет установлен из orchestrator
         self.data_registry = None  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): DataRegistry для получения волатильности
         self.signal_generator = None  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): SignalGenerator для получения волатильности
+        self.telegram = None  # TelegramNotifier — устанавливается из orchestrator
 
         # Состояние
         self.is_initialized = False
@@ -104,6 +105,11 @@ class FuturesOrderExecutor:
         """✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (02.01.2026): Установить SignalGenerator для получения волатильности"""
         self.signal_generator = signal_generator
         logger.debug("✅ FuturesOrderExecutor: SignalGenerator установлен")
+
+    def set_telegram(self, telegram):
+        """Установить TelegramNotifier для отправки сигнальных уведомлений"""
+        self.telegram = telegram
+        logger.debug("✅ FuturesOrderExecutor: TelegramNotifier установлен")
 
     async def execute_signal(
         self, signal: Dict[str, Any], position_size: float
@@ -2563,6 +2569,18 @@ class FuturesOrderExecutor:
             if result.get("code") == "0":
                 order_id = result.get("data", [{}])[0].get("ordId")
                 logger.info(f"✅ OCO ордер размещен: {order_id}")
+
+                # Telegram: уведомление о входе
+                if self.telegram:
+                    size_usd = size * signal.get("price", 0.0)
+                    asyncio.create_task(
+                        self.telegram.send_trade_open(
+                            signal=signal,
+                            tp_price=tp_price,
+                            sl_price=sl_price,
+                            size_usd=size_usd,
+                        )
+                    )
 
                 return {
                     "success": True,

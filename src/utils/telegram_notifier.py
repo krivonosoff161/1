@@ -218,6 +218,156 @@ class TelegramNotifier:
         )
         await self.send_critical_alert(message, "DAILY REPORT")
 
+    # ─────────────────────────────────────────────────────────────────
+    # Trade signal notifications
+    # ─────────────────────────────────────────────────────────────────
+
+    _SIGNAL_TYPE_RU = {
+        "rsi_oversold": "RSI перепродан",
+        "rsi_overbought": "RSI перекуплен",
+        "macd_bullish": "MACD пересечение вверх",
+        "macd_bearish": "MACD пересечение вниз",
+        "bb_oversold": "Цена у нижней полосы BB",
+        "bb_overbought": "Цена у верхней полосы BB",
+        "short_combo": "Комбо-сигнал ШОРТ",
+        "rsi_divergence": "RSI дивергенция",
+        "volume_spike": "Спайк объёма",
+    }
+
+    _REGIME_RU = {
+        "trending": "Тренд",
+        "ranging": "Флэт",
+        "choppy": "Хаос",
+    }
+
+    async def send_trade_open(
+        self,
+        signal: dict,
+        tp_price: float,
+        sl_price: float,
+        size_usd: float = 0.0,
+    ) -> None:
+        """Уведомление об открытии позиции."""
+        if not self.enabled:
+            return
+
+        symbol = signal.get("symbol", "???")
+        side = signal.get("side", "???")
+        entry = signal.get("price", 0.0)
+        strength = signal.get("strength", 0.0)
+        sig_type = signal.get("type", "")
+        regime = signal.get("regime", "")
+        confidence = signal.get("confidence", 0.0)
+        ind_value = signal.get("indicator_value")
+
+        side_icon = "🟢 LONG" if side == "buy" else "🔴 SHORT"
+        regime_ru = self._REGIME_RU.get(regime, regime)
+        sig_ru = self._SIGNAL_TYPE_RU.get(sig_type, sig_type)
+
+        # R:R
+        if entry and entry > 0 and tp_price and sl_price:
+            tp_pct = abs(tp_price - entry) / entry * 100
+            sl_pct = abs(sl_price - entry) / entry * 100
+            rr = tp_pct / sl_pct if sl_pct > 0 else 0.0
+            tp_str = f"{tp_price:.4f} (+{tp_pct:.2f}%)"
+            sl_str = f"{sl_price:.4f} (-{sl_pct:.2f}%)"
+            rr_str = f"{rr:.1f}:1"
+        else:
+            tp_str = f"{tp_price:.4f}"
+            sl_str = f"{sl_price:.4f}"
+            rr_str = "—"
+
+        # Объяснение почему
+        why_parts = [sig_ru]
+        if ind_value is not None:
+            why_parts.append(f"значение={ind_value:.2f}")
+
+        # Дополнительный совет при сильном сигнале
+        tip = ""
+        if strength >= 0.75:
+            tip = (
+                "\n\n💡 <b>Сильный сигнал!</b> При достижении половины TP "
+                "рассмотри перенос SL в безубыток."
+            )
+        elif strength >= 0.55:
+            tip = "\n\n💡 Средний сигнал — держи стандартный SL."
+
+        size_str = f"${size_usd:.0f}" if size_usd else ""
+
+        text = (
+            f"<b>{side_icon} {symbol}</b>  {size_str}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📍 Вход:  <b>{entry:.4f}</b>\n"
+            f"🎯 TP:    <b>{tp_str}</b>\n"
+            f"🛡 SL:    <b>{sl_str}</b>\n"
+            f"📊 R:R:   <b>{rr_str}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚡ Сигнал:  {sig_ru}\n"
+            f"📈 Режим:  {regime_ru}\n"
+            f"💪 Сила:   {strength:.2f}  |  Уверенность: {confidence:.2f}\n"
+            f"🔍 Почему: {', '.join(why_parts)}"
+            f"{tip}"
+        )
+
+        await self.send_message(text)
+
+    async def send_trade_close(
+        self,
+        symbol: str,
+        side: str,
+        entry_price: float,
+        close_price: float,
+        net_pnl: float,
+        reason: str,
+        duration_min: float = 0.0,
+    ) -> None:
+        """Уведомление о закрытии позиции."""
+        if not self.enabled:
+            return
+
+        pnl_icon = "✅" if net_pnl >= 0 else "❌"
+        pnl_str = f"+${net_pnl:.2f}" if net_pnl >= 0 else f"-${abs(net_pnl):.2f}"
+        side_ru = "LONG" if side == "buy" else "SHORT"
+        dur_str = f"{duration_min:.1f} мин" if duration_min else ""
+
+        text = (
+            f"{pnl_icon} <b>Закрыто {side_ru} {symbol}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 PnL:    <b>{pnl_str}</b>\n"
+            f"📍 Вход:  {entry_price:.4f}  →  {close_price:.4f}\n"
+            f"⏱ Время: {dur_str}\n"
+            f"📋 Причина: {reason}"
+        )
+
+        await self.send_message(text)
+
+    async def send_message(self, text: str) -> None:
+        """Отправить произвольное HTML-сообщение."""
+        if not self.enabled:
+            return
+        try:
+            import aiohttp
+
+            url = f"{self.api_url}/sendMessage"
+            data = {
+                "chat_id": self.chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, json=data, timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        logger.warning(
+                            f"⚠️ Telegram send_message failed: {resp.status} {body[:120]}"
+                        )
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Telegram timeout")
+        except Exception as e:
+            logger.error(f"❌ Telegram error: {e}")
+
 
 # Для совместимости с другими модулями
 from datetime import datetime
