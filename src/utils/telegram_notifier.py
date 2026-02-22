@@ -29,19 +29,25 @@ class TelegramNotifier:
         """
         Args:
             bot_token: Telegram Bot Token (или из env)
-            chat_id: Telegram Chat ID (или из env)
+            chat_id: Telegram Chat ID или несколько через запятую (или из env)
         """
-        self.bot_token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN")
-        self.chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
+        raw_token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN") or ""
+        self.bot_token = raw_token.strip("'\"")
 
-        if not self.bot_token or not self.chat_id:
+        raw_ids = chat_id or os.getenv("TELEGRAM_CHAT_ID") or ""
+        # Поддержка нескольких chat_id через запятую: "111,222,333"
+        self.chat_ids: list = [c.strip() for c in raw_ids.split(",") if c.strip()]
+        # Для обратной совместимости со старым кодом (send_critical_alert использует self.chat_id)
+        self.chat_id = self.chat_ids[0] if self.chat_ids else ""
+
+        if not self.bot_token or not self.chat_ids:
             logger.warning("⚠️ Telegram not configured - alerts disabled")
             logger.warning("   Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env")
             self.enabled = False
         else:
             self.enabled = True
             logger.info(
-                f"✅ Telegram Notifier initialized (Chat ID: {self.chat_id[:5]}***)"
+                f"✅ Telegram Notifier initialized ({len(self.chat_ids)} chat(s))"
             )
 
         self.api_url = (
@@ -359,27 +365,24 @@ class TelegramNotifier:
         await self.send_message(text)
 
     async def send_message(self, text: str) -> None:
-        """Отправить произвольное HTML-сообщение."""
+        """Отправить произвольное HTML-сообщение всем получателям из chat_ids."""
         if not self.enabled:
             return
         try:
             import aiohttp
 
             url = f"{self.api_url}/sendMessage"
-            data = {
-                "chat_id": self.chat_id,
-                "text": text,
-                "parse_mode": "HTML",
-            }
             async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    url, json=data, timeout=aiohttp.ClientTimeout(total=10)
-                ) as resp:
-                    if resp.status != 200:
-                        body = await resp.text()
-                        logger.warning(
-                            f"⚠️ Telegram send_message failed: {resp.status} {body[:120]}"
-                        )
+                for cid in self.chat_ids:
+                    data = {"chat_id": cid, "text": text, "parse_mode": "HTML"}
+                    async with session.post(
+                        url, json=data, timeout=aiohttp.ClientTimeout(total=10)
+                    ) as resp:
+                        if resp.status != 200:
+                            body = await resp.text()
+                            logger.warning(
+                                f"⚠️ Telegram send_message failed (chat={cid}): {resp.status} {body[:120]}"
+                            )
         except asyncio.TimeoutError:
             logger.warning("⚠️ Telegram timeout")
         except Exception as e:
