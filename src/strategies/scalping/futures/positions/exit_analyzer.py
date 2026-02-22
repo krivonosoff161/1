@@ -758,6 +758,29 @@ class ExitAnalyzer:
                             exchange_gross_guard,
                             min_abs_pct=_adaptive_min_abs_pct,
                         )
+                        # FIX 2026-02-22 P2: При устаревшей цене mismatch вызван stale WS,
+                        # а не реальным расхождением логики. Доверяем бирже как источнику истины.
+                        if mismatch_detected:
+                            _price_age_sec = (
+                                float(price_age) if price_age is not None else 0.0
+                            )
+                            # Порог 15s — совпадает с ws_fresh_max_age для ETH (наиболее волатильная пара)
+                            _stale_mismatch_threshold = 15.0
+                            if _price_age_sec > _stale_mismatch_threshold:
+                                if exchange_gross_guard is not None:
+                                    logger.warning(
+                                        f"⚠️ PNL_MISMATCH_STALE {symbol}: цена устарела на {_price_age_sec:.1f}s "
+                                        f"— доверяем бирже ({exchange_gross_guard:.4f}%) "
+                                        f"вместо model ({model_gross_guard:.4f}%) [quality_downgrade]"
+                                    )
+                                    mismatch_detected = False  # разблокируем exit
+                                else:
+                                    logger.warning(
+                                        f"⚠️ PNL_MISMATCH_STALE_NO_EXCHANGE {symbol}: "
+                                        f"цена устарела на {_price_age_sec:.1f}s + exchange=None "
+                                        f"→ HOLD (quality_downgrade)"
+                                    )
+
                         if mismatch_detected:
                             if self.slo_monitor:
                                 try:

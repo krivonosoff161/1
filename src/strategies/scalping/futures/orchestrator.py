@@ -3545,7 +3545,8 @@ class FuturesScalpingOrchestrator:
             logger.critical("🚨 ЭКСТРЕННОЕ ЗАКРЫТИЕ ВСЕХ ПОЗИЦИЙ!")
 
             for symbol in list(self.active_positions.keys()):
-                await self._close_position(symbol, "emergency")
+                # FIX 2026-02-22 P0: force=True обходит TTLCache при экстренном закрытии
+                await self._close_position(symbol, "emergency", force=True)
                 logger.info(f"✅ Позиция {symbol} закрыта экстренно")
 
         except Exception as e:
@@ -4211,7 +4212,8 @@ class FuturesScalpingOrchestrator:
             logger.critical("🛑 Закрытие всех позиций...")
             for symbol, position in list(self.active_positions.items()):
                 try:
-                    await self._close_position(symbol, "emergency")
+                    # FIX 2026-02-22 P0: force=True обходит TTLCache при emergency stop
+                    await self._close_position(symbol, "emergency", force=True)
                     logger.info(f"✅ Позиция {symbol} закрыта")
                 except Exception as e:
                     logger.error(f"❌ Ошибка закрытия {symbol}: {e}")
@@ -5155,6 +5157,7 @@ class FuturesScalpingOrchestrator:
         symbol: str,
         reason: str,
         decision_payload: Optional[Dict[str, Any]] = None,
+        force: bool = False,
     ):
         """Закрытие позиции через position_manager"""
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Инициализируем asyncio.Lock и TTLCache для защиты от race condition
@@ -5180,7 +5183,8 @@ class FuturesScalpingOrchestrator:
         # ✅ Используем Lock для предотвращения одновременного закрытия
         async with self._closing_locks[symbol]:
             # ✅ Проверяем TTLCache - если позиция недавно закрывалась, пропускаем
-            if symbol in self._closing_positions_cache:
+            # FIX 2026-02-22 P0: force=True обходит кэш для emergency-закрытий
+            if not force and symbol in self._closing_positions_cache:
                 logger.debug(
                     f"Position {symbol} already closing (TTLCache, reason={reason}), skip"
                 )

@@ -414,6 +414,24 @@ class FuturesOrderExecutor:
                             f"⚠️ OrderExecutor: Ошибка записи размещения ордера в CSV: {e}"
                         )
 
+                # FIX 2026-02-22 P1: Telegram уведомление для market/limit ордеров
+                # OCO уже уведомляет внутри _place_oco_order — не дублируем
+                if self.telegram and order_type in ("market", "limit"):
+                    try:
+                        _size_usd = position_size * float(
+                            signal.get("price", 0.0) or 0.0
+                        )
+                        asyncio.create_task(
+                            self.telegram.send_trade_open(
+                                signal=signal,
+                                tp_price=None,  # TSL управляет динамически
+                                sl_price=None,
+                                size_usd=_size_usd,
+                            )
+                        )
+                    except Exception as _tg_err:
+                        logger.debug(f"Telegram send_trade_open error: {_tg_err}")
+
             return result
 
         except Exception as e:
