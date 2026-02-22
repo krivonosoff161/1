@@ -1,0 +1,247 @@
+Generated: 2026-02-21T12:06:10.671690
+E:/ TOP LEVEL MAP (sorted by size)
+110.807 GB	dir	Genshin Impact game
+81.923 GB	dir	диск с загрузки
+69.801 GB	dir	арина телефон
+7.254 GB	dir	Nox
+6.833 GB	file	2025-09-08 КАБИНЕТ.zip
+6.814 GB	dir	софтина
+3.526 GB	file	2025-02-25 Семья.zip
+2.800 GB	dir	подписать папку
+2.152 GB	dir	2025-04-25 Элиза
+2.138 GB	dir	АРИНА
+1.813 GB	dir	2024-11-15 Элиза
+1.643 GB	dir	Battle.net
+1.342 GB	dir	ЛИЗА
+1.341 GB	dir	steam
+1.197 GB	dir	birga
+1.133 GB	dir	Новая папка
+1.057 GB	dir	Epic Games
+0.926 GB	dir	лиза работа
+0.506 GB	dir	Telegram Desktop
+0.247 GB	file	13.12.2023 Лиза.zip
+0.243 GB	dir	GOG Galaxy
+0.135 GB	file	hydralauncher-3.4.10-portable.exe
+0.085 GB	dir	СОФТ
+0.080 GB	dir	AIDA64 Extreme
+0.017 GB	dir	Seagate
+0.017 GB	dir	totalcmd
+0.010 GB	dir	Feedback
+0.007 GB	dir	торги
+0.004 GB	dir	PaintToolSAI
+0.002 GB	dir	skyload
+0.001 GB	file	skyload.zip
+0.001 GB	file	uTorrent.exe
+0.000 GB	file	DumpStack.log.tmp
+0.000 GB	file	hosts
+0.000 GB	file	1.fcd
+0.000 GB	dir	$RECYCLE.BIN
+0.000 GB	file	.GamingRoot
+0.000 GB	dir	Criterion Games
+0.000 GB	file	desktop.ini
+0.000 GB	dir	GameCenter
+0.000 GB	dir	msdownld.tmp
+0.000 GB	dir	Program Files
+0.000 GB	dir	System Volume Information
+0.000 GB	dir	WindowsApps
+0.000 GB	dir	XboxGames
+
+E:/ TOP SUBDIR MAP (for largest dirs)
+
+[Genshin Impact game] total=110.807 GB
+  110.102 GB	dir	GenshinImpact_Data
+  0.337 GB	file	GenshinImpact.exe
+  0.319 GB	dir	BeyondAssets
+  0.025 GB	file	mhypbase.dll
+  0.020 GB	dir	LauncherPlugins
+  0.004 GB	file	HoYoKProtect.sys
+  0.001 GB	file	beyond_pkg_version
+  0.000 GB	file	pkg_version
+  0.000 GB	file	Audio_English(US)_pkg_version
+  0.000 GB	file	config.ini
+
+[диск с загрузки] total=81.923 GB
+  49.644 GB	dir	Poppy Playtime
+  12.770 GB	file	Выпускной.mov
+  11.081 GB	dir	The Sims 4
+  3.526 GB	file	2025-02-25 Семья.zip
+  2.152 GB	file	2025-04-25 Элиза.zip
+  1.527 GB	file	[SW.BAND] Ботанические свечи.zip
+  0.683 GB	file	17.11.2023 Студия Массажа.zip
+  0.161 GB	file	GitHubDesktopSetup-x64.exe
+  0.135 GB	file	hydralauncher-3.4.10-setup.exe
+  0.018 GB	file	Косметик эстетист (1).zip
+  0.018 GB	file	Косметик эстетист (2).zip
+  0.018 GB	file	Косметик эстетист.zip
+  0.012 GB	file	IMG_3574.jpg
+  0.010 GB	file	Saint Sinner,Supertask,Mersiv - Get To You (Mersiv Remix).mp3
+  0.010 GB	file	Damien N-Drix - Ghetto Funk.mp3
+  0.009 GB	file	graves - Mouf.mp3
+  0.008 GB	file	Miyagi & Andy Panda - Патрон.mp3
+  0.008 GB	file	Dimension - Offender.mp3
+  0.006 GB	file	DiagPlugin_user.001766.exe
+  0.005 GB	file	IMG_8887.JPG
+  0.005 GB	file	IMG_8880.JPG
+  0.005 GB	file	IMG_8034.JPG
+  0.005 GB	file	IMG_8890.JPG
+  0.005 GB	file	IMG_8875.JPG
+  0.005 GB	file	IMG_8869.JPG
+
+[арина телефон] total=69.801 GB
+  69.801 GB	dir	DCIM
+
+[Nox] total=7.254 GB
+  7.205 GB	dir	bin
+  0.043 GB	dir	noxvm
+  0.006 GB	dir	plugins
+
+[софтина] total=6.814 GB
+  4.110 GB	file	Win8.1_Russian_x64.iso
+  0.795 GB	file	528.49-notebook-win10-win11-64bit-international-dch-whql.exe
+  0.557 GB	file	nox_setup_v7.0.6.1_full_intl.exe
+  0.182 GB	file	GenshinImpact_install_ua_262089bdcc99.exe
+  0.167 GB	file	LostLight_netease_global_20231122.exe
+  0.163 GB	file	LostLight_netease_20230511.exe
+  0.161 GB	dir	KMS Tools Portable
+  0.149 GB	file	EpicInstaller-14.2.1-b6ed50ef9af2441ca8879dfd380eddd7.msi
+  0.123 GB	file	GeForce_Experience_v3.27.0.120.exe
+  0.084 GB	file	TeamSpeak3-Client-win64-3.5.6.exe
+  0.082 GB	file	RAT_8+_x64.1.0.70.exe
+  0.047 GB	file	TeamViewer_Setup_x64.exe
+  0.038 GB	file	tsetup-x64.4.6.2.exe
+  0.015 GB	dir	everest
+  0.015 GB	file	HPEasyStart_15_3_5.exe
+  0.012 GB	file	VKPlayLoader_c59a3da05f87c2d1de0541ca88bf0828.exe
+  0.011 GB	file	[SW.BAND] Кулон Циния [Ирина Михель].pdf
+  0.011 GB	file	HPPSdr.exe
+  0.011 GB	file	CheatEngine.exe
+  0.009 GB	dir	UltraIso-portable
+  0.008 GB	dir	kmsautonet
+  0.007 GB	dir	victoria535
+  0.007 GB	file	Disk-O_setup.exe
+  0.007 GB	file	GPU-Z.2.43.0.exe
+  0.006 GB	file	WRCFree_10.8.3.704.exe
+
+[подписать папку] total=2.800 GB
+  0.018 GB	file	No Mana - Nostalgia Drive.mp3
+  0.017 GB	file	Röyksopp,Artbat - What Else Is There_ (ARTBAT Remix).mp3
+  0.017 GB	file	АК-47,GUF,Ноггано - Тем, кто с нами.mp3
+  0.013 GB	file	Riot - Meditate.mp3
+  0.013 GB	file	Баста,Смоки Мо,Скриптонит - Лёд.mp3
+  0.013 GB	file	Gorillaz - Clint Eastwood.mp3
+  0.013 GB	file	Ноггано - Застрахуй.mp3
+  0.012 GB	file	Центр,Noggano,AK-47,5Плюх - Давай делай шире круг.mp3
+  0.012 GB	file	The Rah Band - Messages from the Stars (Sped Up).mp3
+  0.012 GB	file	N1NT3ND0,Крёстная семья - Отмели.mp3
+  0.012 GB	file	Blue Foundation,Zeds Dead - Eyes on Fire (Zeds Dead Remix).mp3
+  0.012 GB	file	The Cranberries - Zombie.mp3
+  0.011 GB	file	Joan Osborne - One Of Us (Short Version).mp3
+  0.011 GB	file	Неизвестность,Ноггано - Улыбнись.mp3
+  0.011 GB	file	J. Cole,Amber Coffman,Cults - She Knows.mp3
+  0.011 GB	file	Qo,Trilo - Push It To The Limit.mp3
+  0.011 GB	file	Ternion Sound,Buunshin - Artifice (Buunshin Remix).mp3
+  0.011 GB	file	Fred again..,The Blessed Madonna - Marea (we’ve lost dancing).mp3
+  0.011 GB	file	Disclosure,Eliza Doolittle,Flume - You & Me (Flume Remix).mp3
+  0.011 GB	file	Скриптонит - Положение.mp3
+  0.011 GB	file	Amanati - Invicta.mp3
+  0.010 GB	file	Скриптонит - Это любовь.mp3
+  0.010 GB	file	Disturbed - Down with the Sickness.mp3
+  0.010 GB	file	Anyma,Chris Avantgarde - Consciousness.mp3
+  0.010 GB	file	Tesen - Us.mp3
+
+[2025-04-25 Элиза] total=2.152 GB
+  2.152 GB	dir	Photos
+
+[АРИНА] total=2.138 GB
+  1.042 GB	dir	лиза
+  1.022 GB	file	photos-38b10c0369dbe800434ce91730085d74.zip
+  0.006 GB	file	Q0244.jpg
+  0.006 GB	file	Q0243.jpg
+  0.006 GB	file	Q0235.jpg
+  0.005 GB	file	Q0239.jpg
+  0.005 GB	file	Q0250.jpg
+  0.005 GB	file	Q0249.jpg
+  0.005 GB	file	Q0238.jpg
+  0.004 GB	file	Q0242.jpg
+  0.004 GB	file	Q0247.jpg
+  0.004 GB	file	Q0248.jpg
+  0.003 GB	file	Q0236.jpg
+  0.003 GB	file	Q0240.jpg
+  0.003 GB	file	Q0237.jpg
+  0.003 GB	file	Q0245.jpg
+  0.003 GB	file	Q0241.jpg
+  0.003 GB	file	Q0246.jpg
+  0.003 GB	file	Q0251.jpg
+  0.003 GB	file	Q0252.jpg
+
+[2024-11-15 Элиза] total=1.813 GB
+  1.793 GB	dir	2024-11-15 Элиза
+  0.017 GB	file	IMG_2835.jpg
+  0.003 GB	file	4Z6A9235.jpg
+  0.001 GB	file	VUswn1o4bUE.jpg
+
+[Battle.net] total=1.643 GB
+  0.543 GB	dir	Battle.net.16014
+  0.543 GB	dir	Battle.net.15928
+  0.543 GB	dir	Battle.net.15976
+  0.013 GB	dir	.battle.net
+  0.001 GB	file	Battle.net.exe
+  0.000 GB	file	Battle.net Launcher.exe
+  0.000 GB	file	Microsoft.Gaming.XboxApp.Extensions.winmd
+  0.000 GB	file	.product.db
+  0.000 GB	file	Launcher.db
+  0.000 GB	file	.patch.result
+
+[ЛИЗА] total=1.342 GB
+  0.522 GB	file	PP_VO_Rus.exe
+  0.105 GB	file	МИКРОТОКИ.mp4
+  0.078 GB	file	Фонофорез.mp4
+  0.071 GB	file	Миостимуляция тела.mp4
+  0.065 GB	file	ЛПЖ И ВИБРОСФЕРА.mp4
+  0.058 GB	file	ЛПЖ ТЕЛО. ПРОТОКОЛ.mp4
+  0.053 GB	file	Микротоковая терапия. Протокол процедуры. (1).mp4
+  0.053 GB	file	Микротоковая терапия. Протокол процедуры..mp4
+  0.044 GB	file	5. Вибросфера. Тело. Протокол процедуры.mp4
+  0.040 GB	file	Вакуумный массаж лица.mp4
+  0.040 GB	file	Ультразвуковая чистка. Протокол процедуры.mp4
+  0.033 GB	file	1. Знакомство с интерфейсом аппарата.mp4
+  0.028 GB	file	6. Вибросфера. Лицо. Протокол процедуры.mp4
+  0.027 GB	file	Дезинкрустация.mp4
+  0.027 GB	file	2. LPG - массаж. Тело.  Обследование клиента перед массажем. Схемы движения манипулы.mp4
+  0.026 GB	file	4. LPG - массаж. Лицо. Протокол процедуры.mp4
+  0.025 GB	file	Брашинг, Дарсонваль, Ионофорез.mp4
+  0.012 GB	file	Профессиональные косметические средства для УЗИ чистки.mp4
+  0.009 GB	file	ArenaBreakoutInfiniteMiniloader0.0.6.235(sg).exe
+  0.008 GB	file	Микротоковая терапия. Показания и противопоказания. Курс процедур. (1).mp4
+  0.008 GB	file	Микротоковая терапия. Показания и противопоказания. Курс процедур..mp4
+  0.007 GB	file	Ультразвуковая лопатка.mp4
+  0.005 GB	file	Необходимые материалы для процедуры для УЗИ чистки.mp4
+  0.000 GB	file	[DL] Poppy Playtime [P] [RUS + ENG + 6 ENG + 2] (2021, Horror) (Build 13606106 + 2 DLC) [Portable] [rutracker-6125593] (1).torrent
+  0.000 GB	file	[DL] Poppy Playtime [P] [RUS + ENG + 6 ENG + 2] (2021, Horror) (Build 13606106 + 2 DLC) [Portable] [rutracker-6125593].torrent
+
+[steam] total=1.341 GB
+  0.383 GB	dir	bin
+  0.264 GB	dir	steamapps
+  0.230 GB	dir	package
+  0.089 GB	dir	steamui
+  0.062 GB	dir	logs
+  0.032 GB	dir	clientui
+  0.032 GB	dir	appcache
+  0.024 GB	file	steamclient64.dll
+  0.019 GB	file	steamclient.dll
+  0.017 GB	file	SteamUI.dll
+  0.014 GB	dir	steam
+  0.013 GB	dir	userdata
+  0.013 GB	dir	public
+  0.012 GB	file	steamwebrtc64.dll
+  0.010 GB	file	streaming_client.exe
+  0.009 GB	file	aom.dll
+  0.009 GB	dir	controller_base
+  0.008 GB	dir	graphics
+  0.008 GB	file	ThirdPartyLegalNotices-Chromium.html
+  0.007 GB	file	libavcodec-62.dll
+  0.007 GB	dir	resource
+  0.006 GB	dir	tenfoot
+  0.005 GB	file	steam.exe
+  0.005 GB	file	steam.exe.old
+  0.005 GB	file	video64.dll
