@@ -664,22 +664,23 @@ class FuturesPositionManager:
 
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Используем bid/ask avg для точного PnL расчета
             current_price = float(position.get("markPx", "0") or "0")  # Fallback
+            # FIX 2026-02-22 P0: WS bid/ask из DataRegistry вместо HTTP get_price_limits()
+            # До фикса: 30+ HTTP-запросов за цикл manage_positions при 3 позициях → 1.2s latency
             try:
-                price_limits = await self.client.get_price_limits(symbol)
-                if price_limits:
-                    best_bid = price_limits.get("best_bid", 0)
-                    best_ask = price_limits.get("best_ask", 0)
-                    if best_bid > 0 and best_ask > 0:
-                        # Используем среднее bid/ask для более точного расчета PnL
-                        current_price = (best_bid + best_ask) / 2.0
-                    elif price_limits.get("current_price", 0) > 0:
-                        # Fallback на current_price если bid/ask недоступны
-                        current_price = price_limits.get("current_price")
+                if hasattr(self, "data_registry") and self.data_registry:
+                    _md = await self.data_registry.get_market_data(symbol)
+                    if _md:
+                        _best_bid = float(_md.get("best_bid") or 0)
+                        _best_ask = float(_md.get("best_ask") or 0)
+                        if _best_bid > 0 and _best_ask > 0:
+                            current_price = (_best_bid + _best_ask) / 2.0
+                        elif float(_md.get("price") or 0) > 0:
+                            current_price = float(_md.get("price"))
             except Exception as e:
                 logger.debug(
-                    f"⚠️ Не удалось получить цену из стакана для {symbol}, используем markPx: {e}"
+                    f"⚠️ Не удалось получить цену из DataRegistry для {symbol}, используем markPx: {e}"
                 )
-            # 🔥 ИСПРАВЛЕНИЕ (11.02.2026): Если current_price=0 (markPx=0 + REST failed) - пробуем DataRegistry
+            # 🔥 ИСПРАВЛЕНИЕ (11.02.2026): Если current_price=0 (markPx=0 + WS failed) - пробуем DataRegistry
             if (
                 current_price <= 0
                 and hasattr(self, "data_registry")
@@ -1574,20 +1575,19 @@ class FuturesPositionManager:
             symbol = position.get("instId", "").replace("-SWAP", "")
             size = float(position.get("pos", "0"))
             entry_price = float(position.get("avgPx", "0"))
-            # ✅ ОПТИМИЗАЦИЯ: Используем актуальную цену из стакана для скальпинга, markPx только как fallback
+            # FIX 2026-02-22 P0: DataRegistry вместо HTTP для SL-проверки
             current_price = float(position.get("markPx", "0"))  # Fallback
             try:
-                price_limits = await self.client.get_price_limits(symbol)
-                if price_limits:
-                    actual_price = price_limits.get("current_price", 0)
-                    if actual_price > 0:
-                        current_price = actual_price
+                if hasattr(self, "data_registry") and self.data_registry:
+                    _md = await self.data_registry.get_market_data(symbol)
+                    if _md and float(_md.get("price") or 0) > 0:
+                        current_price = float(_md.get("price"))
                         logger.debug(
-                            f"✅ Используем актуальную цену из стакана для SL проверки {symbol}: {current_price:.2f}"
+                            f"✅ DataRegistry цена для SL проверки {symbol}: {current_price:.2f}"
                         )
             except Exception as e:
                 logger.debug(
-                    f"⚠️ Не удалось получить актуальную цену для {symbol}, используем markPx: {e}"
+                    f"⚠️ Не удалось получить цену из DataRegistry для {symbol}, используем markPx: {e}"
                 )
 
             # 🔴 BUG #14 FIX: Если price=0, используем fallback 4-уровневый (как Bug #10)
@@ -2377,22 +2377,21 @@ class FuturesPositionManager:
             if isinstance(side, str):
                 side = side.lower()
             entry_price = float(position.get("avgPx", "0"))
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Используем bid/ask avg для точного PnL расчета
+            # FIX 2026-02-22 P0: DataRegistry вместо HTTP для TP-проверки
             current_price = float(position.get("markPx", "0"))  # Fallback
             try:
-                price_limits = await self.client.get_price_limits(symbol)
-                if price_limits:
-                    best_bid = price_limits.get("best_bid", 0)
-                    best_ask = price_limits.get("best_ask", 0)
-                    if best_bid > 0 and best_ask > 0:
-                        # Используем среднее bid/ask для более точного расчета PnL
-                        current_price = (best_bid + best_ask) / 2.0
-                    elif price_limits.get("current_price", 0) > 0:
-                        # Fallback на current_price если bid/ask недоступны
-                        current_price = price_limits.get("current_price")
+                if hasattr(self, "data_registry") and self.data_registry:
+                    _md = await self.data_registry.get_market_data(symbol)
+                    if _md:
+                        _best_bid = float(_md.get("best_bid") or 0)
+                        _best_ask = float(_md.get("best_ask") or 0)
+                        if _best_bid > 0 and _best_ask > 0:
+                            current_price = (_best_bid + _best_ask) / 2.0
+                        elif float(_md.get("price") or 0) > 0:
+                            current_price = float(_md.get("price"))
             except Exception as e:
                 logger.debug(
-                    f"⚠️ Не удалось получить цену из стакана для {symbol}, используем markPx: {e}"
+                    f"⚠️ Не удалось получить цену из DataRegistry для {symbol}, используем markPx: {e}"
                 )
 
             # ✅ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ: Начало проверки

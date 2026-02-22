@@ -112,6 +112,15 @@ scalping:
     strength_multiplier: 1000.0  # FIX 2026-02-18: было в неверном месте (top-level), код читает scalping.signal_generator
     strength_reduction_neutral: 0.9  # Снижение strength для neutral направления
     base_signal_strength: 0.001
+    # FIX 2026-02-22 P2: Заблокированные типы сигналов в choppy-режиме (перенесено из хардкода)
+    # Допустимые в choppy: rsi_divergence, vwap_mean_reversion
+    choppy_blocked_types:
+      - macd_bullish
+      - macd_bearish
+      - bb_oversold
+      - bb_overbought
+      - rsi_oversold
+      - rsi_overbought
     # WebSocket watchdog параметры для предотвращения ложных reconnect
     ws_fresh_max_age: 30.0  # Для проверки входов: OKX шлет тикеры каждые 7-20 сек, 30s = достаточно
     exit_price_max_age: 20.0  # FIX (2026-02-19): max_age для exit price snapshot (было hardcode 15.0 → 20.0 с per-symbol override)

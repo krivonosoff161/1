@@ -583,6 +583,10 @@ class WebSocketCoordinator:
                                 "price": price,
                                 "last_price": price,
                                 "current_tick": current_tick,
+                                # FIX 2026-02-22 P0: плоские поля bid/ask — position_manager
+                                # использует их напрямую вместо HTTP get_price_limits()
+                                "best_bid": bid_price,
+                                "best_ask": ask_price,
                                 "volume": volume_24h,
                                 "volume_ccy": volume_ccy_24h,
                                 "high_24h": high_24h,

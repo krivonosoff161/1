@@ -315,6 +315,24 @@ class FuturesSignalGenerator:
             if isinstance(sg_cfg, dict)
             else float(getattr(sg_cfg, "rest_update_cooldown", 1.0))
         )
+        # FIX 2026-02-22 P2: Choppy blocked types из конфига (ранее хардкод в коде)
+        _choppy_blocked_raw = (
+            sg_cfg.get("choppy_blocked_types")
+            if isinstance(sg_cfg, dict)
+            else getattr(sg_cfg, "choppy_blocked_types", None)
+        )
+        self._choppy_blocked_types: set = (
+            set(_choppy_blocked_raw)
+            if _choppy_blocked_raw
+            else {
+                "macd_bullish",
+                "macd_bearish",
+                "bb_oversold",
+                "bb_overbought",
+                "rsi_oversold",
+                "rsi_overbought",
+            }
+        )
         self._last_rest_update_ts: Dict[str, float] = {}
         self._last_forced_rest_ts: Dict[str, float] = {}
         self._forced_rest_logged = set()
@@ -1995,19 +2013,12 @@ class FuturesSignalGenerator:
                     base_signals[0].get("regime") if base_signals else None
                 )
                 if _current_regime == "choppy":
-                    _CHOPPY_BLOCKED_TYPES = {
-                        "macd_bullish",
-                        "macd_bearish",
-                        "bb_oversold",
-                        "bb_overbought",
-                        "rsi_oversold",  # классический RSI — ненадёжен в choppy
-                        "rsi_overbought",  # классический RSI — ненадёжен в choppy
-                    }
+                    # FIX 2026-02-22 P2: список из конфига (scalping.signal_generator.choppy_blocked_types)
                     _before = len(base_signals)
                     base_signals = [
                         s
                         for s in base_signals
-                        if s.get("type") not in _CHOPPY_BLOCKED_TYPES
+                        if s.get("type") not in self._choppy_blocked_types
                     ]
                     _blocked = _before - len(base_signals)
                     if _blocked:
@@ -2840,10 +2851,14 @@ class FuturesSignalGenerator:
                 logger.warning(
                     f"⚠️ [BB] {symbol}: Bollinger Bands НЕ РАССЧИТАН (bb_data={bb_data})"
                 )
+            # FIX 2026-02-22 P1: относительный порог вместо абсолютного 0.0001
+            # Для BTC($95k): 0.0001 = 0.0000001% → порог никогда не срабатывал
+            # Для DOGE($0.1): 0.0001 = 0.1% → ложные срабатывания на нормальных сигналах
             if (
                 ema_12 is not None
                 and ema_26 is not None
-                and abs(ema_12 - ema_26) < 0.0001
+                and ema_26 > 0
+                and abs(ema_12 - ema_26) / ema_26 < 1e-5  # 0.001% от цены
             ):
                 logger.warning(
                     f"⚠️ [EMA] {symbol}: EMA_12 и EMA_26 ОДИНАКОВЫЕ ({ema_12:.6f}) - возможно, недостаточно данных или ошибка расчета"

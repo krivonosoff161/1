@@ -182,9 +182,9 @@ class OKXFuturesClient:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Circuit Breaker для защиты от массовых сбоев API
         self.consecutive_failures = 0  # Счётчик последовательных сбоев
         self.circuit_open = False  # Флаг открытого circuit breaker
-        self.circuit_open_until: Optional[float] = (
-            None  # Время закрытия circuit breaker
-        )
+        self.circuit_open_until: Optional[
+            float
+        ] = None  # Время закрытия circuit breaker
         self.circuit_failure_threshold = (
             5  # Порог для открытия circuit (5 подряд ошибок)
         )
@@ -429,7 +429,9 @@ class OKXFuturesClient:
 
             except (asyncio.TimeoutError, aiohttp.ServerTimeoutError) as e:
                 if attempt < max_retries - 1:
-                    wait_time = retry_delay * (2**attempt)  # Экспоненциальная задержка
+                    wait_time = retry_delay * (
+                        2**attempt
+                    )  # Экспоненциальная задержка
                     logger.warning(
                         f"⏱️ Таймаут при запросе к OKX (попытка {attempt + 1}/{max_retries}): "
                         f"{method} {url}, повтор через {wait_time:.1f}с"
@@ -993,6 +995,19 @@ class OKXFuturesClient:
         Returns:
             dict с ключами: max_buy_price, min_sell_price, best_bid, best_ask, current_price
         """
+        # FIX 2026-02-22 P0: TTL-кэш 1s — предотвращает лавину HTTP при нескольких позициях
+        # (до фикса: 30+ HTTP-запросов за цикл manage_positions при 3 позициях)
+        import time as _time_module
+
+        if not hasattr(self, "_price_limits_cache"):
+            self._price_limits_cache: dict = {}
+        _cache_ttl = 1.0
+        _cached = self._price_limits_cache.get(symbol)
+        if _cached is not None:
+            _result, _ts = _cached
+            if _time_module.time() - _ts < _cache_ttl:
+                return _result
+
         try:
             inst_id = f"{symbol}-SWAP"
             import aiohttp
@@ -1061,25 +1076,35 @@ class OKXFuturesClient:
                                                 f"min_sell={min_sell_price:.2f}, max_buy={max_buy_price:.2f}"
                                             )
 
-                                            return {
+                                            _r = {
                                                 "max_buy_price": max_buy_price,
                                                 "min_sell_price": min_sell_price,
                                                 "best_bid": best_bid,
                                                 "best_ask": best_ask,
                                                 "current_price": current_price,
-                                                "timestamp": time.time(),  # ✅ НОВОЕ: Timestamp для проверки свежести
+                                                "timestamp": time.time(),
                                             }
+                                            self._price_limits_cache[symbol] = (
+                                                _r,
+                                                _time_module.time(),
+                                            )
+                                            return _r
 
                                 # Если не получили текущую цену, используем среднюю из стакана
                                 current_price = (best_ask + best_bid) / 2
-                                return {
+                                _r = {
                                     "max_buy_price": max_buy_price,
                                     "min_sell_price": min_sell_price,
                                     "best_bid": best_bid,
                                     "best_ask": best_ask,
                                     "current_price": current_price,
-                                    "timestamp": time.time(),  # ✅ НОВОЕ: Timestamp для проверки свежести
+                                    "timestamp": time.time(),
                                 }
+                                self._price_limits_cache[symbol] = (
+                                    _r,
+                                    _time_module.time(),
+                                )
+                                return _r
 
                 # ✅ FALLBACK: Если не получили стакан, используем тикер
                 ticker_url = (
@@ -1107,14 +1132,16 @@ class OKXFuturesClient:
                                 f"min_sell={min_sell_price:.2f}, max_buy={max_buy_price:.2f}"
                             )
 
-                            return {
+                            _r = {
                                 "max_buy_price": max_buy_price,
                                 "min_sell_price": min_sell_price,
-                                "timestamp": time.time(),  # ✅ НОВОЕ: Timestamp для проверки свежести
-                                "best_bid": current_price * 0.999,  # Примерно
-                                "best_ask": current_price * 1.001,  # Примерно
+                                "timestamp": time.time(),
+                                "best_bid": current_price * 0.999,
+                                "best_ask": current_price * 1.001,
                                 "current_price": current_price,
                             }
+                            self._price_limits_cache[symbol] = (_r, _time_module.time())
+                            return _r
         except Exception as e:
             logger.warning(f"⚠️ Не удалось получить лимиты цены для {symbol}: {e}")
 
@@ -1160,9 +1187,7 @@ class OKXFuturesClient:
                 self._logged_position_fields = set()
             if symbol not in self._logged_position_fields:
                 available_fields = list(pos.keys())
-                logger.debug(
-                    f"📋 Доступные поля в позиции {symbol}: {available_fields}"
-                )
+                logger.debug(f"📋 Доступные поля в позиции {symbol}: {available_fields}")
                 logger.debug(f"📋 Пример позиции {symbol}: {pos}")
                 self._logged_position_fields.add(symbol)
 
@@ -1224,7 +1249,9 @@ class OKXFuturesClient:
                 if "availEq" in pos and pos.get("availEq"):
                     try:
                         equity = float(pos["availEq"])
-                        logger.debug(f"⚠️ Используем availEq для {symbol}: {equity:.2f}")
+                        logger.debug(
+                            f"⚠️ Используем availEq для {symbol}: {equity:.2f}"
+                        )
                     except (ValueError, TypeError):
                         pass
 
