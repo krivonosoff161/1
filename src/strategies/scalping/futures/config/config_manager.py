@@ -58,6 +58,9 @@ class ConfigManager:
         # ✅ НОВОЕ (26.12.2025): Детальное логирование загруженной конфигурации
         self._log_config_summary()
 
+        # ✅ L5-2 FIX: Поле для гистерезиса балансовых профилей
+        self._current_balance_profile_name: Optional[str] = None
+
         logger.info("✅ ConfigManager инициализирован")
 
     def _validate_units_and_ranges(self) -> None:
@@ -1045,83 +1048,50 @@ class ConfigManager:
             logger.error("❌ Не найдено ни одного валидного профиля в конфиге!")
             raise ValueError("Должен быть хотя бы один профиль в balance_profiles")
 
-        # Определяем профиль по балансу
+        # ✅ L5-2 FIX: Гистерезис ±5% при понижении профиля
+        # --- Определяем raw профиль (без гистерезиса) ---
+        raw_profile = None
         for profile in profile_list:
             if balance <= profile["threshold"]:
-                profile_config = profile["config"]
-                profile_name = profile["name"]
+                raw_profile = profile
+                break
+        if raw_profile is None:
+            raw_profile = profile_list[-1]  # largest (large: threshold=999999)
 
-                # 🔥 АДАПТИВНЫЙ РАСЧЁТ (11.02.2026): маржа = balance × max_position_percent%
-                max_position_percent = getattr(
-                    profile_config, "max_position_percent", None
-                )
-                if max_position_percent is None or max_position_percent <= 0:
-                    logger.error(
-                        f"❌ max_position_percent не указан в конфиге для профиля {profile_name}! "
-                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_percent"
+        raw_name = raw_profile["name"]
+
+        # --- Гистерезис ±5% при понижении профиля ---
+        HYSTERESIS_PCT = 0.05
+        current_name = self._current_balance_profile_name
+
+        if current_name is not None and current_name != raw_name:
+            current_idx = next(
+                (i for i, p in enumerate(profile_list) if p["name"] == current_name), -1
+            )
+            raw_idx = next(
+                (i for i, p in enumerate(profile_list) if p["name"] == raw_name), -1
+            )
+
+            if raw_idx < current_idx and current_idx > 0:
+                # Понижение профиля: проверяем гистерезис
+                # Нижняя граница текущего профиля = threshold предыдущего (ниже) профиля
+                lower_threshold = profile_list[current_idx - 1]["threshold"]
+                if balance > lower_threshold * (1 - HYSTERESIS_PCT):
+                    # Ещё в зоне гистерезиса — остаёмся на текущем профиле
+                    logger.debug(
+                        f"📊 balance_profile: гистерезис удержал {current_name} "
+                        f"(balance={balance:.0f}, порог понижения={lower_threshold * (1 - HYSTERESIS_PCT):.0f})"
                     )
-                    raise ValueError(
-                        f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
+                    raw_profile = next(
+                        p for p in profile_list if p["name"] == current_name
                     )
+                    raw_name = current_name
 
-                # base_position_usd = целевая МАРЖА (для совместимости с adaptive_leverage и другими модулями)
-                base_pos_usd = balance * float(max_position_percent) / 100.0
+        self._current_balance_profile_name = raw_name
+        profile_config = raw_profile["config"]
+        profile_name = raw_name
 
-                # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
-                min_pos_usd = getattr(profile_config, "min_position_usd", None)
-                max_pos_usd = getattr(profile_config, "max_position_usd", None)
-
-                if min_pos_usd is None or min_pos_usd <= 0:
-                    logger.error(
-                        f"❌ min_position_usd не указан в конфиге для профиля {profile_name}! "
-                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> min_position_usd"
-                    )
-                    raise ValueError(
-                        f"min_position_usd должен быть указан в конфиге для профиля {profile_name}"
-                    )
-                if max_pos_usd is None or max_pos_usd <= 0:
-                    logger.error(
-                        f"❌ max_position_usd не указан в конфиге для профиля {profile_name}! "
-                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_position_usd"
-                    )
-                    raise ValueError(
-                        f"max_position_usd должен быть указан в конфиге для профиля {profile_name}"
-                    )
-
-                max_open_positions = getattr(profile_config, "max_open_positions", None)
-                if max_open_positions is None or max_open_positions <= 0:
-                    logger.error(
-                        f"❌ max_open_positions не указан в конфиге для профиля {profile_name}! "
-                        f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {profile_name} -> max_open_positions"
-                    )
-                    raise ValueError(
-                        f"max_open_positions должен быть указан в конфиге для профиля {profile_name}"
-                    )
-
-                logger.debug(
-                    f"📊 Профиль [{profile_name}]: баланс=${balance:.2f} × {max_position_percent}% "
-                    f"= ${base_pos_usd:.2f} маржа (notional рассчитает risk_manager с учётом плеча)"
-                )
-
-                return {
-                    "name": profile_name,
-                    "base_position_usd": base_pos_usd,  # = маржа (balance × pct%), для совместимости
-                    "min_position_usd": min_pos_usd,
-                    "max_position_usd": max_pos_usd,
-                    "max_open_positions": max_open_positions,
-                    "max_position_percent": max_position_percent,
-                    "progressive": False,
-                }
-
-        # Если баланс больше всех порогов - используем последний (самый большой) профиль
-        last_profile = profile_list[-1]
-        profile_config = last_profile["config"]
-        profile_name = last_profile["name"]
-        logger.debug(
-            f"📊 Баланс {balance:.2f} больше всех порогов, используем профиль {profile_name}"
-        )
-
-        # 🔥 АДАПТИВНЫЙ РАСЧЁТ (11.02.2026) для последнего профиля
+        # 🔥 АДАПТИВНЫЙ РАСЧЁТ (11.02.2026): маржа = balance × max_position_percent%
         max_position_percent = getattr(profile_config, "max_position_percent", None)
         if max_position_percent is None or max_position_percent <= 0:
             logger.error(
@@ -1132,11 +1102,13 @@ class ConfigManager:
                 f"max_position_percent должен быть указан в конфиге для профиля {profile_name}"
             )
 
+        # base_position_usd = целевая МАРЖА (для совместимости с adaptive_leverage и другими модулями)
         base_pos_usd = balance * float(max_position_percent) / 100.0
 
         # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
         min_pos_usd = getattr(profile_config, "min_position_usd", None)
         max_pos_usd = getattr(profile_config, "max_position_usd", None)
+
         if min_pos_usd is None or min_pos_usd <= 0:
             logger.error(
                 f"❌ min_position_usd не указан в конфиге для профиля {profile_name}! "
@@ -1165,11 +1137,11 @@ class ConfigManager:
             )
 
         logger.debug(
-            f"📊 Профиль [{profile_name}] (max balance): баланс=${balance:.2f} × {max_position_percent}% "
-            f"= ${base_pos_usd:.2f} маржа"
+            f"📊 Профиль [{profile_name}]: баланс=${balance:.2f} × {max_position_percent}% "
+            f"= ${base_pos_usd:.2f} маржа (notional рассчитает risk_manager с учётом плеча)"
         )
 
-        result = {
+        return {
             "name": profile_name,
             "base_position_usd": base_pos_usd,  # = маржа (balance × pct%), для совместимости
             "min_position_usd": min_pos_usd,
@@ -1178,8 +1150,6 @@ class ConfigManager:
             "max_position_percent": max_position_percent,
             "progressive": False,
         }
-
-        return result
 
     def get_regime_params(
         self, regime_name: str, symbol: Optional[str] = None
