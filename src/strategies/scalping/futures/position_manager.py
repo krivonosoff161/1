@@ -1127,10 +1127,11 @@ class FuturesPositionManager:
                     except (ValueError, TypeError):
                         leverage_from_position = None
 
-            # Определяем итоговый leverage: приоритет конфиг → позиция → fallback
+            # Определяем итоговый leverage: приоритет БИРЖА → конфиг → fallback
+            # ✅ L1-4a FIX: Инвертирован приоритет - биржевое leverage важнее конфига
             leverage = (
-                getattr(self.scalping_config, "leverage", None)
-                or leverage_from_position
+                leverage_from_position
+                or getattr(self.scalping_config, "leverage", None)
                 or 3
             )
 
@@ -1367,6 +1368,7 @@ class FuturesPositionManager:
                 safety_threshold=None,  # ✅ ИСПРАВЛЕНО: None - читает из конфига по режиму
                 regime=regime_for_margin,  # ✅ КРИТИЧЕСКОЕ: Передаем regime для адаптивного safety_threshold
                 position_age_seconds=position_age_seconds,  # ✅ НОВОЕ: Передаем возраст позиции
+                exchange_leverage=leverage_from_position,  # ✅ L1-4a FIX: Передаем реальное leverage с биржи
             )
 
             if not is_safe:
