@@ -1052,7 +1052,17 @@ class ConfigManager:
                 sources_used.append("exit_params (flat)")
 
         # ✅ ПРИОРИТЕТ 2: trailing_sl_config.* (fallback для TSL параметров)
-        tsl_params = self.get_tsl_params(regime)
+        # Читаем trailing_sl_config напрямую из конфига
+        tsl_config = self._raw_config_dict.get("trailing_sl", {})
+        tsl_params = {}
+        if isinstance(tsl_config, dict):
+            tsl_params = tsl_config
+            # Проверяем by_regime
+            by_regime = tsl_config.get("by_regime", {})
+            if isinstance(by_regime, dict) and regime_lower in by_regime:
+                regime_tsl = by_regime[regime_lower]
+                if isinstance(regime_tsl, dict):
+                    tsl_params.update(regime_tsl)
         tsl_overrides = [
             "initial_trail",
             "max_trail",
