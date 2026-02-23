@@ -154,8 +154,10 @@ class SignalCoordinator:
 
         reentry_guard_cfg = _cfg_get(self.scalping_config, "reentry_guard", {}) or {}
         self._reentry_guard_enabled = bool(_cfg_get(reentry_guard_cfg, "enabled", True))
+        # ✅ FIX L2-4: Увеличен cooldown для прибыльных позиций с 12 до 60 секунд
+        # Бот слишком быстро переоткрывал позиции в том же направлении после прибыльного закрытия
         self._reentry_same_side_cooldown_sec = max(
-            0.0, float(_cfg_get(reentry_guard_cfg, "same_side_cooldown_sec", 12.0))
+            0.0, float(_cfg_get(reentry_guard_cfg, "same_side_cooldown_sec", 60.0))
         )
         # ✅ FIX L2-3: Используем cooldown_after_loss_minutes из конфига если loss_cooldown_sec не задан
         # Порядок приоритета: reentry_guard.loss_cooldown_sec > exit_params.cooldown_after_loss_minutes > default
@@ -848,8 +850,18 @@ class SignalCoordinator:
 
         if close_side == signal_side:
             cooldown_sec = self._reentry_same_side_cooldown_sec
+            # ✅ FIX L2-4: Детальное логирование для анализа переоткрытий
+            if close_net_pnl >= 0:
+                logger.info(
+                    f"🔄 REENTRY_GUARD: {symbol} прибыльное закрытие {close_net_pnl:+.2f} "
+                    f"side={close_side}, cooldown={cooldown_sec:.0f}s"
+                )
             if close_net_pnl < 0 or self._is_protective_exit_reason(close_reason):
                 cooldown_sec = max(cooldown_sec, self._reentry_loss_cooldown_sec)
+                logger.info(
+                    f"🔄 REENTRY_GUARD: {symbol} убыточное закрытие {close_net_pnl:+.2f} "
+                    f"side={close_side}, extended_cooldown={cooldown_sec:.0f}s"
+                )
         else:
             cooldown_sec = self._reentry_opposite_side_cooldown_sec
 
