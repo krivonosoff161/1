@@ -3240,17 +3240,19 @@ class FuturesScalpingOrchestrator:
                         # ✅ L1-1 FIX: Обновляем entry_price всегда когда есть данные от API
                         # (важно после DCA - avgPx меняется при усреднении)
                         if entry_price_from_api > 0:
-                            if (
-                                not existing_metadata.entry_price
-                                or existing_metadata.entry_price == 0
-                                or abs(
-                                    existing_metadata.entry_price - entry_price_from_api
+                            old_price = existing_metadata.entry_price
+                            should_update = (
+                                not old_price
+                                or old_price == 0
+                                or abs(old_price - entry_price_from_api) > 0.0001
+                            )
+                            if should_update:
+                                old_price_str = (
+                                    f"{old_price:.4f}" if old_price else "None"
                                 )
-                                > 0.0001
-                            ):
                                 logger.info(
                                     f"📝 L1-1: Обновляем entry_price для {symbol}: "
-                                    f"{existing_metadata.entry_price:.4f} -> {entry_price_from_api:.4f}"
+                                    f"{old_price_str} -> {entry_price_from_api:.4f}"
                                 )
                                 existing_metadata.entry_price = entry_price_from_api
 
