@@ -29,6 +29,8 @@ class TSLManager:
         """
         self.config_manager = config_manager
         self.trailing_sl_by_symbol: Dict[str, TrailingStopLoss] = {}
+        # ✅ P0-10 FIX: Получаем полный конфиг для передачи в TrailingStopLoss
+        self._full_config = getattr(config_manager, "_raw_config_dict", {}) or {}
 
         logger.info("✅ TSLManager initialized")
 
@@ -87,6 +89,7 @@ class TSLManager:
                 "trail_growth_high_multiplier", 3.0
             ),
             breakeven_trigger=tsl_params.get("breakeven_trigger"),
+            config=self._full_config,  # ✅ P0-10 FIX: Передаём конфиг для min_loss_cut_hold_seconds
         )
 
         # Инициализируем TSL

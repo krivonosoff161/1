@@ -72,6 +72,8 @@ class TrailingSLCoordinator:
         """
         self.config_manager = config_manager  # Оставляем для обратной совместимости
         self.parameter_provider = None  # ✅ НОВОЕ (26.12.2025): ParameterProvider для единого доступа к параметрам
+        # ✅ P0-10 FIX: Получаем полный конфиг для передачи в TrailingStopLoss
+        self._full_config = getattr(config_manager, "_raw_config_dict", {}) or {}
         self.debug_logger = debug_logger
         self.signal_generator = signal_generator
         self.client = client
@@ -541,6 +543,7 @@ class TrailingSLCoordinator:
             ),
             debug_logger=self.debug_logger,  # ✅ DEBUG LOGGER для логирования
             breakeven_trigger=params.get("breakeven_trigger"),
+            config=self._full_config,  # ✅ P0-10 FIX: Передаём конфиг для min_loss_cut_hold_seconds
         )
 
         # ✅ АДАПТИВНО: Устанавливаем параметры из конфига для TSL

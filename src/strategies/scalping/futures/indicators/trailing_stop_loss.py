@@ -66,6 +66,9 @@ class TrailingStopLoss:
         breakeven_trigger: Optional[
             float
         ] = None,  # ✅ BREAKEVEN: Порог прибыли для активации (0.008 = 0.8%)
+        config: Optional[
+            Dict[str, Any]
+        ] = None,  # ✅ P0-10 FIX: Конфиг для min_loss_cut_hold_seconds
     ):
         """
         Инициализация Trailing Stop Loss.
@@ -78,7 +81,9 @@ class TrailingStopLoss:
             maker_fee_rate: Явная ставка maker за сторону (приоритет над trading_fee_rate)
             taker_fee_rate: Явная ставка taker за сторону (приоритет над trading_fee_rate)
             leverage: Leverage позиции (по умолчанию 1.0) - используется для правильного расчета loss_cut от маржи
+            config: Конфигурация бота для чтения параметров (min_loss_cut_hold_seconds)
         """
+        self.config = config  # ✅ P0-10 FIX: Сохраняем конфиг
         self.initial_trail = initial_trail
         self.max_trail = max_trail
         self.min_trail = min_trail
@@ -877,10 +882,14 @@ class TrailingStopLoss:
                     )
                     return False, None
                 # ✅ P0-10 FIX: Читаем min_loss_cut_hold_seconds из конфига
-                min_loss_cut_hold_seconds = float(
-                    self.config.get("min_loss_cut_hold_seconds", 90.0)
+                # Навигация: config → scalping → trailing_stop_loss → min_loss_cut_hold_seconds
+                tsl_cfg = (
+                    self.config.get("scalping", {}).get("trailing_stop_loss", {})
                     if isinstance(self.config, dict)
-                    else 90.0
+                    else {}
+                )
+                min_loss_cut_hold_seconds = float(
+                    tsl_cfg.get("min_loss_cut_hold_seconds", 90.0)
                 )
 
                 if seconds_in_position >= min_loss_cut_hold_seconds:
