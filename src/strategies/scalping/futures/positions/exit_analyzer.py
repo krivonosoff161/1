@@ -3406,17 +3406,29 @@ class ExitAnalyzer:
                 trend_data = await self._analyze_trend_strength(symbol)
                 if trend_data and trend_data.get("trend_strength", 0) >= 0.7:
                     # Сильный тренд - продлеваем TP вместо закрытия
+                    # ✅ P0-9 FIX: Используем extension_percent из exit_params
+                    exit_params = (
+                        self.parameter_provider.get_exit_params(symbol, regime)
+                        if self.parameter_provider
+                        else {}
+                    )
+                    ext_pct = (
+                        exit_params.get("extension_percent", 120.0)
+                        if isinstance(exit_params, dict)
+                        else 120.0
+                    )
+                    new_tp = tp_percent * (ext_pct / 100.0)
                     logger.info(
                         f"📈 ExitAnalyzer TRENDING: TP достигнут ({pnl_percent:.2f}% >= {tp_percent:.2f}%), "
                         f"но тренд сильный (ADX={trend_data.get('adx', 0):.1f}, strength={trend_data.get('trend_strength', 0):.2f}), "
-                        f"продлеваем TP для {symbol}"
+                        f"продлеваем TP с {tp_percent:.2f}% до {new_tp:.2f}% (extension={ext_pct}%) для {symbol}"
                     )
                     return {
                         "action": "extend_tp",
                         "reason": "strong_trend_extend_tp",
                         "pnl_pct": pnl_percent,
                         "current_tp": tp_percent,
-                        "new_tp": tp_percent * 1.2,  # Продлеваем на 20%
+                        "new_tp": new_tp,
                         "trend_strength": trend_data.get("trend_strength", 0),
                         "regime": regime,
                     }

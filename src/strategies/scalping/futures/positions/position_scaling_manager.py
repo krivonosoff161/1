@@ -301,18 +301,21 @@ class PositionScalingManager:
                 }
 
             # ✅ L3-4 FIX: В trending режиме добавляем только если позиция в прибыли
-            # Это предотвращает усреднение убытков в трендовом режиме
-            TRENDING_MIN_PROFIT_FOR_ADDITION = (
-                1.5  # Минимум 1.5% прибыли для добавления
+            # ✅ P0-12 FIX: Читаем trending_min_profit_for_addition из конфига
+            cfg = self.config if isinstance(self.config, dict) else {}
+            # Навигация: config → scalping → position_scaling
+            ps_cfg = cfg.get("scalping", {}).get("position_scaling", {})
+            trending_min_profit = float(
+                ps_cfg.get("trending_min_profit_for_addition", 1.5)
             )
             if regime and regime.lower() == "trending":
                 if (
                     current_pnl_percent is not None
-                    and current_pnl_percent < TRENDING_MIN_PROFIT_FOR_ADDITION
+                    and current_pnl_percent < trending_min_profit
                 ):
                     return {
                         "can_add": False,
-                        "reason": f"В trending режиме добавление только при прибыли >= {TRENDING_MIN_PROFIT_FOR_ADDITION}% (текущая: {current_pnl_percent:.2f}%)",
+                        "reason": f"В trending режиме добавление только при прибыли >= {trending_min_profit}% (текущая: {current_pnl_percent:.2f}%)",
                         "addition_count": addition_count,
                         "current_pnl_percent": current_pnl_percent,
                     }

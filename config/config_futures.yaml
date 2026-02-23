@@ -84,6 +84,14 @@ scalping:
     min_leverage: 3
     max_leverage: 20
 
+  # Trailing Stop Loss Configuration
+  trailing_stop_loss:
+    min_loss_cut_hold_seconds: 90.0  # секунды до разрешения loss_cut
+
+  # Position Scaling (DCA) Configuration
+  position_scaling:
+    trending_min_profit_for_addition: 1.5  # % прибыли для DCA в trending режиме
+
   patterns:
     enabled: true
     timeframe: "5m"

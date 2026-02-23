@@ -876,7 +876,12 @@ class TrailingStopLoss:
                         f"разница={abs(profit_pct + loss_cut_from_price):.4f} < {commission_threshold:.4f}"
                     )
                     return False, None
-                min_loss_cut_hold_seconds = 90.0  # ✅ ИСПРАВЛЕНО: Увеличено с 30 до 90 секунд для защиты от преждевременного закрытия
+                # ✅ P0-10 FIX: Читаем min_loss_cut_hold_seconds из конфига
+                min_loss_cut_hold_seconds = float(
+                    self.config.get("min_loss_cut_hold_seconds", 90.0)
+                    if isinstance(self.config, dict)
+                    else 90.0
+                )
 
                 if seconds_in_position >= min_loss_cut_hold_seconds:
                     now_ts = time.time()

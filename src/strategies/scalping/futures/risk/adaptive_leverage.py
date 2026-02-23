@@ -31,7 +31,9 @@ class AdaptiveLeverage:
 
         # ✅ P0-2 FIX: Leverage map из конфига с безопасными дефолтами
         cfg = config if isinstance(config, dict) else {}
-        lev_map_cfg = cfg.get("leverage_map", {})
+        # Навигация: config → scalping → adaptive_leverage → leverage_map
+        al_cfg = cfg.get("scalping", {}).get("adaptive_leverage", {})
+        lev_map_cfg = al_cfg.get("leverage_map", {})
         if lev_map_cfg:
             self.leverage_map = {k: int(v) for k, v in lev_map_cfg.items()}
         else:
@@ -45,8 +47,8 @@ class AdaptiveLeverage:
             }
 
         # Минимальный и максимальный леверидж из конфига
-        self.min_leverage = int(cfg.get("min_leverage", 3))
-        self.max_leverage = int(cfg.get("max_leverage", 20))  # был 30
+        self.min_leverage = int(al_cfg.get("min_leverage", 3))
+        self.max_leverage = int(al_cfg.get("max_leverage", 20))  # был 30
 
         # 🔴 BUG #24 FIX: Leverage limits as % of equity, not hardcoded $
         # These will be used to calculate margin thresholds dynamically
