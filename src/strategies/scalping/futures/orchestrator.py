@@ -5634,9 +5634,18 @@ class FuturesScalpingOrchestrator:
                         and self.telegram.enabled
                     ):
                         # Получаем данные для уведомления
+                        # ✅ B0-2 FIX: Используем уже вычисленные entry_price и exit_price (если есть trade_result)
                         close_side = position.get("side", "buy")
-                        close_entry = float(position.get("entry_price", 0) or 0)
-                        close_exit = float(position.get("current_price", 0) or 0)
+                        close_entry = float(
+                            (entry_price if trade_result else None)
+                            or position.get("entry_price", 0)
+                            or 0
+                        )
+                        close_exit = float(
+                            (exit_price if trade_result else None)
+                            or position.get("current_price", 0)
+                            or 0
+                        )
                         # PnL берём из trade_result если есть
                         close_pnl = 0.0
                         if trade_result:

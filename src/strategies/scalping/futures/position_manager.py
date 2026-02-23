@@ -102,6 +102,11 @@ class FuturesPositionManager:
         # ✅ ПРАВКА #3: Блокировка для предотвращения race condition при закрытии позиций
         self._close_lock = asyncio.Lock()
 
+        # ✅ L4-1 FIX: TTLCache для защиты от дублирования закрытия (_close_position_by_reason)
+        from cachetools import TTLCache
+
+        self._closing_positions_cache = TTLCache(maxsize=100, ttl=60.0)
+
         logger.info("FuturesPositionManager инициализирован")
 
     def set_symbol_profiles(self, symbol_profiles: Dict[str, Dict[str, Any]]):
@@ -4165,6 +4170,15 @@ class FuturesPositionManager:
         try:
             symbol = position.get("instId", "").replace("-SWAP", "")
 
+            # ✅ L4-1 FIX: Проверка TTLCache — защита от race condition с orchestrator._close_position
+            if symbol in self._closing_positions_cache:
+                logger.debug(
+                    f"⚠️ _close_position_by_reason: {symbol} уже закрывается (TTLCache), пропускаем дубль"
+                )
+                return None
+            # Добавляем в кэш при начале закрытия
+            self._closing_positions_cache[symbol] = True
+
             # ⚠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем актуальное состояние позиции на бирже
             # перед закрытием, так как position может быть устаревшим
             actual_positions = await self.client.get_positions(symbol)
@@ -6090,15 +6104,20 @@ class FuturesPositionManager:
 
     async def _check_max_holding(self, position: Dict[str, Any]) -> bool:
         """
-        ✅ НОВОЕ: Проверка максимального времени удержания позиции.
+        ⚠️ L3-2 DEAD CODE: Этот метод не используется.
 
-        Закрывает позицию если она держится дольше max_holding_minutes.
+        Max holding проверяется в ExitAnalyzer._get_max_holding_minutes() и
+        управляется через orchestrator._check_position_exits().
 
-        Параметры из конфига:
-        - Trending: 60 минут
-        - Ranging: 120 минут (2 часа)
-        - Choppy: 30 минут
+        Оставлен для истории - логика продления времени при прибыли
+        (extend_time_if_profitable) может быть перенесена в ExitAnalyzer
+        при необходимости.
+
+        Дата пометки: 2026-02-23
         """
+        # DEAD CODE - метод не вызывается из production кода
+        # Логика max_holding перенесена в ExitAnalyzer
+        return False  # Early return to prevent accidental execution
         try:
             symbol = position.get("instId", "").replace("-SWAP", "")
 

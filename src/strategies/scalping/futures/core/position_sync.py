@@ -223,83 +223,54 @@ class PositionSync:
                 except Exception as e_log:
                     logger.debug(f"⚠️ Не удалось записать DRIFT в лог файл: {e_log}")
 
-                # ✅ ИСПРАВЛЕНИЕ: Для DRIFT_ADD позиций регистрируем, а не обновляем
-                if self.position_registry:
-                    try:
-                        # Получаем данные для регистрации
-                        pos_side = pos.get("posSide", "").lower()
-                        if pos_side not in ["long", "short"]:
-                            pos_side = "long" if pos_size > 0 else "short"
+                # ✅ B0-1 FIX: DRIFT_ADD позиции немедленно закрываем, не регистрируем
+                # Проблема: бот не знает leverage/SL/TP позиции с биржи — управление = неуправляемый риск
+                # Решение: немедленное закрытие через API
+                try:
+                    pos_side = pos.get("posSide", "").lower()
+                    if pos_side not in ["long", "short"]:
+                        pos_side = "long" if pos_size > 0 else "short"
 
-                        # Безопасный парсинг данных
-                        try:
-                            avgpx_str = str(pos.get("avgPx", "0")).strip()
-                            entry_price = float(avgpx_str) if avgpx_str else 0.0
-                        except (ValueError, TypeError):
-                            entry_price = 0.0
+                    close_side = "sell" if pos_side == "long" else "buy"
 
-                        try:
-                            margin_str = str(pos.get("margin", "0")).strip()
-                            margin_used = float(margin_str) if margin_str else 0.0
-                        except (ValueError, TypeError):
-                            margin_used = 0.0
+                    logger.critical(
+                        f"🚨 DRIFT_ADD {symbol}: НЕМЕДЛЕННОЕ ЗАКРЫТИЕ | "
+                        f"side={pos_side.upper()}, size={abs(pos_size):.6f}, "
+                        f"close_side={close_side.upper()}"
+                    )
 
-                        # Получаем ctVal для расчета размера в монетах
-                        try:
-                            inst_details = await self.client.get_instrument_details(
-                                symbol
-                            )
-                            ct_val = float(inst_details.get("ctVal", "0.01"))
-                            size_in_coins = abs(pos_size) * ct_val
-                        except Exception:
-                            size_in_coins = abs(pos_size)
+                    # Закрываем позицию через API
+                    close_result = await self.client.place_futures_order(
+                        symbol=symbol,
+                        side=close_side,
+                        size=abs(pos_size),
+                        order_type="market",
+                        size_in_contracts=True,
+                        reduce_only=True,  # Только закрытие, не открытие
+                    )
 
-                        # ✅ ИСПРАВЛЕНО: Создаем словарь position и PositionMetadata
-                        from .position_registry import PositionMetadata
-
-                        # Создаем словарь position с данными из биржи
-                        position_dict = pos.copy()
-
-                        # Создаем метаданные
-                        # 🔴 BUG #19 FIX: используем биржевые времена cTime/openTime для DRIFT_ADD (если есть)
-                        entry_ts_ms = None
-                        for key in ["cTime", "openTime", "c_time", "open_time"]:
-                            if key in pos and pos.get(key):
-                                try:
-                                    entry_ts_ms = float(pos.get(key))
-                                    break
-                                except Exception:
-                                    entry_ts_ms = None
-
-                        if entry_ts_ms:
-                            entry_dt = datetime.fromtimestamp(
-                                entry_ts_ms / 1000.0, tz=timezone.utc
-                            )
-                        else:
-                            entry_dt = datetime.now(timezone.utc)
-
-                        metadata = PositionMetadata(
-                            entry_time=entry_dt,
-                            position_side=pos_side,
-                            entry_price=entry_price if entry_price > 0 else None,
-                            size_in_coins=size_in_coins,
-                            margin_used=margin_used,
+                    if (
+                        close_result
+                        and isinstance(close_result, dict)
+                        and close_result.get("code") == "0"
+                    ):
+                        logger.critical(
+                            f"✅ DRIFT_ADD {symbol}: Позиция УСПЕШНО ЗАКРЫТА | result={close_result}"
+                        )
+                    else:
+                        logger.critical(
+                            f"❌ DRIFT_ADD {symbol}: ОШИБКА закрытия | result={close_result}"
                         )
 
-                        # Регистрируем позицию
-                        await self.position_registry.register_position(
-                            symbol=symbol,
-                            position=position_dict,
-                            metadata=metadata,
-                        )
-                        logger.info(
-                            f"✅ DRIFT_ADD {symbol}: Позиция зарегистрирована в реестре "
-                            f"(side={pos_side}, size={abs(pos_size):.6f}, entry=${entry_price:.2f})"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"❌ Ошибка регистрации DRIFT_ADD позиции {symbol}: {e}"
-                        )
+                    # НЕ регистрируем позицию в реестре — она закрыта или закрывается
+                    continue  # Пропускаем обработку этой позиции
+
+                except Exception as e:
+                    logger.critical(
+                        f"🚨 DRIFT_ADD {symbol}: ИСКЛЮЧЕНИЕ при закрытии: {e}"
+                    )
+                    # В случае ошибки — пропускаем позицию, не регистрируем
+                    continue
             else:
                 # Обновляем существующую позицию в реестре
                 if self.position_registry:

@@ -2421,119 +2421,25 @@ class ExitAnalyzer:
         self, regime: str, symbol: Optional[str] = None
     ) -> float:
         """
-        Получение max_holding_minutes из конфига по режиму.
-
-        Приоритет:
-        1. exit_params.regime.max_holding_minutes (через ParameterProvider)
-        2. adaptive_regime.regime.max_holding_minutes
-        3. per-symbol max_holding_minutes
-        4. 120.0 (default)
-
-        Args:
-            regime: Режим рынка (trending, ranging, choppy)
-            symbol: Торговый символ (опционально, для per-symbol параметров)
-
-        Returns:
-            max_holding_minutes или 120.0 по умолчанию
+        ✅ L3-2 FIX: Упрощённое получение max_holding_minutes только через ParameterProvider.
+        Убраны fallback'и на прямое чтение _raw_config_dict и adaptive_regime.
         """
-        max_holding_minutes = 120.0  # Default 2 часа
-
-        # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения exit_params
+        # ✅ Единственный источник: ParameterProvider
         if self.parameter_provider:
             try:
                 exit_params = self.parameter_provider.get_exit_params(
                     symbol or "", regime
                 )
                 if exit_params and "max_holding_minutes" in exit_params:
-                    max_holding_minutes = self._to_float(
+                    return self._to_float(
                         exit_params["max_holding_minutes"], "max_holding_minutes", 120.0
                     )
-                    logger.debug(
-                        f"✅ ExitAnalyzer: max_holding_minutes для {symbol or 'default'} ({regime}) "
-                        f"получен через ParameterProvider: {max_holding_minutes:.1f}мин"
-                    )
-                    return max_holding_minutes
             except Exception as e:
                 logger.debug(
-                    f"⚠️ ExitAnalyzer: Ошибка получения max_holding_minutes через ParameterProvider: {e}, "
-                    f"используем fallback"
+                    f"⚠️ ExitAnalyzer: ParameterProvider failed for max_holding_minutes: {e}"
                 )
 
-        # ✅ ПРИОРИТЕТ 1: exit_params.regime.max_holding_minutes
-        # ✅ ИСПРАВЛЕНО (26.12.2025): Используем правильный способ получения exit_params из ConfigManager
-        if self.config_manager:
-            try:
-                # ConfigManager не имеет метода get(), используем _raw_config_dict напрямую
-                if (
-                    hasattr(self.config_manager, "_raw_config_dict")
-                    and self.config_manager._raw_config_dict
-                ):
-                    exit_params = self.config_manager._raw_config_dict.get(
-                        "exit_params", {}
-                    )
-                else:
-                    # Fallback: пробуем получить через другие способы
-                    exit_params = (
-                        getattr(self.config_manager.config, "exit_params", None) or {}
-                    )
-
-                if isinstance(exit_params, dict) and regime in exit_params:
-                    regime_config = exit_params.get(regime, {})
-                    if (
-                        isinstance(regime_config, dict)
-                        and "max_holding_minutes" in regime_config
-                    ):
-                        # ✅ ИСПРАВЛЕНО (28.12.2025): Используем _to_float() вместо float() напрямую
-                        max_holding_minutes_raw = regime_config["max_holding_minutes"]
-                        max_holding_minutes = self._to_float(
-                            max_holding_minutes_raw, "max_holding_minutes", 120.0
-                        )
-                        return max_holding_minutes
-            except Exception as e:
-                logger.debug(
-                    f"⚠️ ExitAnalyzer: Ошибка получения exit_params.max_holding_minutes: {e}"
-                )
-
-        # ✅ ПРИОРИТЕТ 2: adaptive_regime.regime.max_holding_minutes (старая логика)
-        if self.scalping_config:
-            try:
-                adaptive_regime = getattr(self.scalping_config, "adaptive_regime", {})
-                regime_config = None
-
-                if isinstance(adaptive_regime, dict):
-                    if regime and regime in adaptive_regime:
-                        regime_config = adaptive_regime.get(regime, {})
-                    elif "ranging" in adaptive_regime:
-                        regime_config = adaptive_regime.get("ranging", {})
-                else:
-                    if regime and hasattr(adaptive_regime, regime):
-                        regime_config = getattr(adaptive_regime, regime)
-                    elif hasattr(adaptive_regime, "ranging"):
-                        regime_config = getattr(adaptive_regime, "ranging")
-
-                if regime_config:
-                    if isinstance(regime_config, dict):
-                        # ✅ ИСПРАВЛЕНО (28.12.2025): Используем _to_float() вместо float() напрямую
-                        max_holding_minutes_raw = regime_config.get(
-                            "max_holding_minutes", 120.0
-                        )
-                        max_holding_minutes = self._to_float(
-                            max_holding_minutes_raw, "max_holding_minutes", 120.0
-                        )
-                    else:
-                        # ✅ ИСПРАВЛЕНО (28.12.2025): Используем _to_float() вместо float() напрямую
-                        max_holding_minutes_raw = getattr(
-                            regime_config, "max_holding_minutes", 120.0
-                        )
-                        max_holding_minutes = self._to_float(
-                            max_holding_minutes_raw, "max_holding_minutes", 120.0
-                        )
-            except Exception as e:
-                logger.debug(
-                    f"⚠️ ExitAnalyzer: Ошибка получения max_holding_minutes: {e}"
-                )
-
-        return max_holding_minutes
+        return 120.0  # default
 
     def _get_partial_tp_params(self, regime: str) -> Dict[str, Any]:
         """
