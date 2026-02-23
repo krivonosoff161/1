@@ -332,19 +332,20 @@ class FuturesRiskManager:
             Максимальная маржа на позицию в USD
         """
         try:
-            # ✅ P0-1 FIX: Читаем max_margin_percent из конфига
+            # ✅ P0-1 FIX: Используем max_position_percent из конфига (делим на 100)
             profiles_cfg = (
                 self.config.get("balance_profiles", {})
                 if hasattr(self, "config")
                 else {}
             )
             profile_cfg = profiles_cfg.get(balance_profile, {})
-            base_percent = float(profile_cfg.get("max_margin_percent", 0.20))
+            # max_position_percent в конфиге в процентах (например, 15.0 = 15%)
+            base_percent = float(profile_cfg.get("max_position_percent", 20.0)) / 100.0
 
             if base_percent <= 0 or base_percent > 1.0:
                 logger.warning(
-                    f"⚠️ Некорректный max_margin_percent={base_percent} для {balance_profile}, "
-                    f"используем 0.20"
+                    f"⚠️ Некорректный max_position_percent={base_percent*100:.1f}% для {balance_profile}, "
+                    f"используем 20%"
                 )
                 base_percent = 0.20
 
