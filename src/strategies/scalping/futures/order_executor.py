@@ -2570,7 +2570,13 @@ class FuturesOrderExecutor:
             side = signal.get("side")
 
             # Расчет цен TP и SL
-            tp_price, sl_price = await self._calculate_tp_sl_prices(signal, size)
+            tp_sl_result = await self._calculate_tp_sl_prices(signal, size)
+            if tp_sl_result is None:
+                logger.error(
+                    f"🚫 Не удалось рассчитать TP/SL для {symbol}, " f"OCO ордер отменён"
+                )
+                return {"success": False, "error": "TP/SL calculation failed"}
+            tp_price, sl_price = tp_sl_result
 
             logger.info(
                 f"🎯 Размещение OCO ордера: {symbol} {side} {size:.6f} TP:{tp_price:.2f} SL:{sl_price:.2f}"
@@ -2623,7 +2629,7 @@ class FuturesOrderExecutor:
 
     async def _calculate_tp_sl_prices(
         self, signal: Dict[str, Any], size: float
-    ) -> Tuple[float, float]:
+    ) -> Optional[Tuple[float, float]]:
         """
         🎯 РАСЧЕТ ПЛАВАЮЩИХ TP/SL
 
@@ -2855,14 +2861,17 @@ class FuturesOrderExecutor:
                                     ticker = data["data"][0]
                                     entry_price = float(ticker.get("last", "0"))
                 except Exception:
-                    logger.error(f"❌ Fallback: не удалось получить цену для {symbol}")
-                    # Последний fallback - используем разумное значение на основе символа
-                    if "BTC" in symbol:
-                        entry_price = 110000.0
-                    elif "ETH" in symbol:
-                        entry_price = 3900.0
-                    else:
-                        entry_price = 50000.0
+                    logger.critical(
+                        f"❌ CRITICAL: не удалось получить цену для {symbol}, "
+                        f"TP/SL расчёт невозможен"
+                    )
+                    return None  # Caller должен обработать None как отказ
+            if entry_price is None or entry_price <= 0:
+                logger.critical(
+                    f"❌ CRITICAL: невалидная цена {entry_price} для {symbol}"
+                )
+                return None
+
             tp_pct = self.scalping_config.tp_percent
             sl_pct = self.scalping_config.sl_percent
 

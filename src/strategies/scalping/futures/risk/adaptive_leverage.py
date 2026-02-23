@@ -29,18 +29,24 @@ class AdaptiveLeverage:
         """
         self.config = config
 
-        # Настройки левериджа по качеству сигнала
-        self.leverage_map = {
-            "very_weak": 3,  # 0.0-0.3
-            "weak": 5,  # 0.3-0.5
-            "medium": 10,  # 0.5-0.7
-            "strong": 20,  # 0.7-0.9
-            "very_strong": 30,  # 0.9-1.0
-        }
+        # ✅ P0-2 FIX: Leverage map из конфига с безопасными дефолтами
+        cfg = config if isinstance(config, dict) else {}
+        lev_map_cfg = cfg.get("leverage_map", {})
+        if lev_map_cfg:
+            self.leverage_map = {k: int(v) for k, v in lev_map_cfg.items()}
+        else:
+            # Безопасные дефолты (снижены с 20/30 до 15/20)
+            self.leverage_map = {
+                "very_weak": 3,  # 0.0-0.3
+                "weak": 5,  # 0.3-0.5
+                "medium": 10,  # 0.5-0.7
+                "strong": 15,  # 0.7-0.9 (было 20)
+                "very_strong": 20,  # 0.9-1.0 (было 30)
+            }
 
-        # Минимальный и максимальный леверидж
-        self.min_leverage = 3
-        self.max_leverage = 30
+        # Минимальный и максимальный леверидж из конфига
+        self.min_leverage = int(cfg.get("min_leverage", 3))
+        self.max_leverage = int(cfg.get("max_leverage", 20))  # был 30
 
         # 🔴 BUG #24 FIX: Leverage limits as % of equity, not hardcoded $
         # These will be used to calculate margin thresholds dynamically

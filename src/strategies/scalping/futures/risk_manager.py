@@ -332,19 +332,21 @@ class FuturesRiskManager:
             Максимальная маржа на позицию в USD
         """
         try:
-            # Базовый процент по профилю баланса
-            if balance_profile == "small":
-                base_percent = 0.15  # 15% для малого баланса
-            elif balance_profile == "medium":
-                base_percent = 0.20  # 20% для среднего баланса
-            elif balance_profile == "large":
-                base_percent = 0.25  # 25% для большого баланса
-            else:
-                # Fallback: используем средний профиль
-                base_percent = 0.20
-                logger.debug(
-                    f"⚠️ Неизвестный balance_profile={balance_profile}, используем 20%"
+            # ✅ P0-1 FIX: Читаем max_margin_percent из конфига
+            profiles_cfg = (
+                self.config.get("balance_profiles", {})
+                if hasattr(self, "config")
+                else {}
+            )
+            profile_cfg = profiles_cfg.get(balance_profile, {})
+            base_percent = float(profile_cfg.get("max_margin_percent", 0.20))
+
+            if base_percent <= 0 or base_percent > 1.0:
+                logger.warning(
+                    f"⚠️ Некорректный max_margin_percent={base_percent} для {balance_profile}, "
+                    f"используем 0.20"
                 )
+                base_percent = 0.20
 
             # Корректировка по режиму рынка
             regime_multiplier = 1.0

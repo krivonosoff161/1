@@ -94,6 +94,17 @@ manual_pools:
       time_limit_seconds: 360
       ph_threshold: 0.45
 
+# Adaptive Leverage Configuration
+adaptive_leverage:
+  leverage_map:
+    very_weak: 3
+    weak: 5
+    medium: 10
+    strong: 15
+    very_strong: 20
+  min_leverage: 3
+  max_leverage: 20
+
 # Risk Management (Simplified for Manual Pools)
 risk:
   max_daily_loss_percent: 10.0    # Stop trading if daily loss exceeds 10%
@@ -103,6 +114,7 @@ risk:
 balance_profiles:
   small:
     threshold: 1000.0
+    max_margin_percent: 0.15              # ✅ P0-1: 15% маржи для small
     base_position_size: 55.0              # 🔥 AI КОНСЕНСУС: 65→55 (оптимальный размер)
     min_position_size: 25.0               # 🔥 AI КОНСЕНСУС: 40→25 (меньше минимум)
     max_position_size: 100.0              # 🔥 AI КОНСЕНСУС: 120→100 (разумный максимум)
@@ -129,6 +141,7 @@ balance_profiles:
   
   medium:
     threshold: 2500.0
+    max_margin_percent: 0.20              # ✅ P0-1: 20% маржи для medium
     base_position_size: 100.0             # Оптимальный размер
     min_position_size: 50.0              # 🔥 AI КОНСЕНСУС: 70→50 (меньше минимум)
     max_position_size: 200.0             # Разумный максимум
@@ -155,6 +168,7 @@ balance_profiles:
   
   large:
     threshold: 3500.0
+    max_margin_percent: 0.25              # ✅ P0-1: 25% маржи для large
     base_position_size: 200.0             # 🔥 AI КОНСЕНСУС: 150→200 (больше размер)
     min_position_size: 80.0              # 🔥 AI КОНСЕНСУС: 100→80 (меньше минимум)
     max_position_size: 400.0            # 🔥 AI КОНСЕНСУС: 300→400 (больше максимум)
