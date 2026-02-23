@@ -72,6 +72,18 @@ scalping:
       min_position_usd: 300.0     # мин номинал
       max_position_usd: 15000.0   # макс номинал
       max_open_positions: 5
+
+  # Adaptive Leverage Configuration
+  adaptive_leverage:
+    leverage_map:
+      very_weak: 3
+      weak: 5
+      medium: 10
+      strong: 15
+      very_strong: 20
+    min_leverage: 3
+    max_leverage: 20
+
   patterns:
     enabled: true
     timeframe: "5m"
