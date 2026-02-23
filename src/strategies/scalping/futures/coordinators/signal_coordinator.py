@@ -3272,12 +3272,13 @@ class SignalCoordinator:
                     ct_val = float(details.get("ctVal", 0.01))
                     # Размер в USD -> размер в монетах
                     addition_size_coins = addition_size_usd / price
-                    # Размер в монетах -> размер в контрактах
-                    position_size = addition_size_coins / ct_val
+                    # ✅ L1-5b FIX: НЕ делим на ct_val - position_size должен быть в МОНЕТАХ
+                    # (order_executor.execute_signal -> place_futures_order сделает конвертацию)
+                    position_size = addition_size_coins
                     logger.info(
                         f"📊 [POSITION_SCALING] {symbol}: Используем размер добавления | "
                         f"addition_size_usd=${addition_size_usd:.2f}, "
-                        f"position_size={position_size:.6f} контрактов"
+                        f"position_size={position_size:.6f} монет (L1-5b fix)"
                     )
                 except Exception as e:
                     logger.warning(

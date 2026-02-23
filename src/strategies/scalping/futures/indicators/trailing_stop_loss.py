@@ -348,105 +348,68 @@ class TrailingStopLoss:
             unrealized_pnl=unrealized_pnl,
         )
 
-        # Обновление экстремумов и трейлинга
+        # ✅ L1-3b FIX: Обновляем экстремумы ВСЕГДА, но трейл - по profit_pct
+        # Обновление экстремумов
         if self.side == "long":
-            # Для лонга отслеживаем максимальную цену
             if current_price > self.highest_price:
                 self.highest_price = current_price
-                # Армирование: до достижения min_profit_to_close не усиливаем трейл
-                trail_multiplier = None  # Инициализируем для логирования
-                was_below_threshold = (
-                    getattr(self, "min_profit_to_close", None) is not None
-                    and profit_pct_total < self.min_profit_to_close
-                )
-                if was_below_threshold:
-                    self.current_trail = max(self.current_trail, self.initial_trail)
-                    trail_multiplier = (
-                        1.0  # Не используем multiplier, оставляем initial_trail
-                    )
-                else:
-                    # ✅ ИСПРАВЛЕНО (06.01.2026): Логируем активацию Trailing Stop
-                    if getattr(
-                        self, "min_profit_to_close", None
-                    ) is not None and not hasattr(self, "_trailing_activated"):
-                        # Первый раз достигли min_profit_to_close - активируем усиленный трейлинг
-                        self._trailing_activated = True
-                        logger.info(
-                            f"✅ Trailing Stop АКТИВИРОВАН для {getattr(self, '_symbol', 'UNKNOWN')}: "
-                            f"прибыль {profit_pct_total:.2%} >= {self.min_profit_to_close:.2%} "
-                            f"(initial_trail={self.initial_trail:.2%}, будет усиливаться)"
-                        )
-                    # Увеличиваем трейл при росте цены
-                    # ✅ АДАПТИВНО: Используем trail_growth multipliers из конфига вместо захардкоженного 2.0
-                    # Адаптируем множитель по уровню прибыли (low/medium/high)
-                    if profit_pct_total < 0.005:  # < 0.5% - низкая прибыль
-                        trail_multiplier = self.trail_growth_low_multiplier
-                    elif profit_pct_total < 0.015:  # 0.5-1.5% - средняя прибыль
-                        trail_multiplier = self.trail_growth_medium_multiplier
-                    else:  # > 1.5% - высокая прибыль
-                        trail_multiplier = self.trail_growth_high_multiplier
-
-                    self.current_trail = min(
-                        self.initial_trail
-                        + max(profit_pct_total, 0.0) * trail_multiplier,
-                        self.max_trail,
-                    )
-                logger.debug(
-                    f"Long: новая максимальная цена={current_price:.2f}, "
-                    f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией), "
-                    f"multiplier={trail_multiplier:.2f}x"
-                    if trail_multiplier is not None
-                    else "multiplier=N/A"
-                )
         else:  # short
-            # Для шорта отслеживаем минимальную цену
             if current_price < self.lowest_price:
                 self.lowest_price = current_price
-                # Армирование: до достижения min_profit_to_close не усиливаем трейл
-                trail_multiplier = None  # Инициализируем для логирования
-                was_below_threshold = (
-                    getattr(self, "min_profit_to_close", None) is not None
-                    and profit_pct_total < self.min_profit_to_close
-                )
-                if was_below_threshold:
-                    self.current_trail = max(self.current_trail, self.initial_trail)
-                    trail_multiplier = (
-                        1.0  # Не используем multiplier, оставляем initial_trail
-                    )
-                else:
-                    # ✅ ИСПРАВЛЕНО (06.01.2026): Логируем активацию Trailing Stop
-                    if getattr(
-                        self, "min_profit_to_close", None
-                    ) is not None and not hasattr(self, "_trailing_activated"):
-                        # Первый раз достигли min_profit_to_close - активируем усиленный трейлинг
-                        self._trailing_activated = True
-                        logger.info(
-                            f"✅ Trailing Stop АКТИВИРОВАН для {getattr(self, '_symbol', 'UNKNOWN')}: "
-                            f"прибыль {profit_pct_total:.2%} >= {self.min_profit_to_close:.2%} "
-                            f"(initial_trail={self.initial_trail:.2%}, будет усиливаться)"
-                        )
-                    # Увеличиваем трейл при падении цены
-                    # ✅ АДАПТИВНО: Используем trail_growth multipliers из конфига вместо захардкоженного 2.0
-                    # Адаптируем множитель по уровню прибыли (low/medium/high)
-                    if profit_pct_total < 0.005:  # < 0.5% - низкая прибыль
-                        trail_multiplier = self.trail_growth_low_multiplier
-                    elif profit_pct_total < 0.015:  # 0.5-1.5% - средняя прибыль
-                        trail_multiplier = self.trail_growth_medium_multiplier
-                    else:  # > 1.5% - высокая прибыль
-                        trail_multiplier = self.trail_growth_high_multiplier
 
-                    self.current_trail = min(
-                        self.initial_trail
-                        + max(profit_pct_total, 0.0) * trail_multiplier,
-                        self.max_trail,
-                    )
-                logger.debug(
-                    f"Short: новая минимальная цена={current_price:.2f}, "
-                    f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%} (net с комиссией), "
-                    f"multiplier={trail_multiplier:.2f}x"
-                    if trail_multiplier is not None
-                    else "multiplier=N/A"
+        # ✅ L1-3b FIX: Обновление трейлинга ВСЕГДА когда profit_pct вырос
+        # Сохраняем предыдущий profit_pct для отслеживания роста
+        prev_profit_pct = getattr(self, "_prev_profit_pct", 0.0)
+        profit_pct_grew = profit_pct_total > prev_profit_pct + 0.0001  # 0.01% threshold
+        self._prev_profit_pct = profit_pct_total
+
+        # Обновляем трейл если profit_pct вырос и мы выше min_profit_to_close
+        should_update_trail = profit_pct_grew and (
+            getattr(self, "min_profit_to_close", None) is None
+            or profit_pct_total >= self.min_profit_to_close
+        )
+
+        if should_update_trail:
+            # ✅ ИСПРАВЛЕНО: Логируем активацию Trailing Stop
+            if getattr(self, "min_profit_to_close", None) is not None and not hasattr(
+                self, "_trailing_activated"
+            ):
+                self._trailing_activated = True
+                logger.info(
+                    f"Trailing Stop АКТИВИРОВАН для {getattr(self, '_symbol', 'UNKNOWN')}: "
+                    f"прибыль {profit_pct_total:.2%} >= {self.min_profit_to_close:.2%} "
+                    f"(initial_trail={self.initial_trail:.2%}, будет усиливаться)"
                 )
+
+            # ✅ АДАПТИВНО: Используем trail_growth multipliers из конфига
+            if profit_pct_total < 0.005:  # < 0.5% - низкая прибыль
+                trail_multiplier = self.trail_growth_low_multiplier
+            elif profit_pct_total < 0.015:  # 0.5-1.5% - средняя прибыль
+                trail_multiplier = self.trail_growth_medium_multiplier
+            else:  # > 1.5% - высокая прибыль
+                trail_multiplier = self.trail_growth_high_multiplier
+
+            # ✅ L1-3c FIX: Ограничиваем trail расстоянием от entry
+            new_trail = min(
+                self.initial_trail + max(profit_pct_total, 0.0) * trail_multiplier,
+                self.max_trail,
+            )
+
+            # Максимальное расстояние trail от entry = profit_pct (иначе SL ниже entry)
+            max_trail_from_entry = profit_pct_total * 0.95  # 95% от прибыли
+            if new_trail > max_trail_from_entry:
+                new_trail = max_trail_from_entry
+                logger.debug(
+                    f"L1-3c: Trail ограничен {new_trail:.2%} от entry (95% of profit)"
+                )
+
+            self.current_trail = new_trail
+
+            logger.debug(
+                f"{'Long' if self.side == 'long' else 'Short'}: "
+                f"трейл={self.current_trail:.2%}, профит={profit_pct_total:.2%}, "
+                f"multiplier={trail_multiplier:.2f}x"
+            )
 
         if (
             self.aggressive_mode
