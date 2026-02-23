@@ -119,6 +119,9 @@ class RegimeConfig:
     ranging_adx_threshold: float = (
         20.0  # 🔥 ADX <20 = боковик (было 25.0 - слишком высоко!)
     )
+    # ✅ L5-1 FIX: Per-symbol ADX thresholds (опционально)
+    # Пример: {"BTC-USDT": {"trending": 28.0, "ranging": 18.0}, "ETH-USDT": {"trending": 24.0, "ranging": 16.0}}
+    per_symbol_adx_thresholds: Dict[str, Dict[str, float]] = field(default_factory=dict)
     high_volatility_threshold: float = 0.05  # >5% = высокая волатильность
     low_volatility_threshold: float = 0.02  # <2% = низкая волатильность
     trend_strength_percent: float = 2.0  # Цена >2% от SMA = тренд
@@ -254,6 +257,37 @@ class AdaptiveRegimeManager:
         if symbol is not None:
             self.symbol = symbol
         logger.debug(f"✅ RegimeManager: DataRegistry установлен (symbol={self.symbol})")
+
+    def _get_adx_thresholds(self) -> tuple[float, float]:
+        """
+        ✅ L5-1 FIX: Получение ADX thresholds с поддержкой per-symbol настроек.
+
+        Returns:
+            tuple: (trending_adx_threshold, ranging_adx_threshold)
+
+        Приоритет:
+        1. Per-symbol thresholds из config.per_symbol_adx_thresholds
+        2. Глобальные thresholds из config.trending_adx_threshold / config.ranging_adx_threshold
+        """
+        # Проверяем per-symbol настройки
+        if self.symbol and self.config.per_symbol_adx_thresholds:
+            symbol_upper = self.symbol.upper()
+            if symbol_upper in self.config.per_symbol_adx_thresholds:
+                symbol_config = self.config.per_symbol_adx_thresholds[symbol_upper]
+                trending = symbol_config.get(
+                    "trending", self.config.trending_adx_threshold
+                )
+                ranging = symbol_config.get(
+                    "ranging", self.config.ranging_adx_threshold
+                )
+                logger.debug(
+                    f"📊 Using per-symbol ADX thresholds for {self.symbol}: "
+                    f"trending={trending}, ranging={ranging}"
+                )
+                return trending, ranging
+
+        # Возвращаем глобальные thresholds
+        return self.config.trending_adx_threshold, self.config.ranging_adx_threshold
 
     def detect_regime(
         self,
@@ -495,6 +529,9 @@ class AdaptiveRegimeManager:
         di_plus = indicators.get("di_plus", 0)
         di_minus = indicators.get("di_minus", 0)
 
+        # ✅ L5-1 FIX: Получаем per-symbol ADX thresholds
+        trending_adx_threshold, ranging_adx_threshold = self._get_adx_thresholds()
+
         # ✅ НОВАЯ ЛОГИКА: Вычисляем score для каждого режима
         # Это гарантирует, что всегда будет выбран один из режимов (TRENDING, RANGING, CHOPPY)
 
@@ -540,11 +577,11 @@ class AdaptiveRegimeManager:
 
         # ✅ ИСПРАВЛЕНО (26.12.2025): Увеличен вес ADX в TRENDING score (макс 50% вместо 30%)
         # ADX - самый важный индикатор для определения тренда
-        if adx > self.config.trending_adx_threshold:
+        if adx > trending_adx_threshold:
             adx_score = min(0.5, (adx / 50.0) * 0.5)  # Увеличено с 0.3 до 0.5
             trending_score += adx_score
             trending_reason_parts.append(f"strong ADX {adx:.1f}")
-        elif adx > self.config.trending_adx_threshold * 0.7:  # Средний ADX
+        elif adx > trending_adx_threshold * 0.7:  # Средний ADX
             adx_score = min(0.25, (adx / 50.0) * 0.25)  # Увеличено с 0.15 до 0.25
             trending_score += adx_score
             trending_reason_parts.append(f"moderate ADX {adx:.1f}")
@@ -600,16 +637,14 @@ class AdaptiveRegimeManager:
             ranging_reason_parts.append(
                 f"ADX too high ({adx:.1f} >= 30), blocking RANGING"
             )
-        elif adx < self.config.ranging_adx_threshold:
+        elif adx < ranging_adx_threshold:
             # Низкий ADX (макс 30%)
-            adx_low_score = min(
-                0.3, (1.0 - adx / self.config.ranging_adx_threshold) * 0.3
-            )
+            adx_low_score = min(0.3, (1.0 - adx / ranging_adx_threshold) * 0.3)
             ranging_score += adx_low_score
             ranging_reason_parts.append(f"low ADX ({adx:.1f})")
-        elif adx < self.config.ranging_adx_threshold * 1.5:  # Средний ADX
+        elif adx < ranging_adx_threshold * 1.5:  # Средний ADX
             adx_low_score = min(
-                0.15, (1.0 - adx / (self.config.ranging_adx_threshold * 1.5)) * 0.15
+                0.15, (1.0 - adx / (ranging_adx_threshold * 1.5)) * 0.15
             )
             ranging_score += adx_low_score
             ranging_reason_parts.append(f"moderate ADX ({adx:.1f})")
