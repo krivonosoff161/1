@@ -8,7 +8,7 @@ Trailing Stop Loss для Futures торговли.
 
 import time
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from loguru import logger
 
