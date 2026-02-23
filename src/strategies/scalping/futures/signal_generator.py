@@ -39,6 +39,16 @@ from .signals.trend_following_signal_generator import (
 )
 
 
+# ✅ P1 FIX: Утилита для безопасного чтения из конфига
+def _cfg_get(cfg: Any, key: str, default=None):
+    """Безопасно получает значение из конфига (dict или object)."""
+    if cfg is None:
+        return default
+    if isinstance(cfg, dict):
+        return cfg.get(key, default)
+    return getattr(cfg, key, default)
+
+
 class FuturesSignalGenerator:
     """
     Генератор сигналов для Futures торговли
