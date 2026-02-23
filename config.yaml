@@ -324,6 +324,13 @@ scalping:
     strong_signal_bypass: 0.95     # Очень сильный сигнал может bypass cooldown
     strong_signal_min_age_sec: 10  # Но не раньше 10 секунд после закрытия
   
+  # ✅ L2-5 FIX: Продление прибыльных позиций (вместо закрытия и переоткрытия)
+  trailing_sl:
+    enabled: true
+    extend_time_on_profit: true   # Продлевать время удержания для прибыльных позиций
+    min_profit_for_extension: 0.15  # 0.15% минимальная прибыль для продления (TP=0.3%, значит 50% от TP)
+    extend_time_multiplier: 1.5   # Продлевать на 1.5x от max_holding_minutes (15min → 22.5min)
+  
   # PHASE 1: Balance Checker - проверка баланса перед входом
   balance_checker_enabled: true
   balance_checker:

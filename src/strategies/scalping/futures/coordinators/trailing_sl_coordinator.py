@@ -337,7 +337,8 @@ class TrailingSLCoordinator:
         params.setdefault("min_holding_minutes", None)
         params.setdefault("min_profit_to_close", None)
         params.setdefault("min_profit_for_extension", None)
-        params.setdefault("extend_time_on_profit", False)
+        # ✅ FIX L2-5: Дефолт True - продлевать прибыльные позиции
+        params.setdefault("extend_time_on_profit", True)
         params.setdefault("extend_time_multiplier", 1.0)
         params.setdefault("min_critical_hold_seconds", 30.0)
         params.setdefault("loss_cut_confirmation_required", 2)
