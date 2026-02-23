@@ -6988,19 +6988,15 @@ class FuturesSignalGenerator:
         vol_sma20 = (
             sum(c.volume for c in candles[-20:]) / 20 if len(candles) >= 20 else 0
         )
-        if not volume_warmup and vol_sma20 > 0 and vol_cur < vol_sma20 * 1.1:
+        # ✅ L2-2 FIX: Единственная volume проверка через EMA (SMA20)
+        # Убрана дублирующая проверка через avg_volume
+        vol_threshold = detection_values.get("min_volume_ratio", 1.1)
+        if not volume_warmup and vol_sma20 > 0 and vol_cur < vol_sma20 * vol_threshold:
             # Блокируем низкообъемные сигналы (шум)
             logger.debug(
                 f"🚫 Импульсный сигнал {symbol} заблокирован: низкий объем "
-                f"(источник={volume_source}, текущий={vol_cur:.0f}, SMA20={vol_sma20:.0f}, ratio={vol_cur/vol_sma20:.2f} < 1.1)"
+                f"(источник={volume_source}, текущий={vol_cur:.0f}, SMA20={vol_sma20:.0f}, ratio={vol_cur/vol_sma20:.2f} < {vol_threshold})"
             )
-            return []
-
-        avg_volume = sum(c.volume for c in prev_candles) / max(len(prev_candles), 1)
-        if not volume_warmup and (
-            avg_volume <= 0
-            or current_candle.volume < avg_volume * detection_values["min_volume_ratio"]
-        ):
             return []
 
         # ✅ ИСПРАВЛЕНО (06.01.2026): ADX gate перед добавлением импульсных сигналов (рекомендация Copilot)
