@@ -1348,6 +1348,36 @@ class SignalCoordinator:
                 ),
             )
 
+            # ✅ L1-5a FIX: CAP position_size by max_position_usd from balance_profile
+            try:
+                balance_profile = "small"  # default
+                if hasattr(self, "config_manager") and self.config_manager:
+                    bp_config = self.config_manager.get_balance_profile(balance)
+                    balance_profile = bp_config.get("name", "small")
+
+                profiles_cfg = (
+                    getattr(self.scalping_config, "balance_profiles", {}) or {}
+                )
+                if isinstance(profiles_cfg, dict) and balance_profile in profiles_cfg:
+                    profile_cfg = profiles_cfg[balance_profile]
+                    max_pos_usd = float(
+                        profile_cfg.get("max_position_usd", 0)
+                        if isinstance(profile_cfg, dict)
+                        else getattr(profile_cfg, "max_position_usd", 0)
+                    )
+                    if max_pos_usd > 0:
+                        # Calculate current position value in USD
+                        position_value_usd = position_size * current_price
+                        if position_value_usd > max_pos_usd:
+                            old_size = position_size
+                            position_size = max_pos_usd / current_price
+                            logger.warning(
+                                f"🛑 L1-5a CAP: Position size reduced from {old_size:.4f} "
+                                f"to {position_size:.4f} (max_position_usd=${max_pos_usd:.0f})"
+                            )
+            except Exception as e:
+                logger.debug(f"⚠️ L1-5a CAP check failed: {e}")
+
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #2: Дополнительная проверка позиций перед открытием
             # Используем блокировку по символу для предотвращения race condition
             if symbol not in self.signal_locks_ref:

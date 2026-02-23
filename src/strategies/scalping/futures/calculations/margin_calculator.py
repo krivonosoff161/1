@@ -173,6 +173,7 @@ class MarginCalculator:
         position_age_seconds: Optional[
             float
         ] = None,  # ✅ НОВОЕ: Возраст позиции в секундах
+        exchange_leverage: Optional[int] = None,  # ✅ L1-4a FIX: Реальное плечо с биржи
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         Проверка безопасности позиции
@@ -183,13 +184,22 @@ class MarginCalculator:
             current_price: Текущая цена
             entry_price: Цена входа
             side: Направление позиции
-            leverage: Плечо
+            leverage: Плечо (из конфига)
             safety_threshold: Порог безопасности (1.5 = 150%)
+            exchange_leverage: Реальное плечо позиции с биржи
 
         Returns:
             Tuple[bool, Dict] - (безопасна ли позиция, детали)
         """
-        if leverage is None:
+        # ✅ L1-4a FIX: Приоритет exchange leverage над config
+        if exchange_leverage and exchange_leverage > 0:
+            if leverage and abs(exchange_leverage - leverage) > 2:
+                logger.warning(
+                    f"🔄 L1-4a: Leverage mismatch config={leverage}x vs exchange={exchange_leverage}x. "
+                    f"Using exchange value."
+                )
+            leverage = exchange_leverage
+        elif leverage is None:
             leverage = self.default_leverage
 
         # ✅ АДАПТИВНО: Получаем safety_threshold из конфига по режиму

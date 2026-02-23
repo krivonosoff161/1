@@ -126,7 +126,15 @@ class TrailingStopLoss:
         self.side = None
         self.entry_timestamp = 0.0
         # ✅ КРИТИЧЕСКОЕ: Сохраняем leverage для правильного расчета loss_cut от маржи
-        self.leverage = max(1.0, float(leverage)) if leverage and leverage > 0 else 1.0
+        # ✅ L1-3a FIX: Валидация leverage для фьючерсов (минимум 3x, предупреждение если < 3)
+        raw_leverage = float(leverage) if leverage and leverage > 0 else 0.0
+        if raw_leverage < 3.0:
+            logger.warning(
+                f"⚠️ L1-3a: Leverage {raw_leverage}x ниже ожидаемого для фьючерсов. "
+                f"Используем 3x минимум. Проверьте передачу leverage в TSL."
+            )
+            raw_leverage = max(3.0, raw_leverage)
+        self.leverage = raw_leverage
         self.loss_cut_percent = self._normalize_percent(loss_cut_percent)
         self.timeout_loss_percent = self._normalize_percent(timeout_loss_percent)
         self.timeout_minutes = (
