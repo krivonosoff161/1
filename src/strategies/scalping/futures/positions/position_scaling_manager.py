@@ -300,6 +300,23 @@ class PositionScalingManager:
                     "current_pnl_percent": current_pnl_percent,
                 }
 
+            # ✅ L3-4 FIX: В trending режиме добавляем только если позиция в прибыли
+            # Это предотвращает усреднение убытков в трендовом режиме
+            TRENDING_MIN_PROFIT_FOR_ADDITION = (
+                1.5  # Минимум 1.5% прибыли для добавления
+            )
+            if regime and regime.lower() == "trending":
+                if (
+                    current_pnl_percent is not None
+                    and current_pnl_percent < TRENDING_MIN_PROFIT_FOR_ADDITION
+                ):
+                    return {
+                        "can_add": False,
+                        "reason": f"В trending режиме добавление только при прибыли >= {TRENDING_MIN_PROFIT_FOR_ADDITION}% (текущая: {current_pnl_percent:.2f}%)",
+                        "addition_count": addition_count,
+                        "current_pnl_percent": current_pnl_percent,
+                    }
+
             # 6. Проверка доступной маржи (будет проверена в calculate_next_addition_size)
             # Здесь только базовая проверка
 
