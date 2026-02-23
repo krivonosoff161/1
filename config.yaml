@@ -315,6 +315,15 @@ scalping:
     max_trades_per_hour: 15       # ✅ Было: 10 (больше сделок если рынок позволяет)
     cooldown_after_loss_minutes: 4  # ✅ Было: 5 (быстрее возврат)
   
+  # ✅ L2-4 FIX: Защита от быстрого переоткрытия позиций
+  reentry_guard:
+    enabled: true
+    same_side_cooldown_sec: 60    # Минимум 60 сек между закрытием и новым входом в том же направлении
+    loss_cooldown_sec: 180        # 3 минуты после убыточного закрытия
+    opposite_side_cooldown_sec: 5  # 5 секунд для противоположного направления
+    strong_signal_bypass: 0.95     # Очень сильный сигнал может bypass cooldown
+    strong_signal_min_age_sec: 10  # Но не раньше 10 секунд после закрытия
+  
   # PHASE 1: Balance Checker - проверка баланса перед входом
   balance_checker_enabled: true
   balance_checker:
