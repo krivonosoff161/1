@@ -162,13 +162,64 @@ class AdaptiveBalanceManager:
         return False
 
     def _determine_profile(self, balance: float) -> BalanceProfile:
-        """Определяет профиль на основе баланса"""
-        if balance >= self.profiles["large"].threshold:
-            return BalanceProfile.LARGE
-        elif balance >= self.profiles["medium"].threshold:
-            return BalanceProfile.MEDIUM
-        else:
+        """
+        ✅ L5-2 FIX: Определяет профиль на основе баланса с гистерезисом ±5%.
+
+        Гистерезис предотвращает частые переключения при колебаниях баланса
+        около границ (например, $950-$1050 для small/medium).
+
+        Пороги перехода:
+        - small → medium: $1000 (без гистерезиса, начальный переход)
+        - medium → small: $950 (с гистерезисом -5%)
+        - medium → large: $2500 (без гистерезиса, начальный переход)
+        - large → medium: $2375 (с гистерезисом -5%)
+        """
+        HYSTERESIS_PCT = 0.05  # 5% гистерезис
+
+        # Получаем пороги
+        small_threshold = self.profiles["small"].threshold  # 1000
+        medium_threshold = self.profiles["medium"].threshold  # 2500
+        large_threshold = self.profiles["large"].threshold  # 3500
+
+        # Текущий профиль (для гистерезиса)
+        current = self.current_profile
+
+        # Если профиль ещё не установлен - используем жёсткие пороги
+        if current is None:
+            if balance >= large_threshold:
+                return BalanceProfile.LARGE
+            elif balance >= medium_threshold:
+                return BalanceProfile.MEDIUM
+            else:
+                return BalanceProfile.SMALL
+
+        # Гистерезис: учитываем текущий профиль при определении нового
+        if current == BalanceProfile.SMALL:
+            # Из small: переходим в medium только при достижении medium_threshold
+            if balance >= medium_threshold:
+                return BalanceProfile.MEDIUM
             return BalanceProfile.SMALL
+
+        elif current == BalanceProfile.MEDIUM:
+            # Из medium:
+            # - в large при достижении large_threshold
+            # - в small только если упали ниже medium_threshold с гистерезисом
+            if balance >= large_threshold:
+                return BalanceProfile.LARGE
+            elif balance < medium_threshold * (
+                1 - HYSTERESIS_PCT
+            ):  # 2500 * 0.95 = 2375
+                return BalanceProfile.SMALL
+            return BalanceProfile.MEDIUM
+
+        elif current == BalanceProfile.LARGE:
+            # Из large: переходим в medium только если упали ниже large_threshold с гистерезисом
+            if balance < large_threshold * (1 - HYSTERESIS_PCT):  # 3500 * 0.95 = 3325
+                return BalanceProfile.MEDIUM
+            return BalanceProfile.LARGE
+
+        # Fallback (не должно произойти)
+        return BalanceProfile.SMALL
 
     def _switch_profile(
         self,
