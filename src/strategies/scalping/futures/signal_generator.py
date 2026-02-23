@@ -7144,7 +7144,8 @@ class FuturesSignalGenerator:
         )
         meta = {
             "body_ratio_atr": round(body_ratio, 3),
-            "volume_ratio": round(current_candle.volume / max(avg_volume, 1e-9), 3),
+            # ✅ L2-2 FIX: Исправлено - используем vol_sma20 вместо undefined avg_volume
+            "volume_ratio": round(current_candle.volume / max(vol_sma20, 1e-9), 3),
             "pivot_level": pivot_level,
             "close": current_candle.close,
             "high": current_candle.high,

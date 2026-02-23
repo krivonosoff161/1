@@ -259,11 +259,12 @@ class TelegramNotifier:
 
         symbol = signal.get("symbol", "???")
         side = signal.get("side", "???")
-        entry = signal.get("price", 0.0)
-        strength = signal.get("strength", 0.0)
+        # ✅ FIX: Защита от None - dict.get(key, default) не работает если value=None
+        entry = signal.get("price") or 0.0
+        strength = signal.get("strength") or 0.0
         sig_type = signal.get("type", "")
         regime = signal.get("regime", "")
-        confidence = signal.get("confidence", 0.0)
+        confidence = signal.get("confidence") or 0.0
         ind_value = signal.get("indicator_value")
         leverage = signal.get("leverage")
 
@@ -301,7 +302,8 @@ class TelegramNotifier:
 
         # Объяснение почему
         why_parts = [sig_ru]
-        if ind_value is not None:
+        # ✅ FIX: Проверяем тип перед форматированием (None может прийти даже с is not None проверкой)
+        if ind_value is not None and isinstance(ind_value, (int, float)):
             why_parts.append(f"значение={ind_value:.2f}")
 
         # Дополнительный совет при сильном сигнале
