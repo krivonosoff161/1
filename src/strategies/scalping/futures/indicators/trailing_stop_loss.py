@@ -514,14 +514,13 @@ class TrailingStopLoss:
                 # Стоп = lowest_price * (1 + trail%) (защита от отскока)
                 # ✅ Стоп может быть ниже entry * (1 + trail%) - это правильно, потому что позиция в прибыли!
                 stop_loss = self.lowest_price * (1 + self.current_trail)
-                # ✅ ЗАЩИТА: стоп не должен быть ниже entry (базовая защита)
-                # Но если цена упала значительно ниже entry, стоп может быть ниже entry * (1 + trail%)
-                if stop_loss < self.entry_price:
-                    # Если стоп опустился ниже entry, используем entry как минимальный стоп
-                    # Это защищает от случая, когда trail очень маленький
-                    stop_loss = max(
-                        stop_loss, self.entry_price * (1 + self.initial_trail)
-                    )
+                # ✅ L1-3c FIX: Защита теперь использует current_trail, а не initial_trail
+                # Стоп не должен быть ниже entry * (1 + min_profit_buffer)
+                min_stop = self.entry_price * (
+                    1 + min(self.current_trail, self.initial_trail)
+                )
+                if stop_loss < min_stop:
+                    stop_loss = min_stop
             else:
                 # Цена еще не упала ниже entry или это инициализация - стоп выше entry
                 # Стоп = entry_price * (1 + trail%) (защита от роста)
