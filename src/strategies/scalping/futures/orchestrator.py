@@ -3237,12 +3237,21 @@ class FuturesScalpingOrchestrator:
                             if entry_time_from_api:
                                 existing_metadata.entry_time = entry_time_from_api
 
-                        # Обновляем entry_price в метаданных если он изменился или отсутствует
-                        if (
-                            not existing_metadata.entry_price
-                            or existing_metadata.entry_price == 0
-                        ):
-                            if entry_price_from_api > 0:
+                        # ✅ L1-1 FIX: Обновляем entry_price всегда когда есть данные от API
+                        # (важно после DCA - avgPx меняется при усреднении)
+                        if entry_price_from_api > 0:
+                            if (
+                                not existing_metadata.entry_price
+                                or existing_metadata.entry_price == 0
+                                or abs(
+                                    existing_metadata.entry_price - entry_price_from_api
+                                )
+                                > 0.0001
+                            ):
+                                logger.info(
+                                    f"📝 L1-1: Обновляем entry_price для {symbol}: "
+                                    f"{existing_metadata.entry_price:.4f} -> {entry_price_from_api:.4f}"
+                                )
                                 existing_metadata.entry_price = entry_price_from_api
 
                         # Получаем текущий режим из signal_generator если regime отсутствует
