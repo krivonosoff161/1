@@ -1018,6 +1018,81 @@ class ConfigManager:
 
         return params
 
+    def get_consolidated_exit_params(
+        self, symbol: str, regime: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        ✅ L1-6 FIX: Единый источник truth для параметров выхода.
+
+        Консолидирует параметры из 3 источников с четким приоритетом:
+        1. exit_params.<regime> (основной источник)
+        2. trailing_sl_config.* (fallback для TSL-специфичных параметров)
+        3. adaptive_regime.<regime> (override для режим-специфичных параметров)
+
+        Args:
+            symbol: Торговая пара
+            regime: Режим рынка (trending, ranging, etc.)
+
+        Returns:
+            Dict с консолидированными параметрами выхода
+        """
+        regime_lower = regime.lower() if regime else "trending"
+        result: Dict[str, Any] = {}
+        sources_used = []
+
+        # ✅ ПРИОРИТЕТ 1: exit_params.<regime> (основной источник)
+        exit_params = self._raw_config_dict.get("exit_params", {})
+        if isinstance(exit_params, dict):
+            if regime_lower in exit_params:
+                result.update(exit_params[regime_lower])
+                sources_used.append(f"exit_params.{regime_lower}")
+            elif exit_params:
+                # Fallback: используем плоскую структуру
+                result.update(exit_params)
+                sources_used.append("exit_params (flat)")
+
+        # ✅ ПРИОРИТЕТ 2: trailing_sl_config.* (fallback для TSL параметров)
+        tsl_params = self.get_tsl_params(regime)
+        tsl_overrides = [
+            "initial_trail",
+            "max_trail",
+            "min_trail",
+            "min_profit_to_close",
+            "min_profit_for_extension",
+            "timeout_minutes",
+            "timeout_loss_percent",
+            "loss_cut_percent",
+            "breakeven_trigger",
+        ]
+        for key in tsl_overrides:
+            if key in tsl_params and tsl_params[key] is not None:
+                if key not in result or result[key] is None:
+                    result[key] = tsl_params[key]
+                    sources_used.append(f"trailing_sl_config.{key}")
+
+        # ✅ ПРИОРИТЕТ 3: adaptive_regime.<regime> (override режим-специфичных)
+        adaptive_regime = self._raw_config_dict.get("adaptive_regime", {})
+        if isinstance(adaptive_regime, dict) and regime_lower in adaptive_regime:
+            regime_config = adaptive_regime[regime_lower]
+            if isinstance(regime_config, dict):
+                # Переопределяем только если значение явно задано
+                for key in [
+                    "min_profit_for_extension",
+                    "max_holding_minutes",
+                    "min_holding_minutes",
+                ]:
+                    if key in regime_config and regime_config[key] is not None:
+                        old_val = result.get(key)
+                        result[key] = regime_config[key]
+                        if old_val != result[key]:
+                            sources_used.append(f"adaptive_regime.{regime_lower}.{key}")
+
+        logger.debug(
+            f"L1-6: Consolidated exit params for {symbol} ({regime}): "
+            f"sources={sources_used}, params={list(result.keys())}"
+        )
+        return result
+
     def get_balance_profile(self, balance: float) -> Dict[str, Any]:
         """Определяет профиль баланса - ВСЕ параметры из конфига!"""
         balance_profiles = getattr(self.scalping_config, "balance_profiles", {})

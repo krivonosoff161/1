@@ -254,26 +254,10 @@ class ParameterProvider:
             if not regime:
                 regime = self._get_current_regime(symbol)
 
-            # ��� �ڦ�ئ�ئ�զ�ڦަ� �ئ�ߦ�ЦҦۦզݦئ� (28.12.2025): �ߦ-��T�TǦ-���- exit_params �-�-��T�TϦ-T�T� ���� raw_config_dict
-            # ConfigManager �-�� ���-����T� �-��T¦-�+�- get_exit_param, ���-��T�TǦ-���- TǦ�T����� _raw_config_dict
-            exit_params = {}
-            if (
-                hasattr(self.config_manager, "_raw_config_dict")
-                and self.config_manager._raw_config_dict
-            ):
-                all_exit_params = self.config_manager._raw_config_dict.get(
-                    "exit_params", {}
-                )
-                if isinstance(all_exit_params, dict) and regime:
-                    regime_lower = (
-                        regime.lower()
-                        if isinstance(regime, str)
-                        else str(regime).lower()
-                    )
-                    exit_params = all_exit_params.get(regime_lower, {})
-                elif isinstance(all_exit_params, dict):
-                    # ��T����� T��������- �-�� Tæ��-���-�-, �-�-���-T��-Tɦ-���- �-T��� exit_params
-                    exit_params = all_exit_params
+            # ✅ L1-6 FIX: Используем консолидированный метод вместо прямого чтения
+            exit_params = self.config_manager.get_consolidated_exit_params(
+                symbol, regime
+            )
 
             # ��� �ڦ�ئ�ئ�զ�ڦަ� �ئ�ߦ�ЦҦۦզݦئ� (28.12.2025): �ڦ-�-�-��T�T¦-TƦ�T� T¦����-�- �+��T� �-T���T� TǦ�T����-�-T�T� ���-T��-�-��T�T��-�-
             # ��T����+�-T¦-T��-Tɦ-��T� TypeError ��T��� T�T��-�-�-���-���� str �� int/float
