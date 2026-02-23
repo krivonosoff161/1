@@ -193,6 +193,24 @@ balance_profiles:
       score_threshold: 0.9
       max_trades: 1.0
 
+# ✅ L2-4/L2-5 FIX: Futures-specific modules configuration
+futures_modules:
+  # Защита от быстрого переоткрытия позиций
+  reentry_guard:
+    enabled: true
+    same_side_cooldown_sec: 60    # Минимум 60 сек между закрытием и новым входом
+    loss_cooldown_sec: 180        # 3 минуты после убыточного закрытия
+    opposite_side_cooldown_sec: 5  # 5 секунд для противоположного направления
+    strong_signal_bypass: 0.95     # Очень сильный сигнал может bypass cooldown
+    strong_signal_min_age_sec: 10  # Но не раньше 10 секунд после закрытия
+  
+  # Продление прибыльных позиций (вместо закрытия и переоткрытия)
+  trailing_sl:
+    enabled: true
+    extend_time_on_profit: true   # Продлевать время удержания для прибыльных позиций
+    min_profit_for_extension: 0.15  # 0.15% минимальная прибыль для продления
+    extend_time_multiplier: 1.5   # Продлевать на 1.5x от max_holding_minutes
+
 # Scalping Strategy
 scalping:
   enabled: true
@@ -314,22 +332,6 @@ scalping:
   # Trade management - УВЕЛИЧИЛИ частоту
     max_trades_per_hour: 15       # ✅ Было: 10 (больше сделок если рынок позволяет)
     cooldown_after_loss_minutes: 4  # ✅ Было: 5 (быстрее возврат)
-  
-  # ✅ L2-4 FIX: Защита от быстрого переоткрытия позиций
-  reentry_guard:
-    enabled: true
-    same_side_cooldown_sec: 60    # Минимум 60 сек между закрытием и новым входом в том же направлении
-    loss_cooldown_sec: 180        # 3 минуты после убыточного закрытия
-    opposite_side_cooldown_sec: 5  # 5 секунд для противоположного направления
-    strong_signal_bypass: 0.95     # Очень сильный сигнал может bypass cooldown
-    strong_signal_min_age_sec: 10  # Но не раньше 10 секунд после закрытия
-  
-  # ✅ L2-5 FIX: Продление прибыльных позиций (вместо закрытия и переоткрытия)
-  trailing_sl:
-    enabled: true
-    extend_time_on_profit: true   # Продлевать время удержания для прибыльных позиций
-    min_profit_for_extension: 0.15  # 0.15% минимальная прибыль для продления (TP=0.3%, значит 50% от TP)
-    extend_time_multiplier: 1.5   # Продлевать на 1.5x от max_holding_minutes (15min → 22.5min)
   
   # PHASE 1: Balance Checker - проверка баланса перед входом
   balance_checker_enabled: true

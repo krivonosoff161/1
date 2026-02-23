@@ -600,6 +600,7 @@ class FuturesModulesConfig(BaseModel):
     )
     micro_pivot: Optional[Dict] = Field(default_factory=dict)
     trailing_sl: Optional[Dict] = Field(default_factory=dict)
+    reentry_guard: Optional[Dict] = Field(default_factory=dict)  # ✅ L2-4 FIX
     funding_monitor: Optional[Dict] = Field(default_factory=dict)
     max_size_limiter: Optional[Dict] = Field(default_factory=dict)
     funding_filter: Optional[FundingFilterConfig] = Field(
