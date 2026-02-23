@@ -92,6 +92,24 @@ scalping:
   position_scaling:
     trending_min_profit_for_addition: 1.5  # % прибыли для DCA в trending режиме
 
+  # Reentry Guard Configuration (P1-11)
+  reentry_guard:
+    same_side_cooldown_sec: 12.0  # задержка перед повторным входом в ту же сторону
+    loss_cooldown_sec: 45.0       # задержка после убыточной сделки
+    opposite_side_cooldown_sec: 0.0  # задержка перед входом в противоположную сторону
+
+  # ADX Blocking Thresholds (P1-8,9,10)
+  adx_blocking:
+    trending: 20.0   # блокировать контр-тренд при ADX > 20 в trending
+    ranging: 25.0    # блокировать при ADX > 25 в ranging
+    choppy: 35.0     # блокировать при ADX > 35 в choppy
+    min_confidence_to_block: 0.65
+    allow_countertrend_on_price_action: true
+
+  # Global Signal Conflict Penalty (P1-15)
+  strength_multipliers:
+    global_conflict_penalty: 0.8  # штраф при BUY=SELL конфликте (0.8 = -20%)
+
   patterns:
     enabled: true
     timeframe: "5m"

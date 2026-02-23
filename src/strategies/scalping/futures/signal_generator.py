@@ -2084,17 +2084,25 @@ class FuturesSignalGenerator:
                     sell_str = best_sell.get("strength", 0)
                     diff = abs(buy_str - sell_str)
                     if diff <= 0.05:
-                        # ✅ FIX L2-1: Выбираем победителя с -20% штрафом вместо отбрасывания обоих
+                        # ✅ FIX L2-1: Выбираем победителя с штрафом вместо отбрасывания обоих
+                        # ✅ P1-15 FIX: Штраф читается из конфига
+                        sm_cfg = _cfg_get(
+                            self.scalping_config, "strength_multipliers", {}
+                        )
+                        conflict_penalty = float(
+                            _cfg_get(sm_cfg, "global_conflict_penalty", 0.8)
+                        )
                         winner = best_buy if buy_str >= sell_str else best_sell
                         loser_side = "SELL" if buy_str >= sell_str else "BUY"
                         winner_side = "BUY" if buy_str >= sell_str else "SELL"
-                        # Применяем штраф -20% к силе
+                        # Применяем штраф к силе
                         original_strength = winner.get("strength", 0)
-                        winner["strength"] = original_strength * 0.8
+                        winner["strength"] = original_strength * conflict_penalty
                         winner["has_conflict"] = True  # Помечаем как конфликтный
+                        penalty_pct = (1 - conflict_penalty) * 100
                         logger.warning(
                             f"⚡ {symbol}: КОНФЛИКТ BUY({buy_str:.3f}) vs SELL({sell_str:.3f}) — "
-                            f"сила равная (diff={diff:.3f}), выбираем {winner_side} с штрафом -20% "
+                            f"сила равная (diff={diff:.3f}), выбираем {winner_side} с штрафом {penalty_pct:.0f}% "
                             f"(strength: {original_strength:.3f} → {winner['strength']:.3f})"
                         )
                         base_signals = [winner]
@@ -3698,16 +3706,21 @@ class FuturesSignalGenerator:
                                 f"⚠️ Не удалось получить режим для ADX блокировки: {e}"
                             )
 
-                        # Определяем порог ADX в зависимости от режима
-                        # Trending: строгая блокировка (>=20), Ranging: строгая (>=25), Choppy: ослабленная (>=35)
-                        # ✅ ИСПРАВЛЕНИЕ (11.02.2026): Ranging снижен 30→25, Choppy снижен 40→35 - лучше блокируем BTC против тренда
+                        # ✅ P1-8,9,10 FIX: Читаем пороги ADX blocking из конфига
+                        adx_blocking_cfg = _cfg_get(
+                            self.scalping_config, "adx_blocking", {}
+                        )
                         if current_regime_for_adx == "trending":
-                            adx_blocking_threshold = 20.0  # Строгая блокировка в тренде
+                            adx_blocking_threshold = float(
+                                _cfg_get(adx_blocking_cfg, "trending", 20.0)
+                            )
                         elif current_regime_for_adx == "ranging":
-                            adx_blocking_threshold = 25.0  # ✅ ИСПРАВЛЕНО: было 30, теперь 25 - блокируем при ADX>25 в ranging
+                            adx_blocking_threshold = float(
+                                _cfg_get(adx_blocking_cfg, "ranging", 25.0)
+                            )
                         elif current_regime_for_adx == "choppy":
-                            adx_blocking_threshold = (
-                                35.0  # ✅ ИСПРАВЛЕНО: было 40, теперь 35
+                            adx_blocking_threshold = float(
+                                _cfg_get(adx_blocking_cfg, "choppy", 35.0)
                             )
                         else:
                             raise ValueError(
