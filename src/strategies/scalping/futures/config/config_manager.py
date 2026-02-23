@@ -1026,8 +1026,9 @@ class ConfigManager:
 
         Консолидирует параметры из 3 источников с четким приоритетом:
         1. exit_params.<regime> (основной источник)
-        2. trailing_sl_config.* (fallback для TSL-специфичных параметров)
-        3. adaptive_regime.<regime> (override для режим-специфичных параметров)
+        2. scalping.exit (fallback для старой структуры конфига)
+        3. trailing_sl_config.* (fallback для TSL-специфичных параметров)
+        4. adaptive_regime.<regime> (override для режим-специфичных параметров)
 
         Args:
             symbol: Торговая пара
@@ -1040,7 +1041,7 @@ class ConfigManager:
         result: Dict[str, Any] = {}
         sources_used = []
 
-        # ✅ ПРИОРИТЕТ 1: exit_params.<regime> (основной источник)
+        # ✅ ПРИОРИТЕТ 1: exit_params.<regime> (основной источник - новая структура)
         exit_params = self._raw_config_dict.get("exit_params", {})
         if isinstance(exit_params, dict):
             if regime_lower in exit_params:
@@ -1051,7 +1052,25 @@ class ConfigManager:
                 result.update(exit_params)
                 sources_used.append("exit_params (flat)")
 
-        # ✅ ПРИОРИТЕТ 2: trailing_sl_config.* (fallback для TSL параметров)
+        # ✅ ПРИОРИТЕТ 2: scalping.exit (fallback для старой структуры конфига)
+        # Маппим старые имена параметров на новые
+        scalping_config = self._raw_config_dict.get("scalping", {})
+        if isinstance(scalping_config, dict):
+            old_exit = scalping_config.get("exit", {})
+            if isinstance(old_exit, dict):
+                # Маппинг старых имен на новые
+                param_mapping = {
+                    "take_profit_atr_multiplier": "tp_atr_multiplier",
+                    "stop_loss_atr_multiplier": "sl_atr_multiplier",
+                    "max_holding_minutes": "timeout_minutes",
+                }
+                for old_key, new_key in param_mapping.items():
+                    if old_key in old_exit and old_exit[old_key] is not None:
+                        if new_key not in result or result[new_key] is None:
+                            result[new_key] = old_exit[old_key]
+                            sources_used.append(f"scalping.exit.{old_key}->{new_key}")
+
+        # ✅ ПРИОРИТЕТ 3: trailing_sl_config.* (fallback для TSL параметров)
         # Читаем trailing_sl_config напрямую из конфига
         tsl_config = self._raw_config_dict.get("trailing_sl", {})
         tsl_params = {}
@@ -1080,7 +1099,7 @@ class ConfigManager:
                     result[key] = tsl_params[key]
                     sources_used.append(f"trailing_sl_config.{key}")
 
-        # ✅ ПРИОРИТЕТ 3: adaptive_regime.<regime> (override режим-специфичных)
+        # ✅ ПРИОРИТЕТ 4: adaptive_regime.<regime> (override режим-специфичных)
         adaptive_regime = self._raw_config_dict.get("adaptive_regime", {})
         if isinstance(adaptive_regime, dict) and regime_lower in adaptive_regime:
             regime_config = adaptive_regime[regime_lower]
@@ -1097,9 +1116,20 @@ class ConfigManager:
                         if old_val != result[key]:
                             sources_used.append(f"adaptive_regime.{regime_lower}.{key}")
 
-        logger.debug(
-            f"L1-6: Consolidated exit params for {symbol} ({regime}): "
-            f"sources={sources_used}, params={list(result.keys())}"
+        # ✅ КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: предупреждаем если ключевые параметры отсутствуют
+        critical_params = ["tp_atr_multiplier", "sl_atr_multiplier"]
+        missing = [p for p in critical_params if result.get(p) is None]
+        if missing:
+            logger.warning(
+                f"⚠️ L1-6: Отсутствуют критические параметры для {symbol}: {missing}. "
+                f"Использованы источники: {sources_used}. "
+                f"Проверьте конфигурацию exit_params или scalping.exit!"
+            )
+
+        logger.info(
+            f"✅ L1-6: Exit params для {symbol} ({regime}): "
+            f"tp={result.get('tp_atr_multiplier')}, sl={result.get('sl_atr_multiplier')}, "
+            f"sources={sources_used}"
         )
         return result
 
