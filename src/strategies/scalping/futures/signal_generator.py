@@ -2013,15 +2013,49 @@ class FuturesSignalGenerator:
                     f"📊 {symbol}: Базовые сигналы не сгенерированы (см. детали в _generate_base_signals)"
                 )
 
+            # ✅ FIX: Проверка enabled для текущего режима (adaptive_regime.{regime}.enabled)
+            _current_regime = regime or (
+                base_signals[0].get("regime") if base_signals else None
+            )
+            if _current_regime:
+                try:
+                    # Получаем конфиг режима из adaptive_regime
+                    arm_config = getattr(self.scalping_config, "adaptive_regime", None)
+                    if arm_config:
+                        arm_dict = (
+                            arm_config
+                            if isinstance(arm_config, dict)
+                            else getattr(arm_config, "dict", lambda: {})()
+                            if hasattr(arm_config, "dict")
+                            else getattr(arm_config, "__dict__", {}) or {}
+                        )
+                        regime_cfg = (
+                            arm_dict.get(_current_regime, {})
+                            if isinstance(arm_dict, dict)
+                            else {}
+                        )
+                        if isinstance(regime_cfg, dict):
+                            regime_enabled = regime_cfg.get("enabled", True)
+                        else:
+                            regime_enabled = getattr(regime_cfg, "enabled", True)
+
+                        if regime_enabled is False:
+                            logger.info(
+                                f"🚫 {symbol}: Торговля в {_current_regime} отключена (enabled: false), "
+                                f"сигналы пропущены"
+                            )
+                            return []
+                except Exception as e:
+                    logger.debug(
+                        f"⚠️ Ошибка проверки enabled для режима {_current_regime}: {e}"
+                    )
+
             # FIX (2026-02-19): В choppy блокируем lagging индикаторы (MACD/BB/RSI classic).
             # Данные из сессии 2026-02-19: 64% сделок в choppy, WR=30%, PnL=-$37.70.
             # EMA crossover / MACD / BB в choppy = шум. Оставляем только:
             # - rsi_divergence (leading сигнал разворота)
             # - vwap_mean_reversion (mean-reversion, создан именно для ranging/choppy)
             if base_signals:
-                _current_regime = regime or (
-                    base_signals[0].get("regime") if base_signals else None
-                )
                 if _current_regime == "choppy":
                     # FIX 2026-02-22 P2: список из конфига (scalping.signal_generator.choppy_blocked_types)
                     _before = len(base_signals)

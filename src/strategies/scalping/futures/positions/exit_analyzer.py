@@ -3486,24 +3486,32 @@ class ExitAnalyzer:
                 )
                 big_profit_exit_percent = 1.5
             if pnl_percent >= big_profit_exit_percent:
-                logger.info(
-                    f"💰 ExitAnalyzer TRENDING: Big profit exit достигнут для {symbol}: "
-                    f"{pnl_percent:.2f}% >= {big_profit_exit_percent:.2f}%"
-                )
-                # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
-                self._record_metrics_on_close(
-                    symbol=symbol,
-                    reason="big_profit_exit",
-                    pnl_percent=pnl_percent,
-                    entry_time=entry_time,
-                )
-                return {
-                    "action": "close",
-                    "reason": "big_profit_exit",
-                    "pnl_pct": pnl_percent,
-                    "big_profit_exit_percent": big_profit_exit_percent,
-                    "regime": regime,
-                }
+                # ✅ FIX #3: Guard против race condition - цена должна быть реально выше входа
+                if current_price <= entry_price * 1.0001:  # минимум +0.01% от entry
+                    logger.debug(
+                        f"⚠️ FIX#3 big_profit_exit guard: current={current_price:.4f} <= "
+                        f"entry*1.0001={entry_price * 1.0001:.4f}, пропуск (pnl_percent={pnl_percent:.2f}%)"
+                    )
+                    # Не выдаем action, продолжаем проверки
+                else:
+                    logger.info(
+                        f"💰 ExitAnalyzer TRENDING: Big profit exit достигнут для {symbol}: "
+                        f"{pnl_percent:.2f}% >= {big_profit_exit_percent:.2f}%"
+                    )
+                    # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
+                    self._record_metrics_on_close(
+                        symbol=symbol,
+                        reason="big_profit_exit",
+                        pnl_percent=pnl_percent,
+                        entry_time=entry_time,
+                    )
+                    return {
+                        "action": "close",
+                        "reason": "big_profit_exit",
+                        "pnl_pct": pnl_percent,
+                        "big_profit_exit_percent": big_profit_exit_percent,
+                        "regime": regime,
+                    }
 
             # 5. Проверка partial_tp с учетом adaptive_min_holding
             partial_tp_params = self._get_partial_tp_params("trending")
@@ -5026,30 +5034,38 @@ class ExitAnalyzer:
                 f"Net PnL%={net_format_bp}% (с комиссией), достигнут={net_pnl_percent >= big_profit_exit_percent}"
             )
             if net_pnl_percent >= big_profit_exit_percent:
-                logger.info(
-                    f"💰 ExitAnalyzer RANGING: Big profit exit достигнут для {symbol}: "
-                    f"Net PnL {net_pnl_percent:.2f}% >= {big_profit_exit_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%), режим={regime}"
-                )
-                # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
-                self._record_metrics_on_close(
-                    symbol=symbol,
-                    reason="big_profit_exit",
-                    pnl_percent=net_pnl_percent,
-                    entry_time=entry_time,
-                )
-                return {
-                    "action": "close",
-                    "reason": "big_profit_exit",
-                    "pnl_pct": net_pnl_percent,  # Net PnL для логирования
-                    "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
-                    "big_profit_exit_percent": big_profit_exit_percent,
-                    "regime": regime,
-                    "entry_regime": (
-                        metadata.regime
-                        if metadata and hasattr(metadata, "regime")
-                        else regime
-                    ),
-                }
+                # ✅ FIX #3: Guard против race condition - цена должна быть реально выше входа
+                if current_price <= entry_price * 1.0001:  # минимум +0.01% от entry
+                    logger.debug(
+                        f"⚠️ FIX#3 big_profit_exit guard: current={current_price:.4f} <= "
+                        f"entry*1.0001={entry_price * 1.0001:.4f}, пропуск (net_pnl_percent={net_pnl_percent:.2f}%)"
+                    )
+                    # Не выдаем action, продолжаем проверки
+                else:
+                    logger.info(
+                        f"💰 ExitAnalyzer RANGING: Big profit exit достигнут для {symbol}: "
+                        f"Net PnL {net_pnl_percent:.2f}% >= {big_profit_exit_percent:.2f}% (Gross PnL {gross_pnl_percent:.2f}%), режим={regime}"
+                    )
+                    # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
+                    self._record_metrics_on_close(
+                        symbol=symbol,
+                        reason="big_profit_exit",
+                        pnl_percent=net_pnl_percent,
+                        entry_time=entry_time,
+                    )
+                    return {
+                        "action": "close",
+                        "reason": "big_profit_exit",
+                        "pnl_pct": net_pnl_percent,  # Net PnL для логирования
+                        "gross_pnl_pct": gross_pnl_percent,  # Gross PnL для информации
+                        "big_profit_exit_percent": big_profit_exit_percent,
+                        "regime": regime,
+                        "entry_regime": (
+                            metadata.regime
+                            if metadata and hasattr(metadata, "regime")
+                            else regime
+                        ),
+                    }
 
             # 5. Проверка partial_tp с учетом adaptive_min_holding
             partial_tp_params = self._get_partial_tp_params("ranging")

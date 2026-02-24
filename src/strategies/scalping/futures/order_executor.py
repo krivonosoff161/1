@@ -2794,6 +2794,23 @@ class FuturesOrderExecutor:
                     f"(regime={regime}, больше минимального {sl_percent_value:.2f}%)"
                 )
 
+            # ✅ FIX #2: Повторная проверка SL floor после применения arm_override
+            # Иногда arm_override содержит sl_atr_multiplier который даёт слишком узкий SL
+            sl_floor_pct = (
+                float(regime_params.get("sl_percent", 0) if regime_params else 0)
+                / 100.0
+            )
+            if sl_floor_pct > 0:
+                sl_floor_abs = entry_price * sl_floor_pct
+                if sl_distance < sl_floor_abs:
+                    old_sl_distance = sl_distance
+                    sl_distance = sl_floor_abs
+                    logger.info(
+                        f"⚠️ FIX#2: SL floor reapplied after arm_override: "
+                        f"{old_sl_distance/entry_price*100:.2f}% → {sl_distance/entry_price*100:.2f}% "
+                        f"(floor={sl_floor_pct*100:.2f}%) для {symbol} {regime}"
+                    )
+
             # FIX 2026-02-22 P0.1: применяем tp_percent как минимальный TP (зеркально sl_percent).
             # Без этого TP остаётся ATR-based (~0.2-0.4%) при SL floored 1.0-1.5% → R:R 0.2:1 → гарантированный убыток.
             # Config уже содержит правильные значения: trending tp_percent=4.0%/sl=1.2% → R:R 3.3:1
