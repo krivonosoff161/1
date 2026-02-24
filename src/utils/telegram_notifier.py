@@ -345,6 +345,8 @@ class TelegramNotifier:
         net_pnl: float,
         reason: str,
         duration_min: float = 0.0,
+        leverage: float = 0.0,
+        margin_usd: float = 0.0,
     ) -> None:
         """Уведомление о закрытии позиции."""
         if not self.enabled:
@@ -354,12 +356,24 @@ class TelegramNotifier:
         pnl_str = f"+${net_pnl:.2f}" if net_pnl >= 0 else f"-${abs(net_pnl):.2f}"
         side_ru = "LONG" if side == "buy" else "SHORT"
         dur_str = f"{duration_min:.1f} мин" if duration_min else ""
+        pnl_pct_str = ""
+        if margin_usd > 0:
+            pnl_pct = (net_pnl / margin_usd) * 100
+            sign = "+" if pnl_pct >= 0 else ""
+            pnl_pct_str = f"  ({sign}{pnl_pct:.1f}% маржи)"
+
+        lev_str = (
+            f"⚡ Плечо: {int(leverage)}x  |  💵 Маржа: ${margin_usd:.0f}\n"
+            if leverage > 0
+            else ""
+        )
 
         text = (
             f"{pnl_icon} <b>Закрыто {side_ru} {symbol}</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 PnL:    <b>{pnl_str}</b>\n"
+            f"💰 PnL:    <b>{pnl_str}{pnl_pct_str}</b>\n"
             f"📍 Вход:  {entry_price:.4f}  →  {close_price:.4f}\n"
+            f"{lev_str}"
             f"⏱ Время: {dur_str}\n"
             f"📋 Причина: {reason}"
         )

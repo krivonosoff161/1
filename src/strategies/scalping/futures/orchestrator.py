@@ -5672,6 +5672,12 @@ class FuturesScalpingOrchestrator:
                             close_duration = (
                                 datetime.now(timezone.utc) - entry_time
                             ).total_seconds() / 60.0
+                        leverage_val = float(position.get("leverage", 0) or 0)
+                        margin_val = float(
+                            position.get("margin", 0)
+                            or position.get("initial_margin", 0)
+                            or 0
+                        )
 
                         # Отправляем уведомление асинхронно (не блокируем)
                         asyncio.create_task(
@@ -5683,6 +5689,8 @@ class FuturesScalpingOrchestrator:
                                 net_pnl=close_pnl,
                                 reason=reason,
                                 duration_min=close_duration,
+                                leverage=leverage_val,
+                                margin_usd=margin_val,
                             )
                         )
                         logger.debug(f"📨 Telegram notification sent for {symbol} close")
