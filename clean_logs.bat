@@ -4,10 +4,10 @@ title Clean Logs
 
 REM ============================================================
 REM clean_logs.bat (safe)
-REM - Creates ONE zip with all current logs/csv/json
-REM - Deletes originals (move into staging -> zip -> delete staging)
+REM - Moves current logs/csv/json into ONE staging folder for analysis
+REM - Keeps staging folder (no zip by default)
 REM - Supports:
-REM     --dry      : show what would be moved/zipped (no changes)
+REM     --dry      : show what would be moved (no changes)
 REM     --nopause  : do not pause at the end
 REM ============================================================
 
@@ -32,7 +32,6 @@ if not defined TS echo [ERROR] Failed to get timestamp (PowerShell failed). & go
 
 set "ARCHIVE_DIR=logs\futures\archived"
 set "STAGE_DIR=%ARCHIVE_DIR%\staging_%TS%"
-set "ZIP_FILE=%ARCHIVE_DIR%\logs_%TS%.zip"
 
 if "%DRY%"=="1" (
   echo [DRY RUN] No files will be moved or deleted.
@@ -53,7 +52,6 @@ echo ====================================
 echo CLEAN LOGS
 echo ====================================
 echo Timestamp : %TS%
-echo Zip file  : %ZIP_FILE%
 echo Stage dir : %STAGE_DIR%
 echo Dry run   : %DRY%
 echo.
@@ -63,12 +61,14 @@ set "SKIPPED=0"
 
 call :move_pattern logs\futures\*.log
 call :move_pattern logs\futures\*.zip
+call :move_pattern logs\futures\drift_log.txt
+call :move_pattern logs\futures\drift_*.txt
 
-REM ✅ ИСПРАВЛЕНО: Переносим папки debug и structured полностью (со всеми подпапками и файлами)
+REM Move debug and structured folders fully (with subfolders and files)
 call :move_folder logs\futures\debug logs_futures_debug
 call :move_folder logs\futures\structured logs_futures_structured
 
-REM ✅ ИСПРАВЛЕНО: Переносим все CSV файлы (включая объединенный)
+REM Move all CSV/JSON and summary files
 call :move_pattern logs\trades_*.csv
 call :move_pattern logs\trades_*.json
 call :move_pattern logs\orders_*.csv
@@ -95,48 +95,8 @@ if %MOVED% LEQ 0 (
   goto end_ok
 )
 
-where powershell >nul 2>&1
-if errorlevel 1 (
-  echo [ERROR] PowerShell not found. Cannot create zip automatically.
-  echo Stage folder kept: "%STAGE_DIR%"
-  goto end_fail
-)
-
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%STAGE_DIR%\*' -DestinationPath '%ZIP_FILE%' -Force" >nul 2>&1
-if errorlevel 1 (
-  echo [ERROR] Failed to create zip: "%ZIP_FILE%"
-  echo Stage folder kept: "%STAGE_DIR%"
-  echo [WARNING] Логи сохранены в staging папке, но ZIP не создан!
-  goto end_fail
-)
-
-REM ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Проверяем, что ZIP файл действительно создан перед удалением staging
-if not exist "%ZIP_FILE%" (
-  echo [ERROR] ZIP файл не найден после создания: "%ZIP_FILE%"
-  echo Stage folder kept: "%STAGE_DIR%"
-  echo [WARNING] Логи сохранены в staging папке, но ZIP не найден!
-  goto end_fail
-)
-
-REM ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Проверяем размер ZIP файла (должен быть > 0)
-for %%I in ("%ZIP_FILE%") do set ZIP_SIZE=%%~zI
-if !ZIP_SIZE! LEQ 0 (
-  echo [ERROR] ZIP файл пустой (размер 0): "%ZIP_FILE%"
-  echo Stage folder kept: "%STAGE_DIR%"
-  echo [WARNING] Логи сохранены в staging папке, но ZIP пустой!
-  goto end_fail
-)
-
-echo [OK] Zip created: %ZIP_FILE% (size: !ZIP_SIZE! bytes)
-
-REM ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (03.01.2026): Удаляем staging ТОЛЬКО если ZIP создан и валиден
-rmdir /S /Q "%STAGE_DIR%" >nul 2>&1
-if errorlevel 1 (
-  echo [WARNING] Failed to remove staging folder: "%STAGE_DIR%"
-  echo [INFO] Staging folder будет удален вручную или при следующем запуске
-) else (
-  echo [OK] Staging folder removed.
-)
+echo [OK] Session folder prepared for analysis: "%STAGE_DIR%"
+echo [INFO] ZIP archive is not created by this script.
 
 goto end_ok
 
@@ -197,5 +157,4 @@ echo Failed.
 if "%NOPAUSE%"=="1" exit /b 1
 pause
 exit /b 1
-
 
