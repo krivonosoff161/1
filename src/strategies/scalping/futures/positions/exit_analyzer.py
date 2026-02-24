@@ -2472,6 +2472,10 @@ class ExitAnalyzer:
                     if regime in by_regime:
                         regime_config = by_regime[regime]
                         if isinstance(regime_config, dict):
+                            # ✅ FIX: читаем enabled per-regime (раньше только глобальный)
+                            params["enabled"] = regime_config.get(
+                                "enabled", params["enabled"]
+                            )
                             params["fraction"] = regime_config.get(
                                 "fraction", params["fraction"]
                             )
@@ -3527,43 +3531,56 @@ class ExitAnalyzer:
 
             if partial_tp_enabled:
                 if pnl_percent >= trigger_percent:
-                    # ✅ Проверяем adaptive_min_holding перед partial_tp
-                    (
-                        can_partial_close,
-                        min_holding_info,
-                    ) = await self._check_adaptive_min_holding_for_partial_tp(
-                        symbol, metadata, pnl_percent, "trending"
-                    )
-
-                    if can_partial_close:
-                        fraction = partial_tp_params.get("fraction", 0.6)
-                        logger.info(
-                            f"📊 ExitAnalyzer TRENDING: Partial TP триггер достигнут для {symbol}: "
-                            f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
-                            f"({min_holding_info})"
-                        )
-                        return {
-                            "action": "partial_close",
-                            "reason": "partial_tp",
-                            "pnl_pct": pnl_percent,
-                            "trigger_percent": trigger_percent,
-                            "fraction": fraction,
-                            "min_holding_info": min_holding_info,
-                            "regime": regime,
-                        }
-                    else:
+                    # ✅ FIX: Guard — partial_tp стреляет только ОДИН раз (зеркально с RANGING)
+                    if (
+                        metadata
+                        and hasattr(metadata, "partial_tp_executed")
+                        and metadata.partial_tp_executed
+                    ):
                         logger.debug(
-                            f"⏱️ ExitAnalyzer TRENDING: Partial TP триггер достигнут для {symbol}, "
-                            f"но min_holding не пройден ({min_holding_info}), ждем..."
+                            f"⏱️ ExitAnalyzer TRENDING: Partial TP уже был выполнен для {symbol}, пропускаем"
                         )
-                        # Не закрываем частично, возвращаем hold
-                        return {
-                            "action": "hold",
-                            "reason": "partial_tp_min_holding_wait",
-                            "pnl_pct": pnl_percent,
-                            "min_holding_info": min_holding_info,
-                            "regime": regime,
-                        }
+                    else:
+                        # ✅ Проверяем adaptive_min_holding перед partial_tp
+                        (
+                            can_partial_close,
+                            min_holding_info,
+                        ) = await self._check_adaptive_min_holding_for_partial_tp(
+                            symbol, metadata, pnl_percent, "trending"
+                        )
+
+                        if can_partial_close:
+                            fraction = partial_tp_params.get("fraction", 0.6)
+                            logger.info(
+                                f"📊 ExitAnalyzer TRENDING: Partial TP триггер достигнут для {symbol}: "
+                                f"{pnl_percent:.2f}% >= {trigger_percent:.2f}%, закрываем {fraction*100:.0f}% позиции "
+                                f"({min_holding_info})"
+                            )
+                            # ✅ FIX: Устанавливаем флаг (зеркально с RANGING ~строка 5142)
+                            if metadata and hasattr(metadata, "partial_tp_executed"):
+                                metadata.partial_tp_executed = True
+                            return {
+                                "action": "partial_close",
+                                "reason": "partial_tp",
+                                "pnl_pct": pnl_percent,
+                                "trigger_percent": trigger_percent,
+                                "fraction": fraction,
+                                "min_holding_info": min_holding_info,
+                                "regime": regime,
+                            }
+                        else:
+                            logger.debug(
+                                f"⏱️ ExitAnalyzer TRENDING: Partial TP триггер достигнут для {symbol}, "
+                                f"но min_holding не пройден ({min_holding_info}), ждем..."
+                            )
+                            # Не закрываем частично, возвращаем hold
+                            return {
+                                "action": "hold",
+                                "reason": "partial_tp_min_holding_wait",
+                                "pnl_pct": pnl_percent,
+                                "min_holding_info": min_holding_info,
+                                "regime": regime,
+                            }
 
             # 6. Проверка SL (Stop Loss) - должна быть ДО Smart Close
             # ✅ ГРОК КОМПРОМИСС: Передаем current_price и market_data для ATR-based SL
