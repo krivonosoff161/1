@@ -92,11 +92,11 @@ scalping:
   position_scaling:
     trending_min_profit_for_addition: 1.5  # % прибыли для DCA в trending режиме
 
-  # Reentry Guard Configuration (P1-11)
+  # Reentry Guard Configuration (P1-11) ✅ L2-4 FIX: Увеличен cooldown с 12.0 до 60.0
   reentry_guard:
-    same_side_cooldown_sec: 12.0  # задержка перед повторным входом в ту же сторону
-    loss_cooldown_sec: 45.0       # задержка после убыточной сделки
-    opposite_side_cooldown_sec: 0.0  # задержка перед входом в противоположную сторону
+    same_side_cooldown_sec: 60.0  # задержка перед повторным входом в ту же сторону (было 12.0 - слишком быстрое переоткрытие)
+    loss_cooldown_sec: 180.0      # задержка после убыточной сделки (увеличено с 45.0)
+    opposite_side_cooldown_sec: 5.0  # задержка перед входом в противоположную сторону (было 0.0)
 
   # ADX Blocking Thresholds (P1-8,9,10)
   adx_blocking:
