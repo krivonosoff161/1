@@ -364,7 +364,7 @@ class TelegramNotifier:
 
         lev_str = (
             f"⚡ Плечо: {int(leverage)}x  |  💵 Маржа: ${margin_usd:.0f}\n"
-            if leverage > 0
+            if leverage > 0 and margin_usd > 0
             else ""
         )
 
