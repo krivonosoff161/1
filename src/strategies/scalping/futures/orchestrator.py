@@ -5672,7 +5672,12 @@ class FuturesScalpingOrchestrator:
                             close_duration = (
                                 datetime.now(timezone.utc) - entry_time
                             ).total_seconds() / 60.0
-                        leverage_val = float(position.get("leverage", 0) or 0)
+                        leverage_val = float(
+                            position.get("leverage")
+                            or position.get("lever")
+                            or getattr(self.scalping_config, "leverage", 0)
+                            or 0
+                        )
                         margin_val = float(
                             position.get("margin", 0)
                             or position.get("initial_margin", 0)

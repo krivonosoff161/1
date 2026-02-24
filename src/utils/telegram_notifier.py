@@ -281,8 +281,8 @@ class TelegramNotifier:
             sl_str = f"{sl_price:.4f} (-{sl_pct:.2f}%)"
             rr_str = f"{rr:.1f}:1"
         else:
-            tp_str = f"{tp_price:.4f}"
-            sl_str = f"{sl_price:.4f}"
+            tp_str = f"{tp_price:.4f}" if tp_price is not None else "—"
+            sl_str = f"{sl_price:.4f}" if sl_price is not None else "—"
             rr_str = "—"
 
         # Плечо
