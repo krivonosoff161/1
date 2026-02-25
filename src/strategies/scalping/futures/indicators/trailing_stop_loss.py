@@ -33,9 +33,9 @@ class TrailingStopLoss:
 
     def __init__(
         self,
-        initial_trail: float = 0.05,
-        max_trail: float = 0.2,
-        min_trail: float = 0.02,
+        initial_trail: float = 0.025,  # P0-5 FIX: 0.05→0.025 (соответствует config.yaml trailing_sl.initial_trail)
+        max_trail: float = 0.050,  # P0-5 FIX: 0.2→0.050 (соответствует config.yaml trailing_sl.max_trail)
+        min_trail: float = 0.010,  # P0-5 FIX: 0.02→0.010 (соответствует config.yaml trailing_sl.min_trail)
         trading_fee_rate: float = 0.0004,  # ⚠️ Legacy: если передается "на круг", ниже конвертируется в ставку за сторону
         maker_fee_rate: Optional[float] = None,
         taker_fee_rate: Optional[float] = None,
@@ -74,9 +74,9 @@ class TrailingStopLoss:
         Инициализация Trailing Stop Loss.
 
         Args:
-            initial_trail: Начальный трейлинг в % (по умолчанию 0.05%)
-            max_trail: Максимальный трейлинг в % (по умолчанию 0.2%)
-            min_trail: Минимальный трейлинг в % (по умолчанию 0.02%)
+            initial_trail: Начальный трейлинг в % (по умолчанию 0.025 = 2.5%)
+            max_trail: Максимальный трейлинг в % (по умолчанию 0.050 = 5.0%)
+            min_trail: Минимальный трейлинг в % (по умолчанию 0.010 = 1.0%)
             trading_fee_rate: Ставка комиссии за сторону (maker). Legacy: если передаётся "на круг", будет конвертирована в ставку за сторону.
             maker_fee_rate: Явная ставка maker за сторону (приоритет над trading_fee_rate)
             taker_fee_rate: Явная ставка taker за сторону (приоритет над trading_fee_rate)

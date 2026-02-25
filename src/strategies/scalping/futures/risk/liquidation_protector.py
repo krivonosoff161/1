@@ -38,13 +38,16 @@ class LiquidationProtector:
         self.margin_calculator = margin_calculator
         self.config = config or {}
 
-        # Порог безопасности: минимальное расстояние до ликвидации (50% от ликвидационной цены)
-        # ✅ ИСПРАВЛЕНО: config может быть Pydantic моделью или словарем
+        # Порог безопасности: минимальное расстояние до ликвидации
+        # ✅ P0-4 FIX: Дефолт 1.5 соответствует config.yaml (risk_management.liquidation_guard.safety_threshold)
+        # config может быть Pydantic моделью или словарем
         if isinstance(self.config, dict):
-            self.safety_threshold = self.config.get("safety_threshold", 0.5)  # 50%
+            self.safety_threshold = self.config.get("safety_threshold", 1.5)  # 150%
         else:
             # Если это Pydantic модель, используем getattr
-            self.safety_threshold = getattr(self.config, "safety_threshold", 0.5)  # 50%
+            self.safety_threshold = getattr(
+                self.config, "safety_threshold", 1.5
+            )  # 150%
 
         logger.info(
             f"✅ LiquidationProtector инициализирован "
