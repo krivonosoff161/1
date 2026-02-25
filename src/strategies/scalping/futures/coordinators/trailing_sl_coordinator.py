@@ -279,6 +279,114 @@ class TrailingSLCoordinator:
             logger.debug(f"⚠️ Ошибка получения TSL параметров для {symbol}: {e}")
             return None
 
+    def _resolve_symbol_regime(self, symbol: str) -> Optional[str]:
+        """Resolve current regime for a symbol with safe fallbacks."""
+        try:
+            if hasattr(self.signal_generator, "regime_managers"):
+                managers = getattr(self.signal_generator, "regime_managers", {}) or {}
+                manager = managers.get(symbol)
+                if manager:
+                    regime = manager.get_current_regime()
+                    if regime:
+                        return str(regime).lower()
+        except Exception:
+            pass
+
+        try:
+            if (
+                hasattr(self.signal_generator, "regime_manager")
+                and self.signal_generator.regime_manager
+            ):
+                regime = self.signal_generator.regime_manager.get_current_regime()
+                if regime:
+                    return str(regime).lower()
+        except Exception:
+            pass
+        return None
+
+    def _get_symbol_tsl_activation_params(
+        self, symbol: str, regime: Optional[str] = None
+    ) -> Dict[str, Optional[float]]:
+        """
+        Resolve activation thresholds for TSL using:
+        1) global trailing_sl
+        2) trailing_sl.by_symbol.<symbol>
+        3) trailing_sl.by_symbol.<symbol>.by_regime.<regime>
+        """
+        min_profit_to_activate = 0.008
+        breakeven_trigger = None
+
+        # Base breakeven from ParameterProvider/ConfigManager chain.
+        base_params = self._get_trailing_sl_params(symbol=symbol, regime=regime) or {}
+        if base_params.get("breakeven_trigger") is not None:
+            try:
+                breakeven_trigger = float(base_params.get("breakeven_trigger"))
+            except (TypeError, ValueError):
+                breakeven_trigger = None
+
+        trailing_cfg: Any = self._full_config.get("trailing_sl", {})
+        if not isinstance(trailing_cfg, dict) or not trailing_cfg:
+            futures_modules = self._full_config.get("futures_modules", {})
+            if isinstance(futures_modules, dict):
+                trailing_cfg = futures_modules.get("trailing_sl", {})
+        if not isinstance(trailing_cfg, dict) or not trailing_cfg:
+            scalping_cfg = self._full_config.get("scalping", {})
+            if isinstance(scalping_cfg, dict):
+                trailing_cfg = scalping_cfg.get("trailing_sl", {})
+        if not isinstance(trailing_cfg, dict):
+            return {
+                "min_profit_to_activate": min_profit_to_activate,
+                "breakeven_trigger": breakeven_trigger,
+            }
+
+        try:
+            global_min_activate = trailing_cfg.get("min_profit_to_activate")
+            if global_min_activate is not None:
+                min_profit_to_activate = float(global_min_activate)
+        except (TypeError, ValueError):
+            pass
+
+        by_symbol = trailing_cfg.get("by_symbol", {})
+        symbol_cfg = by_symbol.get(symbol, {}) if isinstance(by_symbol, dict) else {}
+        if isinstance(symbol_cfg, dict):
+            try:
+                if symbol_cfg.get("min_profit_to_activate") is not None:
+                    min_profit_to_activate = float(
+                        symbol_cfg.get("min_profit_to_activate")
+                    )
+            except (TypeError, ValueError):
+                pass
+            try:
+                if symbol_cfg.get("breakeven_trigger") is not None:
+                    breakeven_trigger = float(symbol_cfg.get("breakeven_trigger"))
+            except (TypeError, ValueError):
+                pass
+
+            regime_key = regime.lower() if isinstance(regime, str) else None
+            symbol_by_regime = symbol_cfg.get("by_regime", {})
+            if regime_key and isinstance(symbol_by_regime, dict):
+                regime_cfg = symbol_by_regime.get(regime_key, {})
+                if isinstance(regime_cfg, dict):
+                    try:
+                        if regime_cfg.get("min_profit_to_activate") is not None:
+                            min_profit_to_activate = float(
+                                regime_cfg.get("min_profit_to_activate")
+                            )
+                    except (TypeError, ValueError):
+                        pass
+                    try:
+                        if regime_cfg.get("breakeven_trigger") is not None:
+                            breakeven_trigger = float(
+                                regime_cfg.get("breakeven_trigger")
+                            )
+                    except (TypeError, ValueError):
+                        pass
+
+        return {
+            "min_profit_to_activate": max(0.0, float(min_profit_to_activate)),
+            "breakeven_trigger": breakeven_trigger,
+        }
+
     def initialize_trailing_stop(
         self,
         symbol: str,
@@ -415,6 +523,16 @@ class TrailingSLCoordinator:
                             f"⚠️ Не удалось преобразовать {key}={value} в правильный тип: {e}"
                         )
                         # Оставляем значение по умолчанию
+
+        # Resolve per-symbol activation thresholds from trailing_sl.by_symbol.
+        activation_params = self._get_symbol_tsl_activation_params(symbol, regime)
+        if activation_params.get("min_profit_to_activate") is not None:
+            params["min_profit_to_activate"] = activation_params.get(
+                "min_profit_to_activate"
+            )
+        if activation_params.get("breakeven_trigger") is not None:
+            params["breakeven_trigger"] = activation_params.get("breakeven_trigger")
+
         # Смягченный режим: не зажимаем TSL для максимально сильных сигналов (strength=1.0).
         signal_strength = signal.get("strength", 0.0) if signal else 0.0
         if 0.8 < signal_strength < 1.0:
@@ -940,18 +1058,15 @@ class TrailingSLCoordinator:
                 except Exception as e:
                     logger.debug(f"⚠️ Ошибка расчета unrealized_pnl для {symbol}: {e}")
 
-            # ✅ ГРОК РЕКОМЕНДАЦИЯ: Проверка min_profit_to_activate перед обновлением trailing stop
+            # ✅ Per-symbol activation threshold: min_profit_to_activate
             try:
-                # Получаем параметры trailing_sl из конфига
-                trailing_sl_config = getattr(self.scalping_config, "trailing_sl", {})
-                if isinstance(trailing_sl_config, dict):
-                    min_profit_to_activate = trailing_sl_config.get(
-                        "min_profit_to_activate", 0.008
-                    )
-                else:
-                    min_profit_to_activate = getattr(
-                        trailing_sl_config, "min_profit_to_activate", 0.008
-                    )
+                regime_for_symbol = self._resolve_symbol_regime(symbol)
+                activation_params = self._get_symbol_tsl_activation_params(
+                    symbol=symbol, regime=regime_for_symbol
+                )
+                min_profit_to_activate = float(
+                    activation_params.get("min_profit_to_activate") or 0.008
+                )
 
                 # Рассчитываем текущий PnL%
                 if entry_price > 0:
@@ -967,7 +1082,8 @@ class TrailingSLCoordinator:
                     if pnl_percent < min_profit_to_activate:
                         logger.debug(
                             f"⏸️ Trailing SL не активирован для {symbol}: "
-                            f"PnL {pnl_percent:.2%} < минимум {min_profit_to_activate:.2%}"
+                            f"PnL {pnl_percent:.2%} < минимум {min_profit_to_activate:.2%} "
+                            f"(regime={regime_for_symbol or 'unknown'})"
                         )
                         return  # Не обновляем trailing до достижения минимума
             except Exception as e:

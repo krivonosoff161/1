@@ -1902,6 +1902,73 @@ futures_modules:
           low_profit_multiplier: 1.2  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Стандартное значение для хаоса
           medium_profit_multiplier: 1.5  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Уменьшено с 2.0 до 1.5 (-25%) - более плавный трейлинг
           high_profit_multiplier: 2.0  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Уменьшено с 3.0 до 2.0 (-33%) - более плавный трейлинг
+
+    # ✅ P0-6/7: Per-symbol activation/breakeven structure for TSL thresholds.
+    # Приоритет в коде:
+    # 1) trailing_sl.by_symbol.<symbol>.by_regime.<regime>
+    # 2) trailing_sl.by_symbol.<symbol>
+    # 3) trailing_sl.by_regime / trailing_sl globals
+    by_symbol:
+      BTC-USDT:
+        min_profit_to_activate: 0.008
+        by_regime:
+          trending:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.010
+          ranging:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.009
+          choppy:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.008
+      ETH-USDT:
+        min_profit_to_activate: 0.008
+        by_regime:
+          trending:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.010
+          ranging:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.009
+          choppy:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.008
+      SOL-USDT:
+        min_profit_to_activate: 0.008
+        by_regime:
+          trending:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.010
+          ranging:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.009
+          choppy:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.008
+      DOGE-USDT:
+        min_profit_to_activate: 0.008
+        by_regime:
+          trending:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.010
+          ranging:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.009
+          choppy:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.008
+      XRP-USDT:
+        min_profit_to_activate: 0.008
+        by_regime:
+          trending:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.010
+          ranging:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.009
+          choppy:
+            min_profit_to_activate: 0.008
+            breakeven_trigger: 0.008
   # Momentum Filter (из статьи Momentum Trading Strategy)
   momentum_filter:
     enabled: true

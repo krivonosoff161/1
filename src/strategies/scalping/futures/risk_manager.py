@@ -1,12 +1,12 @@
 """
-Risk Manager для Futures торговли.
+Risk Manager РґР»СЏ Futures С‚РѕСЂРіРѕРІР»Рё.
 
-Ответственность:
-- Расчет размера позиции с учетом баланса и режима
-- Проверка безопасности маржи
-- Интеграция с ConfigManager
-- Интеграция с существующими risk модулями
-- ✅ FIX: Circuit breaker для серии убытков
+РћС‚РІРµС‚СЃС‚РІРµРЅРЅРѕСЃС‚СЊ:
+- Р Р°СЃС‡РµС‚ СЂР°Р·РјРµСЂР° РїРѕР·РёС†РёРё СЃ СѓС‡РµС‚РѕРј Р±Р°Р»Р°РЅСЃР° Рё СЂРµР¶РёРјР°
+- РџСЂРѕРІРµСЂРєР° Р±РµР·РѕРїР°СЃРЅРѕСЃС‚Рё РјР°СЂР¶Рё
+- РРЅС‚РµРіСЂР°С†РёСЏ СЃ ConfigManager
+- РРЅС‚РµРіСЂР°С†РёСЏ СЃ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРјРё risk РјРѕРґСѓР»СЏРјРё
+- вњ… FIX: Circuit breaker РґР»СЏ СЃРµСЂРёРё СѓР±С‹С‚РєРѕРІ
 """
 
 import time
@@ -28,9 +28,9 @@ from .utils.units import pct_points_to_fraction
 
 class FuturesRiskManager:
     """
-    Менеджер рисков для Futures торговли.
+    РњРµРЅРµРґР¶РµСЂ СЂРёСЃРєРѕРІ РґР»СЏ Futures С‚РѕСЂРіРѕРІР»Рё.
 
-    Централизует всю логику управления рисками.
+    Р¦РµРЅС‚СЂР°Р»РёР·СѓРµС‚ РІСЃСЋ Р»РѕРіРёРєСѓ СѓРїСЂР°РІР»РµРЅРёСЏ СЂРёСЃРєР°РјРё.
     """
 
     def __init__(
@@ -42,18 +42,18 @@ class FuturesRiskManager:
         margin_monitor: Optional[MarginMonitor] = None,
         max_size_limiter: Optional[MaxSizeLimiter] = None,
         orchestrator: Optional[Any] = None,
-        data_registry=None,  # ✅ НОВОЕ: DataRegistry для чтения баланса
+        data_registry=None,  # вњ… РќРћР’РћР•: DataRegistry РґР»СЏ С‡С‚РµРЅРёСЏ Р±Р°Р»Р°РЅСЃР°
     ):
         """
         Args:
-            config: Конфигурация бота
-            client: Futures клиент
+            config: РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ Р±РѕС‚Р°
+            client: Futures РєР»РёРµРЅС‚
             config_manager: Config Manager
-            liquidation_protector: Защита от ликвидации (опционально)
-            margin_monitor: Мониторинг маржи (опционально)
-            max_size_limiter: Ограничитель размера (опционально)
-            orchestrator: Ссылка на orchestrator для доступа к методам (опционально)
-            data_registry: DataRegistry для чтения баланса (опционально)
+            liquidation_protector: Р—Р°С‰РёС‚Р° РѕС‚ Р»РёРєРІРёРґР°С†РёРё (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+            margin_monitor: РњРѕРЅРёС‚РѕСЂРёРЅРі РјР°СЂР¶Рё (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+            max_size_limiter: РћРіСЂР°РЅРёС‡РёС‚РµР»СЊ СЂР°Р·РјРµСЂР° (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+            orchestrator: РЎСЃС‹Р»РєР° РЅР° orchestrator РґР»СЏ РґРѕСЃС‚СѓРїР° Рє РјРµС‚РѕРґР°Рј (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+            data_registry: DataRegistry РґР»СЏ С‡С‚РµРЅРёСЏ Р±Р°Р»Р°РЅСЃР° (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
         """
         self.config = config
         self.scalping_config = get_scalping_view(config)
@@ -63,22 +63,22 @@ class FuturesRiskManager:
         self.liquidation_protector = liquidation_protector
         self.margin_monitor = margin_monitor
         self.max_size_limiter = max_size_limiter
-        self.orchestrator = (
-            orchestrator  # ✅ РЕФАКТОРИНГ: Для доступа к методам orchestrator
-        )
-        # ✅ НОВОЕ: DataRegistry для чтения баланса
+        self.orchestrator = orchestrator  # вњ… Р Р•Р¤РђРљРўРћР РРќР“: Р”Р»СЏ РґРѕСЃС‚СѓРїР° Рє РјРµС‚РѕРґР°Рј orchestrator
+        # вњ… РќРћР’РћР•: DataRegistry РґР»СЏ С‡С‚РµРЅРёСЏ Р±Р°Р»Р°РЅСЃР°
         self.data_registry = data_registry
 
-        # Получаем symbol_profiles из config_manager
+        # РџРѕР»СѓС‡Р°РµРј symbol_profiles РёР· config_manager
         self.symbol_profiles = config_manager.get_symbol_profiles()
 
-        # ✅ FIX: Circuit breaker для серии убытков - АДАПТИВНО из конфига
-        self.pair_loss_streak: Dict[str, int] = {}  # symbol → кол-во убытков подряд
+        # вњ… FIX: Circuit breaker РґР»СЏ СЃРµСЂРёРё СѓР±С‹С‚РєРѕРІ - РђР”РђРџРўРР’РќРћ РёР· РєРѕРЅС„РёРіР°
+        self.pair_loss_streak: Dict[
+            str, int
+        ] = {}  # symbol в†’ РєРѕР»-РІРѕ СѓР±С‹С‚РєРѕРІ РїРѕРґСЂСЏРґ
         self.pair_block_until: Dict[
             str, float
-        ] = {}  # symbol → monotonic time до которого блок
+        ] = {}  # symbol в†’ monotonic time РґРѕ РєРѕС‚РѕСЂРѕРіРѕ Р±Р»РѕРє
 
-        # ✅ FIX: Читаем из конфига, не хард-код
+        # вњ… FIX: Р§РёС‚Р°РµРј РёР· РєРѕРЅС„РёРіР°, РЅРµ С…Р°СЂРґ-РєРѕРґ
         self._max_consecutive_losses = (
             getattr(self.risk_config, "consecutive_losses_limit", None) or 5
         )
@@ -86,13 +86,38 @@ class FuturesRiskManager:
             getattr(self.risk_config, "pair_block_duration_min", None) or 30
         )
 
-        # ✅ НОВОЕ: Отслеживание дневного PnL для max_daily_loss
-        self.daily_pnl: float = 0.0  # Текущий дневной PnL
-        self.daily_pnl_date: Optional[str] = None  # Дата текущего дня (YYYY-MM-DD)
-        self.max_daily_loss_percent: float = (
-            getattr(self.risk_config, "max_daily_loss_percent", None) or 5.0
-        )  # Максимальная дневная потеря в % от баланса
-        self.daily_trading_stopped: bool = False  # Флаг остановки торговли
+        # вњ… РќРћР’РћР•: РћС‚СЃР»РµР¶РёРІР°РЅРёРµ РґРЅРµРІРЅРѕРіРѕ PnL РґР»СЏ max_daily_loss
+        self.daily_pnl: float = 0.0  # РўРµРєСѓС‰РёР№ РґРЅРµРІРЅРѕР№ PnL
+        self.daily_pnl_date: Optional[
+            str
+        ] = None  # Р”Р°С‚Р° С‚РµРєСѓС‰РµРіРѕ РґРЅСЏ (YYYY-MM-DD)
+        raw_max_daily_loss_percent = getattr(
+            self.risk_config, "max_daily_loss_percent", None
+        )
+        if raw_max_daily_loss_percent is None:
+            risk_cfg_raw = {}
+            if self.config_manager and hasattr(self.config_manager, "_raw_config_dict"):
+                risk_cfg_raw = (self.config_manager._raw_config_dict or {}).get(
+                    "risk", {}
+                )
+            if isinstance(risk_cfg_raw, dict):
+                raw_max_daily_loss_percent = risk_cfg_raw.get("max_daily_loss_percent")
+        if raw_max_daily_loss_percent is None:
+            model_fields = getattr(type(self.risk_config), "model_fields", {})
+            default_field = (
+                model_fields.get("max_daily_loss_percent")
+                if isinstance(model_fields, dict)
+                else None
+            )
+            raw_max_daily_loss_percent = getattr(default_field, "default", 10.0)
+        try:
+            self.max_daily_loss_percent: float = float(raw_max_daily_loss_percent)
+        except (TypeError, ValueError):
+            self.max_daily_loss_percent = 10.0  # Model default fallback
+        # Max daily loss percent of balance
+        self.daily_trading_stopped: bool = (
+            False  # Р¤Р»Р°Рі РѕСЃС‚Р°РЅРѕРІРєРё С‚РѕСЂРіРѕРІР»Рё
+        )
 
         logger.info(
             f"ADAPT_LOAD consecutive_losses_limit={self._max_consecutive_losses}"
@@ -100,12 +125,12 @@ class FuturesRiskManager:
         logger.info(
             f"ADAPT_LOAD pair_block_duration_min={self._block_duration_minutes}"
         )
-        logger.info("✅ FuturesRiskManager initialized")
+        logger.info("вњ… FuturesRiskManager initialized")
 
     def _get_symbol_regime_profile(
         self, symbol: Optional[str], regime: Optional[str]
     ) -> Dict[str, Any]:
-        """Вспомогательный метод для получения regime_profile (аналог orchestrator._get_symbol_regime_profile)"""
+        """Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Р№ РјРµС‚РѕРґ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ regime_profile (Р°РЅР°Р»РѕРі orchestrator._get_symbol_regime_profile)"""
         if not symbol:
             return {}
         profile = self.symbol_profiles.get(symbol, {})
@@ -123,13 +148,13 @@ class FuturesRiskManager:
     def _resolve_sl_percent_for_risk(
         self, symbol: Optional[str], regime: Optional[str]
     ) -> float:
-        """Надёжно получить sl_percent для риск-расчётов (в процентах, не доле)."""
-        # 1) Из scalping_config (если задан)
+        """РќР°РґС‘Р¶РЅРѕ РїРѕР»СѓС‡РёС‚СЊ sl_percent РґР»СЏ СЂРёСЃРє-СЂР°СЃС‡С‘С‚РѕРІ (РІ РїСЂРѕС†РµРЅС‚Р°С…, РЅРµ РґРѕР»Рµ)."""
+        # 1) РР· scalping_config (РµСЃР»Рё Р·Р°РґР°РЅ)
         sl_percent = getattr(self.scalping_config, "sl_percent", None)
         if sl_percent is not None:
             return float(sl_percent)
 
-        # 2) Из exit_params (централизованные параметры выходов)
+        # 2) РР· exit_params (С†РµРЅС‚СЂР°Р»РёР·РѕРІР°РЅРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ РІС‹С…РѕРґРѕРІ)
         try:
             raw = getattr(self.config_manager, "_raw_config_dict", {}) or {}
             exit_params = raw.get("exit_params") or {}
@@ -140,7 +165,7 @@ class FuturesRiskManager:
         except Exception:
             pass
 
-        # 3) Из symbol_profiles по режиму (если задан)
+        # 3) РР· symbol_profiles РїРѕ СЂРµР¶РёРјСѓ (РµСЃР»Рё Р·Р°РґР°РЅ)
         if symbol:
             regime_profile = self._get_symbol_regime_profile(symbol, regime)
             sl_percent = regime_profile.get("sl_percent")
@@ -148,14 +173,14 @@ class FuturesRiskManager:
                 return float(sl_percent)
 
         raise ValueError(
-            "sl_percent отсутствует: проверь config_futures.yaml (scalping.sl_percent или exit_params.<regime>.sl_min_percent)"
+            "sl_percent РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚: РїСЂРѕРІРµСЂСЊ config_futures.yaml (scalping.sl_percent РёР»Рё exit_params.<regime>.sl_min_percent)"
         )
 
     async def _get_used_margin(self) -> float:
-        """Получает использованную маржу через orchestrator или напрямую"""
+        """РџРѕР»СѓС‡Р°РµС‚ РёСЃРїРѕР»СЊР·РѕРІР°РЅРЅСѓСЋ РјР°СЂР¶Сѓ С‡РµСЂРµР· orchestrator РёР»Рё РЅР°РїСЂСЏРјСѓСЋ"""
         if self.orchestrator and hasattr(self.orchestrator, "_get_used_margin"):
             return await self.orchestrator._get_used_margin()
-        # Fallback: получаем напрямую
+        # Fallback: РїРѕР»СѓС‡Р°РµРј РЅР°РїСЂСЏРјСѓСЋ
         try:
             exchange_positions = await self.client.get_positions()
             if not exchange_positions:
@@ -175,7 +200,7 @@ class FuturesRiskManager:
                     continue
             return total_margin
         except Exception as e:
-            logger.warning(f"⚠️ Ошибка получения used_margin: {e}")
+            logger.warning(f"вљ пёЏ РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ used_margin: {e}")
             return 0.0
 
     def _calculate_dynamic_margin_cap(
@@ -188,27 +213,27 @@ class FuturesRiskManager:
         open_positions_margin: float = 0.0,
     ) -> float:
         """
-        Динамический расчет максимальной маржи на сделку.
+        Р”РёРЅР°РјРёС‡РµСЃРєРёР№ СЂР°СЃС‡РµС‚ РјР°РєСЃРёРјР°Р»СЊРЅРѕР№ РјР°СЂР¶Рё РЅР° СЃРґРµР»РєСѓ.
 
-        Учитывает:
-        - max_margin_per_trade из конфига
-        - Волатильность (ATR)
-        - Просадку портфеля
-        - Режим рынка
+        РЈС‡РёС‚С‹РІР°РµС‚:
+        - max_margin_per_trade РёР· РєРѕРЅС„РёРіР°
+        - Р’РѕР»Р°С‚РёР»СЊРЅРѕСЃС‚СЊ (ATR)
+        - РџСЂРѕСЃР°РґРєСѓ РїРѕСЂС‚С„РµР»СЏ
+        - Р РµР¶РёРј СЂС‹РЅРєР°
 
         Args:
-            balance: Текущий баланс
-            symbol: Торговый символ
-            regime: Режим рынка (trending, ranging, choppy)
-            volatility: Волатильность (ATR % от цены, опционально)
-            daily_pnl: Дневной PnL (для расчета просадки)
-            open_positions_margin: Использованная маржа открытых позиций
+            balance: РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ
+            symbol: РўРѕСЂРіРѕРІС‹Р№ СЃРёРјРІРѕР»
+            regime: Р РµР¶РёРј СЂС‹РЅРєР° (trending, ranging, choppy)
+            volatility: Р’РѕР»Р°С‚РёР»СЊРЅРѕСЃС‚СЊ (ATR % РѕС‚ С†РµРЅС‹, РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+            daily_pnl: Р”РЅРµРІРЅРѕР№ PnL (РґР»СЏ СЂР°СЃС‡РµС‚Р° РїСЂРѕСЃР°РґРєРё)
+            open_positions_margin: РСЃРїРѕР»СЊР·РѕРІР°РЅРЅР°СЏ РјР°СЂР¶Р° РѕС‚РєСЂС‹С‚С‹С… РїРѕР·РёС†РёР№
 
         Returns:
-            Максимальная маржа на сделку в USD
+            РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ РјР°СЂР¶Р° РЅР° СЃРґРµР»РєСѓ РІ USD
         """
         try:
-            # Получаем параметры из конфига
+            # РџРѕР»СѓС‡Р°РµРј РїР°СЂР°РјРµС‚СЂС‹ РёР· РєРѕРЅС„РёРіР°
             risk_config = getattr(self.scalping_config, "risk_config", {})
             if isinstance(risk_config, dict):
                 max_margin_per_trade_pct = (
@@ -239,57 +264,57 @@ class FuturesRiskManager:
                     risk_config, "max_margin_cap_multiplier", 2.0
                 )
 
-            # Базовый кап = баланс * процент
+            # Р‘Р°Р·РѕРІС‹Р№ РєР°Рї = Р±Р°Р»Р°РЅСЃ * РїСЂРѕС†РµРЅС‚
             base_cap = balance * max_margin_per_trade_pct
 
-            # Фактор волатильности (чем выше волатильность, тем меньше кап)
+            # Р¤Р°РєС‚РѕСЂ РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚Рё (С‡РµРј РІС‹С€Рµ РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚СЊ, С‚РµРј РјРµРЅСЊС€Рµ РєР°Рї)
             volatility_factor = 1.0
             if volatility_factor_enabled and volatility is not None and volatility > 0:
-                # Нормализуем волатильность: 1% = 1.0, 2% = 0.5, 3% = 0.33
-                # Используем обратную зависимость: factor = 1 / (1 + volatility)
+                # РќРѕСЂРјР°Р»РёР·СѓРµРј РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚СЊ: 1% = 1.0, 2% = 0.5, 3% = 0.33
+                # РСЃРїРѕР»СЊР·СѓРµРј РѕР±СЂР°С‚РЅСѓСЋ Р·Р°РІРёСЃРёРјРѕСЃС‚СЊ: factor = 1 / (1 + volatility)
                 volatility_factor = 1.0 / (
                     1.0 + volatility * 10
-                )  # Умножаем на 10 для усиления эффекта
+                )  # РЈРјРЅРѕР¶Р°РµРј РЅР° 10 РґР»СЏ СѓСЃРёР»РµРЅРёСЏ СЌС„С„РµРєС‚Р°
                 volatility_factor = max(
                     0.5, min(1.5, volatility_factor)
-                )  # Ограничиваем 0.5-1.5
+                )  # РћРіСЂР°РЅРёС‡РёРІР°РµРј 0.5-1.5
 
-            # Фактор просадки (чем больше просадка, тем меньше кап)
+            # Р¤Р°РєС‚РѕСЂ РїСЂРѕСЃР°РґРєРё (С‡РµРј Р±РѕР»СЊС€Рµ РїСЂРѕСЃР°РґРєР°, С‚РµРј РјРµРЅСЊС€Рµ РєР°Рї)
             drawdown_factor = 1.0
             if drawdown_factor_enabled and daily_pnl < 0:
-                # Просадка уменьшает кап: -5% = 0.5, -10% = 0.0
+                # РџСЂРѕСЃР°РґРєР° СѓРјРµРЅСЊС€Р°РµС‚ РєР°Рї: -5% = 0.5, -10% = 0.0
                 drawdown_pct = abs(daily_pnl) / balance if balance > 0 else 0.0
                 drawdown_factor = max(
                     0.0, 1.0 - drawdown_pct * 2
-                )  # Усиливаем эффект просадки
+                )  # РЈСЃРёР»РёРІР°РµРј СЌС„С„РµРєС‚ РїСЂРѕСЃР°РґРєРё
                 drawdown_factor = max(
                     0.3, min(1.0, drawdown_factor)
-                )  # Минимум 30% от базового капа
+                )  # РњРёРЅРёРјСѓРј 30% РѕС‚ Р±Р°Р·РѕРІРѕРіРѕ РєР°РїР°
 
-            # Режимный множитель (trending = больше, choppy = меньше)
+            # Р РµР¶РёРјРЅС‹Р№ РјРЅРѕР¶РёС‚РµР»СЊ (trending = Р±РѕР»СЊС€Рµ, choppy = РјРµРЅСЊС€Рµ)
             regime_multiplier = 1.0
             if regime:
                 regime_lower = regime.lower()
                 if regime_lower == "trending":
-                    regime_multiplier = 1.2  # +20% в тренде
+                    regime_multiplier = 1.2  # +20% РІ С‚СЂРµРЅРґРµ
                 elif regime_lower == "ranging":
-                    regime_multiplier = 1.0  # Стандарт
+                    regime_multiplier = 1.0  # РЎС‚Р°РЅРґР°СЂС‚
                 elif regime_lower == "choppy":
-                    regime_multiplier = 0.8  # -20% в хаосе
+                    regime_multiplier = 0.8  # -20% РІ С…Р°РѕСЃРµ
 
-            # Рассчитываем динамический кап
+            # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј РґРёРЅР°РјРёС‡РµСЃРєРёР№ РєР°Рї
             dynamic_cap = (
                 base_cap * volatility_factor * drawdown_factor * regime_multiplier
             )
 
-            # Применяем ограничения
+            # РџСЂРёРјРµРЅСЏРµРј РѕРіСЂР°РЅРёС‡РµРЅРёСЏ
             min_cap = min_margin_cap
             max_cap = base_cap * max_margin_cap_multiplier
 
             final_cap = max(min_cap, min(dynamic_cap, max_cap))
 
             logger.debug(
-                f"📊 Dynamic Margin Cap для {symbol} ({regime}): "
+                f"рџ“Љ Dynamic Margin Cap РґР»СЏ {symbol} ({regime}): "
                 f"base=${base_cap:.2f}, vol_factor={volatility_factor:.2f}, "
                 f"drawdown_factor={drawdown_factor:.2f}, regime_mult={regime_multiplier:.2f}, "
                 f"final=${final_cap:.2f}"
@@ -298,8 +323,10 @@ class FuturesRiskManager:
             return final_cap
 
         except Exception as e:
-            logger.warning(f"⚠️ Ошибка расчета dynamic_margin_cap: {e}")
-            # Fallback: возвращаем базовый кап
+            logger.warning(
+                f"вљ пёЏ РћС€РёР±РєР° СЂР°СЃС‡РµС‚Р° dynamic_margin_cap: {e}"
+            )
+            # Fallback: РІРѕР·РІСЂР°С‰Р°РµРј Р±Р°Р·РѕРІС‹Р№ РєР°Рї
             risk_config = getattr(self.scalping_config, "risk_config", {})
             if isinstance(risk_config, dict):
                 max_margin_per_trade_pct = (
@@ -318,50 +345,86 @@ class FuturesRiskManager:
         regime: Optional[str] = None,
     ) -> float:
         """
-        Рассчитать максимальную маржу на одну позицию.
+        Р Р°СЃСЃС‡РёС‚Р°С‚СЊ РјР°РєСЃРёРјР°Р»СЊРЅСѓСЋ РјР°СЂР¶Сѓ РЅР° РѕРґРЅСѓ РїРѕР·РёС†РёСЋ.
 
-        Используется для проверки лимитов при добавлении к позиции.
-        Учитывает баланс, профиль баланса и режим рынка.
+        РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґР»СЏ РїСЂРѕРІРµСЂРєРё Р»РёРјРёС‚РѕРІ РїСЂРё РґРѕР±Р°РІР»РµРЅРёРё Рє РїРѕР·РёС†РёРё.
+        РЈС‡РёС‚С‹РІР°РµС‚ Р±Р°Р»Р°РЅСЃ, РїСЂРѕС„РёР»СЊ Р±Р°Р»Р°РЅСЃР° Рё СЂРµР¶РёРј СЂС‹РЅРєР°.
 
         Args:
-            balance: Текущий баланс
-            balance_profile: Профиль баланса (small, medium, large)
-            regime: Режим рынка (trending, ranging, choppy)
+            balance: РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ
+            balance_profile: РџСЂРѕС„РёР»СЊ Р±Р°Р»Р°РЅСЃР° (small, medium, large)
+            regime: Р РµР¶РёРј СЂС‹РЅРєР° (trending, ranging, choppy)
 
         Returns:
-            Максимальная маржа на позицию в USD
+            РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ РјР°СЂР¶Р° РЅР° РїРѕР·РёС†РёСЋ РІ USD
         """
         try:
-            # ✅ P0-1 FIX: Используем max_position_percent из конфига (делим на 100)
-            profiles_cfg = (
-                self.config.get("balance_profiles", {})
-                if hasattr(self, "config")
-                else {}
-            )
-            profile_cfg = profiles_cfg.get(balance_profile, {})
-            # max_position_percent в конфиге в процентах (например, 15.0 = 15%)
-            base_percent = float(profile_cfg.get("max_position_percent", 20.0)) / 100.0
+            # вњ… P0-1 FIX: РСЃРїРѕР»СЊР·СѓРµРј max_position_percent РёР· РєРѕРЅС„РёРіР° (РґРµР»РёРј РЅР° 100)
+            resolved_profile_name = balance_profile
+            profile_cfg: Dict[str, Any] = {}
 
-            if base_percent <= 0 or base_percent > 1.0:
-                logger.warning(
-                    f"⚠️ Некорректный max_position_percent={base_percent*100:.1f}% для {balance_profile}, "
-                    f"используем 20%"
+            # 1) Get profile selected by current balance (source of truth).
+            if self.config_manager:
+                selected_profile = self.config_manager.get_balance_profile(balance)
+                profile_cfg = self.config_manager.to_dict(selected_profile)
+                resolved_profile_name = selected_profile.get(
+                    "name", resolved_profile_name
                 )
-                base_percent = 0.20
 
-            # Корректировка по режиму рынка
+            # 2) Optional explicit override by profile name from config.
+            if balance_profile:
+                balance_profiles_raw = getattr(
+                    self.scalping_config, "balance_profiles", {}
+                )
+                if isinstance(balance_profiles_raw, dict):
+                    balance_profiles = balance_profiles_raw
+                elif self.config_manager:
+                    balance_profiles = self.config_manager.to_dict(balance_profiles_raw)
+                else:
+                    balance_profiles = {}
+                requested_profile = (
+                    balance_profiles.get(balance_profile, {})
+                    if isinstance(balance_profiles, dict)
+                    else {}
+                )
+                if not isinstance(requested_profile, dict) and self.config_manager:
+                    requested_profile = self.config_manager.to_dict(requested_profile)
+                if requested_profile:
+                    profile_cfg = requested_profile
+                    resolved_profile_name = balance_profile
+                else:
+                    logger.warning(
+                        f"Invalid balance_profile={balance_profile}, use auto profile={resolved_profile_name}"
+                    )
+
+            raw_max_position_percent = profile_cfg.get("max_position_percent")
+            if raw_max_position_percent is None:
+                raise ValueError(
+                    f"max_position_percent missing for balance_profile={resolved_profile_name}"
+                )
+
+            # max_position_percent in config is percent points (e.g. 15.0 = 15%).
+            base_percent = float(raw_max_position_percent) / 100.0
+            if base_percent <= 0 or base_percent > 1.0:
+                raise ValueError(
+                    f"Invalid max_position_percent={base_percent*100:.2f}% for profile={resolved_profile_name}"
+                )
+
+            # РљРѕСЂСЂРµРєС‚РёСЂРѕРІРєР° РїРѕ СЂРµР¶РёРјСѓ СЂС‹РЅРєР°
             regime_multiplier = 1.0
             if regime == "trending":
-                regime_multiplier = 1.05  # +5% в тренде (можно больше)
+                regime_multiplier = (
+                    1.05  # +5% РІ С‚СЂРµРЅРґРµ (РјРѕР¶РЅРѕ Р±РѕР»СЊС€Рµ)
+                )
             elif regime == "choppy":
-                regime_multiplier = 0.95  # -5% в хаосе (меньше риска)
-            # ranging: 1.0 (без изменений)
+                regime_multiplier = 0.95  # -5% РІ С…Р°РѕСЃРµ (РјРµРЅСЊС€Рµ СЂРёСЃРєР°)
+            # ranging: 1.0 (Р±РµР· РёР·РјРµРЅРµРЅРёР№)
 
             max_margin_per_position = balance * base_percent * regime_multiplier
 
             logger.debug(
-                f"📊 [MAX_MARGIN_PER_POSITION] balance=${balance:.2f}, "
-                f"profile={balance_profile}, regime={regime}, "
+                f"рџ“Љ [MAX_MARGIN_PER_POSITION] balance=${balance:.2f}, "
+                f"profile={resolved_profile_name}, regime={regime}, "
                 f"base_percent={base_percent*100:.1f}%, "
                 f"regime_multiplier={regime_multiplier}, "
                 f"max_margin=${max_margin_per_position:.2f}"
@@ -371,9 +434,19 @@ class FuturesRiskManager:
 
         except Exception as e:
             logger.error(
-                f"❌ Ошибка расчета max_margin_per_position: {e}", exc_info=True
+                f"Failed max_margin_per_position calculation: {e}", exc_info=True
             )
-            # Fallback: 20% от баланса
+            # Fallback: recover percent from selected config profile first.
+            try:
+                if self.config_manager:
+                    fallback_profile = self.config_manager.get_balance_profile(balance)
+                    fallback_percent = (
+                        float(fallback_profile.get("max_position_percent")) / 100.0
+                    )
+                    return balance * max(0.0, min(1.0, fallback_percent))
+            except Exception:
+                pass
+            # Last-resort safeguard.
             return balance * 0.20
 
     def _calculate_risk_based_margin(
@@ -385,48 +458,48 @@ class FuturesRiskManager:
         price: float,
     ) -> float:
         """
-        Расчет маржи через risk_usd / sl_distance (Уровень 3: Margin Budget).
+        Р Р°СЃС‡РµС‚ РјР°СЂР¶Рё С‡РµСЂРµР· risk_usd / sl_distance (РЈСЂРѕРІРµРЅСЊ 3: Margin Budget).
 
-        Формула:
+        Р¤РѕСЂРјСѓР»Р°:
         risk_usd = balance * risk_per_trade
         size_coins = risk_usd / sl_distance_pct
         margin_usd = (size_coins * price) / leverage
 
         Args:
-            balance: Текущий баланс
-            risk_per_trade: Риск на сделку в процентах (например, 0.012 = 1.2%)
-            sl_distance_pct: Расстояние до SL в процентах (например, 0.02 = 2%)
-            leverage: Плечо
-            price: Текущая цена
+            balance: РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ
+            risk_per_trade: Р РёСЃРє РЅР° СЃРґРµР»РєСѓ РІ РїСЂРѕС†РµРЅС‚Р°С… (РЅР°РїСЂРёРјРµСЂ, 0.012 = 1.2%)
+            sl_distance_pct: Р Р°СЃСЃС‚РѕСЏРЅРёРµ РґРѕ SL РІ РїСЂРѕС†РµРЅС‚Р°С… (РЅР°РїСЂРёРјРµСЂ, 0.02 = 2%)
+            leverage: РџР»РµС‡Рѕ
+            price: РўРµРєСѓС‰Р°СЏ С†РµРЅР°
 
         Returns:
-            Маржа в USD
+            РњР°СЂР¶Р° РІ USD
         """
         try:
             if sl_distance_pct <= 0 or leverage <= 0 or price <= 0:
                 logger.warning(
-                    f"⚠️ Risk-based margin: невалидные параметры "
+                    f"вљ пёЏ Risk-based margin: РЅРµРІР°Р»РёРґРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ "
                     f"(sl_distance={sl_distance_pct}, leverage={leverage}, price={price})"
                 )
                 return 0.0
 
-            # Рассчитываем риск в USD
+            # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј СЂРёСЃРє РІ USD
             risk_usd = balance * risk_per_trade
 
-            # Рассчитываем размер позиции в монетах через риск
-            # Если SL = 2%, то при убытке 2% мы потеряем risk_usd
-            # Значит: size_coins * price * sl_distance_pct = risk_usd
+            # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё РІ РјРѕРЅРµС‚Р°С… С‡РµСЂРµР· СЂРёСЃРє
+            # Р•СЃР»Рё SL = 2%, С‚Рѕ РїСЂРё СѓР±С‹С‚РєРµ 2% РјС‹ РїРѕС‚РµСЂСЏРµРј risk_usd
+            # Р—РЅР°С‡РёС‚: size_coins * price * sl_distance_pct = risk_usd
             # size_coins = risk_usd / (price * sl_distance_pct)
             size_coins = risk_usd / (price * sl_distance_pct)
 
-            # Рассчитываем номинальную стоимость
+            # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј РЅРѕРјРёРЅР°Р»СЊРЅСѓСЋ СЃС‚РѕРёРјРѕСЃС‚СЊ
             notional_usd = size_coins * price
 
-            # Рассчитываем маржу
+            # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј РјР°СЂР¶Сѓ
             margin_usd = notional_usd / leverage
 
             logger.debug(
-                f"📊 Risk-based Margin: risk_usd=${risk_usd:.2f}, "
+                f"рџ“Љ Risk-based Margin: risk_usd=${risk_usd:.2f}, "
                 f"sl_distance={sl_distance_pct*100:.2f}%, size_coins={size_coins:.6f}, "
                 f"notional=${notional_usd:.2f}, margin=${margin_usd:.2f}"
             )
@@ -434,25 +507,25 @@ class FuturesRiskManager:
             return margin_usd
 
         except Exception as e:
-            logger.warning(f"⚠️ Ошибка расчета risk_based_margin: {e}")
+            logger.warning(f"вљ пёЏ РћС€РёР±РєР° СЂР°СЃС‡РµС‚Р° risk_based_margin: {e}")
             return 0.0
 
     async def _check_drawdown_protection(self) -> bool:
-        """Проверяет drawdown protection через orchestrator"""
+        """РџСЂРѕРІРµСЂСЏРµС‚ drawdown protection С‡РµСЂРµР· orchestrator"""
         if self.orchestrator and hasattr(
             self.orchestrator, "_check_drawdown_protection"
         ):
             return await self.orchestrator._check_drawdown_protection()
-        return True  # Если orchestrator не доступен, разрешаем торговлю
+        return True  # Р•СЃР»Рё orchestrator РЅРµ РґРѕСЃС‚СѓРїРµРЅ, СЂР°Р·СЂРµС€Р°РµРј С‚РѕСЂРіРѕРІР»СЋ
 
     async def _check_emergency_stop_unlock(self):
-        """Проверяет emergency stop unlock через orchestrator"""
+        """РџСЂРѕРІРµСЂСЏРµС‚ emergency stop unlock С‡РµСЂРµР· orchestrator"""
         if self.orchestrator and hasattr(
             self.orchestrator, "_check_emergency_stop_unlock"
         ):
             return await self.orchestrator._check_emergency_stop_unlock()
 
-    # ✅ FIX: Circuit breaker методы для серии убытков
+    # вњ… FIX: Circuit breaker РјРµС‚РѕРґС‹ РґР»СЏ СЃРµСЂРёРё СѓР±С‹С‚РєРѕРІ
     def record_trade_result(
         self,
         symbol: str,
@@ -461,38 +534,38 @@ class FuturesRiskManager:
         error_msg: Optional[str] = None,
     ):
         """
-        Записывает результат сделки для circuit breaker.
-        Вызывать после закрытия каждой сделки.
+        Р—Р°РїРёСЃС‹РІР°РµС‚ СЂРµР·СѓР»СЊС‚Р°С‚ СЃРґРµР»РєРё РґР»СЏ circuit breaker.
+        Р’С‹Р·С‹РІР°С‚СЊ РїРѕСЃР»Рµ Р·Р°РєСЂС‹С‚РёСЏ РєР°Р¶РґРѕР№ СЃРґРµР»РєРё.
 
         Args:
-            symbol: Торговый символ
-            is_profit: True если прибыль, False если убыток
-            error_code: Код ошибки (например, "51169") - для фильтрации технических ошибок
-            error_msg: Сообщение об ошибке - для дополнительной проверки
+            symbol: РўРѕСЂРіРѕРІС‹Р№ СЃРёРјРІРѕР»
+            is_profit: True РµСЃР»Рё РїСЂРёР±С‹Р»СЊ, False РµСЃР»Рё СѓР±С‹С‚РѕРє
+            error_code: РљРѕРґ РѕС€РёР±РєРё (РЅР°РїСЂРёРјРµСЂ, "51169") - РґР»СЏ С„РёР»СЊС‚СЂР°С†РёРё С‚РµС…РЅРёС‡РµСЃРєРёС… РѕС€РёР±РѕРє
+            error_msg: РЎРѕРѕР±С‰РµРЅРёРµ РѕР± РѕС€РёР±РєРµ - РґР»СЏ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕР№ РїСЂРѕРІРµСЂРєРё
         """
-        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Не считаем технические ошибки (51169) как убытки
-        # Ошибка 51169 = "Order failed because you don't have any positions to reduce"
-        # Это техническая ошибка, а не убыток от рынка
+        # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: РќРµ СЃС‡РёС‚Р°РµРј С‚РµС…РЅРёС‡РµСЃРєРёРµ РѕС€РёР±РєРё (51169) РєР°Рє СѓР±С‹С‚РєРё
+        # РћС€РёР±РєР° 51169 = "Order failed because you don't have any positions to reduce"
+        # Р­С‚Рѕ С‚РµС…РЅРёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°, Р° РЅРµ СѓР±С‹С‚РѕРє РѕС‚ СЂС‹РЅРєР°
         if not is_profit and (
             error_code == "51169"
             or (error_msg and "don't have any positions" in error_msg.lower())
         ):
             logger.debug(
-                f"⚠️ Техническая ошибка {error_code} для {symbol} не считается убытком для PAIR_BLOCK"
+                f"вљ пёЏ РўРµС…РЅРёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° {error_code} РґР»СЏ {symbol} РЅРµ СЃС‡РёС‚Р°РµС‚СЃСЏ СѓР±С‹С‚РєРѕРј РґР»СЏ PAIR_BLOCK"
             )
-            return  # Не записываем как убыток
+            return  # РќРµ Р·Р°РїРёСЃС‹РІР°РµРј РєР°Рє СѓР±С‹С‚РѕРє
 
         if is_profit:
-            # Сбрасываем серию при прибыли
+            # РЎР±СЂР°СЃС‹РІР°РµРј СЃРµСЂРёСЋ РїСЂРё РїСЂРёР±С‹Р»Рё
             if symbol in self.pair_loss_streak:
                 old_streak = self.pair_loss_streak[symbol]
                 if old_streak > 0:
                     logger.info(
-                        f"PAIR_STREAK_RESET {symbol}: {old_streak} → 0 (profit)"
+                        f"PAIR_STREAK_RESET {symbol}: {old_streak} в†’ 0 (profit)"
                     )
             self.pair_loss_streak[symbol] = 0
         else:
-            # Увеличиваем серию при убытке
+            # РЈРІРµР»РёС‡РёРІР°РµРј СЃРµСЂРёСЋ РїСЂРё СѓР±С‹С‚РєРµ
             self.pair_loss_streak[symbol] = self.pair_loss_streak.get(symbol, 0) + 1
             streak = self.pair_loss_streak[symbol]
 
@@ -501,84 +574,84 @@ class FuturesRiskManager:
                     f"PAIR_STREAK {symbol} {streak}/{self._max_consecutive_losses}"
                 )
             else:
-                # Блокируем пару
+                # Р‘Р»РѕРєРёСЂСѓРµРј РїР°СЂСѓ
                 block_until = time.monotonic() + (self._block_duration_minutes * 60)
                 self.pair_block_until[symbol] = block_until
                 logger.critical(
                     f"PAIR_BLOCK {symbol} {streak}/{self._max_consecutive_losses} "
-                    f"→ blocked for {self._block_duration_minutes} min"
+                    f"в†’ blocked for {self._block_duration_minutes} min"
                 )
 
     def get_consecutive_losses(self, symbol: str) -> int:
-        """Получить количество последовательных убытков для символа."""
+        """РџРѕР»СѓС‡РёС‚СЊ РєРѕР»РёС‡РµСЃС‚РІРѕ РїРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅС‹С… СѓР±С‹С‚РєРѕРІ РґР»СЏ СЃРёРјРІРѕР»Р°."""
         return self.pair_loss_streak.get(symbol, 0)
 
     def is_symbol_blocked(self, symbol: str) -> bool:
-        """Проверяет, заблокирован ли символ из-за серии убытков."""
+        """РџСЂРѕРІРµСЂСЏРµС‚, Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅ Р»Рё СЃРёРјРІРѕР» РёР·-Р·Р° СЃРµСЂРёРё СѓР±С‹С‚РєРѕРІ."""
         if symbol not in self.pair_block_until:
             return False
 
         block_until = self.pair_block_until[symbol]
         if time.monotonic() >= block_until:
-            # Блокировка истекла - сбрасываем
+            # Р‘Р»РѕРєРёСЂРѕРІРєР° РёСЃС‚РµРєР»Р° - СЃР±СЂР°СЃС‹РІР°РµРј
             del self.pair_block_until[symbol]
             self.pair_loss_streak[symbol] = 0
             logger.info(f"PAIR_UNBLOCK {symbol}: block expired, streak reset")
             return False
 
-        # Блокировка активна
+        # Р‘Р»РѕРєРёСЂРѕРІРєР° Р°РєС‚РёРІРЅР°
         remaining = (block_until - time.monotonic()) / 60
         logger.debug(f"PAIR_BLOCKED {symbol}: {remaining:.1f} min remaining")
         return True
 
     async def _check_max_daily_loss(self, balance: float) -> bool:
         """
-        Проверка максимальной дневной потери.
+        РџСЂРѕРІРµСЂРєР° РјР°РєСЃРёРјР°Р»СЊРЅРѕР№ РґРЅРµРІРЅРѕР№ РїРѕС‚РµСЂРё.
 
         Args:
-            balance: Текущий баланс
+            balance: РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ
 
         Returns:
-            True если торговля разрешена, False если превышен лимит
+            True РµСЃР»Рё С‚РѕСЂРіРѕРІР»СЏ СЂР°Р·СЂРµС€РµРЅР°, False РµСЃР»Рё РїСЂРµРІС‹С€РµРЅ Р»РёРјРёС‚
         """
         try:
-            # Получаем текущую дату
+            # РџРѕР»СѓС‡Р°РµРј С‚РµРєСѓС‰СѓСЋ РґР°С‚Сѓ
             current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-            # Если дата изменилась, сбрасываем дневной PnL
+            # Р•СЃР»Рё РґР°С‚Р° РёР·РјРµРЅРёР»Р°СЃСЊ, СЃР±СЂР°СЃС‹РІР°РµРј РґРЅРµРІРЅРѕР№ PnL
             if self.daily_pnl_date != current_date:
                 logger.info(
-                    f"📅 Новый торговый день: {current_date}. "
-                    f"Сбрасываем дневной PnL (было: ${self.daily_pnl:.2f})"
+                    f"рџ“… РќРѕРІС‹Р№ С‚РѕСЂРіРѕРІС‹Р№ РґРµРЅСЊ: {current_date}. "
+                    f"РЎР±СЂР°СЃС‹РІР°РµРј РґРЅРµРІРЅРѕР№ PnL (Р±С‹Р»Рѕ: ${self.daily_pnl:.2f})"
                 )
                 self.daily_pnl = 0.0
                 self.daily_pnl_date = current_date
                 self.daily_trading_stopped = False
 
-            # Если торговля уже остановлена, проверяем не нужно ли разблокировать
+            # Р•СЃР»Рё С‚РѕСЂРіРѕРІР»СЏ СѓР¶Рµ РѕСЃС‚Р°РЅРѕРІР»РµРЅР°, РїСЂРѕРІРµСЂСЏРµРј РЅРµ РЅСѓР¶РЅРѕ Р»Рё СЂР°Р·Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ
             if self.daily_trading_stopped:
-                # Проверяем, не восстановился ли баланс
+                # РџСЂРѕРІРµСЂСЏРµРј, РЅРµ РІРѕСЃСЃС‚Р°РЅРѕРІРёР»СЃСЏ Р»Рё Р±Р°Р»Р°РЅСЃ
                 max_daily_loss_usd = balance * (self.max_daily_loss_percent / 100.0)
                 if self.daily_pnl >= -max_daily_loss_usd:
                     logger.info(
-                        f"✅ Дневной PnL восстановился: ${self.daily_pnl:.2f} >= "
-                        f"-${max_daily_loss_usd:.2f}. Возобновляем торговлю"
+                        f"вњ… Р”РЅРµРІРЅРѕР№ PnL РІРѕСЃСЃС‚Р°РЅРѕРІРёР»СЃСЏ: ${self.daily_pnl:.2f} >= "
+                        f"-${max_daily_loss_usd:.2f}. Р’РѕР·РѕР±РЅРѕРІР»СЏРµРј С‚РѕСЂРіРѕРІР»СЋ"
                     )
                     self.daily_trading_stopped = False
                 else:
                     logger.warning(
-                        f"⛔ Торговля остановлена из-за превышения max_daily_loss: "
-                        f"PnL=${self.daily_pnl:.2f}, лимит=-${max_daily_loss_usd:.2f} "
-                        f"({self.max_daily_loss_percent}% от баланса ${balance:.2f})"
+                        f"в›” РўРѕСЂРіРѕРІР»СЏ РѕСЃС‚Р°РЅРѕРІР»РµРЅР° РёР·-Р·Р° РїСЂРµРІС‹С€РµРЅРёСЏ max_daily_loss: "
+                        f"PnL=${self.daily_pnl:.2f}, Р»РёРјРёС‚=-${max_daily_loss_usd:.2f} "
+                        f"({self.max_daily_loss_percent}% РѕС‚ Р±Р°Р»Р°РЅСЃР° ${balance:.2f})"
                     )
                     return False
 
-            # Проверяем текущий дневной PnL
+            # РџСЂРѕРІРµСЂСЏРµРј С‚РµРєСѓС‰РёР№ РґРЅРµРІРЅРѕР№ PnL
             max_daily_loss_usd = balance * (self.max_daily_loss_percent / 100.0)
             if self.daily_pnl <= -max_daily_loss_usd:
                 logger.error(
-                    f"❌ ПРЕВЫШЕН MAX_DAILY_LOSS: PnL=${self.daily_pnl:.2f} <= "
-                    f"-${max_daily_loss_usd:.2f} ({self.max_daily_loss_percent}% от баланса ${balance:.2f})"
+                    f"вќЊ РџР Р•Р’Р«РЁР•Рќ MAX_DAILY_LOSS: PnL=${self.daily_pnl:.2f} <= "
+                    f"-${max_daily_loss_usd:.2f} ({self.max_daily_loss_percent}% РѕС‚ Р±Р°Р»Р°РЅСЃР° ${balance:.2f})"
                 )
                 self.daily_trading_stopped = True
                 return False
@@ -587,44 +660,44 @@ class FuturesRiskManager:
 
         except Exception as e:
             logger.error(
-                f"❌ Ошибка проверки max_daily_loss: {e}",
+                f"вќЊ РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё max_daily_loss: {e}",
                 exc_info=True,
             )
-            # При ошибке разрешаем торговлю (безопаснее)
+            # РџСЂРё РѕС€РёР±РєРµ СЂР°Р·СЂРµС€Р°РµРј С‚РѕСЂРіРѕРІР»СЋ (Р±РµР·РѕРїР°СЃРЅРµРµ)
             return True
 
     def record_daily_pnl(self, pnl: float):
         """
-        Записывает PnL сделки в дневной PnL.
+        Р—Р°РїРёСЃС‹РІР°РµС‚ PnL СЃРґРµР»РєРё РІ РґРЅРµРІРЅРѕР№ PnL.
 
         Args:
-            pnl: PnL сделки (может быть отрицательным)
+            pnl: PnL СЃРґРµР»РєРё (РјРѕР¶РµС‚ Р±С‹С‚СЊ РѕС‚СЂРёС†Р°С‚РµР»СЊРЅС‹Рј)
         """
         try:
-            # Получаем текущую дату
+            # РџРѕР»СѓС‡Р°РµРј С‚РµРєСѓС‰СѓСЋ РґР°С‚Сѓ
             current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-            # Если дата изменилась, сбрасываем дневной PnL
+            # Р•СЃР»Рё РґР°С‚Р° РёР·РјРµРЅРёР»Р°СЃСЊ, СЃР±СЂР°СЃС‹РІР°РµРј РґРЅРµРІРЅРѕР№ PnL
             if self.daily_pnl_date != current_date:
                 logger.info(
-                    f"📅 Новый торговый день: {current_date}. "
-                    f"Сбрасываем дневной PnL (было: ${self.daily_pnl:.2f})"
+                    f"рџ“… РќРѕРІС‹Р№ С‚РѕСЂРіРѕРІС‹Р№ РґРµРЅСЊ: {current_date}. "
+                    f"РЎР±СЂР°СЃС‹РІР°РµРј РґРЅРµРІРЅРѕР№ PnL (Р±С‹Р»Рѕ: ${self.daily_pnl:.2f})"
                 )
                 self.daily_pnl = 0.0
                 self.daily_pnl_date = current_date
                 self.daily_trading_stopped = False
 
-            # Добавляем PnL сделки
+            # Р”РѕР±Р°РІР»СЏРµРј PnL СЃРґРµР»РєРё
             self.daily_pnl += pnl
 
             logger.debug(
-                f"📊 Дневной PnL обновлен: ${self.daily_pnl:.2f} "
-                f"(добавлено: ${pnl:.2f})"
+                f"рџ“Љ Р”РЅРµРІРЅРѕР№ PnL РѕР±РЅРѕРІР»РµРЅ: ${self.daily_pnl:.2f} "
+                f"(РґРѕР±Р°РІР»РµРЅРѕ: ${pnl:.2f})"
             )
 
         except Exception as e:
             logger.error(
-                f"❌ Ошибка записи дневного PnL: {e}",
+                f"вќЊ РћС€РёР±РєР° Р·Р°РїРёСЃРё РґРЅРµРІРЅРѕРіРѕ PnL: {e}",
                 exc_info=True,
             )
 
@@ -632,28 +705,28 @@ class FuturesRiskManager:
         self,
         balance: Optional[
             float
-        ] = None,  # ✅ НОВОЕ: Опциональный баланс (читаем из DataRegistry если не передан)
+        ] = None,  # вњ… РќРћР’РћР•: РћРїС†РёРѕРЅР°Р»СЊРЅС‹Р№ Р±Р°Р»Р°РЅСЃ (С‡РёС‚Р°РµРј РёР· DataRegistry РµСЃР»Рё РЅРµ РїРµСЂРµРґР°РЅ)
         price: float = 0.0,
         signal: Optional[Dict[str, Any]] = None,
         signal_generator=None,
     ) -> float:
         """
-        Рассчитывает размер позиции с учетом Balance Profiles и режима рынка.
-        ✅ РЕФАКТОРИНГ: Вся логика перенесена из orchestrator._calculate_position_size
-        ✅ НОВОЕ: Баланс читается из DataRegistry, если не передан
+        Р Р°СЃСЃС‡РёС‚С‹РІР°РµС‚ СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё СЃ СѓС‡РµС‚РѕРј Balance Profiles Рё СЂРµР¶РёРјР° СЂС‹РЅРєР°.
+        вњ… Р Р•Р¤РђРљРўРћР РРќР“: Р’СЃСЏ Р»РѕРіРёРєР° РїРµСЂРµРЅРµСЃРµРЅР° РёР· orchestrator._calculate_position_size
+        вњ… РќРћР’РћР•: Р‘Р°Р»Р°РЅСЃ С‡РёС‚Р°РµС‚СЃСЏ РёР· DataRegistry, РµСЃР»Рё РЅРµ РїРµСЂРµРґР°РЅ
 
         Args:
-            balance: Текущий баланс (опционально, читается из DataRegistry если не передан)
-            price: Текущая цена
-            signal: Торговый сигнал
-            signal_generator: Signal generator для определения режима
+            balance: РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ, С‡РёС‚Р°РµС‚СЃСЏ РёР· DataRegistry РµСЃР»Рё РЅРµ РїРµСЂРµРґР°РЅ)
+            price: РўРµРєСѓС‰Р°СЏ С†РµРЅР°
+            signal: РўРѕСЂРіРѕРІС‹Р№ СЃРёРіРЅР°Р»
+            signal_generator: Signal generator РґР»СЏ РѕРїСЂРµРґРµР»РµРЅРёСЏ СЂРµР¶РёРјР°
 
         Returns:
-            float: Размер позиции в монетах (не USD!)
+            float: Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё РІ РјРѕРЅРµС‚Р°С… (РЅРµ USD!)
         """
         try:
-            # ✅ КРИТИЧЕСКОЕ: Проверка max_daily_loss перед расчетом размера
-            # Получаем баланс для проверки (если не передан, получим позже)
+            # вњ… РљР РРўРР§Р•РЎРљРћР•: РџСЂРѕРІРµСЂРєР° max_daily_loss РїРµСЂРµРґ СЂР°СЃС‡РµС‚РѕРј СЂР°Р·РјРµСЂР°
+            # РџРѕР»СѓС‡Р°РµРј Р±Р°Р»Р°РЅСЃ РґР»СЏ РїСЂРѕРІРµСЂРєРё (РµСЃР»Рё РЅРµ РїРµСЂРµРґР°РЅ, РїРѕР»СѓС‡РёРј РїРѕР·Р¶Рµ)
             check_balance = balance
             if check_balance is None and self.data_registry:
                 try:
@@ -666,12 +739,12 @@ class FuturesRiskManager:
             if check_balance and check_balance > 0:
                 if not await self._check_max_daily_loss(check_balance):
                     logger.warning(
-                        f"⛔ Торговля остановлена из-за превышения max_daily_loss. "
-                        f"Размер позиции не рассчитывается."
+                        f"в›” РўРѕСЂРіРѕРІР»СЏ РѕСЃС‚Р°РЅРѕРІР»РµРЅР° РёР·-Р·Р° РїСЂРµРІС‹С€РµРЅРёСЏ max_daily_loss. "
+                        f"Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё РЅРµ СЂР°СЃСЃС‡РёС‚С‹РІР°РµС‚СЃСЏ."
                     )
                     return 0.0
 
-            # ✅ НОВОЕ: Получаем баланс из DataRegistry, если не передан
+            # вњ… РќРћР’РћР•: РџРѕР»СѓС‡Р°РµРј Р±Р°Р»Р°РЅСЃ РёР· DataRegistry, РµСЃР»Рё РЅРµ РїРµСЂРµРґР°РЅ
             if balance is None:
                 if self.data_registry:
                     try:
@@ -679,27 +752,29 @@ class FuturesRiskManager:
                         if balance_data:
                             balance = balance_data.get("balance")
                             logger.debug(
-                                f"✅ RiskManager: Баланс получен из DataRegistry: ${balance:.2f}"
+                                f"вњ… RiskManager: Р‘Р°Р»Р°РЅСЃ РїРѕР»СѓС‡РµРЅ РёР· DataRegistry: ${balance:.2f}"
                             )
                     except Exception as e:
                         logger.warning(
-                            f"⚠️ Ошибка получения баланса из DataRegistry: {e}"
+                            f"вљ пёЏ РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ Р±Р°Р»Р°РЅСЃР° РёР· DataRegistry: {e}"
                         )
 
-                # Fallback: если DataRegistry не доступен или нет данных
+                # Fallback: РµСЃР»Рё DataRegistry РЅРµ РґРѕСЃС‚СѓРїРµРЅ РёР»Рё РЅРµС‚ РґР°РЅРЅС‹С…
                 if balance is None:
                     if self.client:
                         try:
                             balance = await self.client.get_balance()
                             logger.debug(
-                                f"✅ RiskManager: Баланс получен из API: ${balance:.2f}"
+                                f"вњ… RiskManager: Р‘Р°Р»Р°РЅСЃ РїРѕР»СѓС‡РµРЅ РёР· API: ${balance:.2f}"
                             )
                         except Exception as e:
-                            logger.error(f"❌ Ошибка получения баланса из API: {e}")
+                            logger.error(
+                                f"вќЊ РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ Р±Р°Р»Р°РЅСЃР° РёР· API: {e}"
+                            )
                             return 0.0
                     else:
                         logger.error(
-                            "❌ RiskManager: Нет доступа к балансу (нет data_registry и client)"
+                            "вќЊ RiskManager: РќРµС‚ РґРѕСЃС‚СѓРїР° Рє Р±Р°Р»Р°РЅСЃСѓ (РЅРµС‚ data_registry Рё client)"
                         )
                         return 0.0
 
@@ -727,15 +802,13 @@ class FuturesRiskManager:
 
             balance_profile = self.config_manager.get_balance_profile(balance)
 
-            # 🔥 АДАПТИВНЫЙ РАСЧЁТ (11.02.2026): маржа = balance × max_position_percent%
-            # Истинная адаптивность — размер позиции всегда пропорционален текущему балансу.
-            # Профиль (micro/small/medium/large) задаёт только процент и защитные лимиты.
-            # При росте баланса 350$ → 1000$ → маржа автоматически растёт (% × баланс).
-            is_progressive = (
-                False  # Прогрессивная интерполяция заменена процентным расчётом
-            )
+            # рџ”Ґ РђР”РђРџРўРР’РќР«Р™ Р РђРЎР§РЃРў (11.02.2026): РјР°СЂР¶Р° = balance Г— max_position_percent%
+            # РСЃС‚РёРЅРЅР°СЏ Р°РґР°РїС‚РёРІРЅРѕСЃС‚СЊ вЂ” СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё РІСЃРµРіРґР° РїСЂРѕРїРѕСЂС†РёРѕРЅР°Р»РµРЅ С‚РµРєСѓС‰РµРјСѓ Р±Р°Р»Р°РЅСЃСѓ.
+            # РџСЂРѕС„РёР»СЊ (micro/small/medium/large) Р·Р°РґР°С‘С‚ С‚РѕР»СЊРєРѕ РїСЂРѕС†РµРЅС‚ Рё Р·Р°С‰РёС‚РЅС‹Рµ Р»РёРјРёС‚С‹.
+            # РџСЂРё СЂРѕСЃС‚Рµ Р±Р°Р»Р°РЅСЃР° 350$ в†’ 1000$ в†’ РјР°СЂР¶Р° Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё СЂР°СЃС‚С‘С‚ (% Г— Р±Р°Р»Р°РЅСЃ).
+            is_progressive = False  # РџСЂРѕРіСЂРµСЃСЃРёРІРЅР°СЏ РёРЅС‚РµСЂРїРѕР»СЏС†РёСЏ Р·Р°РјРµРЅРµРЅР° РїСЂРѕС†РµРЅС‚РЅС‹Рј СЂР°СЃС‡С‘С‚РѕРј
 
-            # Получаем leverage заранее (нужен для расчёта номинала)
+            # РџРѕР»СѓС‡Р°РµРј leverage Р·Р°СЂР°РЅРµРµ (РЅСѓР¶РµРЅ РґР»СЏ СЂР°СЃС‡С‘С‚Р° РЅРѕРјРёРЅР°Р»Р°)
             _leverage_for_size = None
             if signal:
                 _leverage_for_size = signal.get("leverage")
@@ -745,21 +818,23 @@ class FuturesRiskManager:
                 _leverage_for_size = 3  # fallback
 
             max_pct = balance_profile.get("max_position_percent", 15.0)
-            margin_target_usd = balance * max_pct / 100.0  # целевая МАРЖА в USD
+            margin_target_usd = (
+                balance * max_pct / 100.0
+            )  # С†РµР»РµРІР°СЏ РњРђР Р–Рђ РІ USD
             base_usd_size = (
                 margin_target_usd * _leverage_for_size
-            )  # номинальная стоимость
+            )  # РЅРѕРјРёРЅР°Р»СЊРЅР°СЏ СЃС‚РѕРёРјРѕСЃС‚СЊ
 
             logger.info(
-                f"📊 Адаптивный размер [{balance_profile.get('name', '?')}]: "
-                f"${balance:.2f} × {max_pct}% = ${margin_target_usd:.2f} маржа "
-                f"× {_leverage_for_size}x = ${base_usd_size:.2f} номинал"
+                f"рџ“Љ РђРґР°РїС‚РёРІРЅС‹Р№ СЂР°Р·РјРµСЂ [{balance_profile.get('name', '?')}]: "
+                f"${balance:.2f} Г— {max_pct}% = ${margin_target_usd:.2f} РјР°СЂР¶Р° "
+                f"Г— {_leverage_for_size}x = ${base_usd_size:.2f} РЅРѕРјРёРЅР°Р»"
             )
 
             min_usd_size = balance_profile["min_position_usd"]
             max_usd_size = balance_profile["max_position_usd"]
 
-            # ✅ ВАРИАНТ B: Применить per-symbol множитель к базовому размеру
+            # вњ… Р’РђР РРђРќРў B: РџСЂРёРјРµРЅРёС‚СЊ per-symbol РјРЅРѕР¶РёС‚РµР»СЊ Рє Р±Р°Р·РѕРІРѕРјСѓ СЂР°Р·РјРµСЂСѓ
             if symbol:
                 symbol_profile = self.symbol_profiles.get(symbol, {})
                 if symbol_profile:
@@ -774,27 +849,27 @@ class FuturesRiskManager:
                         original_size = base_usd_size
                         if position_multiplier != 1.0:
                             base_usd_size = base_usd_size * float(position_multiplier)
-                            # 🔇 ИЗМЕНЕНО (2026-02-08): INFO → DEBUG для снижения объема логов
+                            # рџ”‡ РР—РњР•РќР•РќРћ (2026-02-08): INFO в†’ DEBUG РґР»СЏ СЃРЅРёР¶РµРЅРёСЏ РѕР±СЉРµРјР° Р»РѕРіРѕРІ
                             logger.debug(
-                                f"📊 Per-symbol multiplier для {symbol}: {position_multiplier}x "
-                                f"→ размер ${original_size:.2f} → ${base_usd_size:.2f}"
+                                f"рџ“Љ Per-symbol multiplier РґР»СЏ {symbol}: {position_multiplier}x "
+                                f"в†’ СЂР°Р·РјРµСЂ ${original_size:.2f} в†’ ${base_usd_size:.2f}"
                             )
                         # else:
                         #     logger.debug(
-                        #         f"📊 Per-symbol multiplier для {symbol}: {position_multiplier}x "
-                        #         f"→ размер ${original_size:.2f} (без изменений)"
+                        #         f"рџ“Љ Per-symbol multiplier РґР»СЏ {symbol}: {position_multiplier}x "
+                        #         f"в†’ СЂР°Р·РјРµСЂ ${original_size:.2f} (Р±РµР· РёР·РјРµРЅРµРЅРёР№)"
                         #     )
                     # else:
                     #     logger.debug(
-                    #         f"📊 Per-symbol multiplier для {symbol}: не найден "
-                    #         f"(используем базовый размер ${base_usd_size:.2f})"
+                    #         f"рџ“Љ Per-symbol multiplier РґР»СЏ {symbol}: РЅРµ РЅР°Р№РґРµРЅ "
+                    #         f"(РёСЃРїРѕР»СЊР·СѓРµРј Р±Р°Р·РѕРІС‹Р№ СЂР°Р·РјРµСЂ ${base_usd_size:.2f})"
                     #     )
                 # else:
                 #     logger.debug(
-                #         f"⚠️ symbol_profile не найден для {symbol} в symbol_profiles"
+                #         f"вљ пёЏ symbol_profile РЅРµ РЅР°Р№РґРµРЅ РґР»СЏ {symbol} РІ symbol_profiles"
                 #     )
 
-            # Применяем position overrides (если указаны, они имеют приоритет для точной настройки)
+            # РџСЂРёРјРµРЅСЏРµРј position overrides (РµСЃР»Рё СѓРєР°Р·Р°РЅС‹, РѕРЅРё РёРјРµСЋС‚ РїСЂРёРѕСЂРёС‚РµС‚ РґР»СЏ С‚РѕС‡РЅРѕР№ РЅР°СЃС‚СЂРѕР№РєРё)
             position_overrides: Dict[str, Any] = {}
             if symbol:
                 regime_profile = self._get_symbol_regime_profile(symbol, symbol_regime)
@@ -802,65 +877,65 @@ class FuturesRiskManager:
                     regime_profile.get("position", {})
                 )
 
-            # ⚠️ ВАЖНО: position overrides из symbol_profiles могут быть устаревшими
-            # Они применяются только если явно указаны и имеют приоритет над multiplier
-            # Для новой системы рекомендуется использовать только position_multiplier
+            # вљ пёЏ Р’РђР–РќРћ: position overrides РёР· symbol_profiles РјРѕРіСѓС‚ Р±С‹С‚СЊ СѓСЃС‚Р°СЂРµРІС€РёРјРё
+            # РћРЅРё РїСЂРёРјРµРЅСЏСЋС‚СЃСЏ С‚РѕР»СЊРєРѕ РµСЃР»Рё СЏРІРЅРѕ СѓРєР°Р·Р°РЅС‹ Рё РёРјРµСЋС‚ РїСЂРёРѕСЂРёС‚РµС‚ РЅР°Рґ multiplier
+            # Р”Р»СЏ РЅРѕРІРѕР№ СЃРёСЃС‚РµРјС‹ СЂРµРєРѕРјРµРЅРґСѓРµС‚СЃСЏ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ С‚РѕР»СЊРєРѕ position_multiplier
             if position_overrides.get("base_position_usd") is not None:
-                # ✅ ИСПРАВЛЕНО: Игнорируем override если он меньше базового размера
+                # вњ… РРЎРџР РђР’Р›Р•РќРћ: РРіРЅРѕСЂРёСЂСѓРµРј override РµСЃР»Рё РѕРЅ РјРµРЅСЊС€Рµ Р±Р°Р·РѕРІРѕРіРѕ СЂР°Р·РјРµСЂР°
                 override_size = float(position_overrides["base_position_usd"])
                 if override_size < base_usd_size:
                     logger.debug(
-                        f"⚠️ Игнорируем position override для {symbol}: "
-                        f"${override_size:.2f} < базовый ${base_usd_size:.2f} (из balance_profile)"
+                        f"вљ пёЏ РРіРЅРѕСЂРёСЂСѓРµРј position override РґР»СЏ {symbol}: "
+                        f"${override_size:.2f} < Р±Р°Р·РѕРІС‹Р№ ${base_usd_size:.2f} (РёР· balance_profile)"
                     )
                 elif abs(override_size - base_usd_size) / base_usd_size > 0.5:
                     logger.debug(
-                        f"⚠️ Игнорируем устаревший position override для {symbol}: "
-                        f"${override_size:.2f} (используем multiplier: ${base_usd_size:.2f})"
+                        f"вљ пёЏ РРіРЅРѕСЂРёСЂСѓРµРј СѓСЃС‚Р°СЂРµРІС€РёР№ position override РґР»СЏ {symbol}: "
+                        f"${override_size:.2f} (РёСЃРїРѕР»СЊР·СѓРµРј multiplier: ${base_usd_size:.2f})"
                     )
                 else:
                     base_usd_size = override_size
                     logger.info(
-                        f"📊 Используем position override для {symbol}: ${base_usd_size:.2f} (увеличен с базового)"
+                        f"рџ“Љ РСЃРїРѕР»СЊР·СѓРµРј position override РґР»СЏ {symbol}: ${base_usd_size:.2f} (СѓРІРµР»РёС‡РµРЅ СЃ Р±Р°Р·РѕРІРѕРіРѕ)"
                     )
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: min/max из symbol_profiles не должны уменьшать значения из balance_profile
+            # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: min/max РёР· symbol_profiles РЅРµ РґРѕР»Р¶РЅС‹ СѓРјРµРЅСЊС€Р°С‚СЊ Р·РЅР°С‡РµРЅРёСЏ РёР· balance_profile
             if position_overrides.get("min_position_usd") is not None:
                 symbol_min = float(position_overrides["min_position_usd"])
                 balance_min = min_usd_size
                 if symbol_min > min_usd_size:
                     min_usd_size = symbol_min
                     logger.debug(
-                        f"📊 Min position size из symbol_profiles (${symbol_min:.2f}) больше "
-                        f"balance_profile (${balance_min:.2f}), используем ${symbol_min:.2f}"
+                        f"рџ“Љ Min position size РёР· symbol_profiles (${symbol_min:.2f}) Р±РѕР»СЊС€Рµ "
+                        f"balance_profile (${balance_min:.2f}), РёСЃРїРѕР»СЊР·СѓРµРј ${symbol_min:.2f}"
                     )
                 else:
                     logger.debug(
-                        f"📊 Min position size из symbol_profiles (${symbol_min:.2f}) меньше или равно "
-                        f"balance_profile (${balance_min:.2f}), игнорируем (используем ${balance_min:.2f})"
+                        f"рџ“Љ Min position size РёР· symbol_profiles (${symbol_min:.2f}) РјРµРЅСЊС€Рµ РёР»Рё СЂР°РІРЅРѕ "
+                        f"balance_profile (${balance_min:.2f}), РёРіРЅРѕСЂРёСЂСѓРµРј (РёСЃРїРѕР»СЊР·СѓРµРј ${balance_min:.2f})"
                     )
 
             if position_overrides.get("max_position_usd") is not None:
                 symbol_max = float(position_overrides["max_position_usd"])
                 balance_max = max_usd_size
 
-                # 🔴 BUG #28 FIX: используем min(per_symbol, global) и логируем конфликт
+                # рџ”ґ BUG #28 FIX: РёСЃРїРѕР»СЊР·СѓРµРј min(per_symbol, global) Рё Р»РѕРіРёСЂСѓРµРј РєРѕРЅС„Р»РёРєС‚
                 if symbol_max < balance_max:
                     logger.info(
-                        f"⚠️ max_position_usd per-symbol (${symbol_max:.2f}) < global (${balance_max:.2f}), используем min=${symbol_max:.2f}"
+                        f"вљ пёЏ max_position_usd per-symbol (${symbol_max:.2f}) < global (${balance_max:.2f}), РёСЃРїРѕР»СЊР·СѓРµРј min=${symbol_max:.2f}"
                     )
                     max_usd_size = symbol_max
                 else:
                     max_usd_size = balance_max
                     logger.debug(
-                        f"📊 max_position_usd per-symbol (${symbol_max:.2f}) >= global (${balance_max:.2f}), оставляем global ${balance_max:.2f}"
+                        f"рџ“Љ max_position_usd per-symbol (${symbol_max:.2f}) >= global (${balance_max:.2f}), РѕСЃС‚Р°РІР»СЏРµРј global ${balance_max:.2f}"
                     )
 
                 if max_usd_size < min_usd_size:
                     logger.warning(
-                        f"⚠️ Конфликт лимитов: max_position_usd (${max_usd_size:.2f}) < "
-                        f"min_position_usd (${min_usd_size:.2f}) для {symbol}. "
-                        f"Используем max_position_usd = min_position_usd (${min_usd_size:.2f})."
+                        f"вљ пёЏ РљРѕРЅС„Р»РёРєС‚ Р»РёРјРёС‚РѕРІ: max_position_usd (${max_usd_size:.2f}) < "
+                        f"min_position_usd (${min_usd_size:.2f}) РґР»СЏ {symbol}. "
+                        f"РСЃРїРѕР»СЊР·СѓРµРј max_position_usd = min_position_usd (${min_usd_size:.2f})."
                     )
                     max_usd_size = min_usd_size
 
@@ -869,33 +944,33 @@ class FuturesRiskManager:
                 if max_pct is not None:
                     balance_profile["max_position_percent"] = float(max_pct)
 
-            # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
+            # вњ… РњРћР”Р•Р РќРР—РђР¦РРЇ: РЈР±РёСЂР°РµРј fallback Р·РЅР°С‡РµРЅРёСЏ, С‚СЂРµР±СѓРµРј РёР· РєРѕРЅС„РёРіР°
             if min_usd_size is None or min_usd_size <= 0:
                 logger.error(
-                    f"❌ min_position_usd не указан в конфиге для профиля {balance_profile.get('name', 'unknown')}! "
-                    f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {balance_profile.get('name', 'unknown')} -> min_position_usd"
+                    f"вќЊ min_position_usd РЅРµ СѓРєР°Р·Р°РЅ РІ РєРѕРЅС„РёРіРµ РґР»СЏ РїСЂРѕС„РёР»СЏ {balance_profile.get('name', 'unknown')}! "
+                    f"РџСЂРѕРІРµСЂСЊС‚Рµ config_futures.yaml -> scalping -> balance_profiles -> {balance_profile.get('name', 'unknown')} -> min_position_usd"
                 )
                 raise ValueError(
-                    f"min_position_usd должен быть указан в конфиге для профиля {balance_profile.get('name', 'unknown')}"
+                    f"min_position_usd РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ СѓРєР°Р·Р°РЅ РІ РєРѕРЅС„РёРіРµ РґР»СЏ РїСЂРѕС„РёР»СЏ {balance_profile.get('name', 'unknown')}"
                 )
             if max_usd_size is None or max_usd_size <= 0:
                 logger.error(
-                    f"❌ max_position_usd не указан в конфиге для профиля {balance_profile.get('name', 'unknown')}! "
-                    f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {balance_profile.get('name', 'unknown')} -> max_position_usd"
+                    f"вќЊ max_position_usd РЅРµ СѓРєР°Р·Р°РЅ РІ РєРѕРЅС„РёРіРµ РґР»СЏ РїСЂРѕС„РёР»СЏ {balance_profile.get('name', 'unknown')}! "
+                    f"РџСЂРѕРІРµСЂСЊС‚Рµ config_futures.yaml -> scalping -> balance_profiles -> {balance_profile.get('name', 'unknown')} -> max_position_usd"
                 )
                 raise ValueError(
-                    f"max_position_usd должен быть указан в конфиге для профиля {balance_profile.get('name', 'unknown')}"
+                    f"max_position_usd РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ СѓРєР°Р·Р°РЅ РІ РєРѕРЅС„РёРіРµ РґР»СЏ РїСЂРѕС„РёР»СЏ {balance_profile.get('name', 'unknown')}"
                 )
 
-            # ✅ МОДЕРНИЗАЦИЯ: Убираем fallback значения, требуем из конфига
+            # вњ… РњРћР”Р•Р РќРР—РђР¦РРЇ: РЈР±РёСЂР°РµРј fallback Р·РЅР°С‡РµРЅРёСЏ, С‚СЂРµР±СѓРµРј РёР· РєРѕРЅС„РёРіР°
             profile_max_positions = balance_profile.get("max_open_positions")
             if profile_max_positions is None or profile_max_positions <= 0:
                 logger.error(
-                    f"❌ max_open_positions не указан в конфиге для профиля {balance_profile.get('name', 'unknown')}! "
-                    f"Проверьте config_futures.yaml -> scalping -> balance_profiles -> {balance_profile.get('name', 'unknown')} -> max_open_positions"
+                    f"вќЊ max_open_positions РЅРµ СѓРєР°Р·Р°РЅ РІ РєРѕРЅС„РёРіРµ РґР»СЏ РїСЂРѕС„РёР»СЏ {balance_profile.get('name', 'unknown')}! "
+                    f"РџСЂРѕРІРµСЂСЊС‚Рµ config_futures.yaml -> scalping -> balance_profiles -> {balance_profile.get('name', 'unknown')} -> max_open_positions"
                 )
                 raise ValueError(
-                    f"max_open_positions должен быть указан в конфиге для профиля {balance_profile.get('name', 'unknown')}"
+                    f"max_open_positions РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ СѓРєР°Р·Р°РЅ РІ РєРѕРЅС„РёРіРµ РґР»СЏ РїСЂРѕС„РёР»СЏ {balance_profile.get('name', 'unknown')}"
                 )
 
             if position_overrides.get("max_open_positions") is not None:
@@ -912,27 +987,27 @@ class FuturesRiskManager:
                     and self.max_size_limiter.max_positions != allowed_positions
                 ):
                     logger.debug(
-                        f"🔧 MaxSizeLimiter: обновляем max_positions {self.max_size_limiter.max_positions} → {allowed_positions}"
+                        f"рџ”§ MaxSizeLimiter: РѕР±РЅРѕРІР»СЏРµРј max_positions {self.max_size_limiter.max_positions} в†’ {allowed_positions}"
                     )
                     self.max_size_limiter.max_positions = allowed_positions
                 if self.max_size_limiter:
                     max_total_size = max_usd_size * allowed_positions
                     if self.max_size_limiter.max_total_size_usd != max_total_size:
                         logger.debug(
-                            f"🔧 MaxSizeLimiter: обновляем max_total_size_usd {self.max_size_limiter.max_total_size_usd:.2f} → {max_total_size:.2f}"
+                            f"рџ”§ MaxSizeLimiter: РѕР±РЅРѕРІР»СЏРµРј max_total_size_usd {self.max_size_limiter.max_total_size_usd:.2f} в†’ {max_total_size:.2f}"
                         )
                         self.max_size_limiter.max_total_size_usd = max_total_size
                     if self.max_size_limiter.max_single_size_usd != max_usd_size:
                         logger.debug(
-                            f"🔧 MaxSizeLimiter: обновляем max_single_size_usd {self.max_size_limiter.max_single_size_usd:.2f} → {max_usd_size:.2f}"
+                            f"рџ”§ MaxSizeLimiter: РѕР±РЅРѕРІР»СЏРµРј max_single_size_usd {self.max_size_limiter.max_single_size_usd:.2f} в†’ {max_usd_size:.2f}"
                         )
                         self.max_size_limiter.max_single_size_usd = max_usd_size
             else:
                 logger.error(
-                    f"❌ max_open_positions не указан или равен 0 для профиля {balance_profile.get('name', 'unknown')}!"
+                    f"вќЊ max_open_positions РЅРµ СѓРєР°Р·Р°РЅ РёР»Рё СЂР°РІРµРЅ 0 РґР»СЏ РїСЂРѕС„РёР»СЏ {balance_profile.get('name', 'unknown')}!"
                 )
                 raise ValueError(
-                    f"max_open_positions должен быть указан и > 0 в конфиге для профиля {balance_profile.get('name', 'unknown')}"
+                    f"max_open_positions РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ СѓРєР°Р·Р°РЅ Рё > 0 РІ РєРѕРЅС„РёРіРµ РґР»СЏ РїСЂРѕС„РёР»СЏ {balance_profile.get('name', 'unknown')}"
                 )
 
             if (
@@ -952,81 +1027,85 @@ class FuturesRiskManager:
                         multiplier = regime_params.get("position_size_multiplier")
                         if multiplier is not None:
                             base_usd_size *= multiplier
-                            logger.debug(f"Режим {regime_key}: multiplier={multiplier}")
+                            logger.debug(
+                                f"Р РµР¶РёРј {regime_key}: multiplier={multiplier}"
+                            )
                 except Exception as e:
-                    logger.warning(f"Ошибка адаптации под режим: {e}")
+                    logger.warning(
+                        f"РћС€РёР±РєР° Р°РґР°РїС‚Р°С†РёРё РїРѕРґ СЂРµР¶РёРј: {e}"
+                    )
 
             has_conflict = signal.get("has_conflict", False)
             signal_strength = signal.get("strength", 0.5)
 
-            # ✅ МОДЕРНИЗАЦИЯ: Получаем адаптивные параметры риска с учетом режима и баланса
+            # вњ… РњРћР”Р•Р РќРР—РђР¦РРЇ: РџРѕР»СѓС‡Р°РµРј Р°РґР°РїС‚РёРІРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ СЂРёСЃРєР° СЃ СѓС‡РµС‚РѕРј СЂРµР¶РёРјР° Рё Р±Р°Р»Р°РЅСЃР°
             adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
                 balance, symbol_regime, symbol, signal_generator=signal_generator
             )
             strength_multipliers = adaptive_risk_params.get("strength_multipliers", {})
             strength_thresholds = adaptive_risk_params.get("strength_thresholds", {})
 
-            # ✅ МОДЕРНИЗАЦИЯ: Используем адаптивные strength_multipliers из конфига
+            # вњ… РњРћР”Р•Р РќРР—РђР¦РРЇ: РСЃРїРѕР»СЊР·СѓРµРј Р°РґР°РїС‚РёРІРЅС‹Рµ strength_multipliers РёР· РєРѕРЅС„РёРіР°
             if has_conflict:
                 strength_multiplier = strength_multipliers.get("conflict", 0.5)
                 logger.debug(
-                    f"⚡ Конфликт RSI/EMA: уменьшенный размер для быстрого скальпа "
+                    f"вљЎ РљРѕРЅС„Р»РёРєС‚ RSI/EMA: СѓРјРµРЅСЊС€РµРЅРЅС‹Р№ СЂР°Р·РјРµСЂ РґР»СЏ Р±С‹СЃС‚СЂРѕРіРѕ СЃРєР°Р»СЊРїР° "
                     f"(strength={signal_strength:.2f}, multiplier={strength_multiplier})"
                 )
             elif signal_strength > strength_thresholds.get("very_strong", 0.8):
                 strength_multiplier = strength_multipliers.get("very_strong", 1.5)
                 logger.debug(
-                    f"Очень сильный сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
+                    f"РћС‡РµРЅСЊ СЃРёР»СЊРЅС‹Р№ СЃРёРіРЅР°Р» (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
                 )
             elif signal_strength > strength_thresholds.get("strong", 0.6):
                 strength_multiplier = strength_multipliers.get("strong", 1.2)
                 logger.debug(
-                    f"Хороший сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
+                    f"РҐРѕСЂРѕС€РёР№ СЃРёРіРЅР°Р» (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
                 )
             elif signal_strength > strength_thresholds.get("medium", 0.4):
                 strength_multiplier = strength_multipliers.get("medium", 1.0)
                 logger.debug(
-                    f"Средний сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
+                    f"РЎСЂРµРґРЅРёР№ СЃРёРіРЅР°Р» (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
                 )
             else:
                 strength_multiplier = strength_multipliers.get("weak", 0.8)
                 logger.debug(
-                    f"Слабый сигнал (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
+                    f"РЎР»Р°Р±С‹Р№ СЃРёРіРЅР°Р» (strength={signal_strength:.2f}): multiplier={strength_multiplier}"
                 )
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Для прогрессивных профилей уменьшаем multiplier
-            # чтобы не перезаписывать прогрессивный расчет (уже выполнен выше при расчете base_usd_size)
+            # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: Р”Р»СЏ РїСЂРѕРіСЂРµСЃСЃРёРІРЅС‹С… РїСЂРѕС„РёР»РµР№ СѓРјРµРЅСЊС€Р°РµРј multiplier
+            # С‡С‚РѕР±С‹ РЅРµ РїРµСЂРµР·Р°РїРёСЃС‹РІР°С‚СЊ РїСЂРѕРіСЂРµСЃСЃРёРІРЅС‹Р№ СЂР°СЃС‡РµС‚ (СѓР¶Рµ РІС‹РїРѕР»РЅРµРЅ РІС‹С€Рµ РїСЂРё СЂР°СЃС‡РµС‚Рµ base_usd_size)
             original_multiplier = strength_multiplier
             if is_progressive:
-                # Для прогрессивных профилей используем меньший multiplier (0.9 вместо 0.8)
-                # чтобы прогрессивный расчет работал правильно, но множители все равно влияли
-                progressive_multiplier = (
-                    0.9  # 90% от обычного multiplier (увеличено с 0.8)
-                )
+                # Р”Р»СЏ РїСЂРѕРіСЂРµСЃСЃРёРІРЅС‹С… РїСЂРѕС„РёР»РµР№ РёСЃРїРѕР»СЊР·СѓРµРј РјРµРЅСЊС€РёР№ multiplier (0.9 РІРјРµСЃС‚Рѕ 0.8)
+                # С‡С‚РѕР±С‹ РїСЂРѕРіСЂРµСЃСЃРёРІРЅС‹Р№ СЂР°СЃС‡РµС‚ СЂР°Р±РѕС‚Р°Р» РїСЂР°РІРёР»СЊРЅРѕ, РЅРѕ РјРЅРѕР¶РёС‚РµР»Рё РІСЃРµ СЂР°РІРЅРѕ РІР»РёСЏР»Рё
+                progressive_multiplier = 0.9  # 90% РѕС‚ РѕР±С‹С‡РЅРѕРіРѕ multiplier (СѓРІРµР»РёС‡РµРЅРѕ СЃ 0.8)
                 strength_multiplier = (
                     1.0 + (strength_multiplier - 1.0) * progressive_multiplier
                 )
                 logger.debug(
-                    f"📊 Прогрессивный профиль: уменьшаем multiplier до {strength_multiplier:.2f} "
-                    f"(было бы {original_multiplier:.2f} без прогрессивной адаптации)"
+                    f"рџ“Љ РџСЂРѕРіСЂРµСЃСЃРёРІРЅС‹Р№ РїСЂРѕС„РёР»СЊ: СѓРјРµРЅСЊС€Р°РµРј multiplier РґРѕ {strength_multiplier:.2f} "
+                    f"(Р±С‹Р»Рѕ Р±С‹ {original_multiplier:.2f} Р±РµР· РїСЂРѕРіСЂРµСЃСЃРёРІРЅРѕР№ Р°РґР°РїС‚Р°С†РёРё)"
                 )
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем multiplier, но ограничиваем max_usd_size!
+            # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: РџСЂРёРјРµРЅСЏРµРј multiplier, РЅРѕ РѕРіСЂР°РЅРёС‡РёРІР°РµРј max_usd_size!
             base_usd_size *= strength_multiplier
-            # ✅ ИСПРАВЛЕНО: Строгая проверка max_position_size с логированием до/после
+            # вњ… РРЎРџР РђР’Р›Р•РќРћ: РЎС‚СЂРѕРіР°СЏ РїСЂРѕРІРµСЂРєР° max_position_size СЃ Р»РѕРіРёСЂРѕРІР°РЅРёРµРј РґРѕ/РїРѕСЃР»Рµ
             base_usd_size_before_cap = base_usd_size
             if base_usd_size > max_usd_size:
-                base_usd_size = max_usd_size * 0.95  # ✅ ПРАВКА #7: 5% запас
+                base_usd_size = (
+                    max_usd_size * 0.95
+                )  # вњ… РџР РђР’РљРђ #7: 5% Р·Р°РїР°СЃ
                 logger.warning(
-                    f"⚠️ Размер позиции ${base_usd_size_before_cap:.2f} превышает max_position_size ${max_usd_size:.2f} для {symbol}! "
-                    f"Ограничиваем до ${base_usd_size:.2f} (5% запас, сигнал был сильный: strength_multiplier={strength_multiplier:.2f}x)"
+                    f"вљ пёЏ Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё ${base_usd_size_before_cap:.2f} РїСЂРµРІС‹С€Р°РµС‚ max_position_size ${max_usd_size:.2f} РґР»СЏ {symbol}! "
+                    f"РћРіСЂР°РЅРёС‡РёРІР°РµРј РґРѕ ${base_usd_size:.2f} (5% Р·Р°РїР°СЃ, СЃРёРіРЅР°Р» Р±С‹Р» СЃРёР»СЊРЅС‹Р№: strength_multiplier={strength_multiplier:.2f}x)"
                 )
             logger.info(
-                f"💰 Position size: ${base_usd_size_before_cap:.2f} → ${base_usd_size:.2f} USD after cap "
+                f"рџ’° Position size: ${base_usd_size_before_cap:.2f} в†’ ${base_usd_size:.2f} USD after cap "
                 f"(max=${max_usd_size:.2f}, progressive={is_progressive}, multiplier={strength_multiplier:.2f})"
             )
 
-            # ✅ ОПТИМИЗАЦИЯ #4: Динамический размер позиций на основе волатильности (ATR-based)
+            # вњ… РћРџРўРРњРР—РђР¦РРЇ #4: Р”РёРЅР°РјРёС‡РµСЃРєРёР№ СЂР°Р·РјРµСЂ РїРѕР·РёС†РёР№ РЅР° РѕСЃРЅРѕРІРµ РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚Рё (ATR-based)
             volatility_adjustment_enabled = False
             volatility_multiplier = 1.0
             try:
@@ -1058,7 +1137,7 @@ class FuturesRiskManager:
                             "max_multiplier", max_multiplier
                         )
 
-                    # Получаем ATR через signal_generator
+                    # РџРѕР»СѓС‡Р°РµРј ATR С‡РµСЂРµР· signal_generator
                     current_atr_percent = None
                     try:
                         if signal_generator and hasattr(
@@ -1067,7 +1146,7 @@ class FuturesRiskManager:
                             market_data = await signal_generator._get_market_data(
                                 symbol
                             )
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Используем адаптивный ATR период
+                            # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР• (27.12.2025): РСЃРїРѕР»СЊР·СѓРµРј Р°РґР°РїС‚РёРІРЅС‹Р№ ATR РїРµСЂРёРѕРґ
                             atr_period = 14  # Fallback
                             if signal_generator and hasattr(
                                 signal_generator, "_get_regime_indicators_params"
@@ -1107,97 +1186,101 @@ class FuturesRiskManager:
                                     atr_value = atr_result.value
                                     current_atr_percent = (
                                         atr_value / price
-                                    ) * 100  # ATR в % от цены
+                                    ) * 100  # ATR РІ % РѕС‚ С†РµРЅС‹
                     except Exception as e:
-                        logger.debug(f"⚠️ Не удалось получить ATR для {symbol}: {e}")
+                        logger.debug(
+                            f"вљ пёЏ РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ ATR РґР»СЏ {symbol}: {e}"
+                        )
 
-                    # Рассчитываем multiplier на основе волатильности
+                    # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј multiplier РЅР° РѕСЃРЅРѕРІРµ РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚Рё
                     if current_atr_percent is not None and current_atr_percent > 0:
                         raw_multiplier = base_atr_percent / (
                             current_atr_percent / 100.0
                         )
-                        # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Приводим к float, чтобы избежать умножения строки
+                        # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: РџСЂРёРІРѕРґРёРј Рє float, С‡С‚РѕР±С‹ РёР·Р±РµР¶Р°С‚СЊ СѓРјРЅРѕР¶РµРЅРёСЏ СЃС‚СЂРѕРєРё
                         volatility_multiplier = float(
                             max(min_multiplier, min(raw_multiplier, max_multiplier))
                         )
 
                         logger.info(
-                            f"  4a. Волатильность (ATR): текущая={current_atr_percent:.4f}%, "
-                            f"базовая={base_atr_percent*100:.2f}%, multiplier={volatility_multiplier:.2f}x"
+                            f"  4a. Р’РѕР»Р°С‚РёР»СЊРЅРѕСЃС‚СЊ (ATR): С‚РµРєСѓС‰Р°СЏ={current_atr_percent:.4f}%, "
+                            f"Р±Р°Р·РѕРІР°СЏ={base_atr_percent*100:.2f}%, multiplier={volatility_multiplier:.2f}x"
                         )
 
                         base_usd_size_before_vol = base_usd_size
                         base_usd_size *= volatility_multiplier
-                        # ✅ ИСПРАВЛЕНО: Строгая проверка max_position_size после волатильности с логированием
+                        # вњ… РРЎРџР РђР’Р›Р•РќРћ: РЎС‚СЂРѕРіР°СЏ РїСЂРѕРІРµСЂРєР° max_position_size РїРѕСЃР»Рµ РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚Рё СЃ Р»РѕРіРёСЂРѕРІР°РЅРёРµРј
                         base_usd_size_before_vol_cap = base_usd_size
                         if base_usd_size > max_usd_size:
                             logger.warning(
-                                f"⚠️ Размер позиции после волатильности ${base_usd_size:.2f} "
-                                f"превышает max_position_size ${max_usd_size:.2f} для {symbol}! "
-                                f"Ограничиваем до ${max_usd_size:.2f} "
+                                f"вљ пёЏ Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё РїРѕСЃР»Рµ РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚Рё ${base_usd_size:.2f} "
+                                f"РїСЂРµРІС‹С€Р°РµС‚ max_position_size ${max_usd_size:.2f} РґР»СЏ {symbol}! "
+                                f"РћРіСЂР°РЅРёС‡РёРІР°РµРј РґРѕ ${max_usd_size:.2f} "
                                 f"(volatility_multiplier={volatility_multiplier:.2f}x, strength_multiplier={strength_multiplier:.2f}x)"
                             )
                             base_usd_size = max_usd_size
                         if base_usd_size_before_vol_cap != base_usd_size:
                             logger.info(
-                                f"💰 Position size after volatility: ${base_usd_size_before_vol_cap:.2f} → ${base_usd_size:.2f} USD after cap"
+                                f"рџ’° Position size after volatility: ${base_usd_size_before_vol_cap:.2f} в†’ ${base_usd_size:.2f} USD after cap"
                             )
 
                         if abs(volatility_multiplier - 1.0) > 0.01:
                             logger.info(
-                                f"  4b. Размер скорректирован волатильностью: "
-                                f"${base_usd_size_before_vol:.2f} → ${base_usd_size:.2f} "
+                                f"  4b. Р Р°Р·РјРµСЂ СЃРєРѕСЂСЂРµРєС‚РёСЂРѕРІР°РЅ РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚СЊСЋ: "
+                                f"${base_usd_size_before_vol:.2f} в†’ ${base_usd_size:.2f} "
                                 f"({volatility_multiplier:.2f}x)"
                             )
                     else:
                         logger.debug(
-                            f"  4a. Волатильность: ATR не доступен для {symbol}, используем базовый размер"
+                            f"  4a. Р’РѕР»Р°С‚РёР»СЊРЅРѕСЃС‚СЊ: ATR РЅРµ РґРѕСЃС‚СѓРїРµРЅ РґР»СЏ {symbol}, РёСЃРїРѕР»СЊР·СѓРµРј Р±Р°Р·РѕРІС‹Р№ СЂР°Р·РјРµСЂ"
                         )
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка расчета волатильности для {symbol}: {e}")
+                logger.debug(
+                    f"вљ пёЏ РћС€РёР±РєР° СЂР°СЃС‡РµС‚Р° РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚Рё РґР»СЏ {symbol}: {e}"
+                )
 
-            # 4. ПРИМЕНЯЕМ ЛЕВЕРИДЖ (Futures) - из signal или из конфига!
-            # ✅ ИСПРАВЛЕНИЕ: Сначала пытаемся получить leverage из signal (адаптивный)
+            # 4. РџР РРњР•РќРЇР•Рњ Р›Р•Р’Р•Р РР”Р– (Futures) - РёР· signal РёР»Рё РёР· РєРѕРЅС„РёРіР°!
+            # вњ… РРЎРџР РђР’Р›Р•РќРР•: РЎРЅР°С‡Р°Р»Р° РїС‹С‚Р°РµРјСЃСЏ РїРѕР»СѓС‡РёС‚СЊ leverage РёР· signal (Р°РґР°РїС‚РёРІРЅС‹Р№)
             leverage = None
             if signal:
                 leverage = signal.get("leverage")
                 if leverage and leverage > 0:
                     logger.debug(
-                        f"✅ Используем leverage={leverage}x из signal (адаптивный)"
+                        f"вњ… РСЃРїРѕР»СЊР·СѓРµРј leverage={leverage}x РёР· signal (Р°РґР°РїС‚РёРІРЅС‹Р№)"
                     )
 
-            # Fallback на конфиг, если не был указан в signal
+            # Fallback РЅР° РєРѕРЅС„РёРі, РµСЃР»Рё РЅРµ Р±С‹Р» СѓРєР°Р·Р°РЅ РІ signal
             if leverage is None or leverage <= 0:
                 leverage = getattr(self.scalping_config, "leverage", None)
                 if leverage and leverage > 0:
                     logger.debug(
-                        f"✅ Используем leverage={leverage}x из конфига (фиксированный)"
+                        f"вњ… РСЃРїРѕР»СЊР·СѓРµРј leverage={leverage}x РёР· РєРѕРЅС„РёРіР° (С„РёРєСЃРёСЂРѕРІР°РЅРЅС‹Р№)"
                     )
 
             if leverage is None or leverage <= 0:
                 logger.error(
-                    "❌ leverage не указан в signal и не указан в конфиге или <= 0! Проверьте config_futures.yaml"
+                    "вќЊ leverage РЅРµ СѓРєР°Р·Р°РЅ РІ signal Рё РЅРµ СѓРєР°Р·Р°РЅ РІ РєРѕРЅС„РёРіРµ РёР»Рё <= 0! РџСЂРѕРІРµСЂСЊС‚Рµ config_futures.yaml"
                 )
                 raise ValueError(
-                    "leverage должен быть указан в signal или в конфиге (например, leverage: 3)"
+                    "leverage РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ СѓРєР°Р·Р°РЅ РІ signal РёР»Рё РІ РєРѕРЅС„РёРіРµ (РЅР°РїСЂРёРјРµСЂ, leverage: 3)"
                 )
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: base_usd_size это НОМИНАЛЬНАЯ стоимость (notional)
+            # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: base_usd_size СЌС‚Рѕ РќРћРњРРќРђР›Р¬РќРђРЇ СЃС‚РѕРёРјРѕСЃС‚СЊ (notional)
             margin_required_initial = (
                 base_usd_size / leverage
-            )  # Требуемая маржа (в USD)
+            )  # РўСЂРµР±СѓРµРјР°СЏ РјР°СЂР¶Р° (РІ USD)
             margin_required = margin_required_initial
 
-            # ✅ Пересчитываем min/max из номинальной стоимости в маржу для проверок
+            # вњ… РџРµСЂРµСЃС‡РёС‚С‹РІР°РµРј min/max РёР· РЅРѕРјРёРЅР°Р»СЊРЅРѕР№ СЃС‚РѕРёРјРѕСЃС‚Рё РІ РјР°СЂР¶Сѓ РґР»СЏ РїСЂРѕРІРµСЂРѕРє
             min_margin_usd = min_usd_size / leverage
             max_margin_usd = max_usd_size / leverage
 
-            # ✅ МОДЕРНИЗАЦИЯ: Получаем использованную маржу с биржи (актуальные данные)
+            # вњ… РњРћР”Р•Р РќРР—РђР¦РРЇ: РџРѕР»СѓС‡Р°РµРј РёСЃРїРѕР»СЊР·РѕРІР°РЅРЅСѓСЋ РјР°СЂР¶Сѓ СЃ Р±РёСЂР¶Рё (Р°РєС‚СѓР°Р»СЊРЅС‹Рµ РґР°РЅРЅС‹Рµ)
             used_margin = await self._get_used_margin()
-            # Обновляем total_margin_used через orchestrator
+            # РћР±РЅРѕРІР»СЏРµРј total_margin_used С‡РµСЂРµР· orchestrator
             if self.orchestrator and hasattr(self.orchestrator, "total_margin_used"):
                 self.orchestrator.total_margin_used = used_margin
 
-            # ✅ МОДЕРНИЗАЦИЯ: Получаем адаптивные параметры риска с учетом режима и баланса
+            # вњ… РњРћР”Р•Р РќРР—РђР¦РРЇ: РџРѕР»СѓС‡Р°РµРј Р°РґР°РїС‚РёРІРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ СЂРёСЃРєР° СЃ СѓС‡РµС‚РѕРј СЂРµР¶РёРјР° Рё Р±Р°Р»Р°РЅСЃР°
             adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
                 balance, symbol_regime, symbol, signal_generator=signal_generator
             )
@@ -1211,65 +1294,65 @@ class FuturesRiskManager:
                 adaptive_risk_params.get("max_margin_safety_percent", 90.0) / 100.0
             )
 
-            # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование расчета margin для каждой пары
+            # вњ… РљР РРўРР§Р•РЎРљРћР• РЈР›РЈР§РЁР•РќРР• (04.01.2026): Р”РµС‚Р°Р»СЊРЅРѕРµ Р»РѕРіРёСЂРѕРІР°РЅРёРµ СЂР°СЃС‡РµС‚Р° margin РґР»СЏ РєР°Р¶РґРѕР№ РїР°СЂС‹
             logger.info(
-                f"📊 [PARAMS_MARGIN] {symbol} ({symbol_regime or 'unknown'}): ДЕТАЛЬНЫЙ РАСЧЕТ МАРЖИ:"
+                f"рџ“Љ [PARAMS_MARGIN] {symbol} ({symbol_regime or 'unknown'}): Р”Р•РўРђР›Р¬РќР«Р™ Р РђРЎР§Р•Рў РњРђР Р–Р:"
             )
             logger.info(
-                f"  1. Балансовый профиль: {balance_profile['name']}, баланс=${balance:.2f}"
+                f"  1. Р‘Р°Р»Р°РЅСЃРѕРІС‹Р№ РїСЂРѕС„РёР»СЊ: {balance_profile['name']}, Р±Р°Р»Р°РЅСЃ=${balance:.2f}"
             )
             logger.info(
-                f"  2. Базовый размер из конфига: base_usd_size=${base_usd_size:.2f} (notional)"
+                f"  2. Р‘Р°Р·РѕРІС‹Р№ СЂР°Р·РјРµСЂ РёР· РєРѕРЅС„РёРіР°: base_usd_size=${base_usd_size:.2f} (notional)"
             )
             logger.info(
-                f"  3. Лимиты из конфига: min=${min_usd_size:.2f}, max=${max_usd_size:.2f} (notional)"
+                f"  3. Р›РёРјРёС‚С‹ РёР· РєРѕРЅС„РёРіР°: min=${min_usd_size:.2f}, max=${max_usd_size:.2f} (notional)"
             )
             logger.info(
-                f"  4. Леверидж: {leverage}x → маржа до ограничений: ${margin_required_initial:.2f} "
-                f"(расчет: ${base_usd_size:.2f} / {leverage}x = ${margin_required_initial:.2f})"
+                f"  4. Р›РµРІРµСЂРёРґР¶: {leverage}x в†’ РјР°СЂР¶Р° РґРѕ РѕРіСЂР°РЅРёС‡РµРЅРёР№: ${margin_required_initial:.2f} "
+                f"(СЂР°СЃС‡РµС‚: ${base_usd_size:.2f} / {leverage}x = ${margin_required_initial:.2f})"
             )
             logger.info(
-                f"  5. Использованная маржа: ${used_margin:.2f}, доступная: ${balance - used_margin:.2f}"
+                f"  5. РСЃРїРѕР»СЊР·РѕРІР°РЅРЅР°СЏ РјР°СЂР¶Р°: ${used_margin:.2f}, РґРѕСЃС‚СѓРїРЅР°СЏ: ${balance - used_margin:.2f}"
             )
 
-            # ✅ МОДЕРНИЗАЦИЯ: Используем использованную маржу с биржи (актуальные данные)
-            # 5. 🛡️ ЗАЩИТА: Max Margin Used (адаптивный процент из конфига)
+            # вњ… РњРћР”Р•Р РќРР—РђР¦РРЇ: РСЃРїРѕР»СЊР·СѓРµРј РёСЃРїРѕР»СЊР·РѕРІР°РЅРЅСѓСЋ РјР°СЂР¶Сѓ СЃ Р±РёСЂР¶Рё (Р°РєС‚СѓР°Р»СЊРЅС‹Рµ РґР°РЅРЅС‹Рµ)
+            # 5. рџ›ЎпёЏ Р—РђР©РРўРђ: Max Margin Used (Р°РґР°РїС‚РёРІРЅС‹Р№ РїСЂРѕС†РµРЅС‚ РёР· РєРѕРЅС„РёРіР°)
             max_margin_allowed = balance * max_margin_percent
             available_margin = balance - used_margin
 
             logger.info(
-                f"  6. Max margin percent: {max_margin_percent*100:.1f}% → лимит: ${max_margin_allowed:.2f}"
+                f"  6. Max margin percent: {max_margin_percent*100:.1f}% в†’ Р»РёРјРёС‚: ${max_margin_allowed:.2f}"
             )
             if used_margin + margin_required > max_margin_allowed:
                 margin_required_before = margin_required
                 margin_required = max(0, max_margin_allowed - used_margin)
                 logger.warning(
-                    f"     ⚠️ ОГРАНИЧЕНО: max_margin_allowed (${max_margin_allowed:.2f}) → margin: ${margin_required_before:.2f} → ${margin_required:.2f} (уменьшено на ${margin_required_before - margin_required:.2f} или {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
+                    f"     вљ пёЏ РћР“Р РђРќРР§Р•РќРћ: max_margin_allowed (${max_margin_allowed:.2f}) в†’ margin: ${margin_required_before:.2f} в†’ ${margin_required:.2f} (СѓРјРµРЅСЊС€РµРЅРѕ РЅР° ${margin_required_before - margin_required:.2f} РёР»Рё {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
                 )
                 if margin_required < min_margin_usd:
                     logger.error(
-                        f"❌ Недостаточно свободной маржи для открытия позиции "
-                        f"(использовано: ${used_margin:.2f}, доступно: ${available_margin:.2f}, "
-                        f"требуется минимум: ${min_margin_usd:.2f} маржи)"
+                        f"вќЊ РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ СЃРІРѕР±РѕРґРЅРѕР№ РјР°СЂР¶Рё РґР»СЏ РѕС‚РєСЂС‹С‚РёСЏ РїРѕР·РёС†РёРё "
+                        f"(РёСЃРїРѕР»СЊР·РѕРІР°РЅРѕ: ${used_margin:.2f}, РґРѕСЃС‚СѓРїРЅРѕ: ${available_margin:.2f}, "
+                        f"С‚СЂРµР±СѓРµС‚СЃСЏ РјРёРЅРёРјСѓРј: ${min_margin_usd:.2f} РјР°СЂР¶Рё)"
                     )
                     return 0.0
 
-            # ✅ МОДЕРНИЗАЦИЯ: Дополнительная проверка на доступную маржу
-            logger.info(f"  7. Доступная маржа: ${available_margin:.2f}")
+            # вњ… РњРћР”Р•Р РќРР—РђР¦РРЇ: Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅР°СЏ РїСЂРѕРІРµСЂРєР° РЅР° РґРѕСЃС‚СѓРїРЅСѓСЋ РјР°СЂР¶Сѓ
+            logger.info(f"  7. Р”РѕСЃС‚СѓРїРЅР°СЏ РјР°СЂР¶Р°: ${available_margin:.2f}")
             if margin_required > available_margin:
                 margin_required_before = margin_required
                 margin_required = max(0, available_margin)
                 logger.warning(
-                    f"     ⚠️ ОГРАНИЧЕНО: available_margin (${available_margin:.2f}) → margin: ${margin_required_before:.2f} → ${margin_required:.2f} (уменьшено на ${margin_required_before - margin_required:.2f} или {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
+                    f"     вљ пёЏ РћР“Р РђРќРР§Р•РќРћ: available_margin (${available_margin:.2f}) в†’ margin: ${margin_required_before:.2f} в†’ ${margin_required:.2f} (СѓРјРµРЅСЊС€РµРЅРѕ РЅР° ${margin_required_before - margin_required:.2f} РёР»Рё {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
                 )
                 if margin_required < min_margin_usd:
                     logger.error(
-                        f"❌ Недостаточно доступной маржи для открытия позиции "
-                        f"(доступно: ${available_margin:.2f}, требуется минимум: ${min_margin_usd:.2f} маржи)"
+                        f"вќЊ РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РґРѕСЃС‚СѓРїРЅРѕР№ РјР°СЂР¶Рё РґР»СЏ РѕС‚РєСЂС‹С‚РёСЏ РїРѕР·РёС†РёРё "
+                        f"(РґРѕСЃС‚СѓРїРЅРѕ: ${available_margin:.2f}, С‚СЂРµР±СѓРµС‚СЃСЏ РјРёРЅРёРјСѓРј: ${min_margin_usd:.2f} РјР°СЂР¶Рё)"
                     )
                     return 0.0
 
-            # ✅ НОВОЕ: Динамический кап маржи (Уровень 2: margin-per-trade)
+            # вњ… РќРћР’РћР•: Р”РёРЅР°РјРёС‡РµСЃРєРёР№ РєР°Рї РјР°СЂР¶Рё (РЈСЂРѕРІРµРЅСЊ 2: margin-per-trade)
             dynamic_margin_cap = None
             try:
                 risk_config = getattr(self.scalping_config, "risk_config", {})
@@ -1281,7 +1364,7 @@ class FuturesRiskManager:
                     use_dynamic_cap = hasattr(risk_config, "max_margin_per_trade")
 
                 if use_dynamic_cap:
-                    # Получаем волатильность для расчета
+                    # РџРѕР»СѓС‡Р°РµРј РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚СЊ РґР»СЏ СЂР°СЃС‡РµС‚Р°
                     volatility_atr = None
                     try:
                         if signal_generator and hasattr(
@@ -1291,20 +1374,20 @@ class FuturesRiskManager:
                             if data_registry:
                                 atr_data = await data_registry.get_indicator(
                                     symbol, "atr"
-                                )  # ✅ ИСПРАВЛЕНО: добавлен await
+                                )  # вњ… РРЎРџР РђР’Р›Р•РќРћ: РґРѕР±Р°РІР»РµРЅ await
                                 if atr_data and price > 0:
                                     volatility_atr = (
                                         float(atr_data) / price
-                                    )  # ATR % от цены
+                                    )  # ATR % РѕС‚ С†РµРЅС‹
                     except Exception as e:
                         logger.debug(
-                            f"⚠️ Не удалось получить волатильность для dynamic_cap: {e}"
+                            f"вљ пёЏ РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ РІРѕР»Р°С‚РёР»СЊРЅРѕСЃС‚СЊ РґР»СЏ dynamic_cap: {e}"
                         )
 
-                    # Получаем дневной PnL
+                    # РџРѕР»СѓС‡Р°РµРј РґРЅРµРІРЅРѕР№ PnL
                     daily_pnl = getattr(self, "daily_pnl", 0.0)
 
-                    # Рассчитываем динамический кап
+                    # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј РґРёРЅР°РјРёС‡РµСЃРєРёР№ РєР°Рї
                     dynamic_margin_cap = self._calculate_dynamic_margin_cap(
                         balance=balance,
                         symbol=symbol,
@@ -1328,13 +1411,15 @@ class FuturesRiskManager:
                         margin_required_before = margin_required
                         margin_required = dynamic_margin_cap
                         logger.warning(
-                            f"     ⚠️ ОГРАНИЧЕНО: dynamic_margin_cap (${dynamic_margin_cap:.2f}) → margin: ${margin_required_before:.2f} → ${margin_required:.2f} "
-                            f"(уменьшено на ${margin_required_before - margin_required:.2f} или {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
+                            f"     вљ пёЏ РћР“Р РђРќРР§Р•РќРћ: dynamic_margin_cap (${dynamic_margin_cap:.2f}) в†’ margin: ${margin_required_before:.2f} в†’ ${margin_required:.2f} "
+                            f"(СѓРјРµРЅСЊС€РµРЅРѕ РЅР° ${margin_required_before - margin_required:.2f} РёР»Рё {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
                         )
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка расчета dynamic_margin_cap: {e}")
+                logger.debug(
+                    f"вљ пёЏ РћС€РёР±РєР° СЂР°СЃС‡РµС‚Р° dynamic_margin_cap: {e}"
+                )
 
-            # ✅ НОВОЕ: Risk-based margin (Уровень 3: Margin Budget)
+            # вњ… РќРћР’РћР•: Risk-based margin (РЈСЂРѕРІРµРЅСЊ 3: Margin Budget)
             risk_based_margin = None
             try:
                 risk_config = getattr(self.scalping_config, "risk_config", {})
@@ -1346,20 +1431,18 @@ class FuturesRiskManager:
                     )
 
                 if use_risk_based and price > 0:
-                    # Получаем risk_per_trade из конфига
-                    risk_per_trade = (
-                        max_loss_per_trade_percent  # Используем тот же параметр
-                    )
+                    # РџРѕР»СѓС‡Р°РµРј risk_per_trade РёР· РєРѕРЅС„РёРіР°
+                    risk_per_trade = max_loss_per_trade_percent  # РСЃРїРѕР»СЊР·СѓРµРј С‚РѕС‚ Р¶Рµ РїР°СЂР°РјРµС‚СЂ
 
-                    # Получаем sl_percent
+                    # РџРѕР»СѓС‡Р°РµРј sl_percent
                     sl_percent = self._resolve_sl_percent_for_risk(
                         symbol, symbol_regime
                     )
-                    # ✅ ЕДИНЫЙ СТАНДАРТ: sl_percent в конфиге = процентные пункты (0.8 = 0.8%)
-                    # В risk-based формуле нужен SL в доле (0.008 = 0.8%)
+                    # вњ… Р•Р”РРќР«Р™ РЎРўРђРќР”РђР Рў: sl_percent РІ РєРѕРЅС„РёРіРµ = РїСЂРѕС†РµРЅС‚РЅС‹Рµ РїСѓРЅРєС‚С‹ (0.8 = 0.8%)
+                    # Р’ risk-based С„РѕСЂРјСѓР»Рµ РЅСѓР¶РµРЅ SL РІ РґРѕР»Рµ (0.008 = 0.8%)
                     sl_percent_decimal = pct_points_to_fraction(sl_percent)
 
-                    # Рассчитываем risk-based margin
+                    # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј risk-based margin
                     risk_based_margin = self._calculate_risk_based_margin(
                         balance=balance,
                         risk_per_trade=risk_per_trade,
@@ -1377,17 +1460,19 @@ class FuturesRiskManager:
                         margin_required_before = margin_required
                         margin_required = risk_based_margin
                         logger.warning(
-                            f"     ⚠️ ОГРАНИЧЕНО: risk_based_margin (${risk_based_margin:.2f}) → margin: ${margin_required_before:.2f} → ${margin_required:.2f} "
-                            f"(уменьшено на ${margin_required_before - margin_required:.2f} или {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
+                            f"     вљ пёЏ РћР“Р РђРќРР§Р•РќРћ: risk_based_margin (${risk_based_margin:.2f}) в†’ margin: ${margin_required_before:.2f} в†’ ${margin_required:.2f} "
+                            f"(СѓРјРµРЅСЊС€РµРЅРѕ РЅР° ${margin_required_before - margin_required:.2f} РёР»Рё {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
                         )
             except Exception as e:
-                logger.debug(f"⚠️ Ошибка расчета risk_based_margin: {e}")
+                logger.debug(
+                    f"вљ пёЏ РћС€РёР±РєР° СЂР°СЃС‡РµС‚Р° risk_based_margin: {e}"
+                )
 
-            # 6. 🛡️ ЗАЩИТА: Max Loss per Trade (адаптивный процент из конфига)
+            # 6. рџ›ЎпёЏ Р—РђР©РРўРђ: Max Loss per Trade (Р°РґР°РїС‚РёРІРЅС‹Р№ РїСЂРѕС†РµРЅС‚ РёР· РєРѕРЅС„РёРіР°)
             max_loss_usd = balance * max_loss_per_trade_percent
             sl_percent = self._resolve_sl_percent_for_risk(symbol, symbol_regime)
 
-            # ✅ ЕДИНЫЙ СТАНДАРТ: sl_percent в конфиге = процентные пункты (0.8 = 0.8%)
+            # вњ… Р•Р”РРќР«Р™ РЎРўРђРќР”РђР Рў: sl_percent РІ РєРѕРЅС„РёРіРµ = РїСЂРѕС†РµРЅС‚РЅС‹Рµ РїСѓРЅРєС‚С‹ (0.8 = 0.8%)
             sl_percent_decimal = pct_points_to_fraction(sl_percent)
 
             max_safe_margin = (
@@ -1397,36 +1482,36 @@ class FuturesRiskManager:
             )
 
             logger.info(
-                f"  8. Max loss per trade: {max_loss_per_trade_percent*100:.1f}% (${max_loss_usd:.2f}) → max_safe_margin: ${max_safe_margin:.2f}"
+                f"  8. Max loss per trade: {max_loss_per_trade_percent*100:.1f}% (${max_loss_usd:.2f}) в†’ max_safe_margin: ${max_safe_margin:.2f}"
             )
             if margin_required > max_safe_margin:
                 margin_required_before = margin_required
                 margin_required = max_safe_margin
                 logger.warning(
-                    f"     ⚠️ ОГРАНИЧЕНО: max_safe_margin (${max_safe_margin:.2f}) → margin: ${margin_required_before:.2f} → ${margin_required:.2f} (уменьшено на ${margin_required_before - margin_required:.2f} или {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
+                    f"     вљ пёЏ РћР“Р РђРќРР§Р•РќРћ: max_safe_margin (${max_safe_margin:.2f}) в†’ margin: ${margin_required_before:.2f} в†’ ${margin_required:.2f} (СѓРјРµРЅСЊС€РµРЅРѕ РЅР° ${margin_required_before - margin_required:.2f} РёР»Рё {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
                 )
 
-            # 7. Проверка маржи (адаптивный процент безопасности из конфига - финальная проверка)
+            # 7. РџСЂРѕРІРµСЂРєР° РјР°СЂР¶Рё (Р°РґР°РїС‚РёРІРЅС‹Р№ РїСЂРѕС†РµРЅС‚ Р±РµР·РѕРїР°СЃРЅРѕСЃС‚Рё РёР· РєРѕРЅС„РёРіР° - С„РёРЅР°Р»СЊРЅР°СЏ РїСЂРѕРІРµСЂРєР°)
             max_margin_safety = balance * max_margin_safety_percent
             logger.info(
-                f"  9. Max margin safety: {max_margin_safety_percent*100:.1f}% → лимит: ${max_margin_safety:.2f}"
+                f"  9. Max margin safety: {max_margin_safety_percent*100:.1f}% в†’ Р»РёРјРёС‚: ${max_margin_safety:.2f}"
             )
             if margin_required > max_margin_safety:
                 margin_required_before = margin_required
                 margin_required = max_margin_safety
                 logger.warning(
-                    f"     ⚠️ ОГРАНИЧЕНО: max_margin_safety (${max_margin_safety:.2f}) → margin: ${margin_required_before:.2f} → ${margin_required:.2f} (уменьшено на ${margin_required_before - margin_required:.2f} или {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
+                    f"     вљ пёЏ РћР“Р РђРќРР§Р•РќРћ: max_margin_safety (${max_margin_safety:.2f}) в†’ margin: ${margin_required_before:.2f} в†’ ${margin_required:.2f} (СѓРјРµРЅСЊС€РµРЅРѕ РЅР° ${margin_required_before - margin_required:.2f} РёР»Рё {((margin_required_before - margin_required) / margin_required_before * 100) if margin_required_before > 0 else 0:.1f}%)"
                 )
 
-            # 8. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Применяем ограничения к МАРЖЕ (не к notional!)
+            # 8. вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: РџСЂРёРјРµРЅСЏРµРј РѕРіСЂР°РЅРёС‡РµРЅРёСЏ Рє РњРђР Р–Р• (РЅРµ Рє notional!)
             margin_before_final = margin_required
             logger.info(
-                f"  10. Финальные лимиты: min_margin=${min_margin_usd:.2f}, max_margin=${max_margin_usd:.2f}"
+                f"  10. Р¤РёРЅР°Р»СЊРЅС‹Рµ Р»РёРјРёС‚С‹: min_margin=${min_margin_usd:.2f}, max_margin=${max_margin_usd:.2f}"
             )
             margin_usd = max(min_margin_usd, min(margin_required, max_margin_usd))
 
             logger.info(
-                f"  11. ИТОГО: margin=${margin_usd:.2f} (начальная: ${margin_required_initial:.2f}, после ограничений: ${margin_before_final:.2f})"
+                f"  11. РРўРћР“Рћ: margin=${margin_usd:.2f} (РЅР°С‡Р°Р»СЊРЅР°СЏ: ${margin_required_initial:.2f}, РїРѕСЃР»Рµ РѕРіСЂР°РЅРёС‡РµРЅРёР№: ${margin_before_final:.2f})"
             )
             if margin_usd < margin_required_initial:
                 reduction_pct = (
@@ -1439,13 +1524,13 @@ class FuturesRiskManager:
                     else 0
                 )
                 logger.warning(
-                    f"     ⚠️ РАЗМЕР УМЕНЬШЕН: ${margin_required_initial:.2f} → ${margin_usd:.2f} (на ${margin_required_initial - margin_usd:.2f} или {reduction_pct:.1f}%)"
+                    f"     вљ пёЏ Р РђР—РњР•Р  РЈРњР•РќР¬РЁР•Рќ: ${margin_required_initial:.2f} в†’ ${margin_usd:.2f} (РЅР° ${margin_required_initial - margin_usd:.2f} РёР»Рё {reduction_pct:.1f}%)"
                 )
 
-            # 9. ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Переводим МАРЖУ в количество монет
+            # 9. вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: РџРµСЂРµРІРѕРґРёРј РњРђР Р–РЈ РІ РєРѕР»РёС‡РµСЃС‚РІРѕ РјРѕРЅРµС‚
             position_size = (margin_usd * leverage) / price
 
-            # ✅ НОВОЕ: Учитываем округление при конвертации в контракты
+            # вњ… РќРћР’РћР•: РЈС‡РёС‚С‹РІР°РµРј РѕРєСЂСѓРіР»РµРЅРёРµ РїСЂРё РєРѕРЅРІРµСЂС‚Р°С†РёРё РІ РєРѕРЅС‚СЂР°РєС‚С‹
             ct_val = None
             lot_sz = None
             min_sz = None
@@ -1464,19 +1549,19 @@ class FuturesRiskManager:
                 if rounded_size_in_contracts < min_sz:
                     rounded_size_in_contracts = min_sz
                     logger.warning(
-                        f"⚠️ Размер после округления меньше минимума, используем минимум: {min_sz}"
+                        f"вљ пёЏ Р Р°Р·РјРµСЂ РїРѕСЃР»Рµ РѕРєСЂСѓРіР»РµРЅРёСЏ РјРµРЅСЊС€Рµ РјРёРЅРёРјСѓРјР°, РёСЃРїРѕР»СЊР·СѓРµРј РјРёРЅРёРјСѓРј: {min_sz}"
                     )
 
                 real_position_size = rounded_size_in_contracts * ct_val
                 real_notional_usd = real_position_size * price
                 real_margin_usd = real_notional_usd / leverage
 
-                # ✅ КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем, что реальный размер после округления >= min_margin_usd
+                # вњ… РљР РРўРР§Р•РЎРљРђРЇ РџР РћР’Р•Р РљРђ: РџСЂРѕРІРµСЂСЏРµРј, С‡С‚Рѕ СЂРµР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РїРѕСЃР»Рµ РѕРєСЂСѓРіР»РµРЅРёСЏ >= min_margin_usd
                 if real_margin_usd < min_margin_usd:
                     logger.warning(
-                        f"⚠️ Реальный размер после округления слишком маленький: "
+                        f"вљ пёЏ Р РµР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РїРѕСЃР»Рµ РѕРєСЂСѓРіР»РµРЅРёСЏ СЃР»РёС€РєРѕРј РјР°Р»РµРЅСЊРєРёР№: "
                         f"margin=${real_margin_usd:.2f} < min=${min_margin_usd:.2f}, "
-                        f"увеличиваем до минимума"
+                        f"СѓРІРµР»РёС‡РёРІР°РµРј РґРѕ РјРёРЅРёРјСѓРјР°"
                     )
                     real_margin_usd = min_margin_usd
                     real_notional_usd = real_margin_usd * leverage
@@ -1493,18 +1578,18 @@ class FuturesRiskManager:
                     real_margin_usd = real_notional_usd / leverage
 
                     logger.info(
-                        f"✅ Размер позиции увеличен до минимума: "
+                        f"вњ… Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё СѓРІРµР»РёС‡РµРЅ РґРѕ РјРёРЅРёРјСѓРјР°: "
                         f"margin=${real_margin_usd:.2f}, "
                         f"notional=${real_notional_usd:.2f}, "
-                        f"position_size={real_position_size:.6f} монет"
+                        f"position_size={real_position_size:.6f} РјРѕРЅРµС‚"
                     )
 
-                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем лимиты ПОСЛЕ округления
+                # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: РџСЂРѕРІРµСЂСЏРµРј Р»РёРјРёС‚С‹ РџРћРЎР›Р• РѕРєСЂСѓРіР»РµРЅРёСЏ
                 if real_notional_usd > max_usd_size:
                     logger.warning(
-                        f"⚠️ Реальный размер после округления превышает лимит: "
+                        f"вљ пёЏ Р РµР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РїРѕСЃР»Рµ РѕРєСЂСѓРіР»РµРЅРёСЏ РїСЂРµРІС‹С€Р°РµС‚ Р»РёРјРёС‚: "
                         f"notional=${real_notional_usd:.2f} > max=${max_usd_size:.2f}, "
-                        f"уменьшаем до лимита с учетом округления"
+                        f"СѓРјРµРЅСЊС€Р°РµРј РґРѕ Р»РёРјРёС‚Р° СЃ СѓС‡РµС‚РѕРј РѕРєСЂСѓРіР»РµРЅРёСЏ"
                     )
                     import math
 
@@ -1520,9 +1605,9 @@ class FuturesRiskManager:
                         min_notional_usd = min_sz * ct_val * price
                         if min_notional_usd > max_usd_size:
                             logger.error(
-                                f"❌ КРИТИЧЕСКАЯ ОШИБКА: Минимальный размер позиции ({min_notional_usd:.2f} USD) превышает лимит ({max_usd_size:.2f} USD)! "
-                                f"Невозможно открыть позицию для {symbol}. "
-                                f"Проверьте конфигурацию: min_position_usd и max_position_usd в config_futures.yaml"
+                                f"вќЊ РљР РРўРР§Р•РЎРљРђРЇ РћРЁРР‘РљРђ: РњРёРЅРёРјР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё ({min_notional_usd:.2f} USD) РїСЂРµРІС‹С€Р°РµС‚ Р»РёРјРёС‚ ({max_usd_size:.2f} USD)! "
+                                f"РќРµРІРѕР·РјРѕР¶РЅРѕ РѕС‚РєСЂС‹С‚СЊ РїРѕР·РёС†РёСЋ РґР»СЏ {symbol}. "
+                                f"РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ: min_position_usd Рё max_position_usd РІ config_futures.yaml"
                             )
                             return 0.0
                         else:
@@ -1534,20 +1619,20 @@ class FuturesRiskManager:
 
                     if real_notional_usd > max_usd_size:
                         logger.error(
-                            f"❌ КРИТИЧЕСКАЯ ОШИБКА: Минимальный размер позиции ({real_notional_usd:.2f} USD) превышает лимит ({max_usd_size:.2f} USD)! "
-                            f"Невозможно открыть позицию для {symbol}. "
-                            f"Проверьте конфигурацию: min_position_usd и max_position_usd в config_futures.yaml"
+                            f"вќЊ РљР РРўРР§Р•РЎРљРђРЇ РћРЁРР‘РљРђ: РњРёРЅРёРјР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё ({real_notional_usd:.2f} USD) РїСЂРµРІС‹С€Р°РµС‚ Р»РёРјРёС‚ ({max_usd_size:.2f} USD)! "
+                            f"РќРµРІРѕР·РјРѕР¶РЅРѕ РѕС‚РєСЂС‹С‚СЊ РїРѕР·РёС†РёСЋ РґР»СЏ {symbol}. "
+                            f"РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ: min_position_usd Рё max_position_usd РІ config_futures.yaml"
                         )
                         return 0.0
 
                     logger.info(
-                        f"✅ Размер позиции уменьшен до лимита: "
+                        f"вњ… Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё СѓРјРµРЅСЊС€РµРЅ РґРѕ Р»РёРјРёС‚Р°: "
                         f"margin=${real_margin_usd:.2f}, "
                         f"notional=${real_notional_usd:.2f}, "
-                        f"position_size={real_position_size:.6f} монет"
+                        f"position_size={real_position_size:.6f} РјРѕРЅРµС‚"
                     )
 
-                # Логируем округление
+                # Р›РѕРіРёСЂСѓРµРј РѕРєСЂСѓРіР»РµРЅРёРµ
                 if abs(real_position_size - position_size) > 1e-8:
                     reduction_pct = (
                         ((position_size - real_position_size) / position_size * 100)
@@ -1555,16 +1640,16 @@ class FuturesRiskManager:
                         else 0
                     )
                     logger.warning(
-                        f"⚠️ Размер позиции изменен из-за округления/минимума: "
-                        f"{position_size:.6f} → {real_position_size:.6f} монет "
+                        f"вљ пёЏ Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё РёР·РјРµРЅРµРЅ РёР·-Р·Р° РѕРєСЂСѓРіР»РµРЅРёСЏ/РјРёРЅРёРјСѓРјР°: "
+                        f"{position_size:.6f} в†’ {real_position_size:.6f} РјРѕРЅРµС‚ "
                         f"({reduction_pct:+.2f}%), "
-                        f"notional: ${margin_usd * leverage:.2f} → ${real_notional_usd:.2f}, "
-                        f"margin: ${margin_usd:.2f} → ${real_margin_usd:.2f}"
+                        f"notional: ${margin_usd * leverage:.2f} в†’ ${real_notional_usd:.2f}, "
+                        f"margin: ${margin_usd:.2f} в†’ ${real_margin_usd:.2f}"
                     )
                 else:
                     logger.info(
-                        f"✅ Размер позиции после округления не изменился: "
-                        f"{position_size:.6f} монет, "
+                        f"вњ… Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё РїРѕСЃР»Рµ РѕРєСЂСѓРіР»РµРЅРёСЏ РЅРµ РёР·РјРµРЅРёР»СЃСЏ: "
+                        f"{position_size:.6f} РјРѕРЅРµС‚, "
                         f"notional=${real_notional_usd:.2f}, "
                         f"margin=${real_margin_usd:.2f}"
                     )
@@ -1575,46 +1660,46 @@ class FuturesRiskManager:
 
             except Exception as e:
                 logger.warning(
-                    f"⚠️ Не удалось учесть округление при расчете размера позиции для {symbol}: {e}, "
-                    f"используем расчетный размер без округления"
+                    f"вљ пёЏ РќРµ СѓРґР°Р»РѕСЃСЊ СѓС‡РµСЃС‚СЊ РѕРєСЂСѓРіР»РµРЅРёРµ РїСЂРё СЂР°СЃС‡РµС‚Рµ СЂР°Р·РјРµСЂР° РїРѕР·РёС†РёРё РґР»СЏ {symbol}: {e}, "
+                    f"РёСЃРїРѕР»СЊР·СѓРµРј СЂР°СЃС‡РµС‚РЅС‹Р№ СЂР°Р·РјРµСЂ Р±РµР· РѕРєСЂСѓРіР»РµРЅРёСЏ"
                 )
                 notional_usd = margin_usd * leverage
 
                 if notional_usd > max_usd_size:
                     logger.warning(
-                        f"⚠️ Итоговый размер позиции превышает лимит: "
+                        f"вљ пёЏ РС‚РѕРіРѕРІС‹Р№ СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё РїСЂРµРІС‹С€Р°РµС‚ Р»РёРјРёС‚: "
                         f"notional=${notional_usd:.2f} > max=${max_usd_size:.2f}, "
-                        f"уменьшаем размер позиции"
+                        f"СѓРјРµРЅСЊС€Р°РµРј СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё"
                     )
                     notional_usd = max_usd_size
                     margin_usd = notional_usd / leverage
                     position_size = notional_usd / price
                     logger.info(
-                        f"✅ Размер позиции уменьшен до лимита: "
+                        f"вњ… Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё СѓРјРµРЅСЊС€РµРЅ РґРѕ Р»РёРјРёС‚Р°: "
                         f"notional=${notional_usd:.2f}, margin=${margin_usd:.2f}, "
-                        f"position_size={position_size:.6f} монет"
+                        f"position_size={position_size:.6f} РјРѕРЅРµС‚"
                     )
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Финальная проверка лимитов ПОСЛЕ всех округлений
+            # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР•: Р¤РёРЅР°Р»СЊРЅР°СЏ РїСЂРѕРІРµСЂРєР° Р»РёРјРёС‚РѕРІ РџРћРЎР›Р• РІСЃРµС… РѕРєСЂСѓРіР»РµРЅРёР№
             if notional_usd > max_usd_size:
                 logger.warning(
-                    f"⚠️ Итоговый размер позиции превышает лимит: "
+                    f"вљ пёЏ РС‚РѕРіРѕРІС‹Р№ СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё РїСЂРµРІС‹С€Р°РµС‚ Р»РёРјРёС‚: "
                     f"notional=${notional_usd:.2f} > max=${max_usd_size:.2f}, "
-                    f"уменьшаем размер позиции"
+                    f"СѓРјРµРЅСЊС€Р°РµРј СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё"
                 )
                 notional_usd = max_usd_size
                 margin_usd = notional_usd / leverage
                 position_size = notional_usd / price
                 logger.info(
-                    f"✅ Размер позиции уменьшен до лимита: "
+                    f"вњ… Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё СѓРјРµРЅСЊС€РµРЅ РґРѕ Р»РёРјРёС‚Р°: "
                     f"notional=${notional_usd:.2f}, margin=${margin_usd:.2f}, "
-                    f"position_size={position_size:.6f} монет"
+                    f"position_size={position_size:.6f} РјРѕРЅРµС‚"
                 )
 
-            # 10. 🛡️ ЗАЩИТА: Проверяем emergency stop И drawdown перед открытием
-            # FIX (2026-02-21): emergency unlock check ОБЯЗАТЕЛЬНО ДО drawdown check!
-            # Без этого: drawdown returns False (emergency active) → return 0.0 → unlock НИКОГДА не вызывается
-            # → бот заблокирован навечно (7.5ч простоя в сессии 2026-02-20)
+            # 10. рџ›ЎпёЏ Р—РђР©РРўРђ: РџСЂРѕРІРµСЂСЏРµРј emergency stop Р drawdown РїРµСЂРµРґ РѕС‚РєСЂС‹С‚РёРµРј
+            # FIX (2026-02-21): emergency unlock check РћР‘РЇР—РђРўР•Р›Р¬РќРћ Р”Рћ drawdown check!
+            # Р‘РµР· СЌС‚РѕРіРѕ: drawdown returns False (emergency active) в†’ return 0.0 в†’ unlock РќРРљРћР“Р”Рђ РЅРµ РІС‹Р·С‹РІР°РµС‚СЃСЏ
+            # в†’ Р±РѕС‚ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅ РЅР°РІРµС‡РЅРѕ (7.5С‡ РїСЂРѕСЃС‚РѕСЏ РІ СЃРµСЃСЃРёРё 2026-02-20)
             if (
                 self.orchestrator
                 and hasattr(self.orchestrator, "_emergency_stop_active")
@@ -1623,66 +1708,70 @@ class FuturesRiskManager:
                 await self._check_emergency_stop_unlock()
                 if self.orchestrator._emergency_stop_active:
                     logger.warning(
-                        "⚠️ Emergency stop активен - пропускаем позицию (торговля заблокирована)"
+                        "вљ пёЏ Emergency stop Р°РєС‚РёРІРµРЅ - РїСЂРѕРїСѓСЃРєР°РµРј РїРѕР·РёС†РёСЋ (С‚РѕСЂРіРѕРІР»СЏ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅР°)"
                     )
                     return 0.0
 
             if not await self._check_drawdown_protection():
                 logger.warning(
-                    "⚠️ Drawdown protection активирован - пропускаем позицию"
+                    "вљ пёЏ Drawdown protection Р°РєС‚РёРІРёСЂРѕРІР°РЅ - РїСЂРѕРїСѓСЃРєР°РµРј РїРѕР·РёС†РёСЋ"
                 )
                 return 0.0
 
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ #5: Проверка минимального размера перед возвратом
+            # вњ… РљР РРўРР§Р•РЎРљРћР• РРЎРџР РђР’Р›Р•РќРР• #5: РџСЂРѕРІРµСЂРєР° РјРёРЅРёРјР°Р»СЊРЅРѕРіРѕ СЂР°Р·РјРµСЂР° РїРµСЂРµРґ РІРѕР·РІСЂР°С‚РѕРј
             if symbol and price > 0:
                 try:
-                    # Получаем детали инструмента для проверки минимального размера
+                    # РџРѕР»СѓС‡Р°РµРј РґРµС‚Р°Р»Рё РёРЅСЃС‚СЂСѓРјРµРЅС‚Р° РґР»СЏ РїСЂРѕРІРµСЂРєРё РјРёРЅРёРјР°Р»СЊРЅРѕРіРѕ СЂР°Р·РјРµСЂР°
                     inst_details = await self.client.get_instrument_details(symbol)
                     ct_val = float(inst_details.get("ctVal") or 0.01)
                     min_sz = float(inst_details.get("minSz") or 0.01)
 
-                    # Конвертируем размер из монет в контракты
+                    # РљРѕРЅРІРµСЂС‚РёСЂСѓРµРј СЂР°Р·РјРµСЂ РёР· РјРѕРЅРµС‚ РІ РєРѕРЅС‚СЂР°РєС‚С‹
                     size_in_contracts = position_size / ct_val if ct_val > 0 else 0
 
                     if size_in_contracts < min_sz:
-                        # Размер меньше минимума - увеличиваем до минимума
+                        # Р Р°Р·РјРµСЂ РјРµРЅСЊС€Рµ РјРёРЅРёРјСѓРјР° - СѓРІРµР»РёС‡РёРІР°РµРј РґРѕ РјРёРЅРёРјСѓРјР°
                         min_size_in_coins = min_sz * ct_val
                         logger.warning(
-                            f"⚠️ Рассчитанный размер позиции {symbol} меньше минимума биржи: "
-                            f"{size_in_contracts:.6f} контрактов < {min_sz:.6f} контрактов. "
-                            f"Увеличиваем до минимума: {position_size:.6f} → {min_size_in_coins:.6f} монет"
+                            f"вљ пёЏ Р Р°СЃСЃС‡РёС‚Р°РЅРЅС‹Р№ СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё {symbol} РјРµРЅСЊС€Рµ РјРёРЅРёРјСѓРјР° Р±РёСЂР¶Рё: "
+                            f"{size_in_contracts:.6f} РєРѕРЅС‚СЂР°РєС‚РѕРІ < {min_sz:.6f} РєРѕРЅС‚СЂР°РєС‚РѕРІ. "
+                            f"РЈРІРµР»РёС‡РёРІР°РµРј РґРѕ РјРёРЅРёРјСѓРјР°: {position_size:.6f} в†’ {min_size_in_coins:.6f} РјРѕРЅРµС‚"
                         )
                         position_size = min_size_in_coins
 
-                        # Пересчитываем notional и margin для нового размера
+                        # РџРµСЂРµСЃС‡РёС‚С‹РІР°РµРј notional Рё margin РґР»СЏ РЅРѕРІРѕРіРѕ СЂР°Р·РјРµСЂР°
                         notional_usd = position_size * price
                         margin_usd = (
                             notional_usd / leverage if leverage > 0 else notional_usd
                         )
 
                         logger.info(
-                            f"💰 РАСЧЕТ СКОРРЕКТИРОВАН: position_size={position_size:.6f} монет "
-                            f"({min_sz:.6f} контрактов), notional=${notional_usd:.2f}, margin=${margin_usd:.2f}"
+                            f"рџ’° Р РђРЎР§Р•Рў РЎРљРћР Р Р•РљРўРР РћР’РђРќ: position_size={position_size:.6f} РјРѕРЅРµС‚ "
+                            f"({min_sz:.6f} РєРѕРЅС‚СЂР°РєС‚РѕРІ), notional=${notional_usd:.2f}, margin=${margin_usd:.2f}"
                         )
                 except Exception as e:
                     logger.warning(
-                        f"⚠️ Не удалось проверить минимальный размер для {symbol}: {e}, "
-                        f"используем рассчитанный размер {position_size:.6f} монет"
+                        f"вљ пёЏ РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ РјРёРЅРёРјР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РґР»СЏ {symbol}: {e}, "
+                        f"РёСЃРїРѕР»СЊР·СѓРµРј СЂР°СЃСЃС‡РёС‚Р°РЅРЅС‹Р№ СЂР°Р·РјРµСЂ {position_size:.6f} РјРѕРЅРµС‚"
                     )
 
-            # ✅ НОВОЕ (26.12.2025): Детальное логирование итогового расчета размера позиции
+            # вњ… РќРћР’РћР• (26.12.2025): Р”РµС‚Р°Р»СЊРЅРѕРµ Р»РѕРіРёСЂРѕРІР°РЅРёРµ РёС‚РѕРіРѕРІРѕРіРѕ СЂР°СЃС‡РµС‚Р° СЂР°Р·РјРµСЂР° РїРѕР·РёС†РёРё
             logger.info("=" * 80)
-            logger.info(f"💰 ФИНАЛЬНЫЙ РАСЧЕТ РАЗМЕРА ПОЗИЦИИ для {symbol}:")
             logger.info(
-                f"   Баланс: ${balance:.2f} (профиль: {balance_profile['name']})"
+                f"рџ’° Р¤РРќРђР›Р¬РќР«Р™ Р РђРЎР§Р•Рў Р РђР—РњР•Р Рђ РџРћР—РР¦РР РґР»СЏ {symbol}:"
             )
-            logger.info(f"   Базовый размер (notional): ${base_usd_size:.2f}")
+            logger.info(
+                f"   Р‘Р°Р»Р°РЅСЃ: ${balance:.2f} (РїСЂРѕС„РёР»СЊ: {balance_profile['name']})"
+            )
+            logger.info(
+                f"   Р‘Р°Р·РѕРІС‹Р№ СЂР°Р·РјРµСЂ (notional): ${base_usd_size:.2f}"
+            )
             if is_progressive:
                 logger.info(
-                    f"   Прогрессивный расчет: ${size_at_min:.2f} → ${size_at_max:.2f}"  # noqa: F821
+                    f"   РџСЂРѕРіСЂРµСЃСЃРёРІРЅС‹Р№ СЂР°СЃС‡РµС‚: ${size_at_min:.2f} в†’ ${size_at_max:.2f}"  # noqa: F821
                 )
 
-            # Получаем все множители для логирования
+            # РџРѕР»СѓС‡Р°РµРј РІСЃРµ РјРЅРѕР¶РёС‚РµР»Рё РґР»СЏ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ
             position_multiplier_used = None
             if symbol:
                 symbol_profile = self.symbol_profiles.get(symbol, {})
@@ -1699,13 +1788,13 @@ class FuturesRiskManager:
 
             if strength_multiplier != 1.0:
                 logger.info(
-                    f"   Strength multiplier: {strength_multiplier:.2f}x (сила сигнала: {signal_strength:.2f})"
+                    f"   Strength multiplier: {strength_multiplier:.2f}x (СЃРёР»Р° СЃРёРіРЅР°Р»Р°: {signal_strength:.2f})"
                 )
 
             if volatility_multiplier != 1.0:
                 logger.info(f"   Volatility multiplier: {volatility_multiplier:.2f}x")
 
-            # Получаем regime multiplier
+            # РџРѕР»СѓС‡Р°РµРј regime multiplier
             regime_multiplier_used = None
             if symbol_regime:
                 regime_params = self.config_manager.get_regime_params(
@@ -1717,20 +1806,23 @@ class FuturesRiskManager:
                         f"   Regime multiplier ({symbol_regime}): {regime_multiplier_used:.2f}x"
                     )
 
-            logger.info(f"   Леверидж: {leverage}x")
+            logger.info(f"   Р›РµРІРµСЂРёРґР¶: {leverage}x")
             logger.info(
-                f"   Маржа: ${margin_usd:.2f} (лимит: ${min_margin_usd:.2f}-${max_margin_usd:.2f})"
+                f"   РњР°СЂР¶Р°: ${margin_usd:.2f} (Р»РёРјРёС‚: ${min_margin_usd:.2f}-${max_margin_usd:.2f})"
             )
             logger.info(f"   Notional: ${notional_usd:.2f}")
             logger.info(
-                f"   ИТОГОВЫЙ размер позиции: {position_size:.6f} монет (${notional_usd:.2f} notional, ${margin_usd:.2f} margin)"
+                f"   РРўРћР“РћР’Р«Р™ СЂР°Р·РјРµСЂ РїРѕР·РёС†РёРё: {position_size:.6f} РјРѕРЅРµС‚ (${notional_usd:.2f} notional, ${margin_usd:.2f} margin)"
             )
             logger.info("=" * 80)
 
             return position_size
 
         except Exception as e:
-            logger.error(f"Ошибка расчета размера позиции: {e}", exc_info=True)
+            logger.error(
+                f"РћС€РёР±РєР° СЂР°СЃС‡РµС‚Р° СЂР°Р·РјРµСЂР° РїРѕР·РёС†РёРё: {e}",
+                exc_info=True,
+            )
             return 0.0
 
     async def check_margin_safety(
@@ -1739,28 +1831,28 @@ class FuturesRiskManager:
         current_positions: Dict[str, Any],
     ) -> bool:
         """
-        Проверка безопасности маржи.
+        РџСЂРѕРІРµСЂРєР° Р±РµР·РѕРїР°СЃРЅРѕСЃС‚Рё РјР°СЂР¶Рё.
 
         Args:
-            position_size_usd: Размер новой позиции
-            current_positions: Текущие позиции
+            position_size_usd: Р Р°Р·РјРµСЂ РЅРѕРІРѕР№ РїРѕР·РёС†РёРё
+            current_positions: РўРµРєСѓС‰РёРµ РїРѕР·РёС†РёРё
 
         Returns:
-            bool: True если безопасно открывать
+            bool: True РµСЃР»Рё Р±РµР·РѕРїР°СЃРЅРѕ РѕС‚РєСЂС‹РІР°С‚СЊ
         """
         if not self.margin_monitor:
             return True
 
         try:
-            # ✅ ИСПРАВЛЕНО (28.12.2025): Передаем orchestrator и data_registry для доступа к балансу
+            # вњ… РРЎРџР РђР’Р›Р•РќРћ (28.12.2025): РџРµСЂРµРґР°РµРј orchestrator Рё data_registry РґР»СЏ РґРѕСЃС‚СѓРїР° Рє Р±Р°Р»Р°РЅСЃСѓ
             return await self.margin_monitor.check_safety(
                 position_size_usd,
                 current_positions,
-                orchestrator=self.orchestrator,  # ✅ Передаем orchestrator
-                data_registry=self.data_registry,  # ✅ Передаем data_registry
+                orchestrator=self.orchestrator,  # вњ… РџРµСЂРµРґР°РµРј orchestrator
+                data_registry=self.data_registry,  # вњ… РџРµСЂРµРґР°РµРј data_registry
             )
         except Exception as e:
-            logger.error(f"❌ Error checking margin safety: {e}")
+            logger.error(f"вќЊ Error checking margin safety: {e}")
             return False
 
     async def check_liquidation_risk(
@@ -1771,26 +1863,26 @@ class FuturesRiskManager:
         entry_price: float,
     ) -> bool:
         """
-        Проверка риска ликвидации.
+        РџСЂРѕРІРµСЂРєР° СЂРёСЃРєР° Р»РёРєРІРёРґР°С†РёРё.
 
         Args:
-            symbol: Торговый символ
-            side: Сторона позиции
-            position_size_usd: Размер позиции
-            entry_price: Цена входа
+            symbol: РўРѕСЂРіРѕРІС‹Р№ СЃРёРјРІРѕР»
+            side: РЎС‚РѕСЂРѕРЅР° РїРѕР·РёС†РёРё
+            position_size_usd: Р Р°Р·РјРµСЂ РїРѕР·РёС†РёРё
+            entry_price: Р¦РµРЅР° РІС…РѕРґР°
 
         Returns:
-            bool: True если риск приемлемый
+            bool: True РµСЃР»Рё СЂРёСЃРє РїСЂРёРµРјР»РµРјС‹Р№
         """
         if not self.liquidation_protector:
             return True
 
         try:
-            # 🔴 BUG #21 FIX: Получаем РЕАЛЬНУЮ маржу от API, не position_size
-            current_price = entry_price  # Fallback: используем entry_price если не можем получить текущую
+            # рџ”ґ BUG #21 FIX: РџРѕР»СѓС‡Р°РµРј Р Р•РђР›Р¬РќРЈР® РјР°СЂР¶Сѓ РѕС‚ API, РЅРµ position_size
+            current_price = entry_price  # Fallback: РёСЃРїРѕР»СЊР·СѓРµРј entry_price РµСЃР»Рё РЅРµ РјРѕР¶РµРј РїРѕР»СѓС‡РёС‚СЊ С‚РµРєСѓС‰СѓСЋ
             margin = None
 
-            # Пытаемся получить текущую цену
+            # РџС‹С‚Р°РµРјСЃСЏ РїРѕР»СѓС‡РёС‚СЊ С‚РµРєСѓС‰СѓСЋ С†РµРЅСѓ
             try:
                 if self.data_registry:
                     ticker_data = await self.data_registry.get_ticker(symbol)
@@ -1801,9 +1893,9 @@ class FuturesRiskManager:
             except Exception:
                 pass
 
-            # FIX (2026-02-21): Получаем маржу из active_positions (WS-driven) вместо REST.
-            # Private WS positions channel присылает поле "margin" в реальном времени.
-            # REST fallback только если WS margin == 0 (новая позиция, WS ещё не обновился).
+            # FIX (2026-02-21): РџРѕР»СѓС‡Р°РµРј РјР°СЂР¶Сѓ РёР· active_positions (WS-driven) РІРјРµСЃС‚Рѕ REST.
+            # Private WS positions channel РїСЂРёСЃС‹Р»Р°РµС‚ РїРѕР»Рµ "margin" РІ СЂРµР°Р»СЊРЅРѕРј РІСЂРµРјРµРЅРё.
+            # REST fallback С‚РѕР»СЊРєРѕ РµСЃР»Рё WS margin == 0 (РЅРѕРІР°СЏ РїРѕР·РёС†РёСЏ, WS РµС‰С‘ РЅРµ РѕР±РЅРѕРІРёР»СЃСЏ).
             try:
                 ws_margin = 0.0
                 if self.orchestrator and hasattr(self.orchestrator, "active_positions"):
@@ -1811,9 +1903,11 @@ class FuturesRiskManager:
                     ws_margin = float(pos_data.get("margin", 0) or 0)
                     if ws_margin > 0:
                         margin = ws_margin
-                        logger.debug(f"✓ Маржа для {symbol}: {margin} USDT [source=WS]")
+                        logger.debug(
+                            f"вњ“ РњР°СЂР¶Р° РґР»СЏ {symbol}: {margin} USDT [source=WS]"
+                        )
 
-                # REST fallback: только если WS margin не пришёл ещё
+                # REST fallback: С‚РѕР»СЊРєРѕ РµСЃР»Рё WS margin РЅРµ РїСЂРёС€С‘Р» РµС‰С‘
                 if (margin is None or margin == 0) and self.client:
                     positions_data = await self.client.get_positions()
                     if positions_data:
@@ -1821,15 +1915,17 @@ class FuturesRiskManager:
                             if pos.get("instId") == f"{symbol}-SWAP":
                                 margin = float(pos.get("margin", 0))
                                 logger.debug(
-                                    f"✓ Маржа для {symbol}: {margin} USDT [source=REST_FALLBACK]"
+                                    f"вњ“ РњР°СЂР¶Р° РґР»СЏ {symbol}: {margin} USDT [source=REST_FALLBACK]"
                                 )
                                 break
             except Exception as e:
-                logger.warning(f"⚠️ Не удалось получить маржу: {e}")
+                logger.warning(
+                    f"вљ пёЏ РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ РјР°СЂР¶Сѓ: {e}"
+                )
 
-            # Fallback: если маржа не получена
+            # Fallback: РµСЃР»Рё РјР°СЂР¶Р° РЅРµ РїРѕР»СѓС‡РµРЅР°
             if margin is None or margin == 0:
-                # Оцениваем маржу как position_size / leverage
+                # РћС†РµРЅРёРІР°РµРј РјР°СЂР¶Сѓ РєР°Рє position_size / leverage
                 estimated_leverage = (
                     self.config.risk.leverage
                     if hasattr(self.config.risk, "leverage")
@@ -1837,11 +1933,11 @@ class FuturesRiskManager:
                 )
                 margin = position_size_usd / estimated_leverage
                 logger.warning(
-                    f"⚠️ Маржа не получена от API, используем оценку: {margin} USDT "
+                    f"вљ пёЏ РњР°СЂР¶Р° РЅРµ РїРѕР»СѓС‡РµРЅР° РѕС‚ API, РёСЃРїРѕР»СЊР·СѓРµРј РѕС†РµРЅРєСѓ: {margin} USDT "
                     f"(position_size={position_size_usd}, leverage={estimated_leverage})"
                 )
 
-            # ✅ Формируем позицию как dict для LiquidationProtector
+            # вњ… Р¤РѕСЂРјРёСЂСѓРµРј РїРѕР·РёС†РёСЋ РєР°Рє dict РґР»СЏ LiquidationProtector
             position = {
                 "side": side,
                 "size": position_size_usd,
@@ -1850,14 +1946,14 @@ class FuturesRiskManager:
                 "mark_price": current_price,
                 "margin": margin,
             }
-            # Вызываем check_liquidation_risk с правильными аргументами
+            # Р’С‹Р·С‹РІР°РµРј check_liquidation_risk СЃ РїСЂР°РІРёР»СЊРЅС‹РјРё Р°СЂРіСѓРјРµРЅС‚Р°РјРё
             return await self.liquidation_protector.check_liquidation_risk(
                 symbol=symbol,
                 position=position,
                 balance=margin,
             )
         except Exception as e:
-            logger.error(f"❌ Error checking liquidation risk: {e}")
+            logger.error(f"вќЊ Error checking liquidation risk: {e}")
             return False
 
     def get_adaptive_risk_params(
@@ -1868,18 +1964,18 @@ class FuturesRiskManager:
         signal_generator=None,
     ) -> Dict[str, Any]:
         """
-        Получить адаптивные параметры риска.
+        РџРѕР»СѓС‡РёС‚СЊ Р°РґР°РїС‚РёРІРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ СЂРёСЃРєР°.
 
-        Делегирует в ConfigManager.
+        Р”РµР»РµРіРёСЂСѓРµС‚ РІ ConfigManager.
 
         Args:
-            balance: Текущий баланс
-            regime: Режим рынка
-            symbol: Торговый символ
+            balance: РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ
+            regime: Р РµР¶РёРј СЂС‹РЅРєР°
+            symbol: РўРѕСЂРіРѕРІС‹Р№ СЃРёРјРІРѕР»
             signal_generator: Signal generator
 
         Returns:
-            Dict: Параметры риска
+            Dict: РџР°СЂР°РјРµС‚СЂС‹ СЂРёСЃРєР°
         """
         return self.config_manager.get_adaptive_risk_params(
             balance, regime, symbol, signal_generator
