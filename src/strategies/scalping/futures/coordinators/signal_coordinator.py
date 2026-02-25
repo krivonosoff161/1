@@ -868,8 +868,14 @@ class SignalCoordinator:
         if cooldown_sec <= 0 or age_sec >= cooldown_sec:
             return None
 
+        # P0-4 FIX: strong_signal_bypass не применяется после убыточного закрытия.
+        # loss_cooldown_sec (180s) обязателен — сильный сигнал не должен его обходить.
+        _is_loss_close = close_net_pnl < 0 or self._is_protective_exit_reason(
+            close_reason
+        )
         if (
-            signal_strength >= self._reentry_strong_signal_bypass
+            not _is_loss_close
+            and signal_strength >= self._reentry_strong_signal_bypass
             and age_sec >= self._reentry_strong_signal_min_age_sec
         ):
             return None
