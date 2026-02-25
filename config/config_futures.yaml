@@ -1784,11 +1784,11 @@ futures_modules:
     timeout_loss_percent: 1.0  # ✅ ИСПРАВЛЕНО: Закрывать, если позиция остаётся в убытке -1.0% после таймаута (было -0.5%)
     timeout_minutes: 5  # ✅ ИСПРАВЛЕНО: Таймаут (в минутах) перед принудительным закрытием убыточной позиции (было 3)
     min_holding_minutes: 1.0  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.5 до 1.0 мин - больше времени для роста
-    min_profit_to_close: 0.003  # FIX 2026-02-22: 1.5%→0.3% — 1.5% не достигается за 40мин, позиции висели ночь платя funding
+    min_profit_to_close: 0.010  # FIX 2026-02-25: 0.3%→1.0% — при 0.3% TSL снимался на +0.01% (R:R=0.1)
     extend_time_on_profit: true  # ✅ ЭТАП 4.3: Продлевать время удержания для прибыльных позиций
     extend_time_multiplier: 1.5  # ✅ ЭТАП 4.3: Множитель продления времени (1.5x для прибыльных позиций)
     # ✅ BREAKEVEN: Гарантия безубытка при достижении порога прибыли
-    breakeven_trigger: 0.008  # Активировать при 0.8% прибыли — подтянуть SL к entry + fee
+    breakeven_trigger: 0.015  # FIX 2026-02-25: 0.8%→1.5% — при 0.8% breakeven давал +$0.08 выигрыш
     # ✅ АДАПТИВНО: Интервал проверки TSL (периодическая проверка независимо от тикеров)
     check_interval_seconds: 1.0  # ✅ ИСПРАВЛЕНО: Интервал периодической проверки TSL (1.0 сек)
 
@@ -1814,13 +1814,14 @@ futures_modules:
         min_critical_hold_seconds: 60.0  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 5 до 60 сек - дать время на восстановление
 
         # ✅ ОПТИМИЗАЦИЯ ДЛЯ КАЧЕСТВЕННЫХ СДЕЛОК: Дополнительные параметры
-        min_profit_to_close: 0.003  # FIX 2026-02-22: 1.0%→0.3% — trending позиции держались 7ч платя funding
+        min_profit_to_close: 0.015  # FIX 2026-02-25: 0.3%→1.5% — при TP=4% нужна 1.5% активация TSL
         min_holding_minutes: 3.0  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 2.0 до 3.0 (+50%) - больше времени для роста
         extend_time_multiplier: 1.3  # ✅ КАЧЕСТВЕННАЯ ТОРГОВЛЯ: Уменьшено с 2.0 до 1.3 (-35%) - меньше продления, меньше риск разворота
         extend_time_on_profit: true  # ✅ АДАПТИВНО: Продлевать время для прибыльных позиций в тренде
         regime_multiplier: 2.0  # ✅ УВЕЛИЧЕНО: 2.0 (было 1.5) - больше места для откатов
         trend_strength_boost: 1.3  # ✅ НОВОЕ: Дополнительный буст при сильном тренде (>0.7)
         high_profit_threshold: 0.015  # ✅ НОВОЕ: Порог высокой прибыли для trending (1.5%)
+        breakeven_trigger: 0.020  # FIX 2026-02-25: breakeven только при 2% (50% от TP=4%)
 
         # ✅ АДАПТИВНО: Short reversal protection
         short_reversal_protection:
@@ -1849,13 +1850,14 @@ futures_modules:
         min_critical_hold_seconds: 30.0  # FIX: 60 → 30 сек — быстрее реагировать на убытки
 
         # FIX: мин прибыль для закрытия
-        min_profit_to_close: 0.004  # FIX: 1.5% → 0.4% — при 2-мин позициях 1.5% недостижимо
+        min_profit_to_close: 0.010  # FIX 2026-02-25: 0.4%→1.0% — при TP=1.35% активация при 74% TP
         min_holding_minutes: 0.5  # FIX: 1.0 → 0.5 мин — 30 сек минимум достаточно для ranging
         extend_time_multiplier: 2.0  # 🎯 УВЕЛИЧЕНО: 2.0x продление (было 1.2x) - до 80 минут для прибыльных!
         extend_time_on_profit: true  # Продлевать для прибыльных
         regime_multiplier: 1.5  # 🎯 УВЕЛИЧЕНО: 1.5 (было 1.2) - больше буфер
         trend_strength_boost: 1.0  # Стандарт
         high_profit_threshold: 0.02  # 🎯 УВЕЛИЧЕНО: 2% порог (было 1%) - для высокой прибыли
+        breakeven_trigger: 0.012  # FIX 2026-02-25: breakeven при 1.2% (TP=1.35%, ~89% TP)
 
         # ✅ АДАПТИВНО: Short reversal protection
         short_reversal_protection:
@@ -1881,13 +1883,14 @@ futures_modules:
         min_critical_hold_seconds: 20.0  # FIX: 60 → 20 сек — в хаосе нужна быстрая реакция
 
         # FIX: мин прибыль для закрытия
-        min_profit_to_close: 0.003  # FIX: 1.0% → 0.3% — в choppy 1% за 3 мин нереально
+        min_profit_to_close: 0.006  # FIX 2026-02-25: 0.3%→0.6% — в choppy TP=1.12%, активация при 54% TP
         min_holding_minutes: 0.3  # FIX: 1.0 → 0.3 мин (18 сек) — choppy сделки очень короткие
         extend_time_multiplier: 1.2  # ✅ Меньше продления для choppy (1.2x) - не используется, т.к. extend_time_on_profit=false
         extend_time_on_profit: false  # ✅ АДАПТИВНО: НЕ продлевать время в хаосе (быстрее закрывать)
         regime_multiplier: 0.9  # ✅ Уже есть: 0.9 - более строго
         trend_strength_boost: 1.0  # ✅ НОВОЕ: Нет дополнительного буста в хаосе
         high_profit_threshold: 0.008  # ✅ НОВОЕ: Порог высокой прибыли для choppy (0.8%)
+        breakeven_trigger: 0.008  # FIX 2026-02-25: оставляем 0.8% для choppy (TP=1.12%, быстрые сделки)
 
         # ✅ АДАПТИВНО: Short reversal protection
         short_reversal_protection:

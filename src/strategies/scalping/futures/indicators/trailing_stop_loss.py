@@ -395,12 +395,14 @@ class TrailingStopLoss:
                 self.max_trail,
             )
 
-            # Максимальное расстояние trail от entry = profit_pct (иначе SL ниже entry)
-            max_trail_from_entry = profit_pct_total * 0.95  # 95% от прибыли
-            if new_trail > max_trail_from_entry:
+            # Trail ≤ profit × 0.67 — гарантируем фиксацию ≥ 33% прибыли в SL
+            # При profit=2%: max_trail=1.34% → SL ≥ +0.66% от entry
+            # При profit=4%: max_trail=2.68% → SL ≥ +1.32% от entry
+            max_trail_from_entry = profit_pct_total * 0.67  # lock in 33% of profit
+            if max_trail_from_entry > 0 and new_trail > max_trail_from_entry:
                 new_trail = max_trail_from_entry
                 logger.debug(
-                    f"L1-3c: Trail ограничен {new_trail:.2%} от entry (95% of profit)"
+                    f"L1-3c: Trail ограничен {new_trail:.2%} от entry (lock_in=33% of profit {profit_pct_total:.2%})"
                 )
 
             self.current_trail = new_trail
