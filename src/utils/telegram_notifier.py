@@ -252,6 +252,7 @@ class TelegramNotifier:
         tp_price: float,
         sl_price: float,
         size_usd: float = 0.0,
+        entry_price: float = None,
     ) -> None:
         """Уведомление об открытии позиции."""
         if not self.enabled:
@@ -259,8 +260,9 @@ class TelegramNotifier:
 
         symbol = signal.get("symbol", "???")
         side = signal.get("side", "???")
-        # ✅ FIX: Защита от None - dict.get(key, default) не работает если value=None
-        entry = signal.get("price") or 0.0
+        # FIX 2026-02-25: entry_price передаётся caller'ом (fill/best_ask/live snapshot).
+        # Приоритет: явная entry_price > signal["price"] (которая может быть стале).
+        entry = entry_price or signal.get("price") or 0.0
         strength = signal.get("strength") or 0.0
         sig_type = signal.get("type", "")
         regime = signal.get("regime", "")

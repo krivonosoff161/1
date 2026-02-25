@@ -418,11 +418,20 @@ class FuturesOrderExecutor:
                 # OCO уже уведомляет внутри _place_oco_order — не дублируем
                 if self.telegram and order_type in ("market", "limit"):
                     try:
+                        # FIX 2026-02-25: правильный приоритет цены для уведомления.
+                        # Раньше signal.get("price") был первым — это стале цена DataRegistry.
+                        # Теперь: fill_price (avgPx из OKX) > est_entry (best_ask/bid) >
+                        # current_price_for_check (live snapshot) > signal price (last resort).
                         entry_for_telegram = float(
-                            signal.get("price", 0.0)
-                            or result.get("price", 0.0)
+                            result.get("fill_price")  # avgPx из OKX (market ордер)
+                            or result.get(
+                                "est_entry"
+                            )  # best_ask/bid в момент размещения
+                            or current_price_for_check  # live snapshot (3s max-age + REST)
+                            or signal.get(
+                                "price", 0.0
+                            )  # стале сигнальная цена (last resort)
                             or signal.get("entry_price", 0.0)
-                            or current_price_for_check
                             or 0.0
                         )
                         (
@@ -442,6 +451,7 @@ class FuturesOrderExecutor:
                                 tp_price=approx_tp_price,
                                 sl_price=approx_sl_price,
                                 size_usd=_size_usd,
+                                entry_price=entry_for_telegram,
                             )
                         )
                     except Exception as _tg_err:
@@ -1884,6 +1894,14 @@ class FuturesOrderExecutor:
                         f"⚠️ Не удалось обновить метрики slippage для {symbol}: {e}"
                     )
 
+                # FIX 2026-02-25: возвращаем fill_price и est_entry для Telegram уведомления
+                # fill_px обычно None (OKX не возвращает avgPx сразу), est_entry = best_ask/bid
+                est_entry = None
+                if best_ask and side.lower() in ("buy", "long"):
+                    est_entry = best_ask
+                elif best_bid and side.lower() in ("sell", "short"):
+                    est_entry = best_bid
+
                 return {
                     "success": True,
                     "order_id": order_id,
@@ -1891,6 +1909,8 @@ class FuturesOrderExecutor:
                     "symbol": symbol,
                     "side": side,
                     "size": size,
+                    "fill_price": fill_px,  # None если avgPx пуст в initial response
+                    "est_entry": est_entry,  # best_ask/bid в момент размещения ≈ fill price
                     "timestamp": datetime.now(),
                 }
             else:
