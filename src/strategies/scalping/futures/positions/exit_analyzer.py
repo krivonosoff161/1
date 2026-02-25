@@ -748,10 +748,11 @@ class ExitAnalyzer:
                         # Проблема: stale data (30-79 сек) при плече 10x даёт noise ~0.3% PnL —
                         # что больше старого порога 0.15%, вызывая ложные EXIT_BLOCKED.
                         # Формула: noise = price_move_per_30s * leverage ≈ 0.03% * leverage
-                        # Порог: max(0.20%, leverage * 0.03%) — не меньше 0.20%, не больше 0.80%
+                        # Порог: max(0.20%, leverage * 0.05%) — не меньше 0.20%, не больше 0.80%
+                        # P0-2 FIX: увеличили с 0.03 до 0.05 для более редкого ложного блока
                         _eff_leverage = self._get_effective_leverage(position, metadata)
                         _adaptive_min_abs_pct = max(
-                            0.20, min(0.80, _eff_leverage * 0.03)
+                            0.20, min(0.80, _eff_leverage * 0.05)
                         )
                         mismatch_detected = self._is_pnl_sign_mismatch(
                             model_gross_guard,
@@ -781,6 +782,22 @@ class ExitAnalyzer:
                                         f"→ HOLD (quality_downgrade)"
                                     )
 
+                        # P0-2 FIX: Fallback на exchange PnL при большом разрыве (> leverage * 0.5%)
+                        _large_gap_threshold = (
+                            _eff_leverage * 0.5
+                        )  # 5% for 10x leverage
+                        if mismatch_detected and exchange_gross_guard is not None:
+                            _gap_size = abs(model_gross_guard - exchange_gross_guard)
+                            if _gap_size > _large_gap_threshold:
+                                logger.warning(
+                                    f"⚠️ PNL_MISMATCH_LARGE_GAP {symbol}: "
+                                    f"разрыв={_gap_size:.4f}% > threshold={_large_gap_threshold:.4f}% "
+                                    f"— используем exchange PnL ({exchange_gross_guard:.4f}%) для guard"
+                                )
+                                # Используем exchange PnL для guard-решения
+                                model_gross_guard = exchange_gross_guard
+                                mismatch_detected = False  # Сбрасываем mismatch т.к. используем exchange
+
                         if mismatch_detected:
                             if self.slo_monitor:
                                 try:
@@ -796,6 +813,50 @@ class ExitAnalyzer:
                             )
                             await self._force_resync_on_pnl_mismatch(symbol)
                             if self._should_block_on_pnl_mismatch(decision_reason):
+                                # P0-2 FIX: Force-close после 5 блокировок за 30 секунд
+                                _force_close_threshold = 5
+                                _force_close_window = 30.0
+                                _now = time.time()
+                                _recent_blocks = self._count_recent_pnl_blocks(
+                                    symbol, _force_close_window
+                                )
+
+                                if _recent_blocks >= _force_close_threshold:
+                                    # Force-close по exchange данным
+                                    _exchange_positive = (
+                                        exchange_gross_guard is not None
+                                        and exchange_gross_guard > 0
+                                    )
+                                    logger.critical(
+                                        f"🚨 PNL_MISMATCH_FORCE_CLOSE {symbol}: "
+                                        f"{_recent_blocks} блокировок за {_force_close_window}s — "
+                                        f"force-close по exchange PnL={exchange_gross_guard:.4f}% "
+                                        f"(positive={_exchange_positive})"
+                                    )
+                                    # Возвращаем close с exchange PnL
+                                    return {
+                                        "action": "close",
+                                        "reason": f"pnl_mismatch_force_close_exchange_{'profit' if _exchange_positive else 'loss'}",
+                                        "symbol": symbol,
+                                        "pnl_pct": float(
+                                            exchange_gross_guard
+                                            or model_gross_guard
+                                            or 0.0
+                                        ),
+                                        "net_pnl_pct": float(
+                                            exchange_gross_guard
+                                            or model_gross_guard
+                                            or 0.0
+                                        ),
+                                        "mismatch_count": mismatch_count,
+                                        "mismatch_model_pct": float(
+                                            model_gross_guard or 0.0
+                                        ),
+                                        "mismatch_exchange_pct": float(
+                                            exchange_gross_guard or 0.0
+                                        ),
+                                    }
+
                                 if mismatch_count < self._pnl_mismatch_block_threshold:
                                     logger.warning(
                                         f"EXIT_DEFERRED_PNL_MISMATCH {symbol}: "
@@ -1099,6 +1160,18 @@ class ExitAnalyzer:
 
     def _clear_pnl_mismatch_state(self, symbol: str) -> None:
         self._pnl_mismatch_state.pop(symbol, None)
+
+    def _count_recent_pnl_blocks(self, symbol: str, window_sec: float = 30.0) -> int:
+        """P0-2 FIX: Считает количество EXIT_BLOCKED за последние window_sec секунд."""
+        now_ts = time.time()
+        state = self._pnl_mismatch_state.get(symbol, {})
+        last_ts = float(state.get("last_ts", 0.0) or 0.0)
+        count = int(state.get("count", 0) or 0)
+
+        # Если последний блок был давно - сбрасываем счетчик
+        if now_ts - last_ts > window_sec:
+            return 0
+        return count
 
     async def _force_resync_on_pnl_mismatch(self, symbol: str) -> None:
         """
@@ -1569,10 +1642,11 @@ class ExitAnalyzer:
 
         leverage = self._get_effective_leverage(position, metadata)
         tp_scale = self._get_exit_leverage_scale(position, metadata)
+        # P0-3 FIX: tp_min/tp_max from config are ALREADY configured for target leverage
+        # (they're absolute values, not base values). Only apply scale to ATR result.
         if tp_scale != 1.0:
             tp_percent *= tp_scale
-            tp_min_percent *= tp_scale
-            tp_max_percent *= tp_scale
+            # Do NOT scale tp_min_percent and tp_max_percent - they are absolute bounds
 
         # === ГАРАНТИРОВАННАЯ ИНИЦИАЛИЗАЦИЯ sl_percent ===
         sl_percent = 2.0

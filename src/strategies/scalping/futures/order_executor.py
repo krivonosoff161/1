@@ -418,14 +418,29 @@ class FuturesOrderExecutor:
                 # OCO уже уведомляет внутри _place_oco_order — не дублируем
                 if self.telegram and order_type in ("market", "limit"):
                     try:
-                        _size_usd = position_size * float(
-                            signal.get("price", 0.0) or 0.0
+                        entry_for_telegram = float(
+                            signal.get("price", 0.0)
+                            or result.get("price", 0.0)
+                            or signal.get("entry_price", 0.0)
+                            or current_price_for_check
+                            or 0.0
+                        )
+                        (
+                            approx_tp_price,
+                            approx_sl_price,
+                        ) = self._estimate_tp_sl_for_telegram(
+                            signal=signal, entry_price=entry_for_telegram
+                        )
+                        _size_usd = (
+                            position_size * entry_for_telegram
+                            if entry_for_telegram > 0
+                            else 0.0
                         )
                         asyncio.create_task(
                             self.telegram.send_trade_open(
                                 signal=signal,
-                                tp_price=None,  # TSL управляет динамически
-                                sl_price=None,
+                                tp_price=approx_tp_price,
+                                sl_price=approx_sl_price,
                                 size_usd=_size_usd,
                             )
                         )
@@ -444,6 +459,88 @@ class FuturesOrderExecutor:
             except Exception:
                 pass
             return {"success": False, "error": str(e)}
+
+    def _get_adaptive_regime_baseline_tp_sl(self, regime: str) -> Tuple[float, float]:
+        """Базовые TP/SL проценты из adaptive_regime[regime] для Telegram."""
+        regime_key = str(regime or "ranging").lower()
+
+        def _to_dict(obj: Any) -> Dict[str, Any]:
+            if obj is None:
+                return {}
+            if isinstance(obj, dict):
+                return obj
+            if hasattr(obj, "model_dump"):
+                dumped = obj.model_dump()
+                return dumped if isinstance(dumped, dict) else {}
+            if hasattr(obj, "dict"):
+                dumped = obj.dict()
+                return dumped if isinstance(dumped, dict) else {}
+            if hasattr(obj, "__dict__"):
+                return dict(obj.__dict__)
+            return {}
+
+        tp_percent = 0.0
+        sl_percent = 0.0
+
+        try:
+            scalping_cfg = self.scalping_config
+            adaptive_regime_cfg = (
+                scalping_cfg.get("adaptive_regime", {})
+                if isinstance(scalping_cfg, dict)
+                else getattr(scalping_cfg, "adaptive_regime", {})
+            )
+            adaptive_regime_dict = _to_dict(adaptive_regime_cfg)
+            regime_cfg = _to_dict(adaptive_regime_dict.get(regime_key, {}))
+
+            tp_percent = float(regime_cfg.get("tp_percent", 0) or 0)
+            sl_percent = float(regime_cfg.get("sl_percent", 0) or 0)
+
+            if tp_percent <= 0:
+                tp_percent = float(
+                    (
+                        scalping_cfg.get("tp_percent", 0)
+                        if isinstance(scalping_cfg, dict)
+                        else getattr(scalping_cfg, "tp_percent", 0)
+                    )
+                    or 0
+                )
+            if sl_percent <= 0:
+                sl_percent = float(
+                    (
+                        scalping_cfg.get("sl_percent", 0)
+                        if isinstance(scalping_cfg, dict)
+                        else getattr(scalping_cfg, "sl_percent", 0)
+                    )
+                    or 0
+                )
+        except Exception as exc:
+            logger.debug(
+                f"⚠️ OrderExecutor: failed to read baseline TP/SL for regime={regime_key}: {exc}"
+            )
+
+        return max(tp_percent, 0.0), max(sl_percent, 0.0)
+
+    def _estimate_tp_sl_for_telegram(
+        self, signal: Dict[str, Any], entry_price: float
+    ) -> Tuple[Optional[float], Optional[float]]:
+        """Ориентировочные TP/SL цены для уведомления Telegram."""
+        if entry_price <= 0:
+            return None, None
+
+        side = str(signal.get("side", "buy")).lower()
+        regime = str(signal.get("regime", "ranging")).lower()
+        tp_percent, sl_percent = self._get_adaptive_regime_baseline_tp_sl(regime)
+        if tp_percent <= 0 or sl_percent <= 0:
+            return None, None
+
+        if side in ("buy", "long"):
+            tp_price = entry_price * (1 + tp_percent / 100.0)
+            sl_price = entry_price * (1 - sl_percent / 100.0)
+        else:
+            tp_price = entry_price * (1 - tp_percent / 100.0)
+            sl_price = entry_price * (1 + sl_percent / 100.0)
+
+        return tp_price, sl_price
 
     def _determine_order_type(self, signal: Dict[str, Any]) -> str:
         """Определение типа ордера на основе сигнала"""

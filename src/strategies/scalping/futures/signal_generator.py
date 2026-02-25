@@ -2523,6 +2523,35 @@ class FuturesSignalGenerator:
                 )
                 return []
 
+            # ✅ P0-1 FIX: Проверка на stale candles перед расчетом индикаторов
+            # Получаем цену последней свечи и текущую WS цену
+            last_candle_close = candles[-1].close if candles else 0.0
+            ws_price = 0.0
+            try:
+                if self.data_registry:
+                    ws_price = (
+                        await self.data_registry.get_fresh_price_for_signals(
+                            symbol, client=self.client, max_age=10.0
+                        )
+                        or 0.0
+                    )
+            except Exception as e:
+                logger.debug(
+                    f"⚠️ {symbol}: Ошибка получения WS цены для валидации: {e}"
+                )
+
+            # Проверяем расхождение между ценой свечи и WS ценой
+            if ws_price > 0 and last_candle_close > 0:
+                price_diff_pct = abs(last_candle_close - ws_price) / ws_price
+                if price_diff_pct > 0.05:  # > 5% разница
+                    logger.critical(
+                        f"🚨 [STALE CANDLES CRITICAL] {symbol}: "
+                        f"Свеча={last_candle_close:.2f}, WS={ws_price:.2f}, "
+                        f"разница={price_diff_pct*100:.1f}% > 5%. "
+                        f"БЛОКИРОВКА генерации сигналов до синхронизации данных!"
+                    )
+                    return []
+
             # Технические индикаторы
             indicator_results = self.indicator_manager.calculate_all(market_data)
 
@@ -5701,6 +5730,29 @@ class FuturesSignalGenerator:
             current_price = await self._get_current_market_price(
                 symbol, candle_close_price
             )
+
+            # ✅ P0-1 FIX: Валидация BB значений на соответствие текущей цене
+            # Предотвращает ложные сигналы от stale BB индикаторов
+            if current_price > 0 and upper > 0 and lower > 0 and middle > 0:
+                # Проверяем, что BB значения в разумном диапазоне от текущей цены (±5%)
+                bb_valid_range = 0.05  # 5%
+                upper_dev = abs(upper - current_price) / current_price
+                lower_dev = abs(lower - current_price) / current_price
+                middle_dev = abs(middle - current_price) / current_price
+
+                # Если BB значения слишком далеко от текущей цены - данные устарели
+                if (
+                    upper_dev > bb_valid_range
+                    or lower_dev > bb_valid_range
+                    or middle_dev > bb_valid_range
+                ):
+                    logger.warning(
+                        f"⚠️ [BB STALE DATA] {symbol}: BB значения вне диапазона ±5% от текущей цены. "
+                        f"Price={current_price:.2f}, BB(upper={upper:.2f}, middle={middle:.2f}, lower={lower:.2f}), "
+                        f"отклонения: upper={upper_dev*100:.1f}%, lower={lower_dev*100:.1f}%, middle={middle_dev*100:.1f}%. "
+                        f"Пропускаем генерацию BB сигналов."
+                    )
+                    return []
 
             # Отскок от нижней полосы (покупка)
             # ✅ ИСПРАВЛЕНИЕ: Не даем LONG сигнал в нисходящем тренде!
