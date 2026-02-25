@@ -87,27 +87,20 @@ class RSISignalGenerator:
             rsi_oversold = regime_params.get("rsi_oversold", 30)
             rsi_overbought = regime_params.get("rsi_overbought", 70)
 
-            # ✅ НОВОЕ (09.01.2026): Адаптивные RSI пороги по направлению тренда
-            # В uptrend: LONG при RSI < 50 (не ждать глубокой перепроданности 30)
-            # В downtrend: SHORT при RSI > 50 (не ждать сильной перекупленности 70)
+            # FIX 2026-02-25: Убраны "адаптивные" пороги RSI=50 в uptrend/downtrend.
+            # Логика "ловить LONG при RSI<50 в uptrend" давала мусорные сигналы:
+            # любой RSI=49/44/42 = "RSI перепродан", strength≈0.02 — что нерабочий сигнал.
+            # Используем стандартные пороги из конфига (22-25 в зависимости от пары).
             ema_fast = indicators.get("ema_12", 0)
             ema_slow = indicators.get("ema_26", 0)
 
-            # Определяем направление тренда по EMA
+            # Определяем направление тренда по EMA (используется ниже для блокировки конфликтов)
             is_uptrend = ema_fast > ema_slow
             is_downtrend = ema_fast < ema_slow
 
-            # Адаптируем пороги
-            if is_uptrend:
-                rsi_oversold_adaptive = 50  # В uptrend ловим LONG раньше
-                rsi_overbought_adaptive = rsi_overbought  # Стандартный порог для SHORT
-            elif is_downtrend:
-                rsi_oversold_adaptive = rsi_oversold  # Стандартный порог для LONG
-                rsi_overbought_adaptive = 50  # В downtrend ловим SHORT раньше
-            else:
-                # Нейтральный тренд - стандартные пороги
-                rsi_oversold_adaptive = rsi_oversold
-                rsi_overbought_adaptive = rsi_overbought
+            # Стандартные пороги из конфига — без "adaptive 50" хаков
+            rsi_oversold_adaptive = rsi_oversold
+            rsi_overbought_adaptive = rsi_overbought
 
             # Получаем текущий режим для логирования
             regime_manager = self.regime_managers.get(symbol) or self.regime_manager

@@ -2713,13 +2713,15 @@ class FuturesOrderExecutor:
 
                 # Telegram: уведомление о входе
                 if self.telegram:
-                    size_usd = size * signal.get("price", 0.0)
+                    _oco_entry = float(signal.get("price") or 0.0)
+                    size_usd = size * _oco_entry
                     asyncio.create_task(
                         self.telegram.send_trade_open(
                             signal=signal,
                             tp_price=tp_price,
                             sl_price=sl_price,
                             size_usd=size_usd,
+                            entry_price=_oco_entry,
                         )
                     )
 
