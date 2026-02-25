@@ -1026,6 +1026,13 @@ class DataRegistry:
 
             # Добавляем свечу в буфер
             await self._candle_buffers[symbol][timeframe].add_candle(candle)
+
+            # ✅ P0-1 FIX: Сбрасываем stale флаг при получении свежей свечи
+            # Проверяем, что свеча свежая (не старше 2 минут)
+            candle_ts = getattr(candle, "timestamp", None)
+            if candle_ts and (time.time() - float(candle_ts)) < 120:
+                self.clear_candle_buffer_stale(symbol, timeframe)
+
             logger.debug(
                 f"📊 DataRegistry: Добавлена свеча {symbol} {timeframe} "
                 f"(timestamp={candle.timestamp}, price={candle.close:.2f})"
@@ -1120,6 +1127,8 @@ class DataRegistry:
 
         Используется при старте бота для загрузки исторических свечей.
 
+        ✅ P0-1 FIX: Проверяем свежесть свечей и помечаем буфер как stale если данные устарели.
+
         Args:
             symbol: Торговый символ
             timeframe: Таймфрейм (1m, 5m, 1H, etc.)
@@ -1141,6 +1150,28 @@ class DataRegistry:
             # Добавляем все свечи
             for candle in candles:
                 await buffer.add_candle(candle)
+
+            # ✅ P0-1 FIX: Проверяем свежесть последней свечи
+            if candles:
+                last_candle = candles[-1]
+                last_ts = getattr(last_candle, "timestamp", None)
+                if last_ts:
+                    age_seconds = time.time() - float(last_ts)
+                    # Если свеча старше 2 минут - помечаем как stale
+                    if age_seconds > 120:
+                        logger.warning(
+                            f"⚠️ [STALE CANDLES] {symbol} {timeframe}: "
+                            f"последняя свеча {age_seconds:.0f}s old "
+                            f"(ts={last_ts}, close={getattr(last_candle, 'close', 'N/A')}). "
+                            f"Буфер помечен как STALE - ожидаем свежие данные от WebSocket."
+                        )
+                        # Сохраняем метаданные о stale статусе
+                        if symbol not in self._market_data:
+                            self._market_data[symbol] = {}
+                        self._market_data[symbol][f"_{timeframe}_stale"] = True
+                        self._market_data[symbol][
+                            f"_{timeframe}_stale_since"
+                        ] = time.time()
 
             logger.info(
                 f"📊 DataRegistry: Инициализирован буфер свечей для {symbol} {timeframe} "
@@ -1292,6 +1323,52 @@ class DataRegistry:
             )
             errors.append(f"Validation exception: {str(e)}")
             return False, errors
+
+    def is_candle_buffer_stale(self, symbol: str, timeframe: str = "1m") -> bool:
+        """
+        ✅ P0-1 FIX: Проверяет, помечен ли буфер свечей как stale (устаревший).
+
+        Используется при старте бота для блокировки сигналогенерации
+        пока не придут свежие свечи от WebSocket.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (по умолчанию "1m")
+
+        Returns:
+            True если буфер stale (ожидаем свежие данные), False если данные свежие
+        """
+        md = self._market_data.get(symbol, {})
+        stale_flag = md.get(f"_{timeframe}_stale", False)
+        if stale_flag:
+            # Проверяем, не истек ли таймаут ожидания (5 минут)
+            stale_since = md.get(f"_{timeframe}_stale_since", 0)
+            if time.time() - stale_since > 300:  # 5 минут
+                logger.warning(
+                    f"⏰ [STALE TIMEOUT] {symbol} {timeframe}: "
+                    f"таймаут ожидания свежих свечей (5min). "
+                    f"Снимаем stale флаг и разрешаем торговлю на свой страх и риск."
+                )
+                md[f"_{timeframe}_stale"] = False
+                return False
+        return stale_flag
+
+    def clear_candle_buffer_stale(self, symbol: str, timeframe: str = "1m") -> None:
+        """
+        ✅ P0-1 FIX: Сбрасывает stale флаг при получении свежих свечей.
+
+        Args:
+            symbol: Торговый символ
+            timeframe: Таймфрейм (по умолчанию "1m")
+        """
+        md = self._market_data.get(symbol, {})
+        if md.get(f"_{timeframe}_stale", False):
+            logger.info(
+                f"✅ [STALE CLEARED] {symbol} {timeframe}: "
+                f"получены свежие свечи, снимаем stale флаг."
+            )
+            md[f"_{timeframe}_stale"] = False
+            md.pop(f"_{timeframe}_stale_since", None)
 
     def validate_price(
         self,

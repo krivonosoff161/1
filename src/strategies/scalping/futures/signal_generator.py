@@ -2001,6 +2001,16 @@ class FuturesSignalGenerator:
                 )
                 return []
 
+            # ✅ P0-1 FIX: Проверяем, не помечены ли свечи как stale (устаревшие при старте)
+            if self.data_registry and self.data_registry.is_candle_buffer_stale(
+                symbol, "1m"
+            ):
+                logger.warning(
+                    f"⏳ [STALE BLOCK] {symbol}: Буфер свечей помечен как STALE — "
+                    f"ожидаем свежие данные от WebSocket перед генерацией сигналов."
+                )
+                return []
+
             # Генерация базовых сигналов
             base_signals = await self._generate_base_signals(
                 symbol, market_data, regime
