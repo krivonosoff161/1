@@ -1648,15 +1648,6 @@ class ExitAnalyzer:
             tp_percent *= tp_scale
             # Do NOT scale tp_min_percent and tp_max_percent - they are absolute bounds
 
-        # === ГАРАНТИРОВАННАЯ ИНИЦИАЛИЗАЦИЯ sl_percent ===
-        sl_percent = 2.0
-        sl_min_percent = 1.0
-        leverage = self._get_effective_leverage(position, metadata)
-        sl_scale = self._get_exit_leverage_scale(position, metadata)
-        if sl_scale != 1.0:
-            sl_percent *= sl_scale
-            sl_min_percent *= sl_scale
-
         if current_price and current_price > 0:
             try:
                 # ✅ ИСПРАВЛЕНО ПРОБЛЕМА #6: Используем ATRProvider БЕЗ fallback
