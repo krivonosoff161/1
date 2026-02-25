@@ -2972,7 +2972,14 @@ class FuturesSignalGenerator:
             adx_value = 0.0
             adx_plus_di = 0.0
             adx_minus_di = 0.0
-            adx_threshold = 20.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (27.12.2025): Снижен дефолтный порог с 25 до 20
+            # FIX 2026-02-25: возвращаем 25.0 из конфига adx_filter.
+            # Порог 20.0 давал ложные adx_bearish/bullish сигналы при ADX=20-24 (слабый/нет тренда).
+            # Результат: 88% сделок закрывались по sl_reached из-за слабых сигналов.
+            adx_threshold = (
+                self.adx_filter.config.adx_threshold
+                if self.adx_filter and self.adx_filter.config
+                else 25.0
+            )
             adx_from_registry = False  # Флаг, откуда взят ADX
 
             # ✅ ИСПРАВЛЕНО: Получаем ADX из DataRegistry ДО логирования
@@ -3127,8 +3134,10 @@ class FuturesSignalGenerator:
 
             # ✅ ИСПРАВЛЕНО: Определяем направление тренда ДО логирования (после fallback)
             if adx_value > 0:
+                # FIX 2026-02-25: fallback 20.0 → 25.0 (конфиг default).
+                # При отсутствии adx_filter используем тот же порог что и для генерации.
                 adx_threshold_for_trend = (
-                    self.adx_filter.config.adx_threshold if self.adx_filter else 20.0
+                    self.adx_filter.config.adx_threshold if self.adx_filter else 25.0
                 )
                 if adx_value >= adx_threshold_for_trend:
                     # Сильный тренд
