@@ -143,6 +143,14 @@ scalping:
     allow_candle_price_fallback: false
     allow_price_limits_fallback: false
     rest_update_cooldown: 1.0
+    # FIX 2026-02-25: Staleness-check для сигналов в signal_coordinator.execute_signal_from_price
+    # stale_signal_action: block — при устаревании сигнала блокируем, не "обновляем" price через REST
+    # (обновление через get_price_limits может вернуть стале REST данные и скорраптировать верный WS price)
+    # hard_price_stale (>5% расхождения) блокирует независимо от этого параметра.
+    stale_signal_ttl_seconds: 2.0         # сигнал > 2s → soft_stale
+    stale_signal_hard_ttl_seconds: 5.0    # сигнал > 5s + price_diff → hard_stale → block
+    stale_signal_price_diff_pct: 1.0      # % расхождения сигнала и текущей цены
+    stale_signal_action: "block"          # block: не корруптировать цену через REST refresh
     # Расчёт strength: strength = min(1.0, ema_spread_pct * strength_multiplier)
     # BTC (spread ~0.04%) * 1000 = 0.4, ETH (spread ~0.05%) * 1000 = 0.5
     # XRP (spread ~0.65%) * 1000 = 6.5 → 1.0 (нормально, XRP волатильнее)

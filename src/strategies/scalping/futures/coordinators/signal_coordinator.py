@@ -2867,13 +2867,40 @@ class SignalCoordinator:
                                     f"hard age {time_diff:.2f}s > {stale_hard_ttl_seconds:.2f}s"
                                 )
 
-                    price_client = (
-                        getattr(self.order_executor, "client", None) or self.client
-                    )
-                    if price_client and hasattr(price_client, "get_price_limits"):
-                        price_limits = await price_client.get_price_limits(symbol)
-                        if price_limits:
-                            current_price = price_limits.get("current_price", 0)
+                    # FIX 2026-02-25: WS DataRegistry — приоритетный источник текущей цены.
+                    # get_price_limits() как REST источник ненадёжен: может вернуть стале данные
+                    # (OKX API lag или задержка на старте сессии), что корруптирует верную сигнальную цену.
+                    # Порядок: WS DataRegistry (0 latency) → get_price_limits() REST (fallback).
+                    ws_price_source = "none"
+                    try:
+                        if self.data_registry:
+                            ws_snap = (
+                                await self.data_registry.get_decision_price_snapshot(
+                                    symbol=symbol,
+                                    max_age=5.0,
+                                    allow_rest_fallback=False,
+                                )
+                            )
+                            if (
+                                ws_snap
+                                and ws_snap.get("price")
+                                and float(ws_snap["price"]) > 0
+                            ):
+                                current_price = float(ws_snap["price"])
+                                ws_price_source = ws_snap.get("source", "WS")
+                    except Exception:
+                        pass
+
+                    if current_price <= 0:
+                        # Fallback: REST get_price_limits() если WS нет данных
+                        price_client = (
+                            getattr(self.order_executor, "client", None) or self.client
+                        )
+                        if price_client and hasattr(price_client, "get_price_limits"):
+                            price_limits = await price_client.get_price_limits(symbol)
+                            if price_limits:
+                                current_price = price_limits.get("current_price", 0)
+                                ws_price_source = "REST_FALLBACK"
 
                     dynamic_price_diff_pct = stale_price_diff_pct
                     try:
@@ -2922,7 +2949,21 @@ class SignalCoordinator:
                                 f"price diff {price_diff_pct:.2f}% > {dynamic_price_diff_pct:.2f}%"
                             )
 
-                    is_stale = price_stale or hard_time_stale
+                    # FIX 2026-02-25: hard_price_stale — если расхождение > 5%, это аномалия.
+                    # Не пытаемся "обновить" цену — просто блокируем сигнал.
+                    # Кейс: сигнал price=2132 (верный WS), current=1954 (стале REST) → 9% → block.
+                    hard_price_stale = False
+                    if price_stale and current_price > 0 and signal_price > 0:
+                        raw_diff = (
+                            abs(signal_price - current_price) / current_price * 100
+                        )
+                        if raw_diff > 5.0:
+                            hard_price_stale = True
+                            reasons.append(
+                                f"HARD price anomaly {raw_diff:.1f}% > 5% (src={ws_price_source})"
+                            )
+
+                    is_stale = price_stale or hard_time_stale or hard_price_stale
                     if time_stale and not is_stale:
                         soft_stale = True
 
@@ -2946,6 +2987,14 @@ class SignalCoordinator:
                     elif is_stale:
                         action = str(stale_action).strip().lower()
                         reason_text = "; ".join(reasons) if reasons else "stale"
+                        # FIX 2026-02-25: hard_price_stale всегда блокирует,
+                        # даже если action="refresh" — нельзя обновить цену когда
+                        # расхождение > 5% (источник "current" может быть стале, как в ETH-кейсе).
+                        if hard_price_stale:
+                            logger.warning(
+                                f"STALE signal {symbol}: {reason_text}, HARD BLOCK (price anomaly)"
+                            )
+                            return False
                         if action in ("refresh", "update", "replace"):
                             if current_price <= 0:
                                 price_client = (
