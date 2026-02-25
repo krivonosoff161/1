@@ -1187,9 +1187,19 @@ class FilterManager:
         if not self.order_flow_filter:
             return True
 
-        # Логика проверки order flow
-        # TODO: Реализовать после изучения OrderFlowFilter
-        return True
+        # FIX (2026-02-25): Убираем заглушку TODO — вызываем реальный OrderFlowFilter.
+        # OrderFlowFilter.is_signal_valid() полностью реализован в filters/order_flow_filter.py.
+        # Блокирует BUY при ask-доминировании (delta < long_threshold) и SELL при bid-доминировании.
+        # fail_open_enabled=true в конфиге — при ошибке REST API пропускает сигнал.
+        side = signal.get("side", "buy")
+        regime = signal.get("regime")
+        return await self.order_flow_filter.is_signal_valid(
+            symbol=symbol,
+            side=side,
+            regime=regime,
+            relax_multiplier=relax_multiplier,
+            overrides=params if params else None,
+        )
 
     async def _apply_funding_rate_filter(
         self, symbol: str, signal: Dict[str, Any], params: Dict[str, Any]
