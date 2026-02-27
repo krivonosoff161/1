@@ -180,7 +180,7 @@ scalping:
     thresholds:
       by_regime:
         ranging:
-          min_signal_strength: 0.10
+          min_signal_strength: 0.12  # SYNC 2026-02-27: 0.10→0.12 — выровнен с trending (режимы должны иметь разумный floor)
         trending:
           min_signal_strength: 0.12
         choppy:
@@ -222,7 +222,6 @@ scalping:
 
   # Параметры скальпинга (адаптированы для Futures)
   min_signal_strength: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 0.65→0.35 - реальная сила сигналов 0.00-0.75
-  min_signal_strength_ranging: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 0.65→0.35
   min_adx: 15.0  # ✅ ИСПРАВЛЕНО (23.01.2026): Снижено с 20.0→15.0 для большей чувствительности
 
   # Futures-specific parameters
@@ -249,7 +248,7 @@ scalping:
     ETH-USDT:
       ws_fresh_max_age: 15.0  # FIX (2026-02-19): ETH высоколиквиден, тикеры каждые 2-5s → жёсткий лимит
       min_signal_strength: 0.15  # FIX (2026-02-19): 0.12 → 0.15 — отфильтровать слабые сигналы (WR=22% при 0.12)
-      sl_atr_multiplier: 2.0  # FIX (2026-02-19): 3.5 → 2.0 ATR. Было: SL=$42 при ATR=$12. Стало: SL=$24. R:R ratio 1.14→2.5
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 2.0→1.0 — унификация с exit_params (R:R: 2.5→5.0)
       tp_atr_multiplier: 5.0  # FIX (2026-02-19): 4.0 → 5.0 ATR. Было: TP=$48. Стало: TP=$60. Ratio=5.0/2.0=2.5
       max_holding_minutes: 20.0  # FIX (2026-02-19): 30.0 → 20.0 — ETH быстрый, 30 мин слишком долго
       min_adx: 14.0  # ✅ Looser ADX для ETH
@@ -271,7 +270,7 @@ scalping:
       min_signal_strength: 0.12  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.58→0.35
       min_position_usd: 40.0  # ✅ ИСПРАВЛЕНО (08.01.2026): Снижено с 50.0
       max_position_usd: 750.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 250→900 для целевой маржи $90 при leverage 10x
-      sl_atr_multiplier: 3.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Wider SL для SOL (Grok рекомендация)
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.0→1.0 — унификация с exit_params
       smart_close:  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Per-symbol Smart Close параметры для SOL
         reversal_score_threshold:
           ranging: 5  # ✅ SOL более волатильный - требуется еще больше подтверждений разворота (5 вместо 4)
@@ -279,8 +278,8 @@ scalping:
       enabled: true  # 2026-02-21: Возвращён в торговлю для диагностики адаптивной системы (был WR=11.9% — причина не найдена, нужны свежие логи)
       # ✅ НОВОЕ (06.01.2026): Специальные параметры для низковолатильной пары
       min_adx: 10.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 12.0→10.0
-      min_signal_strength: 0.10  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.55→0.35
-      sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Wider SL для XRP (Grok рекомендация)
+      min_signal_strength: 0.12  # SYNC 2026-02-27: 0.10→0.12 — поднят до уровня trending threshold
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.5→1.0 — унификация с exit_params
       tp_atr_multiplier: 4.0  # ✅ НОВОЕ (06.01.2026): Адаптивный TP для компенсации низкой волатильности
       indicators:  # ✅ НОВОЕ (06.01.2026): Настройка индикаторов для микроволатильности
         atr_period: 7  # ✅ Уменьшен период (14→7) для большей чувствительности
@@ -300,8 +299,8 @@ scalping:
       ws_fresh_max_age: 45.0  # FIX (2026-02-19): DOGE низкая ликвидность, тикеры могут задерживаться 30-60s
       # ✅ НОВОЕ (06.01.2026): Специальные параметры для ультра-низковолатильной пары
       min_adx: 8.0  # ✅ ИСПРАВЛЕНО (23.01.2026): 10.0→8.0
-      min_signal_strength: 0.08  # ✅ ИСПРАВЛЕНО (23.01.2026): 0.50→0.30 (реальная сила 0.00-0.11)
-      sl_atr_multiplier: 4.0  # ✅ Широкий SL для компенсации шумов
+      min_signal_strength: 0.15  # SYNC 2026-02-27: 0.08→0.15 — поднят до уровня choppy threshold (было слишком низко, пропускало мусор)
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 4.0→1.0 — унификация с exit_params
       tp_atr_multiplier: 5.0  # ✅ Увеличенный TP - компенсация микроволатильности
       max_holding_minutes: 20.0  # ✅ Короче холдинг - быстрое закрытие на микродвижениях
       indicators:  # ✅ НОВОЕ (06.01.2026): Максимальная чувствительность индикаторов
@@ -504,11 +503,11 @@ scalping:
       min_score_threshold: 1.5  # ⬇️ Смягчено: было 2.0, теперь 1.5 (больше сигналов в тренде)
       max_trades_per_hour: 5  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 30→5 - экономия комиссий, тренд держать дольше
       position_size_multiplier: 1.3  # ✅ АГРЕССИВНО: Увеличено с 1.1 до 1.3 (+18%) - больше размер позиций
-      tp_atr_multiplier: 1.2  # ✅ АГРЕССИВНО: Увеличено с 1.0 до 1.2 (+20%) - больше прибыль
+      tp_atr_multiplier: 1.6  # SYNC 2026-02-27: 1.2→1.6 — синхронизация с exit_params.trending (single source of truth)
       tp_percent: 4.0  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 6.55%→4.0% - реалистичный TP, при пробое TSL подхватит
       sl_percent: 1.2  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.8% до 1.2% - баланс с новым TP
       sl_atr_based: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Использовать ATR-based SL для защиты от шума
-      sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): 3.0→3.5 ATR для trending (защита от откатов в тренде) - FIX 6
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.5→1.0 — синхронизация с exit_params.trending (R:R был 0.34:1 → стало 1.6:1)
       sl_min_percent: 1.2  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Минимальный SL 0.8%→1.2% - FIX 6
       sl_max_percent: 2.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Максимальный SL 1.8%→2.0% - FIX 6
       max_holding_minutes: 40  # ✅ АГРЕССИВНО: Увеличено с 30 до 40 минут (+33%) - больше времени для прибыли
@@ -581,12 +580,12 @@ scalping:
       tp_percent: 2.5  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 5.55%→2.5% - реалистичный TP для флэта (ATR-based 1.5-2.2% уже действует)
       tp_adaptive: true  # ✅ ГРОК: Включить адаптивный TP с ATR
       tp_atr_based: true  # ✅ ГРОК ФИКС: Включить ATR-based TP для ranging
-      tp_atr_multiplier: 2.5  # ✅ ГРОК ФИКС: Множитель ATR для TP (2.5 для ranging)
+      tp_atr_multiplier: 1.5  # SYNC 2026-02-27: 2.5→1.5 — синхронизация с exit_params.ranging (single source of truth)
       tp_min_percent: 1.5  # ✅ ГРОК ФИКС: Минимальный TP 1.5%
       tp_max_percent: 2.2  # ✅ ГРОК: Максимальный TP 2.2%
       sl_percent: 1.0  # ✅ ГРОК ФИКС: Увеличено с 0.8% до 1.0% (баланс для ranging noise)
       sl_atr_based: true  # ✅ ГРОК: Использовать ATR-based SL вместо фиксированного
-      sl_atr_multiplier: 4.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Увеличено с 3.5 до 4.0 для защиты от шума в ranging - FIX 6
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 4.0→1.0 — синхронизация с exit_params.ranging (R:R был 0.63:1 → стало 1.5:1)
       sl_min_percent: 0.9  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Минимальный SL 0.6%→0.9% (защита от шума) - FIX 6
       sl_max_percent: 2.2  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Увеличено с 2.0% до 2.2% для соответствия новому multiplier - FIX 6
       max_holding_minutes: 25  # ✅ ГРОК: Уменьшено с 28 до 25 минут для более быстрой ротации
@@ -662,11 +661,11 @@ scalping:
       min_score_threshold: 2.5  # ⬆️ Ужесточено: было 2.0, теперь 2.5 (только сильные сигналы)
       max_trades_per_hour: 3  # ⬆️ Ужесточено: было 8, теперь 3 (минимум сделок в хаосе)
       position_size_multiplier: 1.0  # ✅ АГРЕССИВНО: Увеличено с 0.8 до 1.0 (+25%) - больше размер позиций
-      tp_atr_multiplier: 1.1  # ✅ АГРЕССИВНО: Увеличено с 0.9 до 1.1 (+22%) - больше прибыль
+      tp_atr_multiplier: 1.4  # SYNC 2026-02-27: 1.1→1.4 — синхронизация с exit_params.choppy (single source of truth)
       tp_percent: 2.0  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 5.05%→2.0% - реалистичный TP для хаоса
       sl_percent: 1.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 1.2% до 1.5% - баланс для choppy
       sl_atr_based: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Использовать ATR-based SL для choppy
-      sl_atr_multiplier: 3.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): 3.0→3.5 ATR для choppy (защита от хаотичного движения) - FIX 6
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.5→1.0 — синхронизация с exit_params.choppy (R:R был 0.31:1 → стало 1.4:1)
       sl_min_percent: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Минимальный SL 0.8%→1.0% для choppy - FIX 6
       sl_max_percent: 2.2  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Максимальный SL 2.0%→2.2% для choppy - FIX 6
       max_holding_minutes: 14  # ✅ АГРЕССИВНО: Увеличено с 10 до 14 минут (+40%) - больше времени для прибыли
@@ -1630,103 +1629,8 @@ exit_params:
     min_profit_for_extension: 0.4
     extension_percent: 110.0
 
-exit_params_legacy:
-  ranging:
-    max_holding_minutes: 25.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильное значение для ranging режима
-    sl_percent: 0.8  # ✅ ПРАВКА #11: Адаптивный SL для ranging
-    tp_percent: 2.5  # ✅ ПРАВКА #11: Адаптивный TP для ranging
-    spread_buffer: 0.15  # ✅ ПРАВКА #10: Увеличен для ranging
-  trending:
-    max_holding_minutes: 15.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Было 45, исправлено на 15 мин для trending
-    sl_percent: 2.0  # ✅ ПРАВКА #11: Адаптивный SL для trending
-    tp_percent: 8.0  # ✅ ПРАВКА #11: Адаптивный TP для trending
-    spread_buffer: 0.05
-  choppy:
-    max_holding_minutes: 10.0  # ✅ ИСПРАВЛЕНИЕ #3 (07.01.2026): Правильное значение для choppy режима
-    sl_percent: 1.5
-    tp_percent: 3.0
-    spread_buffer: 0.10
-  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (29.12.2025): Адаптивные пороги Smart Close по режимам
-  smart_close:
-    reversal_score_threshold:
-      ranging: 4      # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (30.12.2025): Увеличено с 3 до 4 (Grok рекомендация) - уменьшение ложных SL в ranging режиме
-      trending: 1     # ✅ TRENDING: Быстрее реакция против тренда (1+ сигнал) - оставляем как есть
-      choppy: 4       # ✅ CHOPPY: Максимальная осторожность (4+ сигнала) - оставляем как есть
-    trend_against_threshold:
-      ranging: 0.80   # ✅ RANGING: Более строгий порог (0.80) - нужен сильный тренд против - оставляем как есть
-      trending: 0.60  # ✅ TRENDING: Менее строгий порог (0.60) - быстрее выход против тренда - оставляем как есть
-      choppy: 0.90    # ✅ CHOPPY: Максимально строгий порог (0.90) - только при очень сильном тренде против - оставляем как есть
-
-    # ✅ НОВОЕ: Signal Generator - параметры генерации сигналов
-signal_generator:
-    # Базовые параметры
-    price_change_threshold: 0.0005  # Порог изменения цены 0.05%
-    strength_multiplier: 200.0  # 🔥 ИСПРАВЛЕНО 13.02.2026: было 2000 → 88.6% сигналов имели strength=1.0! 0.1%→0.2, 0.25%→0.5, 0.5%→1.0
-    strength_reduction_neutral: 0.9  # Снижение strength для neutral направления
-    base_signal_strength: 0.001  # Базовый размер сигнала
-    ws_fresh_max_age: 30.0  # Для проверки входов
-    ws_watchdog_max_age: 12.0  # ОТДЕЛЬНЫЙ порог для watchdog reconnect
-    ws_watchdog_consecutive_stale: 2  # 🔥 ИСПРАВЛЕНО 13.02.2026: было 5 (55s!), теперь 2 (10s max)
-    ws_signal_grace_period: 10.0
-    allow_rest_for_ws: false
-    allow_candle_price_fallback: false
-    allow_price_limits_fallback: false
-    adx_blocking:
-      allow_countertrend_on_price_action: true
-      min_confidence_to_block: 0.65
-
-    # Confidence значения по режимам
-    confidence:
-      trending:
-        bullish_strong: 0.9  # Сильный bullish сигнал
-        bullish_normal: 0.8  # Нормальный bullish
-        bearish_strong: 0.9  # Сильный bearish
-        bearish_normal: 0.8  # Нормальный bearish
-        macd_signal: 0.75  # MACD сигнал
-        rsi_signal: 0.7  # RSI сигнал
-      ranging:
-        bullish_strong: 0.7
-        bullish_normal: 0.6
-        bearish_strong: 0.7
-        bearish_normal: 0.6
-        macd_signal: 0.65
-        rsi_signal: 0.6
-      choppy:
-        bullish_strong: 0.5
-        bullish_normal: 0.4
-        bearish_strong: 0.5
-        bearish_normal: 0.4
-        macd_signal: 0.5
-        rsi_signal: 0.4
-
-    # Пороги фильтрации
-    thresholds:
-      correlation_threshold: 0.7  # Порог корреляции
-      pivot_tolerance: 0.003  # Толерантность pivot points (0.3%)
-      volume_profile_va_percent: 70.0  # Процент Value Area
-      volume_profile_poc_tolerance: 0.005  # Толерантность POC (0.5%)
-      min_signal_strength: 0.12  # Минимальная сила сигнала
-
-      # Адаптивные пороги по режимам
-      by_regime:
-        trending:
-          correlation_threshold: 0.8  # Более строго в тренде
-          pivot_tolerance: 0.002
-          volume_profile_va_percent: 75.0
-          volume_profile_poc_tolerance: 0.004
-          min_signal_strength: 0.12  # ✅ ГРОК: Поднято с 0.4 до 0.8 для trending
-        ranging:
-          correlation_threshold: 0.7  # Стандартные значения
-          pivot_tolerance: 0.003
-          volume_profile_va_percent: 70.0
-          volume_profile_poc_tolerance: 0.005
-          min_signal_strength: 0.10  # ✅ ГРОК: Поднято с 0.3 до 0.7 для ranging
-        choppy:
-          correlation_threshold: 0.6  # Менее строго в хаосе
-          pivot_tolerance: 0.004
-          volume_profile_va_percent: 65.0
-          volume_profile_poc_tolerance: 0.006
-          min_signal_strength: 0.08  # ✅ ГРОК: Поднято с 0.25 до 0.6 для choppy
+# REMOVED 2026-02-27: exit_params_legacy (мёртвая секция, не читается кодом)
+# REMOVED 2026-02-27: top-level signal_generator (мёртвый дубль scalping.signal_generator, код читает только scalping.signal_generator)
 
 # Параметры Futures-специфичных модулей
 futures_modules:
