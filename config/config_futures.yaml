@@ -1680,7 +1680,7 @@ futures_modules:
     initial_trail: 0.025  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.015 до 0.025 (2.5%, было 1.5%) - не закрывать слишком рано
     max_trail: 0.050  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.035 до 0.050 (5.0%, было 3.5%) - больше места для роста
     min_trail: 0.010  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.005 до 0.010 (1.0% минимум, было 0.5%) - защита от ранних закрытий
-    min_profit_to_activate: 0.008  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): 0.015→0.008 (0.8%) - раньше SL (иерархия фильтров)
+    min_profit_to_activate: 0.005  # FIX 2026-02-27: 0.008→0.005 — устранение мёртвой зоны (было > min_profit_to_close ranging=0.007/choppy=0.006)
     short_reversal_protection:
       enabled: true
       min_reversal_duration_seconds: 30  # Минимальная длительность отскока для закрытия
@@ -1822,64 +1822,64 @@ futures_modules:
     # 3) trailing_sl.by_regime / trailing_sl globals
     by_symbol:
       BTC-USDT:
-        min_profit_to_activate: 0.008
+        min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
         by_regime:
           trending:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.010
           ranging:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.009
           choppy:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.008
       ETH-USDT:
-        min_profit_to_activate: 0.008
+        min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
         by_regime:
           trending:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.010
           ranging:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.009
           choppy:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.008
       SOL-USDT:
-        min_profit_to_activate: 0.008
+        min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
         by_regime:
           trending:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.010
           ranging:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.009
           choppy:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.008
       DOGE-USDT:
-        min_profit_to_activate: 0.008
+        min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
         by_regime:
           trending:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.010
           ranging:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.009
           choppy:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.008
       XRP-USDT:
-        min_profit_to_activate: 0.008
+        min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
         by_regime:
           trending:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.010
           ranging:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.009
           choppy:
-            min_profit_to_activate: 0.008
+            min_profit_to_activate: 0.005  # FIX 2026-02-27: мёртвая зона устранена
             breakeven_trigger: 0.008
   # Momentum Filter (из статьи Momentum Trading Strategy)
   momentum_filter:
