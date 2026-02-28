@@ -52,8 +52,12 @@ class AdaptiveLeverage:
 
         # 🔴 BUG #24 FIX: Leverage limits as % of equity, not hardcoded $
         # These will be used to calculate margin thresholds dynamically
-        self.position_size_limit_1_percent = 0.10  # 10% of equity
-        self.position_size_limit_2_percent = 0.05  # 5% of equity
+        self.position_size_limit_1_percent = (
+            0.20  # 20% of equity (SCALPING: повышен с 10%)
+        )
+        self.position_size_limit_2_percent = (
+            0.10  # 10% of equity (SCALPING: повышен с 5%)
+        )
 
     async def calculate_leverage(
         self,

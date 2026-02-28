@@ -1722,7 +1722,7 @@ futures_modules:
         min_trail: 0.010  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.005 до 0.010 (1.0%, было 0.5%) - защита от ранних закрытий
         loss_cut_percent: 2.0  # ✅ АДАПТИВНО: 2.0% (было 1.5%) - больше терпения в тренде (может быть временный откат)
         timeout_loss_percent: 1.5  # ✅ АДАПТИВНО: 1.5% (было 1.0%) - больше терпения
-        timeout_minutes: 7  # ✅ АДАПТИВНО: 7 мин (было 5) - больше времени для восстановления
+        timeout_minutes: 5  # SCALPING: 7→5 мин (синхронизация с adaptive_regime trending)
         check_interval_seconds: 1.0  # ✅ ИСПРАВЛЕНО: Вернуто к 1.0 сек для более быстрой реакции TSL
         min_critical_hold_seconds: 60.0  # ✅ ИСПРАВЛЕНО (06.01.2026): Увеличено с 5 до 60 сек - дать время на восстановление
 
@@ -1758,7 +1758,7 @@ futures_modules:
         min_trail: 0.008  # снижено с 0.020 — позволяет trail плотнее следовать при прибыли
         loss_cut_percent: 1.5  # FIX: 4.0% → 1.5% — при leverage 10x убыток 4% = -$43 на $120 маржи
         timeout_loss_percent: 0.8  # FIX: 2.0% → 0.8% — быстрее обрезать убыточные позиции
-        timeout_minutes: 12  # FIX: 120 мин → 12 мин — ranging позиции должны закрываться быстро
+        timeout_minutes: 3  # SCALPING: 12→3 мин (синхронизация с adaptive_regime ranging)
         check_interval_seconds: 1.0  # Стандарт
         min_critical_hold_seconds: 30.0  # FIX: 60 → 30 сек — быстрее реагировать на убытки
 

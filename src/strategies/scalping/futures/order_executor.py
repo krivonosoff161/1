@@ -2713,7 +2713,17 @@ class FuturesOrderExecutor:
 
                 # Telegram: уведомление о входе
                 if self.telegram:
-                    _oco_entry = float(signal.get("price") or 0.0)
+                    # OCO TG FIX: live price, не signal.price (может быть устаревшей)
+                    _oco_entry = 0.0
+                    if hasattr(self, "data_registry") and self.data_registry:
+                        try:
+                            _live = await self.data_registry.get_price(symbol)
+                            if _live and _live > 0:
+                                _oco_entry = float(_live)
+                        except Exception:
+                            pass
+                    if not _oco_entry:
+                        _oco_entry = float(signal.get("price") or 0.0)
                     size_usd = size * _oco_entry
                     asyncio.create_task(
                         self.telegram.send_trade_open(
@@ -2760,7 +2770,26 @@ class FuturesOrderExecutor:
         try:
             symbol = signal.get("symbol")
             side = signal.get("side")
-            entry_price = signal.get("price", 0.0)
+
+            # OCO FIX: всегда берём live price из DataRegistry — signal.price может быть
+            # устаревшей (сигнал сгенерирован при одной цене, исполняется при другой).
+            entry_price = 0.0
+            if hasattr(self, "data_registry") and self.data_registry:
+                try:
+                    live_px = await self.data_registry.get_price(symbol)
+                    if live_px and live_px > 0:
+                        entry_price = float(live_px)
+                        logger.debug(
+                            f"🎯 [OCO_PRICE] {symbol}: live price={entry_price:.4f} (DataRegistry)"
+                        )
+                except Exception as _e:
+                    logger.debug(f"⚠️ [OCO_PRICE] {symbol}: DataRegistry error: {_e}")
+            if not entry_price:
+                entry_price = float(signal.get("price", 0.0) or 0.0)
+                if entry_price:
+                    logger.debug(
+                        f"⚠️ [OCO_PRICE] {symbol}: fallback signal price={entry_price:.4f}"
+                    )
 
             # ✅ ИСПРАВЛЕНИЕ: Если цена не указана, получаем текущую цену
             if entry_price == 0.0:

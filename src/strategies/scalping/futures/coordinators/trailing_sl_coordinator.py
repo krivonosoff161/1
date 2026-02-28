@@ -411,6 +411,11 @@ class TrailingSLCoordinator:
         if entry_price <= 0:
             return None
 
+        # SCALPING: не инициализируем TSL — OCO на бирже обрабатывает SL
+        if hasattr(self, "config") and self.config:
+            if self.config.get("scalping", {}).get("scalping_mode", False):
+                return None
+
         # ✅ ЭТАП 4.5: Получаем режим рынка для адаптации параметров
         regime = signal.get("regime") if signal else None
         if (
