@@ -835,19 +835,8 @@ class OKXFuturesClient:
                         )
                         max_leverage = 125  # Fallback на стандартный максимум
 
-                    # Генерируем список доступных leverage
-                    # OKX обычно поддерживает: 1, 2, 3, 5, 10, 20, 50, 75, 100, 125
-                    available_leverages = []
-                    leverage_steps = [1, 2, 3, 5, 10, 20, 50, 75, 100, 125]
-
-                    for step in leverage_steps:
-                        if step <= max_leverage:
-                            available_leverages.append(step)
-
-                    # Если max_leverage не в списке шагов, добавляем его
-                    if max_leverage not in available_leverages:
-                        available_leverages.append(max_leverage)
-                        available_leverages.sort()
+                    # OKX поддерживает любое целое плечо от 1 до max_leverage
+                    available_leverages = list(range(1, max_leverage + 1))
 
                     leverage_info = {
                         "max_leverage": max_leverage,

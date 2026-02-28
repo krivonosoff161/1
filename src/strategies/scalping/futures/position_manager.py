@@ -934,7 +934,7 @@ class FuturesPositionManager:
             # ✅ МОДЕРНИЗАЦИЯ #1: Проверка Profit Harvest (PH) - ПРИОРИТЕТ #1
             # PH проверяется ПЕРЕД TP/SL для быстрого закрытия при высокой прибыли
             # SCALPING: PH и PD пропускаются — OCO на бирже обрабатывает TP/SL
-            _scalping_mode = self.config.get("scalping", {}).get("scalping_mode", False)
+            _scalping_mode = getattr(self.scalping_config, "scalping_mode", False)
             if not _scalping_mode:
                 logger.debug(
                     f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Harvesting (ПРИОРИТЕТ #1)"

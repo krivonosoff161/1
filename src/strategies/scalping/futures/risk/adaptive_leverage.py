@@ -56,7 +56,7 @@ class AdaptiveLeverage:
             0.20  # 20% of equity (SCALPING: повышен с 10%)
         )
         self.position_size_limit_2_percent = (
-            0.10  # 10% of equity (SCALPING: повышен с 5%)
+            0.20  # 20% of equity (SCALPING: повышен с 10%)
         )
 
     async def calculate_leverage(
