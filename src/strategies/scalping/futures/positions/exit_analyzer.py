@@ -133,6 +133,9 @@ class ExitAnalyzer:
         self._pnl_mismatch_block_threshold = 3
         self._pnl_mismatch_log_cooldown_sec = 5.0
         self._pnl_mismatch_resync_cooldown_sec = 3.0
+        # scalping_mode: TP/SL confirmation window — цена должна держаться у уровня N секунд
+        # {f"{symbol}:tp" | f"{symbol}:sl": time.time() первого касания}
+        self._exit_confirm_state: Dict[str, float] = {}
 
         # Получаем доступ к модулям через orchestrator
         self.fast_adx = None
@@ -239,6 +242,69 @@ class ExitAnalyzer:
                     return self._mtf_filter
 
         return None
+
+    def _check_exit_confirmation(
+        self,
+        symbol: str,
+        exit_type: str,
+        condition_met: bool,
+        confirm_seconds: float,
+        emergency_bypass: bool = False,
+        entry_time=None,
+    ) -> bool:
+        """
+        Confirmation window для TP/SL в scalping_mode.
+
+        Цена должна оставаться у уровня TP/SL не менее confirm_seconds секунд
+        прежде чем будет разрешено закрытие. Защищает от закрытия по spike/wick.
+
+        Args:
+            symbol: символ
+            exit_type: "tp" или "sl"
+            condition_met: True если условие выхода выполнено прямо сейчас
+            confirm_seconds: сколько секунд нужно держать условие
+            emergency_bypass: True → подтверждение не нужно, закрыть немедленно
+            entry_time: datetime открытия позиции (для сброса устаревшего state)
+
+        Returns:
+            True = подтверждено, можно закрывать
+            False = ещё ждём или условие сбросилось
+        """
+        key = f"{symbol}:{exit_type}"
+        now = time.time()
+
+        if emergency_bypass:
+            self._exit_confirm_state.pop(key, None)
+            return True
+
+        if condition_met:
+            if key not in self._exit_confirm_state:
+                self._exit_confirm_state[key] = now
+                return False
+
+            # Сброс устаревшего state от предыдущей позиции
+            if entry_time is not None:
+                try:
+                    entry_ts = (
+                        entry_time.timestamp()
+                        if isinstance(entry_time, datetime)
+                        else 0.0
+                    )
+                    if self._exit_confirm_state[key] < entry_ts:
+                        self._exit_confirm_state[key] = now
+                        return False
+                except Exception:
+                    pass
+
+            elapsed = now - self._exit_confirm_state[key]
+            if elapsed >= confirm_seconds:
+                self._exit_confirm_state.pop(key, None)
+                return True
+            return False
+        else:
+            # Условие больше не выполнено — сбрасываем таймер
+            self._exit_confirm_state.pop(key, None)
+            return False
 
     def _get_fee_rate_per_side(self, order_type: str = "market") -> float:
         """Возвращает ставку комиссии за сторону (maker/taker) из scalping_config."""
@@ -2612,6 +2678,10 @@ class ExitAnalyzer:
         Returns:
             True если обнаружен разворот, False если нет
         """
+        # scalping_mode: reversal detection отключён — timeout/OCO обрабатывает выход
+        if getattr(self.scalping_config, "scalping_mode", False):
+            return False
+
         position_side = str(position_side or "").strip().lower()
         if position_side in ("buy",):
             position_side = "long"
@@ -3503,6 +3573,27 @@ class ExitAnalyzer:
                     }
                 else:
                     # Слабый тренд - закрываем по TP
+                    # scalping_mode: TP confirmation window — цена должна держаться N сек
+                    if getattr(self.scalping_config, "scalping_mode", False):
+                        _tp_confirm_sec = float(
+                            getattr(
+                                self.scalping_config, "tp_confirmation_seconds", 3.0
+                            )
+                        )
+                        if not self._check_exit_confirmation(
+                            symbol, "tp", True, _tp_confirm_sec, entry_time=entry_time
+                        ):
+                            logger.info(
+                                f"⏳ [TP_CONFIRM] TRENDING {symbol}: TP hit ({pnl_percent:.2f}% >= {tp_percent:.2f}%), "
+                                f"ожидаем подтверждения {_tp_confirm_sec:.0f}с (защита от spike)"
+                            )
+                            return {
+                                "action": "hold",
+                                "reason": "tp_pending_confirmation",
+                            }
+                    else:
+                        self._exit_confirm_state.pop(f"{symbol}:tp", None)
+
                     logger.info(
                         f"🎯 ExitAnalyzer TRENDING: TP достигнут для {symbol}: "
                         f"{pnl_percent:.2f}% >= {tp_percent:.2f}% (режим={regime})"
@@ -3853,6 +3944,29 @@ class ExitAnalyzer:
                         "net_pnl_pct": pnl_percent,
                         "grace_period_active": True,
                     }
+
+                # scalping_mode: SL confirmation window
+                # Emergency bypass если убыток глубже 2× SL (реальный пробой, не wick)
+                if getattr(self.scalping_config, "scalping_mode", False):
+                    _sl_confirm_sec = float(
+                        getattr(self.scalping_config, "sl_confirmation_seconds", 2.0)
+                    )
+                    _sl_emergency = gross_pnl_percent <= -(sl_percent * 2.0)
+                    if not self._check_exit_confirmation(
+                        symbol,
+                        "sl",
+                        True,
+                        _sl_confirm_sec,
+                        emergency_bypass=_sl_emergency,
+                        entry_time=entry_time,
+                    ):
+                        logger.info(
+                            f"⏳ [SL_CONFIRM] TRENDING {symbol}: SL hit ({gross_pnl_percent:.2f}%), "
+                            f"ожидаем подтверждения {_sl_confirm_sec:.0f}с (защита от wick)"
+                        )
+                        return {"action": "hold", "reason": "sl_pending_confirmation"}
+                else:
+                    self._exit_confirm_state.pop(f"{symbol}:sl", None)
 
                 self._record_metrics_on_close(
                     symbol=symbol,
@@ -4898,6 +5012,29 @@ class ExitAnalyzer:
                         "grace_period_active": True,
                     }
 
+                # scalping_mode: SL confirmation window
+                # Emergency bypass если убыток глубже 2× SL (реальный пробой, не wick)
+                if getattr(self.scalping_config, "scalping_mode", False):
+                    _sl_confirm_sec = float(
+                        getattr(self.scalping_config, "sl_confirmation_seconds", 2.0)
+                    )
+                    _sl_emergency = gross_pnl_percent <= -(sl_percent * 2.0)
+                    if not self._check_exit_confirmation(
+                        symbol,
+                        "sl",
+                        True,
+                        _sl_confirm_sec,
+                        emergency_bypass=_sl_emergency,
+                        entry_time=entry_time,
+                    ):
+                        logger.info(
+                            f"⏳ [SL_CONFIRM] RANGING {symbol}: SL hit ({gross_pnl_percent:.2f}%), "
+                            f"ожидаем подтверждения {_sl_confirm_sec:.0f}с (защита от wick)"
+                        )
+                        return {"action": "hold", "reason": "sl_pending_confirmation"}
+                else:
+                    self._exit_confirm_state.pop(f"{symbol}:sl", None)
+
                 # ✅ НОВОЕ (26.12.2025): Записываем метрики при закрытии
                 self._record_metrics_on_close(
                     symbol=symbol,
@@ -5073,6 +5210,22 @@ class ExitAnalyzer:
                         f"БЛОКИРУЕМ закрытие - возможно неправильная передача current_pnl из адаптивных параметров."
                     )
                     return {"action": "hold", "reason": "tp_rejected_negative_real_pnl"}
+
+                # scalping_mode: TP confirmation window — цена должна держаться N сек
+                if getattr(self.scalping_config, "scalping_mode", False):
+                    _tp_confirm_sec = float(
+                        getattr(self.scalping_config, "tp_confirmation_seconds", 3.0)
+                    )
+                    if not self._check_exit_confirmation(
+                        symbol, "tp", True, _tp_confirm_sec, entry_time=entry_time
+                    ):
+                        logger.info(
+                            f"⏳ [TP_CONFIRM] RANGING {symbol}: TP hit ({net_pnl_percent:.2f}% >= {tp_percent:.2f}%), "
+                            f"ожидаем подтверждения {_tp_confirm_sec:.0f}с (защита от spike)"
+                        )
+                        return {"action": "hold", "reason": "tp_pending_confirmation"}
+                else:
+                    self._exit_confirm_state.pop(f"{symbol}:tp", None)
 
                 logger.info(
                     f"🎯 ExitAnalyzer RANGING: TP достигнут для {symbol}: "
@@ -6311,6 +6464,22 @@ class ExitAnalyzer:
                     )
                     return {"action": "hold", "reason": "tp_rejected_negative_real_pnl"}
 
+                # scalping_mode: TP confirmation window — цена должна держаться N сек
+                if getattr(self.scalping_config, "scalping_mode", False):
+                    _tp_confirm_sec = float(
+                        getattr(self.scalping_config, "tp_confirmation_seconds", 3.0)
+                    )
+                    if not self._check_exit_confirmation(
+                        symbol, "tp", True, _tp_confirm_sec, entry_time=entry_time
+                    ):
+                        logger.info(
+                            f"⏳ [TP_CONFIRM] CHOPPY {symbol}: TP hit ({pnl_percent:.2f}% >= {tp_percent:.2f}%), "
+                            f"ожидаем подтверждения {_tp_confirm_sec:.0f}с (защита от spike)"
+                        )
+                        return {"action": "hold", "reason": "tp_pending_confirmation"}
+                else:
+                    self._exit_confirm_state.pop(f"{symbol}:tp", None)
+
                 logger.info(
                     f"🎯 ExitAnalyzer CHOPPY: TP достигнут для {symbol}: "
                     f"{pnl_percent:.2f}% >= {tp_percent:.2f}%"
@@ -6409,6 +6578,29 @@ class ExitAnalyzer:
                         "net_pnl_pct": pnl_percent,
                         "grace_period_active": True,
                     }
+
+                # scalping_mode: SL confirmation window
+                # Emergency bypass если убыток глубже 2× SL (реальный пробой, не wick)
+                if getattr(self.scalping_config, "scalping_mode", False):
+                    _sl_confirm_sec = float(
+                        getattr(self.scalping_config, "sl_confirmation_seconds", 2.0)
+                    )
+                    _sl_emergency = gross_pnl_percent <= -(sl_percent * 2.0)
+                    if not self._check_exit_confirmation(
+                        symbol,
+                        "sl",
+                        True,
+                        _sl_confirm_sec,
+                        emergency_bypass=_sl_emergency,
+                        entry_time=entry_time,
+                    ):
+                        logger.info(
+                            f"⏳ [SL_CONFIRM] CHOPPY {symbol}: SL hit ({gross_pnl_percent:.2f}%), "
+                            f"ожидаем подтверждения {_sl_confirm_sec:.0f}с (защита от wick)"
+                        )
+                        return {"action": "hold", "reason": "sl_pending_confirmation"}
+                else:
+                    self._exit_confirm_state.pop(f"{symbol}:sl", None)
 
                 self._record_metrics_on_close(
                     symbol=symbol,

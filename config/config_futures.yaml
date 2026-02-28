@@ -24,6 +24,8 @@ trading:
 scalping:
   enabled: true
   scalping_mode: true  # SCALPING: чистый скальпинг — отключает TSL/PH/PD, удержание 2-5 мин
+  tp_confirmation_seconds: 3.0  # SCALPING: цена должна держаться у TP N сек перед закрытием (защита от spike)
+  sl_confirmation_seconds: 2.0  # SCALPING: цена должна держаться у SL N сек перед закрытием (защита от wick; 2×SL → emergency bypass)
   symbols:
     - "BTC-USDT"
     - "ETH-USDT"
