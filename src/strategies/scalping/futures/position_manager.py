@@ -933,40 +933,45 @@ class FuturesPositionManager:
 
             # ✅ МОДЕРНИЗАЦИЯ #1: Проверка Profit Harvest (PH) - ПРИОРИТЕТ #1
             # PH проверяется ПЕРЕД TP/SL для быстрого закрытия при высокой прибыли
-            logger.debug(
-                f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Harvesting (ПРИОРИТЕТ #1)"
-            )
-            ph_should_close = await self._check_profit_harvesting(position)
-            if ph_should_close:
-                logger.info(
-                    f"🔄 [MANAGE_POSITION] {symbol}: PH сработал, закрываем позицию"
+            # SCALPING: PH и PD пропускаются — OCO на бирже обрабатывает TP/SL
+            _scalping_mode = self.config.get("scalping", {}).get("scalping_mode", False)
+            if not _scalping_mode:
+                logger.debug(
+                    f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Harvesting (ПРИОРИТЕТ #1)"
                 )
-                await self._close_position_by_reason(position, "profit_harvest")
-                return  # Закрыли по PH, дальше не проверяем
-            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: PH не сработал, продолжаем")
-
-            # ✅ НОВОЕ: Обновление максимальной прибыли (перед проверкой отката)
-            logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Обновление peak_profit")
-            # ✅ РЕФАКТОРИНГ: Используем новый модуль PeakProfitTracker
-            if self.peak_profit_tracker:
-                await self.peak_profit_tracker.update_peak_profit(position)
-            else:
-                await self._update_peak_profit(position)  # Fallback на старый метод
-
-            # ✅ НОВОЕ: Проверка отката от максимальной прибыли - ПРИОРИТЕТ #2
-            logger.debug(
-                f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Drawdown (ПРИОРИТЕТ #2)"
-            )
-            drawdown_should_close = await self._check_profit_drawdown(position)
-            if drawdown_should_close:
-                logger.info(
-                    f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown сработал, закрываем позицию"
+                ph_should_close = await self._check_profit_harvesting(position)
+                if ph_should_close:
+                    logger.info(
+                        f"🔄 [MANAGE_POSITION] {symbol}: PH сработал, закрываем позицию"
+                    )
+                    await self._close_position_by_reason(position, "profit_harvest")
+                    return  # Закрыли по PH, дальше не проверяем
+                logger.debug(
+                    f"🔄 [MANAGE_POSITION] {symbol}: PH не сработал, продолжаем"
                 )
-                await self._close_position_by_reason(position, "profit_drawdown")
-                return  # Закрыли по откату, дальше не проверяем
-            logger.debug(
-                f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown не сработал, продолжаем"
-            )
+
+                # ✅ НОВОЕ: Обновление максимальной прибыли (перед проверкой отката)
+                logger.debug(f"🔄 [MANAGE_POSITION] {symbol}: Обновление peak_profit")
+                # ✅ РЕФАКТОРИНГ: Используем новый модуль PeakProfitTracker
+                if self.peak_profit_tracker:
+                    await self.peak_profit_tracker.update_peak_profit(position)
+                else:
+                    await self._update_peak_profit(position)  # Fallback на старый метод
+
+                # ✅ НОВОЕ: Проверка отката от максимальной прибыли - ПРИОРИТЕТ #2
+                logger.debug(
+                    f"🔄 [MANAGE_POSITION] {symbol}: Проверка Profit Drawdown (ПРИОРИТЕТ #2)"
+                )
+                drawdown_should_close = await self._check_profit_drawdown(position)
+                if drawdown_should_close:
+                    logger.info(
+                        f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown сработал, закрываем позицию"
+                    )
+                    await self._close_position_by_reason(position, "profit_drawdown")
+                    return  # Закрыли по откату, дальше не проверяем
+                logger.debug(
+                    f"🔄 [MANAGE_POSITION] {symbol}: Profit Drawdown не сработал, продолжаем"
+                )
 
             # Проверка TP/SL
             # ⚠️ ВАЖНО: Фиксированный SL отключен, когда используется TrailingSL

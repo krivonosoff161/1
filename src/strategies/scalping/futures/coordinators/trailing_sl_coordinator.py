@@ -834,6 +834,10 @@ class TrailingSLCoordinator:
     async def update_trailing_stop_loss(self, symbol: str, current_price: float):
         """Обновление TrailingStopLoss для открытой позиции"""
         try:
+            # SCALPING: TSL пропускается — OCO на бирже обрабатывает SL
+            if hasattr(self, "config") and self.config:
+                if self.config.get("scalping", {}).get("scalping_mode", False):
+                    return
             position = self._get_position(symbol)
             if not position:
                 return
