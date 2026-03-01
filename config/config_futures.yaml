@@ -26,6 +26,39 @@ scalping:
   scalping_mode: true  # SCALPING: чистый скальпинг — отключает TSL/PH/PD, удержание 2-5 мин
   tp_confirmation_seconds: 3.0  # SCALPING: цена должна держаться у TP N сек перед закрытием (защита от spike)
   sl_confirmation_seconds: 2.0  # SCALPING: цена должна держаться у SL N сек перед закрытием (защита от wick; 2×SL → emergency bypass)
+
+  # ── Trend Dip: вход с трендом на intra-candle просадке ──────────────────────
+  # Детектирует резкое движение против тренда в ТЕКУЩЕЙ (незакрытой) свече.
+  # Источник: candles[-1].high/.low + WS tick price → реакция 1-3 сек от дипа.
+  # Работает ТОЛЬКО в trending режиме (ranging/choppy — выключен).
+  # PatternEngine автоматически буcтит сигнал если есть pinbar/engulfing в сторону входа.
+  trend_dip:
+    enabled: true
+    regimes_enabled: [trending]   # только в сильном тренде
+
+    min_adx: 22                   # ADX ниже этого — тренд слабый, пропускаем
+
+    # Глубина дипа в единицах ATR текущей свечи
+    dip_atr_min: 0.4              # меньше — шум, не реагируем
+    dip_atr_max: 2.5              # больше — возможен разворот тренда
+    dip_atr_target: 1.2           # "эталонный" дип для нормировки strength
+
+    confidence_base: 0.82         # базовый confidence сигнала
+
+    # Per-symbol настройки (ATR у каждого актива разный)
+    by_symbol:
+      BTC-USDT:
+        dip_atr_min: 0.5          # BTC: ATR большой абс., нужен бо́льший относительный дип
+      ETH-USDT:
+        dip_atr_min: 0.5
+      SOL-USDT:
+        dip_atr_min: 0.4
+      DOGE-USDT:
+        dip_atr_min: 0.35         # DOGE: резкий, небольшой дип уже значим
+      XRP-USDT:
+        dip_atr_min: 0.35
+  # ────────────────────────────────────────────────────────────────────────────
+
   symbols:
     - "BTC-USDT"
     - "ETH-USDT"

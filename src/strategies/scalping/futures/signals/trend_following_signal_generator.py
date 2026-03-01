@@ -1,14 +1,15 @@
 """
-Trend Following Signal Generator - генерация LONG сигналов в uptrend.
+Trend Following Signal Generator - генерация сигналов в трендовых рынках.
 
-Решает проблему отсутствия LONG позиций в trending рынках, где:
+Решает проблему отсутствия позиций в trending рынках, где:
 - RSI редко опускается ниже 30 (oversold)
 - MACD уже в bullish зоне без новых пересечений
 
-Стратегия:
+Стратегии:
 - Pullback к EMA в uptrend → LONG entry
 - Breakout выше локального максимума → LONG continuation
 - Поддержка на уровне → LONG bounce
+- Trend Dip: резкий intra-candle дип в тренде → вход с трендом (LONG/SHORT)
 """
 
 from datetime import datetime
@@ -134,21 +135,6 @@ class TrendFollowingSignalGenerator:
                                 "trend_following", 0.70
                             )
 
-            # ✅ ПРОВЕРКА UPTREND (обязательное условие для всех сигналов)
-            is_uptrend = (
-                ema_fast > ema_slow
-                and current_price > ema_fast
-                and current_price > ema_slow
-            )
-
-            if not is_uptrend:
-                # Не генерируем LONG сигналы если нет uptrend
-                logger.debug(
-                    f"📊 {symbol}: Trend Following пропущен - нет uptrend "
-                    f"(ema_fast={ema_fast:.2f}, ema_slow={ema_slow:.2f}, price={current_price:.2f})"
-                )
-                return []
-
             # Дополнительная проверка ADX если доступно
             if adx_value > 0 and adx_value < adx_threshold:
                 logger.debug(
@@ -156,6 +142,29 @@ class TrendFollowingSignalGenerator:
                     f"(ADX={adx_value:.1f} < {adx_threshold:.1f})"
                 )
                 return []
+
+            # ✅ TREND DIP сигналы — intra-candle детекция, работает ДО is_uptrend check
+            # (потому что во время дипа цена может быть НИЖЕ EMA_fast, что блокирует is_uptrend)
+            trend_dip_sigs = self._generate_trend_dip(
+                symbol, candles, current_price, indicators, current_regime, adx_value
+            )
+            signals.extend(trend_dip_sigs)
+
+            # ✅ ПРОВЕРКА UPTREND (обязательное условие для pullback/breakout/bounce)
+            is_uptrend = (
+                ema_fast > ema_slow
+                and current_price > ema_fast
+                and current_price > ema_slow
+            )
+
+            if not is_uptrend:
+                # Не генерируем обычные LONG сигналы если нет uptrend,
+                # но trend_dip сигналы уже добавлены выше
+                logger.debug(
+                    f"📊 {symbol}: Trend Following (pullback/breakout/bounce) пропущен - нет uptrend "
+                    f"(ema_fast={ema_fast:.2f}, ema_slow={ema_slow:.2f}, price={current_price:.2f})"
+                )
+                return signals
 
             # ✅ СТРАТЕГИЯ 1: PULLBACK ENTRY (откат к EMA в uptrend)
             # Цена была выше EMA, откатила к EMA или чуть ниже, отскакивает обратно
@@ -313,3 +322,171 @@ class TrendFollowingSignalGenerator:
                 exc_info=True,
             )
             return []
+
+    def _generate_trend_dip(
+        self,
+        symbol: str,
+        candles: list,
+        current_price: float,
+        indicators: Dict,
+        regime: Any,
+        adx_value: float,
+    ) -> List[Dict[str, Any]]:
+        """
+        Детектируем резкую просадку в тренде — вход с трендом (intra-candle скорость).
+
+        Использует ТЕКУЩУЮ незакрытую свечу (candles[-1].high/.low) + WS цену (current_price).
+        Это даёт реакцию 1-3 секунды от начала дипа, в отличие от свечного анализа (1+ мин).
+
+        LONG (trend_dip_long):
+          - Тренд вверх: EMA_fast > EMA_slow + ADX > min_adx
+          - Текущая свеча: high - current_price >= dip_atr_min × ATR
+          - current_price < EMA_fast (ещё в зоне просадки, не отскочил)
+
+        SHORT (trend_dip_short):
+          - Тренд вниз: EMA_fast < EMA_slow + ADX > min_adx
+          - Текущая свеча: current_price - low >= dip_atr_min × ATR
+          - current_price > EMA_fast (ещё в зоне шипа)
+
+        Args:
+            symbol: Торговый символ
+            candles: market_data.ohlcv_data (последний элемент = текущая незакрытая свеча)
+            current_price: WS цена в реальном времени
+            indicators: Словарь индикаторов (ema_12, ema_26, atr, adx, ...)
+            regime: Текущий режим рынка
+            adx_value: Значение ADX
+
+        Returns:
+            Список сигналов (0 или 1 сигнал)
+        """
+        # --- Читаем конфиг ---
+        td_cfg: Dict[str, Any] = {}
+        if self.scalping_config:
+            td_raw = self.scalping_config.get("trend_dip", {})
+            if hasattr(td_raw, "to_dict"):
+                td_cfg = td_raw.to_dict()
+            elif isinstance(td_raw, dict):
+                td_cfg = td_raw
+
+        if not td_cfg.get("enabled", True):
+            return []
+
+        # Только в разрешённых режимах (по умолчанию только trending)
+        regimes_enabled = td_cfg.get("regimes_enabled", ["trending"])
+        regime_str = str(regime or "").lower()
+        if regime_str not in [r.lower() for r in regimes_enabled]:
+            return []
+
+        # --- Параметры ---
+        min_adx = float(td_cfg.get("min_adx", 22))
+        dip_atr_min = float(td_cfg.get("dip_atr_min", 0.4))
+        dip_atr_max = float(td_cfg.get("dip_atr_max", 2.5))
+        dip_atr_target = float(td_cfg.get("dip_atr_target", 1.2))
+        confidence_base = float(td_cfg.get("confidence_base", 0.82))
+
+        # Per-symbol overrides
+        by_symbol = td_cfg.get("by_symbol", {})
+        if isinstance(by_symbol, dict) and symbol in by_symbol:
+            sym_cfg = by_symbol.get(symbol, {})
+            if isinstance(sym_cfg, dict):
+                dip_atr_min = float(sym_cfg.get("dip_atr_min", dip_atr_min))
+                dip_atr_max = float(sym_cfg.get("dip_atr_max", dip_atr_max))
+                confidence_base = float(sym_cfg.get("confidence_base", confidence_base))
+
+        # --- Базовые проверки ---
+        ema_fast = indicators.get("ema_12", 0) or 0
+        ema_slow = indicators.get("ema_26", 0) or 0
+        atr = indicators.get("atr", 0) or 0
+
+        if atr <= 0 or ema_fast <= 0 or ema_slow <= 0:
+            return []
+        if adx_value < min_adx:
+            return []
+        if len(candles) < 2:
+            return []
+
+        current_candle = candles[-1]  # Текущая незакрытая свеча (high/low real-time)
+        is_trend_up = ema_fast > ema_slow
+        is_trend_down = ema_fast < ema_slow
+
+        # ---- LONG: восходящий тренд + резкий дип вниз ----
+        if is_trend_up:
+            candle_high = current_candle.high
+            if candle_high <= 0 or current_price <= 0:
+                return []
+
+            dip_size = (candle_high - current_price) / atr
+
+            if dip_atr_min <= dip_size <= dip_atr_max and current_price < ema_fast:
+                strength = min(1.0, dip_size / dip_atr_target) * confidence_base
+                sig = {
+                    "symbol": symbol,
+                    "side": "buy",
+                    "type": "trend_dip_long",
+                    "price": current_price,
+                    "strength": strength,
+                    "confidence": confidence_base,
+                    "reason": (
+                        f"Тренд-дип LONG: дип {dip_size:.2f}×ATR "
+                        f"({candle_high:.4f}→{current_price:.4f}), "
+                        f"EMA↑({ema_fast:.4f}>{ema_slow:.4f}), ADX={adx_value:.1f}"
+                    ),
+                    "timestamp": datetime.now().isoformat(),
+                    "regime": regime_str,
+                    "indicators": {
+                        "ema_fast": ema_fast,
+                        "ema_slow": ema_slow,
+                        "atr": atr,
+                        "adx": adx_value,
+                        "candle_high": candle_high,
+                        "dip_atr": round(dip_size, 3),
+                    },
+                }
+                logger.info(
+                    f"🎯 [TREND_DIP] {symbol}: LONG — дип {dip_size:.2f}×ATR "
+                    f"({candle_high:.4f}→{current_price:.4f}), "
+                    f"EMA↑, ADX={adx_value:.1f}, strength={strength:.2f}"
+                )
+                return [sig]
+
+        # ---- SHORT: нисходящий тренд + резкий шип вверх ----
+        elif is_trend_down:
+            candle_low = current_candle.low
+            if candle_low <= 0 or current_price <= 0:
+                return []
+
+            spike_size = (current_price - candle_low) / atr
+
+            if dip_atr_min <= spike_size <= dip_atr_max and current_price > ema_fast:
+                strength = min(1.0, spike_size / dip_atr_target) * confidence_base
+                sig = {
+                    "symbol": symbol,
+                    "side": "sell",
+                    "type": "trend_dip_short",
+                    "price": current_price,
+                    "strength": strength,
+                    "confidence": confidence_base,
+                    "reason": (
+                        f"Тренд-дип SHORT: шип {spike_size:.2f}×ATR "
+                        f"({candle_low:.4f}→{current_price:.4f}), "
+                        f"EMA↓({ema_fast:.4f}<{ema_slow:.4f}), ADX={adx_value:.1f}"
+                    ),
+                    "timestamp": datetime.now().isoformat(),
+                    "regime": regime_str,
+                    "indicators": {
+                        "ema_fast": ema_fast,
+                        "ema_slow": ema_slow,
+                        "atr": atr,
+                        "adx": adx_value,
+                        "candle_low": candle_low,
+                        "spike_atr": round(spike_size, 3),
+                    },
+                }
+                logger.info(
+                    f"🎯 [TREND_DIP] {symbol}: SHORT — шип {spike_size:.2f}×ATR "
+                    f"({candle_low:.4f}→{current_price:.4f}), "
+                    f"EMA↓, ADX={adx_value:.1f}, strength={strength:.2f}"
+                )
+                return [sig]
+
+        return []
