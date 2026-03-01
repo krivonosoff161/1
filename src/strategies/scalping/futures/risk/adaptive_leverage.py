@@ -29,10 +29,30 @@ class AdaptiveLeverage:
         """
         self.config = config
 
-        # ✅ P0-2 FIX: Leverage map из конфига с безопасными дефолтами
-        cfg = config if isinstance(config, dict) else {}
+        # ✅ P0-A FIX: поддержка dict, Pydantic BotConfig, MergedConfigView
         # Навигация: config → scalping → adaptive_leverage → leverage_map
-        al_cfg = cfg.get("scalping", {}).get("adaptive_leverage", {})
+        def _nav(obj, key, default=None):
+            if obj is None:
+                return default
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            if hasattr(obj, "get"):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        scalping_raw = _nav(config, "scalping")
+        al_cfg_raw = _nav(scalping_raw, "adaptive_leverage")
+        if isinstance(al_cfg_raw, dict):
+            al_cfg = al_cfg_raw
+        elif al_cfg_raw is not None and hasattr(al_cfg_raw, "model_dump"):
+            al_cfg = al_cfg_raw.model_dump()
+        elif al_cfg_raw is not None and hasattr(al_cfg_raw, "__dict__"):
+            al_cfg = {
+                k: v for k, v in al_cfg_raw.__dict__.items() if not k.startswith("_")
+            }
+        else:
+            al_cfg = {}
+
         lev_map_cfg = al_cfg.get("leverage_map", {})
         if lev_map_cfg:
             self.leverage_map = {k: int(v) for k, v in lev_map_cfg.items()}
@@ -130,10 +150,8 @@ class AdaptiveLeverage:
 
             leverage = self.leverage_map.get(category, 5)
 
-            # ✅ ПРАВКА #12: Снижаем леверидж для ranging (максимум 15x) - УВЕЛИЧЕНО ДЛЯ ЛУЧШЕЙ ЭФФЕКТИВНОСТИ
-            # 🔥 ИЗМЕНЕНО: Лимит увеличен с 10x до 15x для ranging (2026-02-08)
-            if regime == "ranging":
-                leverage = min(leverage, 15)  # Максимум 15x для ranging (было 10x)
+            # ✅ P0-B FIX: убран hardcoded cap 15x для ranging — max_leverage из конфига
+            # (ranging уже получает 0.8× multiplier к signal_strength — этого достаточно)
 
             # ✅ КРИТИЧНОЕ ИСПРАВЛЕНИЕ (25.12.2025): Ограничение плеча по размеру позиции
             # 🔴 BUG #24 FIX: Use % of equity instead of hardcoded $ values

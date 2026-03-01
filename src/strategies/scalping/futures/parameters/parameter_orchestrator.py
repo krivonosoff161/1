@@ -327,6 +327,11 @@ class ParameterOrchestrator:
         max_holding = require_float(
             exit_cfg, "max_holding_minutes", errors, f"exit_params.{regime}"
         )
+        # P1 FIX: per-symbol override for max_holding_minutes via scalping.by_symbol
+        if self._by_symbol and symbol in self._by_symbol:
+            _sym_cfg = self._by_symbol.get(symbol) or {}
+            if isinstance(_sym_cfg, dict) and "max_holding_minutes" in _sym_cfg:
+                max_holding = _sym_cfg["max_holding_minutes"]
         min_holding = require_float(
             exit_cfg, "min_holding_minutes", errors, f"exit_params.{regime}"
         )

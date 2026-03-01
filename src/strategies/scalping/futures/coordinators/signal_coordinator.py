@@ -186,6 +186,11 @@ class SignalCoordinator:
             0.0,
             float(_cfg_get(reentry_guard_cfg, "opposite_side_cooldown_sec", 0.0)),
         )
+        # P0-C FIX: в scalping_mode timeout-закрытие → 15s cooldown (SL/stop остаётся полным)
+        self._scalping_mode = bool(getattr(scalping_config, "scalping_mode", False))
+        self._scalping_timeout_cooldown_sec = float(
+            _cfg_get(reentry_guard_cfg, "scalping_timeout_cooldown_sec", 15.0)
+        )
         self._reentry_strong_signal_bypass = min(
             1.0,
             max(0.0, float(_cfg_get(reentry_guard_cfg, "strong_signal_bypass", 0.95))),
@@ -850,18 +855,26 @@ class SignalCoordinator:
 
         if close_side == signal_side:
             cooldown_sec = self._reentry_same_side_cooldown_sec
-            # ✅ FIX L2-4: Детальное логирование для анализа переоткрытий
-            if close_net_pnl >= 0:
+            # P0-C FIX: в scalping_mode timeout-закрытие → короткий cooldown (SL/stop → полный)
+            if self._scalping_mode and "timeout" in close_reason:
+                cooldown_sec = self._scalping_timeout_cooldown_sec
                 logger.info(
-                    f"🔄 REENTRY_GUARD: {symbol} прибыльное закрытие {close_net_pnl:+.2f} "
-                    f"side={close_side}, cooldown={cooldown_sec:.0f}s"
+                    f"🔄 REENTRY_GUARD: {symbol} timeout-close {close_net_pnl:+.2f} "
+                    f"side={close_side}, scalping_cooldown={cooldown_sec:.0f}s"
                 )
-            if close_net_pnl < 0 or self._is_protective_exit_reason(close_reason):
-                cooldown_sec = max(cooldown_sec, self._reentry_loss_cooldown_sec)
-                logger.info(
-                    f"🔄 REENTRY_GUARD: {symbol} убыточное закрытие {close_net_pnl:+.2f} "
-                    f"side={close_side}, extended_cooldown={cooldown_sec:.0f}s"
-                )
+            else:
+                # ✅ FIX L2-4: Детальное логирование для анализа переоткрытий
+                if close_net_pnl >= 0:
+                    logger.info(
+                        f"🔄 REENTRY_GUARD: {symbol} прибыльное закрытие {close_net_pnl:+.2f} "
+                        f"side={close_side}, cooldown={cooldown_sec:.0f}s"
+                    )
+                if close_net_pnl < 0 or self._is_protective_exit_reason(close_reason):
+                    cooldown_sec = max(cooldown_sec, self._reentry_loss_cooldown_sec)
+                    logger.info(
+                        f"🔄 REENTRY_GUARD: {symbol} убыточное закрытие {close_net_pnl:+.2f} "
+                        f"side={close_side}, extended_cooldown={cooldown_sec:.0f}s"
+                    )
         else:
             cooldown_sec = self._reentry_opposite_side_cooldown_sec
 

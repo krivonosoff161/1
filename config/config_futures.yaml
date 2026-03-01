@@ -356,6 +356,7 @@ scalping:
     BTC-USDT:
       enabled: true  # 2026-02-21: Возвращён в торговлю для диагностики адаптивной системы (был WR=6.1% — причина не найдена, нужны свежие логи)
       min_signal_strength: 0.12  # (не используется пока enabled=false)
+      max_holding_minutes: 5  # P1 FIX: BTC ranging 3→5 мин (ADX 16-20 часто ranging, timeout слишком ранний)
       smart_close:  # Per-symbol Smart Close параметры для BTC
         reversal_score_threshold:
           ranging: 4  # BTC более стабильный - используем стандартный порог 4 (как общий для ranging)
