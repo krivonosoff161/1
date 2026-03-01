@@ -541,12 +541,12 @@ scalping:
       max_trades_per_hour: 5  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 30→5 - экономия комиссий, тренд держать дольше
       position_size_multiplier: 1.3  # ✅ АГРЕССИВНО: Увеличено с 1.1 до 1.3 (+18%) - больше размер позиций
       tp_atr_multiplier: 1.6  # SCALPING: OCO TP атр-мультипликатор (ATR-based OCO обычно побеждает floor)
-      tp_percent: 0.12  # SCALPING 2026-03-01: 4.0→0.12 — 1.76 ATR для BTC (было $2690, стало $80 OCO TP)
-      sl_percent: 0.10  # SCALPING 2026-03-01: 1.2→0.10 — backstop OCO SL (bot-side закрывает первым)
+      tp_percent: 0.20  # NOISE-FIX 2026-03-01: 0.12→0.20 — backstop OCO TP шире bot-side ($134 для BTC)
+      sl_percent: 0.20  # NOISE-FIX 2026-03-01: 0.10→0.20 — backstop OCO SL шире bot-side ($134 для BTC)
       sl_atr_based: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Использовать ATR-based SL для защиты от шума
       sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.5→1.0 — синхронизация с exit_params.trending
-      sl_min_percent: 0.10  # SCALPING 2026-03-01: 1.2→0.10 — соответствие sl_percent
-      sl_max_percent: 0.25  # SCALPING 2026-03-01: 2.0→0.25 — максимальный OCO SL
+      sl_min_percent: 0.20  # NOISE-FIX 2026-03-01: 0.10→0.20 — OCO SL backstop не ýже bot-side
+      sl_max_percent: 0.40  # NOISE-FIX 2026-03-01: 0.25→0.40 — максимальный OCO SL
       max_holding_minutes: 5  # SCALPING: снижено с 40 → 5 мин
       extend_time_if_profitable: true  # ✅ НОВОЕ: Продлевать время если позиция в прибыли
       min_profit_for_extension: 0.4  # ✅ АГРЕССИВНО: Снижено с 0.5% до 0.4% - раньше продлеваем
@@ -614,17 +614,17 @@ scalping:
       min_score_threshold: 2.2  # ⬆️ Ужесточено: было 1.8, теперь 2.2 (меньше слабых сигналов)
       max_trades_per_hour: 3  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 8→3 - флэт, качество важнее количества
       position_size_multiplier: 1.2  # ✅ АГРЕССИВНО: Увеличено с 1.0 до 1.2 (+20%) - больше размер позиций
-      tp_percent: 0.10  # SCALPING 2026-03-01: 2.5→0.10 — OCO TP floor (ATR-based обычно побеждает)
+      tp_percent: 0.15  # NOISE-FIX 2026-03-01: 0.10→0.15 — backstop OCO TP шире bot-side
       tp_adaptive: true  # ✅ ГРОК: Включить адаптивный TP с ATR
       tp_atr_based: true  # ✅ ГРОК ФИКС: Включить ATR-based TP для ranging
       tp_atr_multiplier: 1.5  # SCALPING: OCO TP ATR-мультипликатор
       tp_min_percent: 0.8  # SCALPING 2026-03-01: 1.5→0.8 — fallback если tp_percent=0
       tp_max_percent: 1.5  # SCALPING 2026-03-01: 2.2→1.5 — максимальный OCO TP
-      sl_percent: 0.08  # SCALPING 2026-03-01: 1.0→0.08 — backstop OCO SL
+      sl_percent: 0.15  # NOISE-FIX 2026-03-01: 0.08→0.15 — backstop OCO SL шире bot-side
       sl_atr_based: true  # ✅ ГРОК: Использовать ATR-based SL вместо фиксированного
       sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 4.0→1.0 — синхронизация с exit_params.ranging
-      sl_min_percent: 0.08  # SCALPING 2026-03-01: 0.9→0.08 — соответствие sl_percent
-      sl_max_percent: 0.20  # SCALPING 2026-03-01: 2.2→0.20 — максимальный OCO SL
+      sl_min_percent: 0.15  # NOISE-FIX 2026-03-01: 0.08→0.15 — OCO SL backstop не ýже bot-side
+      sl_max_percent: 0.30  # NOISE-FIX 2026-03-01: 0.20→0.30 — максимальный OCO SL
       max_holding_minutes: 3  # SCALPING: снижено с 25 → 3 мин
       max_holding_hard_stop: true  # ✅ ГРОК: Жесткий стоп по max_holding (не игнорировать убыточные)
       timeout_loss_percent: 1.5  # ✅ ГРОК: Закрывать по max_holding если убыток >= 1.5%
@@ -699,12 +699,12 @@ scalping:
       max_trades_per_hour: 3  # ⬆️ Ужесточено: было 8, теперь 3 (минимум сделок в хаосе)
       position_size_multiplier: 1.0  # ✅ АГРЕССИВНО: Увеличено с 0.8 до 1.0 (+25%) - больше размер позиций
       tp_atr_multiplier: 1.4  # SCALPING: OCO TP ATR-мультипликатор для choppy
-      tp_percent: 0.08  # SCALPING 2026-03-01: 2.0→0.08 — OCO TP floor для choppy (тихий рынок)
-      sl_percent: 0.06  # SCALPING 2026-03-01: 1.5→0.06 — backstop OCO SL для choppy
+      tp_percent: 0.12  # NOISE-FIX 2026-03-01: 0.08→0.12 — backstop OCO TP шире bot-side
+      sl_percent: 0.12  # NOISE-FIX 2026-03-01: 0.06→0.12 — backstop OCO SL шире bot-side
       sl_atr_based: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Использовать ATR-based SL для choppy
       sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.5→1.0 — синхронизация с exit_params.choppy
-      sl_min_percent: 0.06  # SCALPING 2026-03-01: 1.0→0.06 — соответствие sl_percent
-      sl_max_percent: 0.15  # SCALPING 2026-03-01: 2.2→0.15 — максимальный OCO SL для choppy
+      sl_min_percent: 0.12  # NOISE-FIX 2026-03-01: 0.06→0.12 — OCO SL backstop не ýже bot-side
+      sl_max_percent: 0.25  # NOISE-FIX 2026-03-01: 0.15→0.25 — максимальный OCO SL для choppy
       max_holding_minutes: 2  # SCALPING: снижено с 14 → 2 мин
       extend_time_if_profitable: true  # ✅ АГРЕССИВНО: Включено продление даже в хаосе
       min_profit_for_extension: 0.4  # ✅ АГРЕССИВНО: Снижено с 0.5% до 0.4% - раньше продлеваем
@@ -1630,36 +1630,36 @@ risk:
 # ✅ ПРАВКА #2: Адаптивные параметры выхода по режимам
 exit_params:
   trending:
-    tp_atr_multiplier: 0.8  # SCALPING 2026-03-01: 1.6→0.8 — BTC 20x: max(1.0%, 0.068%×0.8×20=1.09%) = $36 price
-    sl_atr_multiplier: 0.6  # SCALPING 2026-03-01: 1.0→0.6 — BTC 20x: max(0.6%, 0.068%×0.6×20=0.82%) = $27 price
-    tp_min_percent: 1.0  # SCALPING 2026-03-01: 2.0→1.0 — минимум 1% маржи = 0.05% цена BTC 20x
-    tp_max_percent: 2.0  # SCALPING 2026-03-01: 4.0→2.0 — потолок bot-side TP
-    sl_min_percent: 0.6  # SCALPING 2026-03-01: 1.0→0.6 — R:R = 1.09/0.82 = 1.33:1
-    sl_max_percent: 1.6  # без изменений
+    tp_atr_multiplier: 2.0  # NOISE-FIX 2026-03-01: 0.8→2.0 — BTC 20x: max(2.0%, 0.068%×2.0×20=2.72%) = $91 price
+    sl_atr_multiplier: 1.5  # NOISE-FIX 2026-03-01: 0.6→1.5 — BTC 20x: max(1.5%, 0.068%×1.5×20=2.04%) = $68 price
+    tp_min_percent: 2.0  # NOISE-FIX 2026-03-01: 1.0→2.0 — минимум 2% маржи = 0.10% цена BTC 20x
+    tp_max_percent: 4.0  # NOISE-FIX 2026-03-01: 2.0→4.0 — потолок bot-side TP
+    sl_min_percent: 1.5  # NOISE-FIX 2026-03-01: 0.6→1.5 — R:R = 2.72/2.04 = 1.33:1
+    sl_max_percent: 3.0  # NOISE-FIX 2026-03-01: 1.6→3.0
     max_holding_minutes: 5.0  # SCALPING: 40→5 мин
     min_holding_minutes: 0.5  # SCALPING: 2.0→0.5 мин
     extend_time_if_profitable: true
     min_profit_for_extension: 0.4
     extension_percent: 120.0
   ranging:
-    tp_atr_multiplier: 0.7  # SCALPING 2026-03-01: 1.5→0.7 — BTC 20x: max(0.8%, 0.068%×0.7×20=0.95%) = $32 price
-    sl_atr_multiplier: 0.5  # SCALPING 2026-03-01: 1.0→0.5 — BTC 20x: max(0.5%, 0.068%×0.5×20=0.68%) = $23 price
-    tp_min_percent: 0.8  # SCALPING 2026-03-01: 1.35→0.8 — R:R = 0.95/0.68 = 1.40:1
-    tp_max_percent: 1.5  # SCALPING 2026-03-01: 2.5→1.5
-    sl_min_percent: 0.5  # SCALPING 2026-03-01: 0.9→0.5
-    sl_max_percent: 1.5  # без изменений
+    tp_atr_multiplier: 1.5  # NOISE-FIX 2026-03-01: 0.7→1.5 — BTC 20x: max(1.8%, 0.068%×1.5×20=2.04%) = $68 price
+    sl_atr_multiplier: 1.2  # NOISE-FIX 2026-03-01: 0.5→1.2 — BTC 20x: max(1.2%, 0.068%×1.2×20=1.63%) = $54 price
+    tp_min_percent: 1.8  # NOISE-FIX 2026-03-01: 0.8→1.8 — R:R = 2.04/1.63 = 1.25:1
+    tp_max_percent: 3.0  # NOISE-FIX 2026-03-01: 1.5→3.0
+    sl_min_percent: 1.2  # NOISE-FIX 2026-03-01: 0.5→1.2
+    sl_max_percent: 2.5  # NOISE-FIX 2026-03-01: 1.5→2.5
     max_holding_minutes: 3.0  # SCALPING: 25→3 мин
     min_holding_minutes: 0.3  # SCALPING: 1.0→0.3 мин
     extend_time_if_profitable: true
     min_profit_for_extension: 0.4
     extension_percent: 120.0
   choppy:
-    tp_atr_multiplier: 0.6  # SCALPING 2026-03-01: 1.4→0.6 — BTC 20x: max(0.6%, 0.068%×0.6×20=0.82%) = $27 price
-    sl_atr_multiplier: 0.4  # SCALPING 2026-03-01: 1.0→0.4 — BTC 20x: max(0.4%, 0.068%×0.4×20=0.54%) = $18 price
-    tp_min_percent: 0.6  # SCALPING 2026-03-01: 1.12→0.6 — R:R = 0.82/0.54 = 1.52:1
-    tp_max_percent: 1.2  # SCALPING 2026-03-01: 2.0→1.2
-    sl_min_percent: 0.4  # SCALPING 2026-03-01: 0.8→0.4
-    sl_max_percent: 1.3  # без изменений
+    tp_atr_multiplier: 1.3  # NOISE-FIX 2026-03-01: 0.6→1.3 — BTC 20x: max(1.5%, 0.068%×1.3×20=1.77%) = $59 price
+    sl_atr_multiplier: 1.0  # NOISE-FIX 2026-03-01: 0.4→1.0 — BTC 20x: max(1.0%, 0.068%×1.0×20=1.36%) = $45 price
+    tp_min_percent: 1.5  # NOISE-FIX 2026-03-01: 0.6→1.5 — R:R = 1.77/1.36 = 1.30:1
+    tp_max_percent: 2.5  # NOISE-FIX 2026-03-01: 1.2→2.5
+    sl_min_percent: 1.0  # NOISE-FIX 2026-03-01: 0.4→1.0
+    sl_max_percent: 2.0  # NOISE-FIX 2026-03-01: 1.3→2.0
     max_holding_minutes: 2.0  # SCALPING: 20→2 мин
     min_holding_minutes: 0.3  # SCALPING: 1.0→0.3 мин
     extend_time_if_profitable: false
