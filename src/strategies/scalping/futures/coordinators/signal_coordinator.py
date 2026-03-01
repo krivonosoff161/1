@@ -3214,26 +3214,6 @@ class SignalCoordinator:
                         )
                     estimated_notional_usd = base_margin_usd * leverage_config
 
-                    # ✅ КРИТИЧНО: Снижаем плечо для ETH при большом notional (>$200) для защиты от ADL
-                    if symbol == "ETH-USDT" and estimated_notional_usd > 200:
-                        # Для ETH с notional > $200 снижаем плечо до 5-7x для защиты от ADL
-                        max_leverage_for_eth = 7 if estimated_notional_usd > 300 else 5
-                        if leverage_config > max_leverage_for_eth:
-                            logger.warning(
-                                f"🔒 [ADL_PROTECTION] {symbol}: Notional ${estimated_notional_usd:.2f} > $200, "
-                                f"снижаем плечо с {leverage_config}x до {max_leverage_for_eth}x для защиты от ADL"
-                            )
-                            leverage_config = max_leverage_for_eth
-                            # Пересчитываем notional с новым leverage
-                            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (04.01.2026): Проверка на None перед умножением
-                            if (
-                                base_margin_usd is not None
-                                and leverage_config is not None
-                            ):
-                                estimated_notional_usd = (
-                                    base_margin_usd * leverage_config
-                                )
-
                     # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование расчета leverage для каждой пары
                     volatility_str = (
                         f"{volatility*100:.2f}%" if volatility is not None else "N/A"
