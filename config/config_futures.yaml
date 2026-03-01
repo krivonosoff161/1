@@ -454,7 +454,7 @@ scalping:
     min_net_profit: 0.0005
     non_critical_confirmation:
       enabled: true
-      required_count: 2
+      required_count: 1  # SCALPING 2026-03-01: 2→1 — ETH TP был заблокирован (confirm_1/2 истекло max_holding)
       window_seconds: 3.0
 
   slo_monitor:
@@ -1512,7 +1512,7 @@ risk:
     base:
       max_loss_per_trade_percent: 2.0  # 2% макс потеря на сделку
       max_margin_percent: 85.0  # ✅ PHASE 1: Увеличено с 80 до 85 (+6%)
-      max_drawdown_percent: 6.0  # ✅ PHASE 1: Увеличено с 5 до 6 (+20%)
+      max_drawdown_percent: 30.0  # SCALPING STATS 2026-03-01: 6→30 — для сбора статистики, не останавливать бот
       max_margin_safety_percent: 90.0  # 90% безопасности (финальная проверка)
       min_balance_usd: 20.0  # Минимум $20 баланса
       min_time_between_orders_seconds: 30  # Минимум 30 секунд между ордерами
@@ -1525,7 +1525,7 @@ risk:
         risk_per_trade_percent: 1.0   # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Риск на сделку 1.0% для trending
         max_loss_per_trade_percent: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Снижено с 1.5% до 1.0%
         max_margin_percent: 90.0  # ✅ PHASE 1: Увеличено с 85 до 90 (+6%)
-        max_drawdown_percent: 6.0  # ✅ PHASE 1: Увеличено с 4 до 6 (+50%)
+        max_drawdown_percent: 30.0  # SCALPING STATS 2026-03-01: 6→30 — статистика
         max_margin_safety_percent: 90.0  # 90% безопасности
         min_time_between_orders_seconds: 20  # Быстрее в тренде (20 секунд вместо 30)
 
@@ -1548,7 +1548,7 @@ risk:
         risk_per_trade_percent: 1.2   # ✅ ГРОК ФИКС: Увеличено с 1.0% до 1.2% (looser для better RR)
         max_loss_per_trade_percent: 1.0  # ✅ ГРОК КОМПРОМИСС: Снижено с 1.5% до 1.0% для безопасности
         max_margin_percent: 90.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 85 до 90 (+6%) для активного использования баланса
-        max_drawdown_percent: 7.0  # ✅ PHASE 1: Увеличено с 5 до 7 (+40%)
+        max_drawdown_percent: 30.0  # SCALPING STATS 2026-03-01: 7→30 — статистика
         max_margin_safety_percent: 90.0  # 90% безопасности
         min_time_between_orders_seconds: 30  # Стандартная скорость (30 секунд)
 
@@ -1571,7 +1571,7 @@ risk:
         risk_per_trade_percent: 2.0   # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Риск на сделку 2.0% для choppy
         max_loss_per_trade_percent: 2.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Снижено с 2.5% до 2.0%
         max_margin_percent: 85.0  # ✅ ОПТИМИЗИРОВАНО: Увеличено с 80 до 85 (+6%) для активного использования баланса
-        max_drawdown_percent: 8.0  # ✅ PHASE 1: Увеличено с 6 до 8 (+33%)
+        max_drawdown_percent: 30.0  # SCALPING STATS 2026-03-01: 8→30 — статистика
         max_margin_safety_percent: 85.0  # 85% безопасности (строже в хаосе)
         min_time_between_orders_seconds: 45  # Медленнее в хаосе (45 секунд вместо 30)
 
@@ -1595,7 +1595,7 @@ risk:
         # Параметры риска для малого баланса (больше агрессивности)
         max_loss_per_trade_percent: 2.5  # Больше риск для малого баланса (2.5% вместо 2.0%)
         max_margin_percent: 85.0  # Больше маржи для малого баланса (85% вместо 80%)
-        max_drawdown_percent: 6.0  # Больше просадка для малого баланса (6% вместо 5%)
+        max_drawdown_percent: 30.0  # SCALPING STATS 2026-03-01: 6→30 — статистика
         max_margin_safety_percent: 90.0  # 90% безопасности
         min_balance_usd: 10.0  # Минимум $10 баланса (меньше для малого баланса)
         min_time_between_orders_seconds: 25  # Быстрее для малого баланса (25 секунд вместо 30)
@@ -1604,7 +1604,7 @@ risk:
         # Параметры риска для среднего баланса (стандартные)
         max_loss_per_trade_percent: 2.0  # Стандартный риск для среднего баланса (2.0%)
         max_margin_percent: 85.0  # ✅ PHASE 1: Увеличено с 80 до 85 (+6%)
-        max_drawdown_percent: 7.0  # ✅ PHASE 1: Увеличено с 5 до 7 (+40%)
+        max_drawdown_percent: 30.0  # SCALPING STATS 2026-03-01: 7→30 — статистика
         max_margin_safety_percent: 90.0  # 90% безопасности
         min_balance_usd: 20.0  # Минимум $20 баланса
         min_time_between_orders_seconds: 30  # Стандартная скорость (30 секунд)
@@ -1613,7 +1613,7 @@ risk:
         # Параметры риска для большого баланса (больше консервативности)
         max_loss_per_trade_percent: 1.8  # Меньше риск для большого баланса (1.8% вместо 2.0%)
         max_margin_percent: 75.0  # Меньше маржи для большого баланса (75% вместо 80%)
-        max_drawdown_percent: 4.0  # Меньше просадка для большого баланса (4% вместо 5%)
+        max_drawdown_percent: 30.0  # SCALPING STATS 2026-03-01: 4→30 — статистика
         max_margin_safety_percent: 85.0  # 85% безопасности (строже для большого баланса)
         min_balance_usd: 30.0  # Минимум $30 баланса (больше для большого баланса)
         min_time_between_orders_seconds: 35  # Медленнее для большого баланса (35 секунд вместо 30)
@@ -1622,7 +1622,7 @@ risk:
         # Параметры риска для очень большого баланса (больше консервативности)
         max_loss_per_trade_percent: 1.5  # Меньше риск для очень большого баланса (1.5% вместо 2.0%)
         max_margin_percent: 70.0  # Меньше маржи для очень большого баланса (70% вместо 80%)
-        max_drawdown_percent: 3.0  # Меньше просадка для очень большого баланса (3% вместо 5%)
+        max_drawdown_percent: 30.0  # SCALPING STATS 2026-03-01: 3→30 — статистика
         max_margin_safety_percent: 80.0  # 80% безопасности (строже для очень большого баланса)
         min_balance_usd: 50.0  # Минимум $50 баланса (больше для очень большого баланса)
         min_time_between_orders_seconds: 40  # Медленнее для очень большого баланса (40 секунд вместо 30)
