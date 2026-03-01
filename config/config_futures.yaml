@@ -540,13 +540,13 @@ scalping:
       min_score_threshold: 1.5  # ⬇️ Смягчено: было 2.0, теперь 1.5 (больше сигналов в тренде)
       max_trades_per_hour: 5  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 30→5 - экономия комиссий, тренд держать дольше
       position_size_multiplier: 1.3  # ✅ АГРЕССИВНО: Увеличено с 1.1 до 1.3 (+18%) - больше размер позиций
-      tp_atr_multiplier: 1.6  # SYNC 2026-02-27: 1.2→1.6 — синхронизация с exit_params.trending (single source of truth)
-      tp_percent: 4.0  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 6.55%→4.0% - реалистичный TP, при пробое TSL подхватит
-      sl_percent: 1.2  # ✅ ОПТИМИЗАЦИЯ: Увеличено с 0.8% до 1.2% - баланс с новым TP
+      tp_atr_multiplier: 1.6  # SCALPING: OCO TP атр-мультипликатор (ATR-based OCO обычно побеждает floor)
+      tp_percent: 0.12  # SCALPING 2026-03-01: 4.0→0.12 — 1.76 ATR для BTC (было $2690, стало $80 OCO TP)
+      sl_percent: 0.10  # SCALPING 2026-03-01: 1.2→0.10 — backstop OCO SL (bot-side закрывает первым)
       sl_atr_based: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Использовать ATR-based SL для защиты от шума
-      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.5→1.0 — синхронизация с exit_params.trending (R:R был 0.34:1 → стало 1.6:1)
-      sl_min_percent: 1.2  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Минимальный SL 0.8%→1.2% - FIX 6
-      sl_max_percent: 2.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Максимальный SL 1.8%→2.0% - FIX 6
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.5→1.0 — синхронизация с exit_params.trending
+      sl_min_percent: 0.10  # SCALPING 2026-03-01: 1.2→0.10 — соответствие sl_percent
+      sl_max_percent: 0.25  # SCALPING 2026-03-01: 2.0→0.25 — максимальный OCO SL
       max_holding_minutes: 5  # SCALPING: снижено с 40 → 5 мин
       extend_time_if_profitable: true  # ✅ НОВОЕ: Продлевать время если позиция в прибыли
       min_profit_for_extension: 0.4  # ✅ АГРЕССИВНО: Снижено с 0.5% до 0.4% - раньше продлеваем
@@ -614,17 +614,17 @@ scalping:
       min_score_threshold: 2.2  # ⬆️ Ужесточено: было 1.8, теперь 2.2 (меньше слабых сигналов)
       max_trades_per_hour: 3  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 8→3 - флэт, качество важнее количества
       position_size_multiplier: 1.2  # ✅ АГРЕССИВНО: Увеличено с 1.0 до 1.2 (+20%) - больше размер позиций
-      tp_percent: 2.5  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 5.55%→2.5% - реалистичный TP для флэта (ATR-based 1.5-2.2% уже действует)
+      tp_percent: 0.10  # SCALPING 2026-03-01: 2.5→0.10 — OCO TP floor (ATR-based обычно побеждает)
       tp_adaptive: true  # ✅ ГРОК: Включить адаптивный TP с ATR
       tp_atr_based: true  # ✅ ГРОК ФИКС: Включить ATR-based TP для ranging
-      tp_atr_multiplier: 1.5  # SYNC 2026-02-27: 2.5→1.5 — синхронизация с exit_params.ranging (single source of truth)
-      tp_min_percent: 1.5  # ✅ ГРОК ФИКС: Минимальный TP 1.5%
-      tp_max_percent: 2.2  # ✅ ГРОК: Максимальный TP 2.2%
-      sl_percent: 1.0  # ✅ ГРОК ФИКС: Увеличено с 0.8% до 1.0% (баланс для ranging noise)
+      tp_atr_multiplier: 1.5  # SCALPING: OCO TP ATR-мультипликатор
+      tp_min_percent: 0.8  # SCALPING 2026-03-01: 1.5→0.8 — fallback если tp_percent=0
+      tp_max_percent: 1.5  # SCALPING 2026-03-01: 2.2→1.5 — максимальный OCO TP
+      sl_percent: 0.08  # SCALPING 2026-03-01: 1.0→0.08 — backstop OCO SL
       sl_atr_based: true  # ✅ ГРОК: Использовать ATR-based SL вместо фиксированного
-      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 4.0→1.0 — синхронизация с exit_params.ranging (R:R был 0.63:1 → стало 1.5:1)
-      sl_min_percent: 0.9  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Минимальный SL 0.6%→0.9% (защита от шума) - FIX 6
-      sl_max_percent: 2.2  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Увеличено с 2.0% до 2.2% для соответствия новому multiplier - FIX 6
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 4.0→1.0 — синхронизация с exit_params.ranging
+      sl_min_percent: 0.08  # SCALPING 2026-03-01: 0.9→0.08 — соответствие sl_percent
+      sl_max_percent: 0.20  # SCALPING 2026-03-01: 2.2→0.20 — максимальный OCO SL
       max_holding_minutes: 3  # SCALPING: снижено с 25 → 3 мин
       max_holding_hard_stop: true  # ✅ ГРОК: Жесткий стоп по max_holding (не игнорировать убыточные)
       timeout_loss_percent: 1.5  # ✅ ГРОК: Закрывать по max_holding если убыток >= 1.5%
@@ -698,13 +698,13 @@ scalping:
       min_score_threshold: 2.5  # ⬆️ Ужесточено: было 2.0, теперь 2.5 (только сильные сигналы)
       max_trades_per_hour: 3  # ⬆️ Ужесточено: было 8, теперь 3 (минимум сделок в хаосе)
       position_size_multiplier: 1.0  # ✅ АГРЕССИВНО: Увеличено с 0.8 до 1.0 (+25%) - больше размер позиций
-      tp_atr_multiplier: 1.4  # SYNC 2026-02-27: 1.1→1.4 — синхронизация с exit_params.choppy (single source of truth)
-      tp_percent: 2.0  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 5.05%→2.0% - реалистичный TP для хаоса
-      sl_percent: 1.5  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Увеличено с 1.2% до 1.5% - баланс для choppy
+      tp_atr_multiplier: 1.4  # SCALPING: OCO TP ATR-мультипликатор для choppy
+      tp_percent: 0.08  # SCALPING 2026-03-01: 2.0→0.08 — OCO TP floor для choppy (тихий рынок)
+      sl_percent: 0.06  # SCALPING 2026-03-01: 1.5→0.06 — backstop OCO SL для choppy
       sl_atr_based: true  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (07.01.2026): Использовать ATR-based SL для choppy
-      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.5→1.0 — синхронизация с exit_params.choppy (R:R был 0.31:1 → стало 1.4:1)
-      sl_min_percent: 1.0  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Минимальный SL 0.8%→1.0% для choppy - FIX 6
-      sl_max_percent: 2.2  # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (08.01.2026): Максимальный SL 2.0%→2.2% для choppy - FIX 6
+      sl_atr_multiplier: 1.0  # SYNC 2026-02-27: 3.5→1.0 — синхронизация с exit_params.choppy
+      sl_min_percent: 0.06  # SCALPING 2026-03-01: 1.0→0.06 — соответствие sl_percent
+      sl_max_percent: 0.15  # SCALPING 2026-03-01: 2.2→0.15 — максимальный OCO SL для choppy
       max_holding_minutes: 2  # SCALPING: снижено с 14 → 2 мин
       extend_time_if_profitable: true  # ✅ АГРЕССИВНО: Включено продление даже в хаосе
       min_profit_for_extension: 0.4  # ✅ АГРЕССИВНО: Снижено с 0.5% до 0.4% - раньше продлеваем
@@ -1630,39 +1630,39 @@ risk:
 # ✅ ПРАВКА #2: Адаптивные параметры выхода по режимам
 exit_params:
   trending:
-    tp_atr_multiplier: 1.6
-    sl_atr_multiplier: 1.0
-    tp_min_percent: 2.0  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 1.6→2.0 - минимум profitable exit в тренде
-    tp_max_percent: 4.0  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 2.6→4.0 - синхронизация с adaptive_regime.tp_percent
-    sl_min_percent: 1.0
-    sl_max_percent: 1.6
+    tp_atr_multiplier: 0.8  # SCALPING 2026-03-01: 1.6→0.8 — BTC 20x: max(1.0%, 0.068%×0.8×20=1.09%) = $36 price
+    sl_atr_multiplier: 0.6  # SCALPING 2026-03-01: 1.0→0.6 — BTC 20x: max(0.6%, 0.068%×0.6×20=0.82%) = $27 price
+    tp_min_percent: 1.0  # SCALPING 2026-03-01: 2.0→1.0 — минимум 1% маржи = 0.05% цена BTC 20x
+    tp_max_percent: 2.0  # SCALPING 2026-03-01: 4.0→2.0 — потолок bot-side TP
+    sl_min_percent: 0.6  # SCALPING 2026-03-01: 1.0→0.6 — R:R = 1.09/0.82 = 1.33:1
+    sl_max_percent: 1.6  # без изменений
     max_holding_minutes: 5.0  # SCALPING: 40→5 мин
     min_holding_minutes: 0.5  # SCALPING: 2.0→0.5 мин
-    extend_time_if_profitable: true  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): Добавлен для консистентности с adaptive_regime
-    min_profit_for_extension: 0.4  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): 0.5→0.4 для соответствия adaptive_regime
+    extend_time_if_profitable: true
+    min_profit_for_extension: 0.4
     extension_percent: 120.0
   ranging:
-    tp_atr_multiplier: 1.5
-    sl_atr_multiplier: 1.0
-    tp_min_percent: 1.35
-    tp_max_percent: 2.5  # ✅ ТРЕЙДЕР-ОПТИМИЗАЦИЯ (11.02.2026): 2.4→2.5 - синхронизация с adaptive_regime.tp_percent
-    sl_min_percent: 0.9
-    sl_max_percent: 1.5
+    tp_atr_multiplier: 0.7  # SCALPING 2026-03-01: 1.5→0.7 — BTC 20x: max(0.8%, 0.068%×0.7×20=0.95%) = $32 price
+    sl_atr_multiplier: 0.5  # SCALPING 2026-03-01: 1.0→0.5 — BTC 20x: max(0.5%, 0.068%×0.5×20=0.68%) = $23 price
+    tp_min_percent: 0.8  # SCALPING 2026-03-01: 1.35→0.8 — R:R = 0.95/0.68 = 1.40:1
+    tp_max_percent: 1.5  # SCALPING 2026-03-01: 2.5→1.5
+    sl_min_percent: 0.5  # SCALPING 2026-03-01: 0.9→0.5
+    sl_max_percent: 1.5  # без изменений
     max_holding_minutes: 3.0  # SCALPING: 25→3 мин
     min_holding_minutes: 0.3  # SCALPING: 1.0→0.3 мин
-    extend_time_if_profitable: true  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): Добавлен для консистентности с adaptive_regime
+    extend_time_if_profitable: true
     min_profit_for_extension: 0.4
     extension_percent: 120.0
   choppy:
-    tp_atr_multiplier: 1.4
-    sl_atr_multiplier: 1.0
-    tp_min_percent: 1.12
-    tp_max_percent: 2.0  # Синхронизирован с adaptive_regime choppy tp_percent
-    sl_min_percent: 0.8
-    sl_max_percent: 1.3
+    tp_atr_multiplier: 0.6  # SCALPING 2026-03-01: 1.4→0.6 — BTC 20x: max(0.6%, 0.068%×0.6×20=0.82%) = $27 price
+    sl_atr_multiplier: 0.4  # SCALPING 2026-03-01: 1.0→0.4 — BTC 20x: max(0.4%, 0.068%×0.4×20=0.54%) = $18 price
+    tp_min_percent: 0.6  # SCALPING 2026-03-01: 1.12→0.6 — R:R = 0.82/0.54 = 1.52:1
+    tp_max_percent: 1.2  # SCALPING 2026-03-01: 2.0→1.2
+    sl_min_percent: 0.4  # SCALPING 2026-03-01: 0.8→0.4
+    sl_max_percent: 1.3  # без изменений
     max_holding_minutes: 2.0  # SCALPING: 20→2 мин
     min_holding_minutes: 0.3  # SCALPING: 1.0→0.3 мин
-    extend_time_if_profitable: false  # ✅ СИНХРОНИЗАЦИЯ (2026-02-08): Добавлен для консистентности с adaptive_regime (не продлевать в хаосе)
+    extend_time_if_profitable: false
     min_profit_for_extension: 0.4
     extension_percent: 110.0
 
