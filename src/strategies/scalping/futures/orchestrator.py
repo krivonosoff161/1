@@ -4154,8 +4154,12 @@ class FuturesScalpingOrchestrator:
                             f"⚠️ Ошибка получения risk_params через ParameterProvider: {e}, используем fallback"
                         )
 
-            # Fallback: используем config_manager напрямую если ParameterProvider не доступен или ошибка
-            if not adaptive_risk_params:
+            # Fallback: используем config_manager если ParameterProvider недоступен ИЛИ
+            # bundle.risk не содержит max_drawdown_percent (bundle возвращает только позиционные поля)
+            if (
+                not adaptive_risk_params
+                or "max_drawdown_percent" not in adaptive_risk_params
+            ):
                 adaptive_risk_params = self.config_manager.get_adaptive_risk_params(
                     current_balance,
                     regime,
