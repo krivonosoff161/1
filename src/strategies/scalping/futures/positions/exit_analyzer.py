@@ -3923,12 +3923,24 @@ class ExitAnalyzer:
                             "reversal_detected": True,
                         }
 
-                # ✅ КРИТИЧЕСКАЯ ЗАЩИТА (23.01.2026): Минимальная задержка 90 сек для SL
+                # ✅ КРИТИЧЕСКАЯ ЗАЩИТА (23.01.2026): Минимальная задержка перед SL
                 # Защита от преждевременного закрытия из-за спреда/комиссии (аналогично TrailingStopLoss.loss_cut)
+                # FIX (03.03.2026): scalping_mode → sl_grace_period_seconds из конфига (20s по умолчанию).
+                #                   Emergency bypass при убытке ≥ 2×SL — реальный пробой, не wick.
                 seconds_in_position = minutes_in_position * 60.0
-                min_sl_hold_seconds = 90.0  # Минимум 90 секунд перед SL
+                _is_scalping = getattr(self.scalping_config, "scalping_mode", False)
+                if _is_scalping:
+                    min_sl_hold_seconds = float(
+                        getattr(self.scalping_config, "sl_grace_period_seconds", 20.0)
+                    )
+                else:
+                    min_sl_hold_seconds = 90.0
+                _sl_emergency_grace = gross_pnl_percent <= -(sl_percent * 2.0)
 
-                if seconds_in_position < min_sl_hold_seconds:
+                if (
+                    seconds_in_position < min_sl_hold_seconds
+                    and not _sl_emergency_grace
+                ):
                     logger.info(
                         f"⏱️ SL ЗАЩИТА: {symbol} SL достигнут (PnL={pnl_percent:.2f}%), "
                         f"но позиция держится {seconds_in_position:.1f}с < {min_sl_hold_seconds:.1f}с | "
@@ -3945,6 +3957,12 @@ class ExitAnalyzer:
                         "min_seconds_required": min_sl_hold_seconds,
                         "regime": regime,
                     }
+                if _sl_emergency_grace and seconds_in_position < min_sl_hold_seconds:
+                    logger.warning(
+                        f"🚨 [SL_GRACE_EMERGENCY] {symbol}: убыток {gross_pnl_percent:.2f}% ≥ 2×SL={sl_percent:.2f}% "
+                        f"— emergency bypass grace period ({seconds_in_position:.1f}с < {min_sl_hold_seconds:.1f}с) | "
+                        f"Немедленное закрытие!"
+                    )
 
                 logger.info(
                     f"🛑 SL reached for {symbol}: current={current_price:.2f} <= SL={sl_price:.2f}, "
@@ -4989,12 +5007,24 @@ class ExitAnalyzer:
                             "reversal_detected": True,
                         }
 
-                # ✅ КРИТИЧЕСКАЯ ЗАЩИТА (23.01.2026): Минимальная задержка 90 сек для SL (ranging режим)
+                # ✅ КРИТИЧЕСКАЯ ЗАЩИТА (23.01.2026): Минимальная задержка перед SL (ranging режим)
                 # Защита от преждевременного закрытия из-за спреда/комиссии (аналогично TrailingStopLoss.loss_cut)
+                # FIX (03.03.2026): scalping_mode → sl_grace_period_seconds из конфига (20s по умолчанию).
+                #                   Emergency bypass при убытке ≥ 2×SL — реальный пробой, не wick.
                 seconds_in_position = minutes_in_position * 60.0
-                min_sl_hold_seconds = 90.0  # Минимум 90 секунд перед SL
+                _is_scalping = getattr(self.scalping_config, "scalping_mode", False)
+                if _is_scalping:
+                    min_sl_hold_seconds = float(
+                        getattr(self.scalping_config, "sl_grace_period_seconds", 20.0)
+                    )
+                else:
+                    min_sl_hold_seconds = 90.0
+                _sl_emergency_grace = gross_pnl_percent <= -(sl_percent * 2.0)
 
-                if seconds_in_position < min_sl_hold_seconds:
+                if (
+                    seconds_in_position < min_sl_hold_seconds
+                    and not _sl_emergency_grace
+                ):
                     logger.info(
                         f"⏱️ SL ЗАЩИТА (ranging): {symbol} SL достигнут (PnL={net_pnl_percent:.2f}%), "
                         f"но позиция держится {seconds_in_position:.1f}с < {min_sl_hold_seconds:.1f}с | "
@@ -5011,6 +5041,12 @@ class ExitAnalyzer:
                         "min_seconds_required": min_sl_hold_seconds,
                         "regime": regime,
                     }
+                if _sl_emergency_grace and seconds_in_position < min_sl_hold_seconds:
+                    logger.warning(
+                        f"🚨 [SL_GRACE_EMERGENCY] {symbol}: убыток {gross_pnl_percent:.2f}% ≥ 2×SL={sl_percent:.2f}% "
+                        f"— emergency bypass grace period ({seconds_in_position:.1f}с < {min_sl_hold_seconds:.1f}с) | "
+                        f"Немедленное закрытие! (ranging)"
+                    )
 
                 logger.info(
                     f"🛑 SL reached for {symbol}: current={current_price:.2f} <= SL={sl_price:.2f} "
