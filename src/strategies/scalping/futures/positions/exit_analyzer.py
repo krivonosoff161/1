@@ -649,15 +649,25 @@ class ExitAnalyzer:
                             entry_ts = float(c_time_raw) / 1000.0  # ms → seconds
                         except (ValueError, TypeError):
                             pass
+                # ✅ FIX (03.03.2026): Диагностика когда entry_ts не удалось определить
+                if entry_ts is None:
+                    logger.warning(
+                        f"⚠️ [TIMEOUT_SKIP] {symbol}: entry_ts=None → pre-price timeout check пропущен! "
+                        f"entry_time={position.get('entry_time') if isinstance(position, dict) else 'N/A'}, "
+                        f"cTime={position.get('cTime') if isinstance(position, dict) else 'N/A'}, "
+                        f"metadata.entry_time={getattr(metadata, 'entry_time', 'N/A') if metadata else 'N/A'}"
+                    )
                 if entry_ts and entry_ts > 0:
                     minutes_now = (time.time() - entry_ts) / 60.0
                     max_holding = self._get_max_holding_minutes(
                         regime, symbol
                     )  # ✅ ИСПРАВЛЕНО (11.02.2026): были перепутаны аргументы symbol/regime
-                    if max_holding and minutes_now >= max_holding:
+                    # ✅ FIX (03.03.2026): защита от max_holding=0/None (возврат `or` к безопасному дефолту)
+                    safe_max_holding = max_holding or 120.0
+                    if minutes_now >= safe_max_holding:
                         logger.warning(
                             f"⏰ ExitAnalyzer: TIMEOUT {symbol}! "
-                            f"{minutes_now:.1f}мин >= max_holding={max_holding:.1f}мин (режим={regime}). "
+                            f"{minutes_now:.1f}мин >= max_holding={safe_max_holding:.1f}мин (режим={regime}). "
                             f"Закрываем БЕЗ проверки свежести цены!"
                         )
                         return {
