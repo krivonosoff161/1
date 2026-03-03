@@ -1862,6 +1862,7 @@ class ExitAnalyzer:
         # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ (09.01.2026): Обновлены fallback значения с 1.0→2.0 и 0.6→0.9
         sl_atr_multiplier = 2.0  # Было 1.0 - слишком маленький множитель!
         sl_min_percent = 0.9  # Было 0.6 - слишком тесный SL!
+        sl_max_percent = 10.0  # ✅ FIX (02.03.2026): Верхний порог SL (ATR×leverage может давать >20% при высоком плече)
         leverage = self._get_effective_leverage(position, metadata)
 
         # ✅ ИСПРАВЛЕНО (26.12.2025): Используем ParameterProvider для получения параметров
@@ -1922,11 +1923,18 @@ class ExitAnalyzer:
                             f"🔍 [SL_SOURCE_TRACE] {symbol} ({regime}): sl_min_percent ПОСЛЕ _to_float | "
                             f"raw={raw_sl_min} → converted={sl_min_percent}"
                         )
+                    # ✅ FIX (02.03.2026): Верхний порог SL чтобы ATR×leverage не давал >sl_max_percent
+                    if "sl_max_percent" in exit_params:
+                        sl_max_percent = self._to_float(
+                            exit_params["sl_max_percent"],
+                            "sl_max_percent",
+                            10.0,
+                        )
                     # ✅ НОВОЕ (03.01.2026): Детальное логирование источников SL параметров
                     logger.info(
                         f"📊 [PARAMS] {symbol} ({regime}): SL параметры "
                         f"sl_percent={sl_percent:.2f}%, sl_atr_multiplier={sl_atr_multiplier:.2f}, "
-                        f"sl_min={sl_min_percent:.2f}% | "
+                        f"sl_min={sl_min_percent:.2f}%, sl_max={sl_max_percent:.2f}% | "
                         f"Источник: ParameterProvider.get_exit_params()"
                     )
             except Exception as e:
@@ -2146,14 +2154,18 @@ class ExitAnalyzer:
                     atr_sl_percent = atr_pct * sl_atr_multiplier
                     # ATR% считается от цены, переводим в % от маржи через leverage
                     atr_sl_percent = atr_sl_percent * leverage
-                    sl_percent = max(sl_min_percent, atr_sl_percent)
+                    # ✅ FIX (02.03.2026): Ограничиваем сверху sl_max_percent
+                    # При 20x плече ATR-based SL мог давать >20%, что ВСЕГДА срабатывало после emergency (-16%)
+                    sl_percent = min(
+                        sl_max_percent, max(sl_min_percent, atr_sl_percent)
+                    )
 
                     # ✅ КРИТИЧЕСКОЕ УЛУЧШЕНИЕ (04.01.2026): Детальное логирование расчета SL для каждой пары
                     logger.info(
                         f"📊 [PARAMS_SL] {symbol} ({regime}): ATR-based SL расчет | "
                         f"ATR_1m={atr_1m:.6f}, ATR%={atr_pct:.4f}%, "
                         f"multiplier={sl_atr_multiplier:.2f}, "
-                        f"atr_sl={atr_sl_percent:.4f}%, min={sl_min_percent:.2f}%, "
+                        f"atr_sl={atr_sl_percent:.4f}%, min={sl_min_percent:.2f}%, max={sl_max_percent:.2f}%, "
                         f"FINAL SL={sl_percent:.2f}% | "
                         f"Источник: ATR-based расчет"
                     )
@@ -2162,7 +2174,7 @@ class ExitAnalyzer:
                     logger.debug(
                         f"🔍 [SL_SOURCE_TRACE] {symbol} ({regime}): ATR-based расчет ФИНАЛ | "
                         f"atr_pct={atr_pct:.4f}% → atr_sl_percent={atr_sl_percent:.4f}% "
-                        f"→ max({sl_min_percent:.2f}%, {atr_sl_percent:.4f}%) = {sl_percent:.2f}%"
+                        f"→ min({sl_max_percent:.2f}%, max({sl_min_percent:.2f}%, {atr_sl_percent:.4f}%)) = {sl_percent:.2f}%"
                     )
                     logger.debug(
                         f"✅ [ATR_SL] {symbol}: ATR-based SL | "

@@ -738,6 +738,9 @@ class FilterManager:
                             f"Режим: {regime or 'unknown'}, Relax: {order_flow_relax:.2f}x | "
                             f"Источник: FilterManager._get_cached_filter_result() (TTL={self.filter_cache_ttl_slow:.0f}s, Order Flow обновляется через API)"
                         )
+                        signal[
+                            "filter_reason"
+                        ] = f"Order Flow Filter (cached): BLOCKED | Режим: {regime or 'unknown'}, Relax: {order_flow_relax:.2f}x"
                         return None
                     else:
                         if "filters_passed" not in signal:
@@ -762,6 +765,9 @@ class FilterManager:
                             f"Режим: {regime or 'unknown'}, Параметры: {order_flow_params}, Relax: {order_flow_relax:.2f}x | "
                             f"Источник: OrderFlowFilter -> API запрос данных о потоке ордеров"
                         )
+                        signal[
+                            "filter_reason"
+                        ] = f"Order Flow Filter: BLOCKED | Режим: {regime or 'unknown'}, Relax: {order_flow_relax:.2f}x"
                         return None
                     else:
                         if "filters_passed" not in signal:

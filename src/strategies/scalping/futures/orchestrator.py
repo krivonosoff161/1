@@ -1081,6 +1081,7 @@ class FuturesScalpingOrchestrator:
             config_manager=self.config_manager,
             get_used_margin_callback=self._get_used_margin,
             telegram=self.telegram,  # ✅ CRITICAL: Telegram для DRIFT_REMOVE алертов
+            on_drift_remove_callback=self._register_recent_close_event,  # ✅ FIX (02.03.2026): anti-churn cooldown при DRIFT_REMOVE
         )
         logger.info("✅ PositionSync инициализирован")
 
@@ -5462,6 +5463,26 @@ class FuturesScalpingOrchestrator:
                     except Exception as close_event_err:
                         logger.debug(
                             f"Failed to register close event for {symbol}: {close_event_err}"
+                        )
+                elif trade_result is None and side in {"long", "short"}:
+                    # ✅ FIX (02.03.2026): Позиция уже закрыта на бирже (OCO SL, ADL, liquidation)
+                    # close_position_manually возвращает None когда size=0 на бирже
+                    # Без этого fallback _register_recent_close_event пропускается → нет cooldown → churn loop
+                    # Особенно актуально после P0 фикса ATR SL cap: OCO теперь срабатывает РАНЬШЕ bot-side
+                    try:
+                        self._register_recent_close_event(
+                            symbol=symbol,
+                            side=side,
+                            reason=reason,
+                            net_pnl=final_pnl,  # pre-close estimate (0.0 если позиция уже закрыта)
+                        )
+                        logger.info(
+                            f"🔄 [CLOSE_FALLBACK] {symbol}: Cooldown зарегистрирован (позиция закрыта на бирже) | "
+                            f"side={side}, reason={reason}, est_pnl={final_pnl:.2f}"
+                        )
+                    except Exception as close_event_err:
+                        logger.debug(
+                            f"Failed to register fallback close event for {symbol}: {close_event_err}"
                         )
 
                 if trade_result and hasattr(self, "performance_tracker"):

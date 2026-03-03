@@ -38,6 +38,7 @@ class PositionSync:
         config_manager=None,
         get_used_margin_callback=None,
         telegram=None,
+        on_drift_remove_callback=None,
     ):
         """
         Инициализация PositionSync.
@@ -54,6 +55,7 @@ class PositionSync:
             fast_adx: FastADX индикатор
             signal_generator: Генератор сигналов
             telegram: TelegramNotifier для отправки алертов
+            on_drift_remove_callback: Callback для регистрации cooldown при DRIFT_REMOVE
         """
         self.client = client
         self.position_registry = position_registry
@@ -69,6 +71,8 @@ class PositionSync:
         self.config_manager = config_manager
         self.get_used_margin_callback = get_used_margin_callback
         self.telegram = telegram
+        # ✅ FIX (02.03.2026): Callback для регистрации anti-churn cooldown при DRIFT_REMOVE
+        self.on_drift_remove_callback = on_drift_remove_callback
 
         # ✅ Блокировки для предотвращения race condition
         self._drift_locks: Dict[str, asyncio.Lock] = {}
@@ -357,6 +361,24 @@ class PositionSync:
                     )
                 except Exception as e:
                     logger.warning(f"⚠️ Не удалось отправить DRIFT_REMOVE алерт: {e}")
+
+            # ✅ FIX (02.03.2026): Регистрируем anti-churn cooldown через callback
+            # Без этого при DRIFT_REMOVE (OCO SL / ликвидация) нет cooldown → churn loop
+            if self.on_drift_remove_callback and side in {"long", "short"}:
+                try:
+                    self.on_drift_remove_callback(
+                        symbol=symbol,
+                        side=side,
+                        reason="drift_remove",
+                        net_pnl=0.0,  # неизвестно, но cooldown всё равно применится
+                    )
+                    logger.info(
+                        f"🔄 [DRIFT_REMOVE] {symbol}: Cooldown зарегистрирован | side={side}"
+                    )
+                except Exception as e:
+                    logger.debug(
+                        f"Failed to call drift_remove callback for {symbol}: {e}"
+                    )
 
             self.active_positions.pop(symbol, None)
 
