@@ -1,101 +1,110 @@
-﻿# CLAUDE.md
+# CLAUDE.md
 
-Project operating instructions for AI coding agents working on this repository.
+Инструкции для AI-агентов, работающих с этим репозиторием.
 
-## 1) Project context
+---
 
-- Project: OKX futures trading bot (scalping + adaptive logic).
-- Main risk: losses from stale price flow, desynced position state, and conflicting exit paths.
-- Priority order for all work:
-  1. Capital protection and exchange state consistency.
-  2. Deterministic entry/exit decisions.
-  3. Performance and optimization.
+## 🟠 1. Определяем задачу
 
-## 1.1) Communication language
+**Проект:** OKX futures trading bot — скальпинг + адаптивная логика.
 
-- The user is Russian-speaking.
-- All discussion, analysis reports, and explanations must be in Russian by default.
-- Switch language only if user explicitly requests another language.
+**Главные риски:** потери от устаревшего потока цен, рассинхрона состояния позиций, конфликтующих путей выхода.
 
-## 2) Non-negotiable invariants
+**Приоритет всех задач:**
+1. Сохранность капитала и консистентность состояния с биржей.
+2. Детерминированные решения входа/выхода.
+3. Производительность и оптимизация.
 
-- Single close entrypoint: all position closes must go through orchestrator close pipeline.
-- Exit guard first: no close execution before guard checks pass.
-- Decision snapshot is single source of truth per decision cycle:
-  - `price`, `source`, `age`, `ts`, `position_data`, `side`, `entry_price`.
-- No mixed prices in one decision (do not mix ws/mark/rest values without explicit fallback path).
-- Position integrity before exit:
-  - if `side` invalid or `size <= 0`, resync from exchange before decision.
-- Idempotent close behavior:
-  - duplicated close attempts for same symbol/reason must be ignored safely.
+**Язык общения:**
+- Пользователь русскоязычный.
+- Всё обсуждение, анализ и объяснения — по умолчанию на русском.
+- Переключаться только по явной просьбе пользователя.
 
-## 3) Data quality rules
+---
 
-- Entry on stale data is forbidden.
-- Non-critical exit on stale data should be blocked or refreshed first.
-- Critical exit may use fallback (REST/mark), but must log quality downgrade.
-- WebSocket parsing must be safe:
-  - empty string / None numeric payloads must not crash loops.
+## 🟠 2. Контекстные файлы
 
-## 4) PnL and risk consistency
+Перед любым глубоким поиском по файловой системе — сначала читать индексы:
 
-- Decision PnL is calculated from normalized tuple:
-  - `entry_price + current_price + side + leverage`.
-- Exchange upl/margin fields are secondary validation only.
-- If model PnL sign conflicts with exchange sign:
-  - switch to HOLD, trigger resync, avoid blind emergency close.
-- Fee-aware exits:
-  - do not close non-critical positions when expected net is near zero or negative after fees.
+- `DOCUMENTATION_INDEX.md` — карта документации.
+- `TESTS_INDEX.md` — карта тестов.
 
-## 5) Strategy behavior constraints
+Если индекс устарел — обновить его до широкого анализа.
 
-- BTC/ETH should trade selectively (high-confidence setups only).
-- Fast pairs (DOGE/SOL/XRP) may trade more frequently but must respect data quality gates.
-- Avoid churn loops:
-  - open -> close -> open same side without new confirmation.
-- Non-critical exits require confirmation window (multi-tick or time-based), not single noisy tick.
+**Ключевые пути (критичные):**
 
-## 6) Required workflow before code changes
+| Роль | Путь |
+|------|------|
+| Фьючерсный конфиг | `config/config_futures.yaml` |
+| Signal generator | `src/strategies/scalping/futures/signal_generator.py` |
+| Exit analyzer | `src/strategies/scalping/futures/positions/exit_analyzer.py` |
+| Position manager | `src/strategies/scalping/futures/position_manager.py` |
+| Risk manager | `src/strategies/scalping/futures/risk_manager.py` |
+| Order executor | `src/strategies/scalping/futures/order_executor.py` |
+| Orchestrator | `src/strategies/scalping/futures/orchestrator.py` |
+| Position sync | `src/strategies/scalping/futures/core/position_sync.py` |
+| Telegram | `src/utils/telegram_notifier.py` |
 
-1. Discuss scope with user first and confirm understanding.
-2. Perform analysis first (logs + code), then provide findings and a fix plan.
-3. Wait for explicit user approval before any code edits.
-4. Read latest session logs from `logs/futures/archived/...`.
-5. Extract concrete failing chains with timestamps and symbols.
-6. Map each chain to exact module/path and root cause.
-7. Patch smallest safe surface first (P0 stability before tuning) only after approval.
-8. Run targeted tests and static checks.
-9. Report:
-   - what changed,
-   - why it fixes root cause,
-   - what remains risky,
-   - exact files touched.
+> ⚠️ `config.yaml` (701 строк) = SPOT бот. Фьючерсный бот его НЕ читает!
+> Все изменения параметров — только в `config/config_futures.yaml`.
 
-## 6.1) Mandatory approval gate
+---
 
-- No code changes without explicit user approval.
-- No config rewrites, refactors, or file moves without approval.
-- If approval is missing or ambiguous: stop at analysis/questions only.
-- Approval applies per task scope; if scope changes, request re-approval.
+## 🟠 3. Референс (ALWAYS / NEVER)
 
-## 6.2) Navigation baseline (must use indexes first)
+### ALWAYS — неизменяемые инварианты
 
-- Start repository navigation with:
-  - `DOCUMENTATION_INDEX.md` for docs map.
-  - `TESTS_INDEX.md` for tests map.
-- Use indexes before deep filesystem scans to reduce misses and churn.
-- If index is outdated, regenerate/update it before broad analysis.
+- **Единственная точка закрытия:** все закрытия позиций идут через orchestrator close pipeline.
+- **Exit guard первый:** никакого исполнения закрытия до прохождения guard-проверок.
+- **Decision snapshot — единственный источник истины** на один цикл решения:
+  `price`, `source`, `age`, `ts`, `position_data`, `side`, `entry_price`.
+- **Нет смешанных цен** в одном решении (ws/mark/rest — только с явным fallback-путём).
+- **Проверка целостности позиции перед выходом:**
+  если `side` невалиден или `size <= 0` → ресинк с биржей перед решением.
+- **Идемпотентное закрытие:** дублированные попытки закрыть ту же symbol/reason должны безопасно игнорироваться.
+- **Emergency bypass:** критические пути всегда обходят `_closing_positions_cache` (force=True).
 
-## 7) Testing policy
+### NEVER — абсолютные запреты
 
-- Always run focused tests for changed modules first.
-- Keep contract tests for WS payload edge cases (empty strings, nulls, missing fields).
-- Maintain replay tests on archived bad sessions for regression control.
-- Do not claim success without command output.
+- Не выполнять код без явного одобрения пользователя.
+- Не переписывать конфиг, не рефакторить, не перемещать файлы без одобрения.
+- Не откатывать несвязанные изменения пользователя.
+- Не использовать деструктивные git-команды без явного запроса.
+- Не утверждать успех без вывода команды.
+- Не печатать и не коммитить API-ключи/токены.
+- Не закрывать некритические позиции, если ожидаемый нетто-результат близок к нулю или отрицателен с учётом комиссий.
 
-## 8) Logging and observability
+---
 
-Every fix touching execution flow must preserve/add structured logs for:
+## 🟠 4. Бриф
+
+### Качество данных
+
+- Вход на устаревших данных — **запрещён**.
+- Некритический выход на устаревших данных — блокировать или сначала обновить.
+- Критический выход может использовать fallback (REST/mark), но **обязательно логировать** понижение качества.
+- WS-парсинг должен быть безопасным: пустая строка / None в числовых полях не должны крашить циклы.
+
+### PnL и риск
+
+- Decision PnL считается из нормализованного кортежа: `entry_price + current_price + side + leverage`.
+- Поля upl/margin с биржи — только вторичная валидация.
+- Если знак model PnL конфликтует со знаком биржи → перейти в HOLD, запустить ресинк, избежать слепого emergency-закрытия.
+
+### Поведение стратегии
+
+- BTC/ETH торгуют избирательно (только высококонфидентные сетапы).
+- Быстрые пары (DOGE/SOL/XRP) могут торговать чаще, но обязаны соблюдать data quality gates.
+- Избегать churn-петель: `open → close → open` той же стороны без новой конфирмации.
+- Некритические выходы требуют окна подтверждения (multi-tick или time-based), не одного шумного тика.
+
+---
+
+## 🟠 5. Правила
+
+### Логирование и наблюдаемость
+
+Каждый фикс, затрагивающий execution flow, должен сохранять/добавлять структурированные логи для:
 - stale ratio,
 - fallback usage,
 - close pipeline errors,
@@ -103,32 +112,71 @@ Every fix touching execution flow must preserve/add structured logs for:
 - same-side reentry suppression,
 - ws parse errors.
 
-Log messages must be actionable: include symbol, reason, age, source, and decision path.
+Сообщения лога должны быть actionable: включать `symbol`, `reason`, `age`, `source`, `decision path`.
 
-## 9) Config discipline
+### Дисциплина конфига
 
-- No duplicate YAML keys.
-- Keep strict YAML mode enabled in production-like runs.
-- Any changed threshold must include rationale and expected impact.
+- Без дублирующих YAML-ключей.
+- Strict YAML mode включён в продакшн-подобных запусках.
+- Любое изменённое пороговое значение должно включать обоснование и ожидаемый эффект.
 
-## 10) Git and safety rules
+### Политика тестирования
 
-- Never revert unrelated user changes.
-- Never use destructive git commands unless explicitly requested.
-- Keep commits scoped by root cause/fix group.
-- Mention if commit used `--no-verify` and why.
+- Всегда сначала запускать фокусированные тесты для изменённых модулей.
+- Поддерживать contract-тесты для edge-cases WS-пейлоадов (пустые строки, null, отсутствующие поля).
+- Поддерживать replay-тесты на заархивированных плохих сессиях для регрессионного контроля.
 
-## 11) Security and secrets
+### Безопасность
 
-- Never print or commit API keys/tokens.
-- If a key is exposed in configs/logs, require immediate rotation.
+- Если ключ попал в конфиг/логи — требовать немедленную ротацию.
 
-## 12) Response format for analysis tasks
+### Git и безопасность
 
-- Findings first (severity order, with file/log references).
-- Then root-cause chains.
-- Then fix plan by priority (P0/P1/P2).
-- Then risk and validation checklist.
-- Every key finding must include both:
-  - log evidence (file + timestamp/line),
-  - code evidence (module/file + function or path).
+- Коммиты скоупируются по root cause / группе фиксов.
+- Упоминать, если коммит использовал `--no-verify` и почему.
+
+---
+
+## 🟠 6. Обсуждение задачи
+
+### Формат ответа для задач анализа
+
+1. **Находки** (по убыванию severity, со ссылками на файл/лог).
+2. **Цепочки root cause**.
+3. **План фиксов по приоритету** (P0 / P1 / P2).
+4. **Риски и чеклист верификации**.
+
+Каждая ключевая находка должна содержать **оба** типа свидетельств:
+- лог-свидетельство (файл + timestamp/строка),
+- код-свидетельство (модуль/файл + функция или путь).
+
+---
+
+## 🟠 7. Постройте план
+
+### Обязательный workflow перед изменениями кода
+
+1. Обсудить скоуп с пользователем и подтвердить понимание.
+2. Сначала анализ (логи + код), затем предоставить находки и план фикса.
+3. Дождаться явного одобрения пользователя перед правками кода.
+4. Читать актуальные логи сессии из `logs/futures/archived/...`.
+5. Извлечь конкретные failing-цепочки с timestamps и символами.
+6. Сопоставить каждую цепочку с точным модулем/путём и root cause.
+7. Патчить наименьшую безопасную поверхность сначала (P0 stability перед тюнингом) — только после одобрения.
+8. Запустить фокусированные тесты и статические проверки.
+9. Отчитаться:
+   - что изменилось,
+   - почему это устраняет root cause,
+   - что остаётся рискованным,
+   - какие файлы затронуты.
+
+---
+
+## 🟠 8. Согласуйте задачу
+
+### Обязательный approval gate
+
+- **Никаких изменений кода без явного одобрения пользователя.**
+- **Никаких переписей конфига, рефакторингов, перемещений файлов без одобрения.**
+- Если одобрение отсутствует или неоднозначно — останавливаться только на анализе/вопросах.
+- Одобрение действует в рамках скоупа задачи; если скоуп меняется — запрашивать повторное одобрение.
